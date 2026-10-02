@@ -15,6 +15,7 @@ try { Object.assign(picks, JSON.parse(localStorage.getItem(STORE) ?? '{}')); } c
 
 function configFor(override?: { row: string; id: string }): PetConfig {
   const cfg: PetConfig = structuredClone(DEFAULT_CONFIG);
+  cfg.smacking = true; // the lab's stage is for playing with him
   for (const row of ROWS) {
     const id = override && override.row === row.key ? override.id : picks[row.key];
     const v = row.variants.find((x) => x.id === id) ?? row.variants[0];
