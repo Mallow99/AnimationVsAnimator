@@ -42,8 +42,10 @@ public static class PetWindows {
 "@
 [PetWindows]::SetProcessDPIAware() | Out-Null   # report real pixels; the app converts them
 $last = ''
+$lastChange = [DateTime]::Now
 while ($true) {
   $json = [PetWindows]::List([uint32]$SelfPid)
-  if ($json -ne $last) { $last = $json; [Console]::Out.WriteLine($json); [Console]::Out.Flush() }
-  Start-Sleep -Milliseconds 100
+  if ($json -ne $last) { $last = $json; $lastChange = [DateTime]::Now; [Console]::Out.WriteLine($json); [Console]::Out.Flush() }
+  # ~60 checks a second while windows are moving, 10 a second when nothing has moved for a bit.
+  if (([DateTime]::Now - $lastChange).TotalSeconds -lt 1.5) { Start-Sleep -Milliseconds 16 } else { Start-Sleep -Milliseconds 100 }
 }

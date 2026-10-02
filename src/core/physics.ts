@@ -14,7 +14,11 @@ export interface Point {
 export const FLOOR = -1, NONE = -2;
 
 /** A surface he can stand on: the visible part of a window's top edge. One-way (you can jump up through it). */
-export interface Platform { id: number; x1: number; x2: number; y: number }
+export interface Platform {
+  id: number; x1: number; x2: number; y: number;
+  win?: number; // which window this edge belongs to
+  wx?: number;  // that window's left x (to tell real moves from parts getting covered)
+}
 
 export interface Stick { a: Point; b: Point; len: number; minOnly?: boolean }
 

@@ -38,6 +38,7 @@ export const RANGES: Record<string, Range> = {
   'look.lineWidth': { min: 2, max: 10, step: 0.5, label: 'Line thickness', hint: 'Limb thickness' },
   'look.headSize': { min: 0.6, max: 1.8, step: 0.05, label: 'Head size', hint: '1 = normal' },
   'look.pixel': { min: 1, max: 6, step: 1, label: 'Pixel size', hint: '1 = smooth, higher = chunkier pixel art' },
+  'body.spread': { min: 0, max: 1, step: 0.05, label: 'Stance width', hint: '0 = feet together, 1 = wide upside-down V' },
   'body.stand': { min: 0, max: 1, step: 0.05, label: 'Leg straightness', hint: '0 = knees bent, 1 = standing straight' },
   'body.armHang': { min: 0, max: 1, step: 0.05, label: 'Arm hang', hint: '0 = held out, 1 = hanging loose' },
   'body.armSwing': { min: 0, max: 2, step: 0.05, label: 'Arm swing', hint: 'How much arms swing while walking' },

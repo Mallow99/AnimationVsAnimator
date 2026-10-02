@@ -226,11 +226,22 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
 { // Changing his size mid-life rebuilds his body without breaking anything.
   const pet = new Pet(bounds);
   petFor(3, pet);
+  pet.paused = true;
   pet.applyConfig({ ...pet.config, scale: 1.8 });
   petFor(4, pet);
   pet.applyConfig({ ...pet.config, scale: 0.7 });
   petFor(4, pet);
   check('resize in settings: still standing', upright(pet.char) && Math.abs(pet.char.scale - 0.7) < 1e-6, `mode=${pet.char.mode}`);
+}
+{ // Dragging a window sideways while another window covers part of its top: he still rides along.
+  const c = onWindow();
+  for (let i = 0; i < 30; i++) {
+    const wx = 450 + i * 6;
+    c.setPlatforms(windowPlatforms([{ id: 9, x: 200, y: 450, w: 300, h: 200 }, { id: 1, x: wx, y: 500, w: 300, h: 300 }], bounds));
+    run(c, 1 / 30);
+  }
+  run(c, 1);
+  check('dragged sideways while partly covered: rides along', c.support >= 0 && upright(c) && c.x > 700, `x=${c.x.toFixed(0)} support=${c.support} mode=${c.mode}`);
 }
 { // Life with windows: he climbs up, gets down, never leaves the screen.
   const pet = new Pet(bounds);

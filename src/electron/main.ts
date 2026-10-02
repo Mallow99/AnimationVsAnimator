@@ -162,6 +162,8 @@ ipcMain.on('config:reset', () => setConfig(DEFAULT_CONFIG));
 ipcMain.on('pet:stats', (_e, stats: unknown) => settingsWin?.webContents.send('pet:stats', stats));
 ipcMain.on('pet:command', (_e, cmd: string) => win?.webContents.send('pet:command', cmd));
 ipcMain.on('settings:open', openSettings);
+// You pressed on him. On macOS that (wrongly) activates our app, so hand focus right back.
+ipcMain.on('pet:pressed', () => watcher?.refocus());
 
 app.whenReady().then(() => {
   loadConfig();

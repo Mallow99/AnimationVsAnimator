@@ -35,7 +35,8 @@ export type CharEvent =
 
 /** How he carries himself. Part of his "look"; set from the settings / presets. */
 export interface BodyStyle {
-  stand: number;    // 0 = knees bent … 1 = legs straight when standing
+  stand: number;    // 0 = knees bent … 1 = legs locked straight when standing
+  spread: number;   // how far apart his feet stand (0 = together, 1 = wide upside-down V)
   armHang: number;  // 0 = arms held out in front … 1 = hanging loose at his sides
   armSwing: number; // how much the arms swing while walking
   stride: number;   // step length (1 = normal). Longer strides = calmer, less "scuttly" walk
@@ -44,7 +45,7 @@ export interface BodyStyle {
   lean: number;     // how much he leans into his motion
 }
 
-export const DEFAULT_BODY: BodyStyle = { stand: 1, armHang: 1, armSwing: 1, stride: 0.8, lift: 1.1, bob: 1, lean: 0.4 };
+export const DEFAULT_BODY: BodyStyle = { spread: 0.6, stand: 1, armHang: 1, armSwing: 1, stride: 0.8, lift: 1.1, bob: 1, lean: 0.4 };
 
 /** Mood-driven body language, set from outside (0..1 each, speed ~0.5..1.5). */
 export interface Posture { hunch: number; bounce: number; tension: number; speed: number }
@@ -142,7 +143,14 @@ export class Character {
     const before = this.supportPlatform();
     this.platforms = list;
     if (this.support < 0 || !before) return;
-    const now = this.supportPlatform();
+    let now = this.supportPlatform();
+    // The visible piece he's on can change id when other windows cover/uncover it.
+    // Find the piece of the same window that's under him instead.
+    if (!now && before.win !== undefined) {
+      const dxw = (list.find((p) => p.win === before.win)?.wx ?? before.wx ?? 0) - (before.wx ?? 0);
+      now = list.find((p) => p.win === before.win && this.x + dxw >= p.x1 - 4 && this.x + dxw <= p.x2 + 4) ?? null;
+      if (now) this.support = now.id;
+    }
     const onIt = this.mode !== 'air' && this.mode !== 'held';
     if (!now) {
       this.support = NONE;
@@ -151,13 +159,14 @@ export class Character {
     }
     if (!onIt) return;
     const dy = now.y - before.y;
-    // A window being dragged moves both of its edges together; a top that got
-    // partly covered only changes one end, which shouldn't move him.
-    const dx1 = now.x1 - before.x1, dx2 = now.x2 - before.x2;
-    const dx = Math.abs(dx1 - dx2) < 1 ? dx1 : 0;
+    // Use the window's own position when we know it (covering part of the edge
+    // changes the edge's ends but doesn't move the window).
+    const dx = now.wx !== undefined && before.wx !== undefined ? now.wx - before.wx
+      : Math.abs((now.x1 - before.x1) - (now.x2 - before.x2)) < 1 ? now.x1 - before.x1 : 0;
     if (!dx && !dy) return;
     this.body.translate(dx, dy);
     this.rootX += dx;
+    if (this.goalX !== null) this.goalX += dx;
     for (const f of [this.feet.L, this.feet.R]) { f.x += dx; f.fromX += dx; f.toX += dx; }
     if (this.getup) {
       for (const set of [this.getup.from, this.getup.crouch, this.getup.stand] as Record<string, Vec>[]) {
@@ -168,7 +177,7 @@ export class Character {
     const jolt = Math.hypot(dx, dy);
     this.events.push({ type: 'carried', speed: jolt });
     // A hard yank throws him off balance.
-    if (jolt > 25 * this.scale) this.poke('hip', -dx * 6, -Math.abs(dy) * 3);
+    if (jolt > 40 * this.scale) this.poke('hip', -dx * 5, -Math.abs(dy) * 3);
   }
 
   stop() { this.goalX = null; }
@@ -207,7 +216,7 @@ export class Character {
         f.swinging = false;
       }
       // Start from a deep crouch so he rises instead of "losing balance".
-      this.crouch = Math.max(0, this.body.j.hip.y - (this.groundY() - this.standHeight()));
+      this.crouch = Math.max(0, this.body.j.hip.y - (this.groundY() - 2 - this.standHeight()));
     } else if (this.mode === 'lie' || this.mode === 'ragdoll') {
       this.startGetup();
     }
@@ -450,8 +459,18 @@ export class Character {
 
   private groundY() { return this.supportPlatform()?.y ?? this.bounds.floor; }
 
-  /** Hip height when standing still (depends on how straight he keeps his legs). */
-  private standHeight() { return (this.d.thigh + this.d.shin) * (0.93 + 0.065 * this.style.stand); }
+  /** Half the distance between his feet when standing. */
+  private stanceHalf() { return (this.d.thigh + this.d.shin) * (0.04 + 0.2 * this.style.spread); }
+
+  /**
+   * Hip height above the feet when standing still. At stand = 1 the hip target is
+   * a hair higher than the legs can reach, so the bones lock fully straight.
+   */
+  private standHeight() {
+    const L = this.d.thigh + this.d.shin, half = this.stanceHalf();
+    const straight = Math.sqrt(L * L - half * half);
+    return straight * (0.9 + 0.1 * this.style.stand) + (this.style.stand > 0.97 ? 1.5 * this.scale : 0);
+  }
 
   private groundPose(dt: number, t: Targets, s: Strengths) {
     const d = this.d, P = this.posture, sc = this.scale, j = this.body.j;
@@ -510,7 +529,7 @@ export class Character {
     const B = this.style, legLen = d.thigh + d.shin;
     const speed = Math.abs(this.rootVX), dir = sign(this.rootVX);
     const stepLen = B.stride * 26 * sc * (this.running ? 1.3 : 1);
-    const stance = 4 * sc;
+    const stance = this.stanceHalf();
     const ideal = moving
       ? { L: this.rootX, R: this.rootX }
       : { L: this.rootX - f * stance, R: this.rootX + f * stance };
@@ -529,7 +548,7 @@ export class Character {
         const eL = Math.abs(ideal.L - this.feet.L.x), eR = Math.abs(ideal.R - this.feet.R.x);
         k = eL > eR ? 'L' : 'R';
         err = Math.max(eL, eR);
-        need = 5 * sc;
+        need = 2.5 * sc;
       }
       if (err > need) {
         const ft = this.feet[k];
@@ -578,7 +597,7 @@ export class Character {
     const bob = moving
       ? Math.sin(Math.PI * swingT) * (0.4 + 2.5 * P.bounce) * sc * B.bob
       : Math.sin(this.time * 2.1) * 0.6 * sc;
-    const hip = { x: this.rootX, y: floor - hipH + this.crouch + P.hunch * 2 * sc - bob };
+    const hip = { x: this.rootX, y: floor - 2 - hipH + this.crouch + P.hunch * 2 * sc - bob };
     this.hipTarget = hip;
 
     // Torso leans into motion; sadness hunches it, anger pitches it forward.
@@ -715,12 +734,12 @@ export class Character {
   /** A calm standing pose at x (used as the end of getting up). */
   private standPose(x: number): Targets {
     const d = this.d, sc = this.scale, f = this.facing, floor = this.groundY();
-    const hip = { x, y: floor - this.standHeight() };
+    const hip = { x, y: floor - 2 - this.standHeight() };
     const neck = { x: x + f * 0.5 * sc, y: hip.y - d.torso };
     const hy = neck.y + (d.upperArm + d.foreArm) * (0.8 + 0.17 * this.style.armHang);
     const t: Targets = {};
     this.fillLimbs(t, hip, neck, f * 0.05, { x: neck.x + f * 2 * sc, y: hy }, { x: neck.x + f * 3 * sc, y: hy },
-      { x: x - f * 4 * sc, y: floor - 2 }, { x: x + f * 4 * sc, y: floor - 2 }, f, 1);
+      { x: x - f * this.stanceHalf(), y: floor - 2 }, { x: x + f * this.stanceHalf(), y: floor - 2 }, f, 1);
     return t;
   }
 

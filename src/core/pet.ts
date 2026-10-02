@@ -27,6 +27,8 @@ export class Pet {
   private press: { joint: JointName; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
   private bubble: { text: string; t: number; ttl: number } | null = null;
   private smackCooldown = 0;
+  private winTarget: WinRect[] | null = null;
+  private winShown: WinRect[] = [];
   private pixels = new PixelLayer();
   private rub = { dist: 0, since: 0, lastX: 0, lastY: 0, over: false };
 
@@ -51,6 +53,7 @@ export class Pet {
     dt = Math.min(dt, 0.1); // after a stall (laptop asleep), don't try to catch up forever
     this.ctx.world.time += dt;
     this.acc += dt;
+    this.smoothWindows(dt);
     while (this.acc >= STEP) {
       this.char.step(STEP);
       this.acc -= STEP;
@@ -92,9 +95,32 @@ export class Pet {
     this.char.setHeadSize(cfg.look.headSize);
   }
 
-  /** Latest window rectangles from the desktop shell (front-most first). */
-  setWindows(wins: WinRect[]) {
-    const plats = windowPlatforms(wins, this.ctx.world.bounds);
+  /**
+   * Latest window rectangles from the desktop shell (front-most first).
+   * They arrive a few dozen times a second at most, so instead of jumping to each
+   * new position we glide toward it every frame — that keeps rides smooth.
+   */
+  setWindows(wins: WinRect[]) { this.winTarget = wins.map((w) => ({ ...w })); }
+
+  private smoothWindows(dt: number) {
+    const target = this.winTarget;
+    if (!target) return;
+    const k = Math.min(1, dt * 30);
+    let changed = target.length !== this.winShown.length;
+    const shown = target.map((t) => {
+      const cur = this.winShown.find((w) => w.id === t.id);
+      if (!cur) { changed = true; return { ...t }; }
+      const next = { ...t };
+      for (const key of ['x', 'y', 'w', 'h'] as const) {
+        const d = t[key] - cur[key];
+        next[key] = Math.abs(d) < 0.5 ? t[key] : cur[key] + d * k;
+        if (next[key] !== cur[key]) changed = true;
+      }
+      return next;
+    });
+    this.winShown = shown;
+    if (!changed) return;
+    const plats = windowPlatforms(shown, this.ctx.world.bounds);
     this.ctx.world.platforms = plats;
     this.char.setPlatforms(plats);
   }

@@ -31,7 +31,7 @@ export function windowPlatforms(wins: WinRect[], bounds: Bounds, minWidth = 40):
       });
     }
     // Give each visible piece a stable id: window id * 8 + piece number.
-    segs.forEach(([s, e], n) => { if (e - s >= minWidth) out.push({ id: w.id * 8 + n, x1: s, x2: e, y }); });
+    segs.forEach(([s, e], n) => { if (e - s >= minWidth) out.push({ id: w.id * 8 + n, x1: s, x2: e, y, win: w.id, wx: w.x }); });
   }
   return out;
 }

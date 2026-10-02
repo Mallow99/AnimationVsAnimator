@@ -13,6 +13,7 @@ interface PetShell {
   sendStats(stats: unknown): void;
   onCommand(cb: (cmd: string) => void): void;
   onWindows(cb: (wins: WinRect[]) => void): void;
+  pressed(): void;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
@@ -89,9 +90,13 @@ window.addEventListener('mousemove', (e) => {
 });
 window.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
-  if (pet.pointerDown(e.clientX, e.clientY, performance.now())) canvas.style.cursor = 'grabbing';
+  if (pet.pointerDown(e.clientX, e.clientY, performance.now())) {
+    canvas.style.cursor = 'grabbing';
+    shell?.pressed();
+  }
 });
 window.addEventListener('mouseup', (e) => {
+  if (pet.dragging) shell?.pressed(); // hand focus back once more after letting go
   pet.pointerUp(e.clientX, e.clientY);
   updateClickThrough(e.clientX, e.clientY);
 });

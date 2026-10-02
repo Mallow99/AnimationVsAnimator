@@ -12,7 +12,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { WinRect } from '../core/world';
 
-export interface WindowWatcher { stop(): void }
+export interface WindowWatcher {
+  stop(): void;
+  /** macOS: give focus back to the app the user was using. */
+  refocus(): void;
+}
 
 const nativeDir = path.join(__dirname, 'native');
 
@@ -49,7 +53,7 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
     if (process.platform === 'darwin') {
       const bin = await macHelper(log);
       if (!bin || stopped) return;
-      child = spawn(bin, [String(process.pid)], { stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(bin, [String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'] });
     } else if (process.platform === 'win32') {
       child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
         path.join(nativeDir, 'windows-win.ps1'), '-SelfPid', String(process.pid)], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
@@ -81,5 +85,8 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
   };
   launch().catch((e) => log(String(e)));
 
-  return { stop() { stopped = true; child?.kill(); } };
+  return {
+    stop() { stopped = true; child?.kill(); },
+    refocus() { if (process.platform === 'darwin') child?.stdin?.write('refocus\n'); },
+  };
 }
