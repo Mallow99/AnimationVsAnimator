@@ -2,10 +2,23 @@
 // always-on-top window covering the main screen, and makes empty areas
 // click-through so you can keep using your computer normally.
 
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, Tray } from 'electron';
 import path from 'node:path';
 
 let win: BrowserWindow | null = null;
+let tray: Tray | null = null;
+
+/** Menu-bar (macOS) / system-tray (Windows) icon. The settings window will hang off this later. */
+function createTray() {
+  // "Template" in the file name tells macOS to tint it to match the menu bar.
+  tray = new Tray(path.join(__dirname, '../../assets/trayTemplate.png'));
+  tray.setToolTip('AnimationVsAnimator');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Reload him', click: () => win?.reload() },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() },
+  ]));
+}
 
 function createWindow() {
   // workArea = the screen minus the macOS menu bar / Dock or the Windows taskbar.
@@ -23,6 +36,10 @@ function createWindow() {
     fullscreenable: false,
     alwaysOnTop: true,
     backgroundColor: '#00000000',
+    // Clicking him shouldn't steal focus from the app you're using.
+    // macOS: a "panel" window takes clicks without activating the app.
+    // Windows: a non-focusable window does the same.
+    ...(process.platform === 'darwin' ? { type: 'panel' } : { focusable: false }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -48,5 +65,5 @@ ipcMain.on('pet:clickThrough', (_e, ignore: boolean) => {
   win?.setIgnoreMouseEvents(ignore, { forward: true });
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => { createWindow(); createTray(); });
 app.on('window-all-closed', () => app.quit());

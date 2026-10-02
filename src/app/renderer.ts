@@ -65,7 +65,7 @@ window.addEventListener('mousemove', (e) => {
   vel.x += ((e.clientX - last.x) / dt - vel.x) * 0.5;
   vel.y += ((e.clientY - last.y) / dt - vel.y) * 0.5;
   last = { x: e.clientX, y: e.clientY, t: now };
-  pet.cursor(e.clientX, e.clientY);
+  pet.cursor(e.clientX, e.clientY, vel.x, vel.y);
   pet.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now);
   updateClickThrough(e.clientX, e.clientY);
 });

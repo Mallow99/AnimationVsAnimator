@@ -27,6 +27,7 @@ export const DEFAULT_CONFIG: PetConfig = {
 };
 
 const STEP = 1 / 120; // physics runs at a fixed 120 steps per second
+const SMACK_SPEED = 1400; // cursor speed (px/s) that counts as a smack rather than a brush
 
 export class Pet {
   readonly char: Character;
@@ -38,6 +39,7 @@ export class Pet {
   private acc = 0;
   private press: { joint: JointName; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
   private bubble: { text: string; t: number; ttl: number } | null = null;
+  private smackCooldown = 0;
   private rub = { dist: 0, since: 0, lastX: 0, lastY: 0, over: false };
 
   constructor(bounds: Bounds, readonly config: PetConfig = DEFAULT_CONFIG) {
@@ -90,12 +92,30 @@ export class Pet {
 
   // ── input ──
 
-  /** The cursor moved (anywhere on screen). Also detects petting: rubbing back and forth over him. */
-  cursor(x: number, y: number) {
-    const w = this.ctx.world;
+  /**
+   * The cursor moved (anywhere on screen), with its velocity in px/s.
+   * Slow rubbing back and forth over him = petting. Swiping through him fast = a smack.
+   */
+  cursor(x: number, y: number, vx = 0, vy = 0) {
+    const w = this.ctx.world, r = this.rub;
+    const speed = Math.hypot(vx, vy);
+    if (!this.press && speed > SMACK_SPEED && w.time > this.smackCooldown) {
+      // Check along the path the cursor just travelled, so a fast swipe can't skip over him.
+      const steps = Math.ceil(Math.hypot(x - r.lastX, y - r.lastY) / 6);
+      for (let i = 0; i <= steps; i++) {
+        const px = r.lastX + ((x - r.lastX) * i) / (steps || 1), py = r.lastY + ((y - r.lastY) * i) / (steps || 1);
+        const joint = this.char.hitTest(px, py, 4);
+        if (!joint) continue;
+        const k = Math.min(speed, 5000) / speed * 0.55; // a share of the swipe's speed goes into him
+        this.char.poke(joint, vx * k, vy * k - 150);
+        this.smackCooldown = w.time + 0.35;
+        this.emit({ type: 'smacked', speed });
+        break;
+      }
+    }
     w.cursor = { x, y };
     w.cursorMovedAt = w.time;
-    const r = this.rub, over = !this.press && this.char.hitTest(x, y, 14) !== null;
+    const over = !this.press && speed < 1200 && this.char.hitTest(x, y, 14) !== null;
     if (over) {
       if (!r.over || w.time - r.since > 2.5) { r.dist = 0; r.since = w.time; }
       r.dist += Math.hypot(x - r.lastX, y - r.lastY);

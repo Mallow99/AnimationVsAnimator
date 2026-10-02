@@ -16,7 +16,7 @@ import {
   AvoidCursor, ChaseCursor, Idle, presets, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
-export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' };
+export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
 
 interface Option { name: string; score: number; make: () => Skill }
 
@@ -136,6 +136,22 @@ export class Mind {
     const m = c.mood, ch = c.char;
     switch (e.type) {
       case 'poked': return this.onPoke(c);
+
+      case 'smacked': {
+        // Much worse than a poke: it hurts, and it was on purpose.
+        m.nudge({ annoyance: 0.28, fear: 0.08, trust: -0.03, happiness: -0.06, boredom: -0.4 });
+        const wasAsleep = m.asleep;
+        m.asleep = false;
+        c.say(wasAsleep ? pick(['WHA-', '!?!']) : e.speed > 3000 ? pick(['OW!', 'HEY!!', 'OWW']) : pick(['ow!', 'hey!', '!!']), 1.3);
+        if (wasAsleep) ch.standUp();
+        const L = m.label;
+        this.interrupt(c, L === 'scared' || L === 'sad'
+          ? new Sequence('flinch', [{ gesture: 'cower' }, { walkTo: 'away', run: L === 'scared' }])
+          : L === 'angry'
+            ? new Sequence('retaliate', [{ face: 'cursor' }, { say: pick(['YOU.', 'oh it is ON', 'stop that!']) }, { gesture: 'pokeBack', atCursor: true }, { gesture: 'stomp' }])
+            : new Sequence('glare', [{ face: 'cursor' }, { wait: 0.6 }, { say: pick(['rude.', 'why', '>:(']) }]));
+        return;
+      }
 
       case 'petted':
         m.nudge({ happiness: 0.08, trust: 0.015, annoyance: -0.15, boredom: -0.2 });
