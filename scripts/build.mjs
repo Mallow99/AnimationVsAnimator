@@ -19,7 +19,10 @@ if (what === 'lab') {
     build({ ...common, entryPoints: ['src/electron/main.ts'], outfile: 'dist/electron/main.js', platform: 'node', format: 'cjs', external: ['electron'] }),
     build({ ...common, entryPoints: ['src/electron/preload.ts'], outfile: 'dist/electron/preload.js', platform: 'node', format: 'cjs', external: ['electron'] }),
     build({ ...common, entryPoints: ['src/app/renderer.ts'], outfile: 'dist/app/renderer.js', platform: 'browser', format: 'iife' }),
+    build({ ...common, entryPoints: ['src/settings/settings.ts'], outfile: 'dist/settings/settings.js', platform: 'browser', format: 'iife' }),
   ]);
+  mkdirSync('dist/settings', { recursive: true });
+  cpSync('src/settings/index.html', 'dist/settings/index.html');
   mkdirSync('dist/app', { recursive: true });
   cpSync('src/app/index.html', 'dist/app/index.html');
 }

@@ -1,38 +1,22 @@
 // The Pet ties everything together: body + mood + mind + speech, and turns
 // raw mouse input into things that happen to him (poke, grab, throw, pet).
 
-import { Character, DEFAULT_BODY, type BodyStyle } from './character';
+import { Character } from './character';
+import { DEFAULT_CONFIG, type PetConfig } from './config';
 import type { JointName } from './body';
 import type { Bounds } from './physics';
 import { Mood } from './mood';
 import { Mind, type MindEvent } from './mind';
 import type { Ctx } from './skills';
-import { DEFAULT_LOOK, drawBubble, drawCharacter, PixelLayer, type Look } from './render';
+import { drawBubble, drawCharacter, PixelLayer } from './render';
 
-export type MindMode = 'offline' | 'chat' | 'full';
-
-export interface PetConfig {
-  name: string;
-  scale: number;
-  look: Look;
-  body: BodyStyle;
-  /** offline = instinct only. chat / full = LLM (milestone 4). */
-  mind: MindMode;
-}
-
-export const DEFAULT_CONFIG: PetConfig = {
-  name: 'Orange',
-  scale: 1.1,
-  look: { ...DEFAULT_LOOK },
-  body: { ...DEFAULT_BODY },
-  mind: 'offline',
-};
+export { DEFAULT_CONFIG, type PetConfig } from './config';
 
 const STEP = 1 / 120; // physics runs at a fixed 120 steps per second
 const SMACK_SPEED = 1400; // cursor speed (px/s) that counts as a smack rather than a brush
 
 export class Pet {
-  readonly char: Character;
+  char: Character;
   readonly mood = new Mood();
   readonly mind = new Mind();
   readonly ctx: Ctx;
@@ -89,9 +73,18 @@ export class Pet {
     }
   }
 
-  /** Apply a (possibly changed) look/body config live. */
+  /** Apply a (possibly changed) config live. A new size rebuilds his body where he stands. */
   applyConfig(cfg: PetConfig) {
-    (this as { config: PetConfig }).config = cfg;
+    const resized = this.config.scale !== cfg.scale;
+    (this as { config: PetConfig }).config = structuredClone(cfg);
+    if (resized && this.ctx) {
+      const old = this.char;
+      this.char = new Character(old.bounds, old.x, cfg.scale);
+      this.char.facing = old.facing;
+      this.ctx.char = this.char;
+      this.press = null;
+      this.mind.reset(this.ctx);
+    }
     this.char.style = { ...cfg.body };
     this.char.setHeadSize(cfg.look.headSize);
   }
@@ -112,7 +105,7 @@ export class Pet {
   cursor(x: number, y: number, vx = 0, vy = 0) {
     const w = this.ctx.world, r = this.rub;
     const speed = Math.hypot(vx, vy);
-    if (!this.press && speed > SMACK_SPEED && w.time > this.smackCooldown) {
+    if (this.config.smacking && !this.press && speed > SMACK_SPEED && w.time > this.smackCooldown) {
       // Check along the path the cursor just travelled, so a fast swipe can't skip over him.
       const steps = Math.ceil(Math.hypot(x - r.lastX, y - r.lastY) / 6);
       for (let i = 0; i <= steps; i++) {
@@ -169,6 +162,37 @@ export class Pet {
   }
 
   get dragging() { return this.press !== null; }
+
+  // ── for the settings window ──
+
+  /** A snapshot of his inner state (shown as live bars in settings). */
+  stats() {
+    return {
+      name: this.config.name,
+      mood: { ...this.mood.s },
+      label: this.mood.label,
+      asleep: this.mood.asleep,
+      doing: this.mind.skill?.name ?? this.char.mode,
+      recent: this.mind.recent.slice(-8),
+    };
+  }
+
+  command(cmd: string) {
+    if (cmd === 'resetMood') {
+      this.mood.s = new Mood().s;
+      this.mood.asleep = false;
+      this.mind.reset(this.ctx);
+      if (this.char.mode === 'lie') this.char.standUp();
+      this.say('!');
+    } else if (cmd === 'respawn') {
+      const b = this.ctx.world.bounds, j = this.char.body.j;
+      this.mind.reset(this.ctx);
+      if (this.char.isHeld()) this.char.release();
+      this.char.body.translate((b.left + b.right) / 2 - j.hip.x, b.top + 120 - j.hip.y);
+      this.char.body.launch(0, 0, 1 / 120);
+      this.char.mode = 'air';
+    }
+  }
 
   // ── saving between runs ──
   save() { return JSON.stringify({ v: 1, mood: this.mood.save() }); }

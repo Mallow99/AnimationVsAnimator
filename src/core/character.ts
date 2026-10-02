@@ -42,7 +42,7 @@ export interface BodyStyle {
   lean: number;     // how much he leans into his motion
 }
 
-export const DEFAULT_BODY: BodyStyle = { stand: 0.75, armHang: 0.85, armSwing: 1, stride: 1.2, lift: 1, bob: 1, lean: 0.8 };
+export const DEFAULT_BODY: BodyStyle = { stand: 1, armHang: 1, armSwing: 1, stride: 0.8, lift: 1.1, bob: 1, lean: 0.4 };
 
 /** Mood-driven body language, set from outside (0..1 each, speed ~0.5..1.5). */
 export interface Posture { hunch: number; bounce: number; tension: number; speed: number }
@@ -63,7 +63,7 @@ export class Character {
   posture: Posture = { hunch: 0, bounce: 0, tension: 0, speed: 1 };
   style: BodyStyle = { ...DEFAULT_BODY };
   look: Vec | null = null;
-  walkSpeed = 75;
+  walkSpeed = 62;
   /** When true he stays down after falling / lying (sleeping, sulking). */
   stayDown = false;
 
@@ -506,28 +506,33 @@ export class Character {
     const bob = moving
       ? Math.sin(Math.PI * swingT) * (0.4 + 2.5 * P.bounce) * sc * B.bob
       : Math.sin(this.time * 2.1) * 0.6 * sc;
-    const hip = { x: this.rootX, y: floor - hipH + this.crouch + P.hunch * 4 * sc - bob };
+    const hip = { x: this.rootX, y: floor - hipH + this.crouch + P.hunch * 2 * sc - bob };
     this.hipTarget = hip;
 
     // Torso leans into motion; sadness hunches it, anger pitches it forward.
-    const lean = clamp(this.rootVX * 0.05 * B.lean, -10 * sc, 10 * sc) + f * (P.hunch * 9 + P.tension * 4) * sc + f * this.crouch * 0.5;
+    const lean = clamp(this.rootVX * 0.05 * B.lean, -10 * sc, 10 * sc) + f * (P.hunch * 5 + P.tension * 3) * sc + f * this.crouch * 0.5;
     const neck = { x: hip.x + lean, y: hip.y - Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)) };
-    let tilt = f * (P.hunch * 0.8 + 0.05);
+    // Head up by default; only a real mood drops it.
+    let tilt = f * P.hunch * 0.6;
     if (this.look) tilt += f * clamp((this.look.y - neck.y) / 400, -0.5, 0.5);
 
     // Arms swing opposite the legs.
     const armLen = d.upperArm + d.foreArm;
     const ready = P.tension > 0.5;
     const handY = neck.y + armLen * (ready ? 0.6 : 0.8 + 0.17 * B.armHang);
-    const handFwd = f * (ready ? 9 : 4 - 3.5 * B.armHang) * sc;
+    // Even "hanging" arms sit a touch apart (front one forward, back one behind),
+    // otherwise in side view they lie on top of the torso and blur into it.
+    const frontFwd = f * (ready ? 9 : 5 - 2.5 * B.armHang) * sc;
+    const backFwd = f * (ready ? 6 : -(1.5 + 1.5 * B.armHang)) * sc;
     // Each hand swings with the opposite foot, along an arc (it rises a little at either end).
-    const swingAmt = 0.4 * B.armSwing;
-    const armAt = (footX: number) => {
+    const swingAmt = 0.65 * B.armSwing;
+    const armAt = (footX: number, fwd: number) => {
       const o = (footX - this.rootX) * swingAmt;
-      return { x: neck.x + handFwd + o, y: handY - Math.abs(o) * 0.35 };
+      return { x: neck.x + fwd + o, y: handY - Math.abs(o) * 0.3 };
     };
-    let handL = armAt(this.feet.R.x);
-    let handR = armAt(this.feet.L.x);
+    const frontIsR = f > 0;
+    let handL = armAt(this.feet.R.x, frontIsR ? backFwd : frontFwd);
+    let handR = armAt(this.feet.L.x, frontIsR ? frontFwd : backFwd);
     let footL = { x: this.feet.L.x, y: footY.L - 2 }, footR = { x: this.feet.R.x, y: footY.R - 2 };
     let hipT = hip, neckT = neck;
 
@@ -696,7 +701,7 @@ export class Character {
     const d = this.d, sc = this.scale, f = this.facing, P = this.posture, floor = this.groundY();
     const x = this.rootX;
     const hip = { x, y: floor - 7 * sc };
-    const lean = f * (2 + P.hunch * 10) * sc;
+    const lean = f * (1 + P.hunch * 8) * sc;
     const neck = { x: x + lean, y: hip.y - Math.sqrt(d.torso ** 2 - lean ** 2) };
     const footL = { x: x + f * 22 * sc, y: floor - 2 }, footR = { x: x + f * 26 * sc, y: floor - 2 };
     const kneeL = twoBoneIK(hip.x, hip.y, footL.x, footL.y, d.thigh, d.shin, -f);

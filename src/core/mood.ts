@@ -59,7 +59,8 @@ export class Mood {
     const sadness = clamp((0.45 - s.happiness) * 2.5, 0, 1);
     const tired = clamp((0.3 - s.energy) * 3, 0, 1);
     return {
-      hunch: clamp(sadness * 0.8 + tired * 0.6 + s.fear * 0.3, 0, 1),
+      // Kept subtle: he stands tall unless he's properly down.
+      hunch: clamp(sadness * 0.6 + tired * 0.45 + s.fear * 0.25, 0, 1),
       bounce: clamp((s.happiness - 0.55) * 2.5, 0, 1) * clamp(s.energy * 1.5, 0, 1),
       tension: clamp((s.annoyance - 0.3) * 2, 0, 1),
       speed: 0.6 + s.energy * 0.5 + s.annoyance * 0.3 - sadness * 0.15,

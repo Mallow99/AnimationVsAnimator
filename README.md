@@ -10,7 +10,8 @@ grab, and throw him.
 3. `npm install` (first time only — downloads Electron, ~250 MB)
 4. `npm start`
 
-**Quit:** right-click his icon in the Dock (macOS) or taskbar (Windows) → Quit.
+**Settings and Quit:** click his little stick-figure icon in the menu bar (macOS, top right)
+or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop him in again, Quit.
 
 ## Things to try
 - **Poke** him (quick click). How he reacts depends on his mood: playful → giggles, tags you back,
@@ -18,11 +19,13 @@ grab, and throw him.
   Poke him a lot and watch him get angry.
 - **Pick him up** (click and drag) and **throw** him. Small drops he lands on his feet;
   big ones knock him flat, and he'll remember he didn't like that.
+- **Smack** him (turn on Smack mode first): swipe the cursor through him fast.
 - **Pet** him: rub the cursor back and forth over him without clicking. ♥
 - **Leave him alone**: he wanders, sits, explores, gets bored, and eventually naps.
   Poke him while he's asleep at your own risk.
 
-His mood is saved between runs.
+His mood is saved between runs. The **Settings** window shows his mood live and lets you change
+his name, size, look (presets or every number by hand) and how he moves.
 
 ## Commands
 | Command | What it does |
@@ -30,6 +33,7 @@ His mood is saved between runs.
 | `npm start` | Build and launch the pet |
 | `npm run preview` | Run in a regular browser window (handy for tweaking) |
 | `npm run sim` | Headless physics tests |
+| `npm run lab` | Design lab: compare looks side by side |
 | `npm run typecheck` | Check the TypeScript for errors |
 
 See `CLAUDE.md` for the architecture and roadmap.

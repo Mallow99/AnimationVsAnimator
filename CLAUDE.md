@@ -61,14 +61,16 @@ Then: Android shell.
   headless Chromium screenshots, Electron launch under Xvfb. NOT yet verified on a real
   Mac/PC: click-through, always-on-top, feel.
 
-- Design pass (in progress): body style + look are now parameters (`BodyStyle` in character.ts,
-  `Look` in render.ts, incl. pixel-art mode). New pendulum walk. Design lab: `npm run lab`
-  (also published as a private artifact). Waiting on the owner's picks.
+- Design pass ✅ Owner picked: Straight stance, Quick steps, Deep blurple, Chunky, Pixel S → defaults.
+  Name: Blurp (placeholder; owner may want something based on "Mallow" later). Stands tall, subtle mood hunch.
+- Settings window ✅ (src/settings): mood bars, look/movement presets + sliders, name, size, smack
+  mode, mind mode (only offline enabled). Config = `src/core/config.ts`, saved by main as
+  userData/pet.json, broadcast to all windows over IPC. Menu-bar/tray icon; Dock icon hidden on macOS.
+- Smacking is a toggle (off by default). Owner later wants weapons/items to hit him with, and him
+  hitting back / moving the cursor (items milestone).
 
 ## Owner's wishlist (agreed, not built yet)
-- Rename to Blurp/Blurple, bluish-purple color (picking the exact shade in the lab).
-- Settings window from the menu-bar icon: name, color, size, visual presets, mind mode.
-  Also stat views: mood bars, memories, personality.
+- Memories and personality views in settings are placeholders until milestones 4–5.
 - Moods as blended bars where all of them matter (complex emotions), not just the loudest one.
   (The dials already exist in mood.ts; reactions mostly use the dominant label today.)
 - A way to talk back to him once he can talk (milestone 4).

@@ -1,11 +1,17 @@
 // The overlay page: sets up the canvas, runs the frame loop, feeds mouse input
 // to the pet, and tells the desktop shell when clicks should pass through.
 
-import { Pet } from '../core/pet';
+import { Pet, type PetConfig } from '../core/pet';
 import type { Bounds } from '../core/physics';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
-interface PetShell { setClickThrough(ignore: boolean): void }
+interface PetShell {
+  setClickThrough(ignore: boolean): void;
+  getConfig(): Promise<PetConfig>;
+  onConfig(cb: (c: PetConfig) => void): void;
+  sendStats(stats: unknown): void;
+  onCommand(cb: (cmd: string) => void): void;
+}
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -15,7 +21,8 @@ if (!shell) {
   document.body.classList.add('preview');
   const hint = document.createElement('div');
   hint.className = 'hint';
-  hint.textContent = 'Preview mode — click to poke, drag to pick up, fling to throw.';
+  hint.textContent = 'Preview mode — click to poke, drag to pick up, fling to throw. Press S to toggle smack mode.';
+  window.addEventListener('keydown', (e) => { if (e.key === 's') pet.config.smacking = !pet.config.smacking; });
   document.body.appendChild(hint);
 }
 
@@ -30,6 +37,14 @@ try { pet.load(localStorage.getItem(SAVE_KEY)); } catch { /* storage blocked */ 
 const save = () => { try { localStorage.setItem(SAVE_KEY, pet.save()); } catch { /* ignore */ } };
 setInterval(save, 15000);
 window.addEventListener('beforeunload', save);
+
+// Settings live in the desktop shell (pet.json). Get them now, and whenever they change.
+if (shell) {
+  shell.getConfig().then((c) => pet.applyConfig(c));
+  shell.onConfig((c) => pet.applyConfig(c));
+  shell.onCommand((cmd) => pet.command(cmd));
+  setInterval(() => shell.sendStats(pet.stats()), 400);
+}
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools
 
 function resize() {

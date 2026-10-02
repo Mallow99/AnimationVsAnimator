@@ -154,10 +154,17 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   const got: string[] = [];
   const orig = pet.mind.onEvent.bind(pet.mind);
   pet.mind.onEvent = (c, e) => { got.push(e.type); orig(c, e); };
+  const swipe = () => {
+    const y = pet.char.body.j.neck.y + 10, x0 = pet.char.x;
+    for (let i = -6; i <= 6; i++) pet.cursor(x0 + i * 40, y, 2400, 0); // 40px per event at 60fps ≈ 2400 px/s
+    petFor(0.2, pet);
+  };
+  swipe();
+  check('smack mode off: swipe does nothing', !got.includes('smacked'), got.join(','));
+  petFor(1, pet);
+  pet.config.smacking = true;
   const before = pet.mood.s.annoyance;
-  const y = pet.char.body.j.neck.y + 10, x0 = pet.char.x;
-  for (let i = -6; i <= 6; i++) pet.cursor(x0 + i * 40, y, 2400, 0); // 40px per event at 60fps ≈ 2400 px/s
-  petFor(0.2, pet);
+  swipe();
   check('fast swipe smacks him', got.includes('smacked') && pet.mood.s.annoyance > before + 0.2, got.join(','));
 }
 {
@@ -172,6 +179,15 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   const hx = pet.char.x, hy = pet.char.body.j.hip.y - 10;
   for (let i = 0; i < 60; i++) { pet.cursor(hx + Math.sin(i / 3) * 12, hy, Math.cos(i / 3) * 240, 0); pet.update(1 / 60); }
   check('slow rub pets him (no smack)', got.includes('petted') && !got.includes('smacked'), got.join(','));
+}
+{ // Changing his size mid-life rebuilds his body without breaking anything.
+  const pet = new Pet(bounds);
+  petFor(3, pet);
+  pet.applyConfig({ ...pet.config, scale: 1.8 });
+  petFor(4, pet);
+  pet.applyConfig({ ...pet.config, scale: 0.7 });
+  petFor(4, pet);
+  check('resize in settings: still standing', upright(pet.char) && Math.abs(pet.char.scale - 0.7) < 1e-6, `mode=${pet.char.mode}`);
 }
 function reactionTo(mood: Partial<import('../src/core/mood').MoodState>) {
   const names: string[] = [];

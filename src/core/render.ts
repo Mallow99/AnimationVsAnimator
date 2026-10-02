@@ -12,7 +12,7 @@ export interface Look {
   showJoints: boolean;
 }
 
-export const DEFAULT_LOOK: Look = { color: '#f7931e', lineWidth: 4.5, headSize: 1, pixel: 1, showJoints: false };
+export const DEFAULT_LOOK: Look = { color: '#4450d6', lineWidth: 7, headSize: 1.25, pixel: 2, showJoints: false };
 
 /** Darken (amount < 0) or lighten a #rrggbb color. */
 export function shade(hex: string, amount: number) {

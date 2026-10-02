@@ -46,6 +46,9 @@ export class Mind {
     this.updateLook(c);
   }
 
+  /** Forget the current plan (e.g. his body was rebuilt). */
+  reset(c: Ctx) { this.end(c); this.queued = null; }
+
   private begin(c: Ctx, s: Skill) {
     c.look = 'default';
     this.skill = s;

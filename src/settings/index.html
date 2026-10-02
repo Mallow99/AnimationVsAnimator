@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <title>Settings</title>
+  <style>
+    /* Layout: a compact control panel. Header with his live mood, tabs, one column of controls. */
+    :root {
+      --bg: #eef0f6; --panel: #f8f9fc; --ink: #1b1d2e; --muted: #5b5f78; --line: #d3d6e5;
+      --accent: #4450d6; --accent-ink: #fff; --track: #dfe2ee;
+      --good: #2f9e6a; --warn: #c98a1c; --bad: #d1495b;
+      --ui: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #13141d; --panel: #1a1c28; --ink: #e8e9f3; --muted: #9a9db5; --line: #2b2e42;
+              --accent: #8c96ff; --accent-ink: #13141d; --track: #262938; color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--ui); }
+    header { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 16px 18px 0; border-bottom: 1px solid var(--line); }
+    .who { display: flex; align-items: center; gap: 10px; }
+    h1 { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -.01em; }
+    .mood-chip { font: 600 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 5px 8px; border-radius: 99px;
+                 background: var(--accent); color: var(--accent-ink); }
+    .doing { margin: 4px 0 12px; color: var(--muted); font-size: 13px; }
+    nav { display: flex; gap: 2px; }
+    nav button { font: 600 13px/1 var(--ui); color: var(--muted); background: none; border: 0; padding: 10px 12px; border-bottom: 2px solid transparent; cursor: pointer; }
+    nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+    main { padding: 18px; display: grid; gap: 22px; }
+    section { display: grid; gap: 22px; }
+    section[hidden] { display: none !important; }
+    .group { display: grid; gap: 10px; }
+    h2 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; }
+    .bar { display: grid; grid-template-columns: 112px 1fr 38px; align-items: center; gap: 10px; }
+    .bar .track { display: block; height: 10px; border-radius: 99px; background: var(--track); overflow: hidden; }
+    .bar .fill { display: block; width: 0; height: 100%; border-radius: 99px; background: var(--accent); transition: width .35s ease; }
+    .bar .val { font: 12px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+    .bar .name { font-weight: 600; }
+    .note { color: var(--muted); font-size: 13px; margin: 0; }
+    .recent { font: 12px/1.6 var(--mono); color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { font: 600 13px/1 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+    .chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+    .chip .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+    .bundle { text-align: left; display: grid; gap: 3px; padding: 10px 12px; }
+    .bundle small { font-weight: 400; color: var(--muted); }
+    .bundles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .row-label { font-size: 13px; font-weight: 600; }
+    .slider { display: grid; gap: 4px; }
+    .slider .top { display: flex; justify-content: space-between; gap: 8px; }
+    .slider .top span:last-child { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+    .slider small { color: var(--muted); font-size: 12px; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    input[type="text"] { font: 15px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+    input[type="color"] { width: 44px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 2px; }
+    .inline { display: flex; align-items: center; gap: 10px; }
+    .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+    .radio { display: flex; align-items: flex-start; gap: 10px; }
+    .radio input { margin-top: 3px; accent-color: var(--accent); }
+    .radio small { display: block; color: var(--muted); }
+    .radio.off { opacity: .55; }
+    .btn { font: 600 13px/1 var(--ui); color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 8px; padding: 9px 12px; cursor: pointer; }
+    .btn.ghost { color: var(--ink); background: none; border: 1px solid var(--line); }
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="who"><h1 id="title">Blurp</h1><span class="mood-chip" id="label">…</span></div>
+    <p class="doing" id="doing">Waiting for him to report in…</p>
+    <nav role="tablist">
+      <button role="tab" data-tab="mood" aria-selected="true">Mood</button>
+      <button role="tab" data-tab="look" aria-selected="false">Look</button>
+      <button role="tab" data-tab="body" aria-selected="false">Movement</button>
+      <button role="tab" data-tab="him" aria-selected="false">General</button>
+    </nav>
+  </header>
+  <main>
+    <section data-panel="mood">
+      <div class="group">
+        <h2>How he feels</h2>
+        <div class="card" id="bars"></div>
+        <p class="note">Each bar moves on its own. Right now the strongest one mostly decides how he reacts; blending them is planned.</p>
+      </div>
+      <div class="group">
+        <h2>Recently</h2>
+        <div class="card"><div class="recent" id="recent">—</div></div>
+      </div>
+      <div class="btns">
+        <button class="btn ghost" id="resetMood" type="button">Reset his mood</button>
+        <button class="btn ghost" id="respawn" type="button">Drop him in again</button>
+      </div>
+      <div class="group">
+        <h2>Memories</h2>
+        <div class="card"><p class="note">He doesn't keep memories yet. They arrive in milestone 5, as a notes file he writes and tidies up himself.</p></div>
+      </div>
+      <div class="group">
+        <h2>Personality</h2>
+        <div class="card"><p class="note">His written persona arrives with the AI brain in milestone 4. For now his personality comes from how his moods react.</p></div>
+      </div>
+    </section>
+
+    <section data-panel="look" hidden>
+      <div class="group"><h2>Presets</h2><div class="bundles" id="bundles"></div></div>
+      <div class="group" id="lookRows"></div>
+      <div class="group">
+        <h2>Fine-tune</h2>
+        <div class="card">
+          <div class="inline"><input type="color" id="color" aria-label="Color" /><span class="row-label">Color</span></div>
+          <div id="lookSliders" class="group"></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-panel="body" hidden>
+      <div class="group" id="bodyRows"></div>
+      <div class="group"><h2>Fine-tune</h2><div class="card" id="bodySliders"></div></div>
+    </section>
+
+    <section data-panel="him" hidden>
+      <div class="group">
+        <h2>Name</h2>
+        <input type="text" id="name" maxlength="40" />
+      </div>
+      <div class="group">
+        <h2>Interaction</h2>
+        <div class="card">
+          <label class="switch"><span><span class="row-label">Smack mode</span><br /><small class="note">Swipe the cursor through him fast to smack him. Off so it doesn't happen by accident.</small></span><input type="checkbox" id="smacking" /></label>
+        </div>
+      </div>
+      <div class="group">
+        <h2>Brain</h2>
+        <div class="card">
+          <label class="radio"><input type="radio" name="mind" value="offline" /><span><span class="row-label">Offline</span><small>Instinct and moods only. No internet, no AI.</small></span></label>
+          <label class="radio off"><input type="radio" name="mind" value="chat" disabled /><span><span class="row-label">Chat</span><small>AI only for talking. Coming in milestone 4.</small></span></label>
+          <label class="radio off"><input type="radio" name="mind" value="full" disabled /><span><span class="row-label">Full</span><small>AI also decides what he does. Coming in milestone 4.</small></span></label>
+        </div>
+      </div>
+      <div class="group">
+        <h2>Size</h2>
+        <div class="card" id="sizeSlider"></div>
+      </div>
+      <div class="btns"><button class="btn ghost" id="resetAll" type="button">Reset all settings</button></div>
+    </section>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>
