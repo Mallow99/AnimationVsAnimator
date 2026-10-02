@@ -186,6 +186,7 @@ $<HTMLInputElement>('name').addEventListener('input', (e) => set({ name: (e.targ
 $<HTMLInputElement>('mischief').addEventListener('change', (e) => set({ mischief: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('windows').addEventListener('change', (e) => set({ windows: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.target as HTMLInputElement).checked }));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
 $<HTMLTextAreaElement>('persona').addEventListener('input', (e) => set({ persona: (e.target as HTMLTextAreaElement).value }));
 $<HTMLInputElement>('model').addEventListener('change', (e) => set({ model: (e.target as HTMLInputElement).value.trim() }));
@@ -231,6 +232,7 @@ function render(c: PetConfig) {
   if (document.activeElement !== name) name.value = c.name;
   $<HTMLInputElement>('color').value = c.look.color;
   $<HTMLInputElement>('smacking').checked = c.smacking;
+  $<HTMLInputElement>('sound').checked = c.sound;
   $<HTMLInputElement>('windows').checked = c.windows;
   $<HTMLInputElement>('mischief').checked = c.mischief;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.checked = r.value === c.mind;

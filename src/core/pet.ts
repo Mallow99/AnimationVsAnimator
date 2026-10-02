@@ -9,7 +9,7 @@ import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowWalls, type WinRect } from './world';
-import { drawBubble, drawCharacter, PixelLayer, shade } from './render';
+import { drawBubble, drawCharacter, drawPixelBubble, drawPuffs, PixelLayer, shade, type Puff } from './render';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, splitSpeech } from './brain';
 
@@ -17,6 +17,7 @@ export { DEFAULT_CONFIG, type PetConfig } from './config';
 
 const STEP = 1 / 120; // physics runs at a fixed 120 steps per second
 const SMACK_SPEED = 1400; // cursor speed (px/s) that counts as a smack rather than a brush
+const TYPE_SPEED = 32;    // letters per second as his speech bubble types out
 
 export class Pet {
   char: Character;
@@ -28,7 +29,14 @@ export class Pet {
   paused = false;
   private acc = 0;
   private press: { joint: JointName; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
-  private bubble: { text: string; t: number; ttl: number } | null = null;
+  /** His speech bubble. Letters type out one by one (`shown`), with a little blip for each. */
+  private bubble: { text: string; t: number; ttl: number; shown: number } | null = null;
+  /** Called for each blip of his voice (the app plays it). `pitch` in Hz. */
+  onBlip: ((pitch: number) => void) | null = null;
+  /** Dust puffs from landings and crashes. */
+  private puffs: Puff[] = [];
+  /** Hit-stop: the world freezes for a split second on a big impact (a classic game-feel trick). */
+  private freeze = 0;
   /** Longer things he says, shown one bubble at a time. */
   private speech: string[] = [];
   private smackCooldown = 0;
@@ -68,15 +76,19 @@ export class Pet {
     dt = Math.min(dt, 0.1); // after a stall (laptop asleep), don't try to catch up forever
     this.ctx.world.time += dt;
     this.ctx.canGrabCursor = this.config.mischief && !!this.onMoveCursor;
+    if (this.freeze > 0) { this.freeze -= dt; dt = 0; }
     this.acc += dt;
     this.smoothWindows(dt);
     while (this.acc >= STEP) {
       this.char.step(STEP);
       this.acc -= STEP;
     }
-    for (const e of this.char.drainEvents()) this.emit(e);
+    for (const e of this.char.drainEvents()) { this.effects(e); this.emit(e); }
     if (!this.paused) { this.mind.update(this.ctx, dt); this.brain.update(this.ctx, this.mind); }
-    if (this.bubble && (this.bubble.t += dt) > this.bubble.ttl) this.bubble = null;
+    if (this.bubble) this.typeOut(this.bubble, dt);
+    if (this.bubble && this.bubble.t > this.bubble.ttl) this.bubble = null;
+    for (const f of this.puffs) { f.t += dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.92; f.vy *= 0.92; }
+    this.puffs = this.puffs.filter((f) => f.t < f.life);
     if (!this.bubble && this.speech.length) this.say(this.speech.shift()!);
     for (const h of this.hearts) { h.t += dt; h.y -= 40 * dt; h.x += h.drift * dt; }
     this.hearts = this.hearts.filter((h) => h.t < 1.4);
@@ -84,7 +96,40 @@ export class Pet {
   }
 
   say(text: string, secs?: number) {
-    this.bubble = { text, t: 0, ttl: secs ?? Math.min(1.8 + text.length * 0.06, 5) };
+    if (text.length > 70 && secs === undefined) { this.speak(text); return; }
+    // Time to type it out, then time to read it.
+    this.bubble = { text, t: 0, shown: 0, ttl: text.length / TYPE_SPEED + (secs ?? Math.min(1.5 + text.length * 0.05, 4.5)) };
+  }
+
+  /** Type the bubble out letter by letter, blipping like an indie game character. */
+  private typeOut(b: { text: string; t: number; shown: number }, dt: number) {
+    b.t += dt;
+    const before = Math.floor(b.shown);
+    b.shown = Math.min(b.text.length, b.t * TYPE_SPEED);
+    const now = Math.floor(b.shown);
+    if (!this.onBlip || !this.config.sound || now === before) return;
+    for (let i = before; i < now; i++) {
+      if (i % 2 || !/[\p{L}\p{N}]/u.test(b.text[i])) continue;
+      // His voice follows his mood: higher when happy, lower and flatter when sad or cross.
+      const s = this.mood.s;
+      const base = 420 + s.happiness * 260 + s.energy * 80 - s.annoyance * 120 - (this.mood.asleep ? 120 : 0);
+      this.onBlip(base * (0.92 + Math.random() * 0.16));
+    }
+  }
+
+  /** Game-feel touches for things that happen to his body. */
+  private effects(e: { type: string; speed?: number }) {
+    const j = this.char.body.j, sc = this.char.scale;
+    const burst = (x: number, y: number, n: number, power: number) => {
+      for (let i = 0; i < n; i++) {
+        const a = Math.PI + (i / Math.max(1, n - 1)) * Math.PI;
+        this.puffs.push({ x, y, vx: Math.cos(a) * power * (0.5 + Math.random()), vy: Math.sin(a) * power * 0.35 * Math.random(), t: 0, life: 0.35 + Math.random() * 0.3, size: (3 + Math.random() * 3) * sc });
+      }
+    };
+    const feetX = (j.footL.x + j.footR.x) / 2, feetY = Math.max(j.footL.y, j.footR.y) + 2;
+    if (e.type === 'landed' && (e.speed ?? 0) > 350) burst(feetX, feetY, 6, 60 + (e.speed ?? 0) * 0.05);
+    if (e.type === 'crashed') { burst(j.hip.x, Math.max(j.hip.y, j.head.y) + 4, 12, 110); this.freeze = 0.07; }
+    if (e.type === 'stomped') burst(feetX, feetY, 5, 70);
   }
 
   /** Say something longer: split into bubble-sized pieces, shown one after another. */
@@ -98,6 +143,7 @@ export class Pet {
     const look = this.config.look;
     if (look.pixel > 1) this.pixels.draw(ctx, this.char, look);
     else drawCharacter(ctx, this.char, look);
+    if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
     // His pen, while he's drawing.
     if (this.mind.skill?.name === 'doodle' && this.char.handTarget) {
@@ -116,8 +162,9 @@ export class Pet {
     }
     if (this.bubble) {
       const b = this.bubble;
-      const alpha = Math.min(1, b.t * 8, (b.ttl - b.t) * 4);
-      drawBubble(ctx, this.char, b.text, alpha, this.ctx.world.bounds);
+      const alpha = Math.min(1, (b.ttl - b.t) * 4);
+      if (look.pixel > 1) drawPixelBubble(ctx, this.char, b.text, b.shown, alpha, this.ctx.world.bounds, Math.round(look.pixel), shade(look.color, -0.45));
+      else drawBubble(ctx, this.char, b.text.slice(0, Math.floor(b.shown)), alpha, this.ctx.world.bounds);
     }
   }
 
@@ -220,6 +267,7 @@ export class Pet {
         this.char.poke(joint, vx * k, vy * k - 150);
         this.smackCooldown = w.time + 0.35;
         this.emit({ type: 'smacked', speed });
+        this.freeze = 0.06;
         break;
       }
     }

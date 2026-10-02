@@ -35,6 +35,8 @@ export interface PetConfig {
   windows: boolean;
   /** Desktop Goose mode: he may grab your cursor and drag it around for a moment. */
   mischief: boolean;
+  /** Little blips when he talks, like characters in indie games. */
+  sound: boolean;
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
@@ -50,6 +52,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   smacking: false,
   windows: true,
   mischief: false,
+  sound: true,
 };
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }

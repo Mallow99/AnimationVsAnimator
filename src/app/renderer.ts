@@ -61,6 +61,24 @@ if (shell) {
 }
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools
 
+// ── his voice: tiny square-wave blips, one per couple of letters (like Undertale or Animal Crossing) ──
+let audio: AudioContext | null = null;
+pet.onBlip = (pitch) => {
+  try {
+    audio ??= new AudioContext();
+    if (audio.state === 'suspended') { audio.resume(); return; } // browsers need a click first
+    const t = audio.currentTime, osc = audio.createOscillator(), gain = audio.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(pitch, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.035, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(t);
+    osc.stop(t + 0.06);
+  } catch { /* no sound available */ }
+};
+
 function resize() {
   const dpr = window.devicePixelRatio || 1; // Retina screens have 2+ real pixels per point
   canvas.width = Math.round(window.innerWidth * dpr);

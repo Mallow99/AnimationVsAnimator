@@ -2,6 +2,7 @@
 // a normal browser, and (later) an Android WebView.
 
 import type { Character } from './character';
+import { drawPixelText, FONT_HEIGHT, textWidth, wrapPixelText } from './pixelfont';
 
 /** How he looks. Edited from the settings / presets. */
 export interface Look {
@@ -126,5 +127,69 @@ export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: st
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x + w / 2, y + h / 2 + 1);
+  ctx.restore();
+}
+
+/**
+ * The indie version of his speech bubble: chunky pixels, a pixel font, stepped
+ * corners and a stepped tail. `shown` = how many letters have appeared so far
+ * (they type out one by one). `p` = screen size of one pixel.
+ */
+export function drawPixelBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, shown: number, alpha: number, b: { left: number; right: number; top: number }, p: number, ink: string) {
+  const head = c.body.j.head, sc = c.scale;
+  const lines = wrapPixelText(text, 100);
+  // Lay out the full text so the bubble doesn't grow while typing.
+  const wText = Math.max(...lines.map(textWidth), 7);
+  const lineH = FONT_HEIGHT + 4;
+  const padX = 4, padY = 3;
+  const wPx = wText + padX * 2, hPx = lines.length * lineH - 3 + padY * 2;
+  const W = wPx * p, H = hPx * p;
+  const snap = (v: number) => Math.round(v / p) * p;
+  const tipX = head.x, tipY = head.y - c.d.headR - 5 * sc;
+  const x = snap(Math.min(Math.max(tipX - W / 2, b.left + 4), b.right - W - 4));
+  const y = snap(Math.max(tipY - 4 * p - H, b.top + 4));
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, alpha);
+  // Outline, then fill, with the corner pixels knocked out.
+  const box = (inset: number, color: string) => {
+    ctx.fillStyle = color;
+    const i = inset * p;
+    ctx.fillRect(x + i + p, y + i, W - 2 * i - 2 * p, H - 2 * i);
+    ctx.fillRect(x + i, y + i + p, W - 2 * i, H - 2 * i - 2 * p);
+  };
+  box(0, ink);
+  box(1, '#ffffff');
+  // Stepped tail pointing at his head.
+  const tx = snap(Math.min(Math.max(tipX, x + 4 * p), x + W - 5 * p));
+  ctx.fillStyle = ink;
+  ctx.fillRect(tx - 2 * p, y + H - p, 5 * p, p);
+  ctx.fillRect(tx - p, y + H, 3 * p, p);
+  ctx.fillRect(tx, y + H + p, p, p);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(tx - p, y + H - p, 3 * p, p);
+  ctx.fillRect(tx, y + H, p, p);
+  // The letters typed so far.
+  ctx.fillStyle = '#1b1d2e';
+  let left = Math.floor(shown);
+  lines.forEach((line, i) => {
+    if (left <= 0) return;
+    const part = line.slice(0, left);
+    left -= line.length + 1;
+    drawPixelText(ctx, part, x + padX * p, y + (padY + i * lineH) * p, p);
+  });
+  ctx.restore();
+}
+
+/** Little puffs of dust (landings, crashes): pixel squares that drift and fade. */
+export interface Puff { x: number; y: number; vx: number; vy: number; t: number; life: number; size: number }
+
+export function drawPuffs(ctx: CanvasRenderingContext2D, puffs: Puff[], p: number, color: string) {
+  ctx.save();
+  ctx.fillStyle = color;
+  for (const f of puffs) {
+    ctx.globalAlpha = Math.max(0, 1 - f.t / f.life) * 0.8;
+    const s = Math.max(p, Math.round((f.size * (1 - f.t / f.life * 0.5)) / p) * p);
+    ctx.fillRect(Math.round(f.x / p) * p - s / 2, Math.round(f.y / p) * p - s / 2, s, s);
+  }
   ctx.restore();
 }

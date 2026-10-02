@@ -192,6 +192,9 @@ ipcMain.on('pet:moveCursor', (_e, x: number, y: number) => {
   watcher.moveCursor(p.x, p.y);
 });
 
+// His talking blips should play without you having to click first.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 app.whenReady().then(() => {
   loadConfig();
   // He lives in the menu bar, not the Dock. Keep an Edit menu so copy/paste
