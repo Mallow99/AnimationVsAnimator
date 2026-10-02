@@ -16,13 +16,14 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
+  Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, RideScooter, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number }
   | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number }
   | { type: 'itemSpawned'; name: string; uid: number } // something new appeared (you dropped it in from his inventory)
+  | { type: 'propSpawned'; id: string; name: string }   // a prop (a chair, a TV...) dropped in
   | { type: 'bonked'; speed: number } // a ball hit him
   | { type: 'hitCursor'; power: number; by: string } // he hit your cursor (and maybe sent it flying)
   | { type: 'cursorFreed' }   // you took your cursor back mid-flight
@@ -127,6 +128,10 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   knock: { boredom: -0.15 },
   ledgesit: { energy: 0.05, boredom: 0.02, happiness: 0.03 },
   hang: { boredom: -0.35, happiness: 0.06 },
+  sitdown: { energy: 0.08, boredom: 0.04, happiness: 0.03 },
+  watchtv: { boredom: -0.5, happiness: 0.08, energy: 0.04 },
+  ride: { boredom: -0.45, happiness: 0.08, energy: -0.03 },
+  ramp: { boredom: -0.3, happiness: 0.05 }, bridge: { boredom: -0.3, happiness: 0.05 }, drawramp: { boredom: -0.3, happiness: 0.05 },
 };
 
 /** Things you can tell him to do from the settings window. */
@@ -148,6 +153,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'knock', label: 'Knock on a window' }, { name: 'ledgesit', label: 'Sit on the edge' }, { name: 'hang', label: 'Hang off the cursor' },
   { name: 'ramp', label: 'Draw a ramp up to a window' }, { name: 'bridge', label: 'Draw a bridge to a window' }, { name: 'drawramp', label: 'Draw a ramp (and jump off it)' },
   { name: 'ropebridge', label: 'Draw a rope bridge' },
+  { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'ride', label: 'Ride the scooter' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
@@ -176,6 +182,8 @@ export class Mind {
   /** When he last swatted your cursor off him, and last messed with a window. */
   private swatAt = -100;
   private hungAt = -100;
+  /** Something to do right after the current skill (a new toy to try once it's landed). */
+  private afterThat: (() => Option | undefined) | null = null;
   /** Building options for something you asked for directly (skip mood and politeness filters). */
   private forced = false;
   /** Why he can't do each thing you asked for (said instead of "?"). */
@@ -206,6 +214,9 @@ export class Mind {
         const glow = AFTERGLOW[this.skill.name];
         if (glow) c.mood.nudge(glow);
         this.end(c);
+        const next = this.afterThat?.();
+        this.afterThat = null;
+        if (next) { this.queued = next.make(); this.why = next.why; return; }
         // Catch his breath before the next thing (longer when tired) — keeps him from twitching between activities.
         this.restUntil = c.world.time + rand(1.5, 4) * (1.5 - c.mood.s.energy * 0.5);
       }
@@ -436,6 +447,7 @@ export class Mind {
       { name: 'sigh', score: L === 'bored' ? 0.6 : 0, why: 'bored', make: presets.sigh },
       ...this.windowOptions(c),
       ...this.windowPranks(c),
+      ...this.propOptions(c),
       ...this.itemOptions(c),
       ...this.parkourOptions(c),
       ...this.liveDrawingOptions(c),
@@ -572,6 +584,27 @@ export class Mind {
     return opts;
   }
 
+  /** His furniture and toys: sit down, watch TV, ride the scooter. */
+  private propOptions(c: Ctx): Option[] {
+    const s = c.mood.s, E = c.mood.emotion, L = c.mood.label, ch = c.char, opts: Option[] = [];
+    if (!ch.whole || ch.support >= 0 && !c.props?.thingOf(ch.support)) {
+      // (Up on a window: he'd have to get down first. Keep it simple: props are for when he's on the floor.)
+      if (this.forced) for (const n of ['sitdown', 'watchtv', 'ride']) this.cant[n] = !ch.whole ? 'not like this' : 'I need to get down first';
+      return opts;
+    }
+    const seat = propsOf(c, 'seat')[0], tv = propsOf(c, 'tv')[0], scooter = propsOf(c, 'ride')[0];
+    if (this.forced) {
+      if (!seat) this.cant.sitdown = 'nothing to sit on (drop in a chair!)';
+      if (!tv) this.cant.watchtv = 'no TV (drop one in from my inventory)';
+      if (!scooter) this.cant.ride = 'no scooter';
+    }
+    if (seat) opts.push({ name: 'sitdown', why: s.energy < 0.5 ? 'tired: having a sit on the ' + seat.def!.name.toLowerCase() : 'taking a seat',
+      score: 0.15 + (1 - s.energy) * 0.7 + (L === 'sad' ? 0.3 : 0), make: () => new SitOnProp(seat) });
+    if (tv) opts.push({ name: 'watchtv', why: 'watching TV', score: L === 'bored' ? 0.9 : E === 'lonely' || L === 'sad' ? 0.6 : L === 'sleepy' ? 0.3 : 0.25, make: () => new WatchTV(tv) });
+    if (scooter && ch.legCount === 2 && ch.useHand) opts.push({ name: 'ride', why: 'scooter time', score: E === 'excited' ? 1 : L === 'playful' ? 0.7 : L === 'bored' ? 0.5 : 0.08, make: () => new RideScooter(scooter) });
+    return opts;
+  }
+
   /** Climbing onto windows and getting back down. */
   private windowOptions(c: Ctx): Option[] {
     const s = c.mood.s, L = c.mood.label, ch = c.char, opts: Option[] = [];
@@ -704,6 +737,19 @@ export class Mind {
         c.say(pick(['ooh!', "what's that?", '!', 'for me?']), 1.2);
         this.interrupt(c, new FetchItem(it));
         this.why = `a ${e.name} fell out of the sky`;
+        return;
+      }
+      case 'propSpawned': {
+        // Something new to play with!
+        if (m.asleep) return;
+        c.say(pick([`ooh! a ${e.name.toLowerCase()}`, `a ${e.name.toLowerCase()}!`, 'for me?']), 1.6);
+        const busy = this.skill && !['idle', 'wander', 'sit', 'sulk', 'explore', 'sigh', 'stretch', 'ledgesit'].includes(this.skill.name);
+        if (busy) return;
+        const make = () => this.options(c).find((o) => o.name === (e.id === 'tv' ? 'watchtv' : e.id === 'scooter' ? 'ride' : 'sitdown'));
+        // (Give it a moment to land first.)
+        this.interrupt(c, new Sequence('look', [{ wait: 1.2 }, { gesture: 'lookAround' }]));
+        this.afterThat = make;
+        this.why = `you dropped in a ${e.name.toLowerCase()}`;
         return;
       }
       case 'itemGiven':

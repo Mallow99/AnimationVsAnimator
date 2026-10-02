@@ -83,8 +83,8 @@ if (shell) {
   };
   setInterval(() => shell.sendStats(pet.stats()), 400);
   // Item definition files (yours, from the items folder) on top of the ones he comes with.
-  shell.getItemDefs().then((d) => pet.items.addDefs(d), () => {});
-  shell.onItemDefs((d) => pet.items.addDefs(d));
+  shell.getItemDefs().then((d) => pet.addDefs(d), () => {});
+  shell.onItemDefs((d) => pet.addDefs(d));
   pet.onOpenSettings = () => shell.openSettings();
   pet.onCollections = () => { shell.sendCollections(pet.collections()); save(); };
 }

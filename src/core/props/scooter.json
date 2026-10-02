@@ -1,0 +1,19 @@
+{
+  "type": "prop",
+  "id": "scooter",
+  "name": "Scooter",
+  "about": "A kick scooter. He hops on, holds the handlebar, kicks off, and rolls across the screen.",
+  "use": "ride",
+  "outline": [[4, 32], [34, 32], [39, 0], [41, 38], [5, 38]],
+  "wheels": [3, 4],
+  "wheel": 4.5,
+  "bar": [39, 1],
+  "friction": 0.01,
+  "shape": [
+    { "pts": [[3, 32], [35, 32]], "color": "#2f7fd8", "width": 3.5 },
+    { "pts": [[35, 32], [39, 2]], "color": "#9aa4b4", "width": 2.5 },
+    { "pts": [[35, 2], [43, 2]], "color": "#2a2c44", "width": 3 },
+    { "pts": [[41, 38], [41.2, 38]], "color": "#2a2c44", "width": 9 },
+    { "pts": [[5, 38], [5.2, 38]], "color": "#2a2c44", "width": 9 }
+  ]
+}

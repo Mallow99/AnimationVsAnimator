@@ -960,6 +960,56 @@ function calmPet() {
   check('draws a bridge over a gap, walks across, it turns into a real bridge', onFirst && overGap && !!br && br.stuck && across, `onFirst=${onFirst} overGap=${overGap} bridge=${!!br} support=${pet.char.support}`);
 }
 
+// ───── props: furniture and toys ─────
+{ // Drop in a chair: it falls, he goes and sits on it; tip it over and he falls off.
+  const pet = calmPet();
+  pet.command('setMood:{"energy":0.4}');
+  pet.command('prop:spawn:chair');
+  const chair = pet.props.placed[0];
+  let sat = false;
+  petFor(14, pet, () => { if (pet.char.mode === 'sit' && pet.char.seat) sat = true; });
+  const landed = !!chair && Math.max(...chair.points.map((p) => p.y)) > 790;
+  pet.mind.command(pet.ctx, 'sitdown');
+  petFor(4, pet);
+  const sitting = pet.char.mode === 'sit' && !!pet.char.seat;
+  // Tip it over.
+  const top = chair.points[0];
+  pet.pointerDown(top.x, top.y, 0);
+  for (let i = 0; i < 20; i++) { pet.pointerMove(top.x - i * 6, top.y + i * 2, -360, 120, 100 + i * 16); petFor(1 / 60, pet); }
+  pet.pointerUp(top.x - 120, top.y + 40);
+  petFor(1, pet);
+  check('chair: drop it in, he sits on it, tip it and he falls off', landed && sat && sitting && !pet.char.seat, `landed=${landed} satOnHisOwn=${sat} sitting=${sitting} mode=${pet.char.mode}`);
+}
+{ // TV and couch: he sits on the couch and watches; the TV turns on.
+  const pet = calmPet();
+  pet.props.spawn('tv', 900, 700, pet.char.scale);
+  pet.props.spawn('couch', 650, 700, pet.char.scale);
+  petFor(2, pet);
+  pet.mind.command(pet.ctx, 'watchtv');
+  let on = false, onCouch = false;
+  petFor(15, pet, () => { const tv = pet.props.placed.find((t) => t.def!.id === 'tv')!; if (tv.on) on = true; if (pet.char.seat && Math.abs(pet.char.x - pet.props.placed.find((t) => t.def!.id === 'couch')!.center.x) < 30) onCouch = true; });
+  check('TV: he watches it from the couch, and it turns on', on && onCouch, `on=${on} onCouch=${onCouch} skill=${pet.mind.skill?.name}`);
+}
+{ // Scooter: hops on, kicks off, rolls along, gets off.
+  const pet = calmPet();
+  pet.props.spawn('scooter', pet.char.x + 120, 700, pet.char.scale);
+  petFor(2, pet);
+  pet.mind.command(pet.ctx, 'ride');
+  const sc = pet.props.placed[0];
+  const x0 = sc.center.x;
+  let onIt = false, far = 0;
+  petFor(20, pet, () => { if (pet.props.thingOf(pet.char.support) === sc) { onIt = true; far = Math.max(far, Math.abs(sc.center.x - x0)); } });
+  check('scooter: he rides it across the screen', onIt && far > 180, `onIt=${onIt} rode=${far.toFixed(0)} skill=${pet.mind.skill?.name}`);
+}
+{ // Props are saved: they're back where they were.
+  const pet = calmPet();
+  pet.props.spawn('couch', 400, 700, pet.char.scale);
+  petFor(1, pet);
+  const copy = new Pet(bounds);
+  copy.load(pet.save());
+  check('props are saved', copy.props.placed.length === 1 && Math.abs(copy.props.placed[0].center.x - 400) < 60, `${copy.props.placed.map((t) => t.def!.id + '@' + t.center.x.toFixed(0))}`);
+}
+
 // ───── memories (milestone 5) ─────
 function throwHim(pet: Pet) {
   const c = pet.char, n = c.body.j.neck;

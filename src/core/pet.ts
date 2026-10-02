@@ -117,6 +117,8 @@ export class Pet {
   private winQuiet = new Map<number, { x: number; y: number; until: number }>();
   /** Where the desktop last said each window was (not smoothed, not overridden). */
   private winReported = new Map<number, WinRect>();
+  /** Saved props whose definition (one of your files) hasn't arrived yet. */
+  private pendingProps: { id: string; x: number }[] = [];
   /** Moving windows didn't work (no permission?): don't try again until this time. */
   windowsStuckUntil = -1;
   /** The desktop helper's latest word on moving windows ("moved a window", "no permission yet"...). */
@@ -303,6 +305,8 @@ export class Pet {
 
   draw(ctx: CanvasRenderingContext2D) {
     const look = this.config.look;
+    // His drawings that came to life, and his furniture: behind him (he sits on them, stands on them).
+    this.props.draw(ctx, this.ctx.world.time);
     // Squash and stretch (drawing only): scale him about his feet for a moment.
     const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
@@ -319,7 +323,6 @@ export class Pet {
     if (this.sparks.length) drawSparks(ctx, this.sparks, Math.max(1, Math.round(look.pixel)));
     if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
-    this.props.draw(ctx, this.ctx.world.time);
     drawCursorFlight(ctx, this.cursorBody, this.ctx.world.time, !this.onMoveCursor);
     for (const h of this.hearts) {
       ctx.save();
@@ -1155,6 +1158,10 @@ export class Pet {
         kinds: [...this.items.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about, use: d.use, drawn: !!d.drawn })),
         list: this.items.list.map((it) => ({ uid: it.uid, id: it.def.id, name: it.def.name, where: it.where, slot: it.slot, drawn: !!it.def.drawn })),
       },
+      props: {
+        kinds: [...this.props.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about })),
+        placed: this.props.placed.map((t, i) => ({ i, id: t.def!.id, name: t.def!.name })),
+      },
       memory: { summary: this.memory.summary, notes: this.memory.notes, tally: this.memory.tally, firstMet: this.memory.firstMet, summarizedAt: this.memory.summarizedAt },
     };
   }
@@ -1171,6 +1178,7 @@ export class Pet {
     if (verb === 'hear') { if (arg.trim()) this.memory.count('talks'); this.brain.hear(this.ctx, arg); return; }
     if (this.memoryCommand(verb, arg)) return;
     if (verb === 'item') { this.itemCommand(arg); this.onCollections?.(); return; }
+    if (verb === 'prop') { this.propCommand(arg); this.onCollections?.(); return; }
     if (verb === 'menuAt') { const [x, y] = arg.split(',').map(Number); this.contextMenu(x, y); return; }
     if (this.collectionCommand(verb, arg)) { this.onCollections?.(); return; }
     if (verb === 'mood') { const p = MOOD_PRESETS[arg]; if (p) { this.mood.asleep = false; Object.assign(this.mood.s, p); } return; }
@@ -1249,6 +1257,37 @@ export class Pet {
   }
 
   /**
+   * Props, from the Items tab:  prop:spawn:<kind>  prop:remove:<index>  prop:clear
+   */
+  private propCommand(arg: string) {
+    const [verb, id] = arg.split(':');
+    const b = this.ctx.world.bounds;
+    if (verb === 'spawn') {
+      // Dropped in from the top of the screen, a little way from him.
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const x = Math.min(b.right - 80, Math.max(b.left + 80, this.char.x + side * (130 + Math.random() * 200)));
+      const t = this.props.spawn(id, x, b.top + 10, this.char.scale);
+      if (t) { this.sound('poof', 0.7); this.emit({ type: 'propSpawned', id: t.def!.id, name: t.def!.name }); }
+    } else if (verb === 'remove') { const t = this.props.placed[Number(id)]; if (t) { this.props.remove(t); this.sound('poof', 0.4); } }
+    else if (verb === 'clear') for (const t of this.props.placed) this.props.remove(t);
+  }
+
+  /** Definition files from your items folder: items and props (a prop file says "type": "prop"). */
+  addDefs(list: unknown[]) {
+    const isProp = (d: unknown) => !!d && typeof d === 'object' && (d as { type?: unknown }).type === 'prop';
+    this.items.addDefs(list.filter((d) => !isProp(d)));
+    this.props.addDefs(list.filter(isProp));
+    // Props of yours he had out last time, now that their files are here.
+    const waiting = this.pendingProps.splice(0);
+    for (const p of waiting) {
+      const def = this.props.defs.get(p.id);
+      if (!def) continue;
+      this.props.spawn(p.id, p.x, this.ctx.world.bounds.floor - Math.max(...def.outline.map((q) => q[1])) * this.char.scale - 2, this.char.scale);
+    }
+    this.onCollections?.();
+  }
+
+  /**
    * His memories, from the Mind tab:
    *   memAdd:<text>  memEdit:<id>:<text>  memDel:<id>  memSummary:<text>  memTidy  memClear
    */
@@ -1268,7 +1307,7 @@ export class Pet {
 
   // ── saving between runs ──
   save() {
-    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known] });
+    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], props: this.props.savePlaced() });
   }
   load(json: string | null) {
     if (!json) return;
@@ -1280,6 +1319,14 @@ export class Pet {
       // Same array object the brain and mind already hold: fill it in place.
       if (Array.isArray(d.moves)) this.brain.savedMoves.splice(0, Infinity, ...d.moves.slice(-30));
       if (Array.isArray(d.items)) this.items.load(d.items, this.char, d.itemsKnown);
+      // His furniture, back where it was (standing on the floor).
+      if (Array.isArray(d.props)) for (const p of d.props.slice(0, 12)) {
+        if (!p || typeof p.id !== 'string' || typeof p.x !== 'number') continue;
+        const def = this.props.defs.get(p.id);
+        if (!def) { this.pendingProps.push(p); continue; } // one of yours: its file loads a moment later
+        const h = Math.max(...def.outline.map((q) => q[1])) * this.char.scale;
+        this.props.spawn(p.id, p.x, this.ctx.world.bounds.floor - h - 2, this.char.scale);
+      }
     } catch { /* corrupt save: start fresh */ }
   }
 }

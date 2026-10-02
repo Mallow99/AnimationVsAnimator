@@ -1,0 +1,19 @@
+{
+  "type": "prop",
+  "id": "couch",
+  "name": "Couch",
+  "about": "A comfy couch. He flops onto it, and it's the best seat for watching TV.",
+  "use": "seat",
+  "outline": [[0, 8], [10, 8], [10, 20], [80, 20], [80, 8], [90, 8], [90, 38], [0, 38]],
+  "seat": [44, 19],
+  "shape": [
+    { "pts": [[4, 2], [86, 2]], "color": "#a8504a", "width": 7 },
+    { "pts": [[5, 10], [5, 34]], "color": "#c4625a", "width": 9 },
+    { "pts": [[85, 10], [85, 34]], "color": "#c4625a", "width": 9 },
+    { "pts": [[10, 25], [80, 25]], "color": "#d9786e", "width": 10 },
+    { "pts": [[10, 33], [80, 33]], "color": "#a8504a", "width": 6 },
+    { "pts": [[45, 21], [45, 29]], "color": "#a8504a", "width": 1.5 },
+    { "pts": [[6, 37], [6, 39]], "color": "#4a2e1a", "width": 3 },
+    { "pts": [[84, 37], [84, 39]], "color": "#4a2e1a", "width": 3 }
+  ]
+}

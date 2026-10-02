@@ -13,6 +13,10 @@
 import { collide, collidePlatforms, integrate, makePoint, platY, solveSticks, type Bounds, type Platform, type Point, type Stick } from './physics';
 import { DOODLE_LIFE, type Doodle } from './doodles';
 import type { Vec } from './math';
+import chairDef from './props/chair.json';
+import couchDef from './props/couch.json';
+import tvDef from './props/tv.json';
+import scooterDef from './props/scooter.json';
 
 /** Platform ids for drawn things start here, far from any window's. */
 const PROP_ID = 1_000_000_000;
@@ -49,7 +53,57 @@ export class Ball {
 }
 
 /** What kind of solid thing it is. */
-export type ThingKind = 'box' | 'ledge' | 'ramp' | 'bridge';
+export type ThingKind = 'box' | 'ledge' | 'ramp' | 'bridge' | 'prop';
+
+/**
+ * A prop: furniture and toys you drop in from his inventory (a chair, a couch, a TV, a scooter),
+ * from a definition file like items have. Sizes in px at his normal size; y down, (0, 0) = top-left.
+ */
+export interface PropDef {
+  id: string; name: string; about: string;
+  /** What he does with it: sit on it, watch it, ride it, or just stand on it. */
+  use: 'seat' | 'tv' | 'ride' | 'none';
+  /** Its solid shape: points around its edge, clockwise on screen. Edges facing up are things to stand on. */
+  outline: [number, number][];
+  /** Where his bottom goes when he sits on it. */
+  seat?: [number, number];
+  /** The TV screen: x, y, width, height. */
+  screen?: [number, number, number, number];
+  /** Which outline points are wheels (they roll), how big, and where he holds on. */
+  wheels?: number[]; wheel?: number; bar?: [number, number];
+  /** How grippy it is on the floor (0.6 = stays put, 0.01 = rolls). */
+  friction: number;
+  shape: { pts: [number, number][]; color: string; width: number }[];
+}
+
+/** Check a prop definition (from a file). Returns null if it's unusable. */
+export function parsePropDef(raw: unknown): PropDef | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (o.type !== 'prop') return null;
+  const id = typeof o.id === 'string' ? o.id.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 30) : '';
+  const pt = (v: unknown): [number, number] | null => Array.isArray(v) && typeof v[0] === 'number' && typeof v[1] === 'number' && Number.isFinite(v[0] + v[1])
+    ? [Math.max(-200, Math.min(400, v[0])), Math.max(-200, Math.min(400, v[1]))] : null;
+  const outline = (Array.isArray(o.outline) ? o.outline : []).slice(0, 12).map(pt).filter((p): p is [number, number] => !!p);
+  if (!id || outline.length < 3) return null;
+  const color = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : '#2a2c44');
+  const shape = (Array.isArray(o.shape) ? o.shape : []).slice(0, 30).flatMap((st) => {
+    const s = st as Record<string, unknown>;
+    const pts = (Array.isArray(s?.pts) ? s.pts : []).slice(0, 40).map(pt).filter((p): p is [number, number] => !!p);
+    return pts.length >= 2 ? [{ pts, color: color(s.color), width: typeof s.width === 'number' ? Math.max(0.5, Math.min(12, s.width)) : 3 }] : [];
+  });
+  const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
+  const scr = Array.isArray(o.screen) && o.screen.length === 4 && o.screen.every((v) => typeof v === 'number') ? o.screen as [number, number, number, number] : undefined;
+  return {
+    id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
+    about: typeof o.about === 'string' ? o.about.slice(0, 160) : '',
+    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' ? o.use : 'none',
+    outline, seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
+    wheels: Array.isArray(o.wheels) ? o.wheels.filter((i): i is number => Number.isInteger(i) && i >= 0 && i < outline.length) : undefined,
+    wheel: num(o.wheel, 4, 1, 20), friction: num(o.friction, 0.6, 0, 1),
+    shape: shape.length ? shape : [{ pts: [...outline, outline[0]], color: '#2a2c44', width: 3 }],
+  };
+}
 
 /**
  * A solid thing he drew (or you dropped in): points + sticks. `outline` lists the points around
@@ -75,6 +129,15 @@ export class Thing {
   platforms: Platform[] = [];
   /** Made by you from his inventory (not a drawing: doesn't fade). */
   forever = false;
+  /** For props: its definition, and the drawing with its own colors. */
+  def: PropDef | null = null;
+  private localColored: { pts: { x: number; y: number }[]; color: string; width: number }[] = [];
+  /** How grippy it is on the floor. */
+  friction = 0.6;
+  /** A TV: switched on (he's watching). */
+  on = false;
+  /** Size it was made at (props scale with him). */
+  scale = 1;
 
   constructor(readonly kind: ThingKind, readonly doodle: Doodle, readonly n = nextProp++) {}
 
@@ -93,6 +156,16 @@ export class Thing {
     const a = this.points[0], b = this.points[1], l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     return { ox: a.x, oy: a.y, ux: (b.x - a.x) / l, uy: (b.y - a.y) / l };
   }
+
+  /** Turn a point in the prop's own coordinates (its definition file's, times its size) into screen coordinates. */
+  toWorld(lx: number, ly: number): Vec {
+    const f = this.frame(), o = this.def!.outline[0], x = (lx - o[0]) * this.scale, y = (ly - o[1]) * this.scale;
+    return { x: f.ox + x * f.ux - y * f.uy, y: f.oy + x * f.uy + y * f.ux };
+  }
+  /** Where he sits, if it's a seat. */
+  get seatAt(): Vec | null { return this.def?.seat ? this.toWorld(this.def.seat[0], this.def.seat[1]) : null; }
+  /** How far it's tipped over (radians; 0 = upright). */
+  get tilt() { const f = this.frame(); return Math.atan2(f.uy, f.ux); }
 
   pin(on: boolean) { for (const i of this.pins) this.points[i].invMass = on ? 0 : 1; this.stuck = on && this.pins.length > 0; }
   /** Knocked or pulled loose: now it's just a thing with weight. */
@@ -189,13 +262,13 @@ export class Thing {
   /** One pass of keeping its shape and keeping it out of the floor and off surfaces. */
   pass(bounds: Bounds) {
     solveSticks(this.sticks);
-    collide(this.points, bounds, 0.6, 0.15);
+    collide(this.points, bounds, this.friction, 0.15);
     for (const [p, pl] of this.above) {
       if (p.x < pl.x1 || p.x > pl.x2) continue;
       const top = platY(pl, p.x) - p.r;
       if (p.y <= top) continue;
       p.y = top;
-      p.px += (p.x - p.px) * 0.6; // friction
+      p.px += (p.x - p.px) * this.friction; // friction
       p.grounded = true;
     }
   }
@@ -204,6 +277,57 @@ export class Thing {
   end() {
     for (const [p] of this.above) if (p.grounded && p.py > p.y) p.py = p.y;
     this.refresh();
+  }
+
+  private drawProp(ctx: CanvasRenderingContext2D, alpha: number, now: number) {
+    const def = this.def!;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // A TV: the screen (dark when off; cartoons when he's watching).
+    if (def.screen) {
+      const [sx, sy, sw, sh] = def.screen;
+      const c = [this.toWorld(sx, sy), this.toWorld(sx + sw, sy), this.toWorld(sx + sw, sy + sh), this.toWorld(sx, sy + sh)];
+      ctx.beginPath(); c.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath();
+      ctx.fillStyle = this.on ? '#1d2b4a' : '#22232c';
+      ctx.fill();
+      if (this.on) { ctx.save(); ctx.clip(); this.drawShow(ctx, sx, sy, sw, sh, now); ctx.restore(); }
+    }
+    for (const st of def.shape) {
+      ctx.strokeStyle = st.color; ctx.lineWidth = st.width * this.scale;
+      ctx.beginPath();
+      st.pts.forEach(([x, y], i) => { const q = this.toWorld(x, y); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** What's on TV: a few little shows that take turns (a stick figure running about, a bouncing ball, static, color bars). */
+  private drawShow(ctx: CanvasRenderingContext2D, sx: number, sy: number, sw: number, sh: number, now: number) {
+    const show = Math.floor(now / 7) % 4, t = now % 7;
+    const at = (u: number, v: number) => this.toWorld(sx + u * sw, sy + v * sh);
+    const line = (pts: [number, number][], color: string, w = 1.6) => {
+      ctx.strokeStyle = color; ctx.lineWidth = w * this.scale; ctx.beginPath();
+      pts.forEach(([u, v], i) => { const q = at(u, v); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }); ctx.stroke();
+    };
+    if (show === 0) {
+      // A tiny stick figure running back and forth, now and then doing a flip. (Hi, Animator vs. Animation.)
+      const u = 0.5 + Math.sin(t * 1.3) * 0.35, run = Math.sin(t * 14) * 0.08, dir = Math.cos(t * 1.3) > 0 ? 1 : -1;
+      const q = at(u, 0.32); ctx.fillStyle = '#ff9a3c'; ctx.beginPath(); ctx.arc(q.x, q.y, 2.2 * this.scale, 0, 7); ctx.fill();
+      line([[u, 0.4], [u + dir * 0.02, 0.62]], '#ff9a3c');
+      line([[u + dir * 0.02, 0.62], [u - run, 0.85]], '#ff9a3c'); line([[u + dir * 0.02, 0.62], [u + run, 0.85]], '#ff9a3c');
+      line([[u - 0.07, 0.48], [u + dir * 0.02, 0.45], [u + 0.07, 0.52]], '#ff9a3c');
+      line([[0, 0.88], [1, 0.88]], '#4a6a9a', 1);
+    } else if (show === 1) {
+      const u = 0.5 + Math.sin(t * 2) * 0.4, v = 0.85 - Math.abs(Math.sin(t * 4.5)) * 0.6;
+      const q = at(u, v); ctx.fillStyle = '#7dff9a'; ctx.beginPath(); ctx.arc(q.x, q.y, 3 * this.scale, 0, 7); ctx.fill();
+    } else if (show === 2) {
+      // Static.
+      for (let i = 0; i < 70; i++) { const q = at(Math.random(), Math.random()); ctx.fillStyle = Math.random() < 0.5 ? '#c9ccd8' : '#5a5e70'; ctx.fillRect(q.x, q.y, 1.6 * this.scale, 1.6 * this.scale); }
+    } else {
+      const bars = ['#e8e8e8', '#f2d43a', '#3ad0f2', '#3af25a', '#e33ad6', '#f23a3a', '#3a4af2'];
+      bars.forEach((c, i) => line([[(i + 0.5) / bars.length, 0], [(i + 0.5) / bars.length, 1]], c, (sw / bars.length) * 0.95));
+    }
   }
 
   /** Recompute its platforms from where its points are now. */
@@ -249,7 +373,8 @@ export class Thing {
   /** Is it moving? (Platforms need updating every step while it is.) */
   get moving() { return this.points.some((p) => Math.abs(p.x - p.px) + Math.abs(p.y - p.py) > 0.02) || this.held !== null; }
 
-  draw(ctx: CanvasRenderingContext2D, alpha: number) {
+  draw(ctx: CanvasRenderingContext2D, alpha: number, now = 0) {
+    if (this.def) { this.drawProp(ctx, alpha, now); return; }
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = this.doodle.color;
@@ -282,6 +407,18 @@ export class Thing {
     }
     ctx.restore();
   }
+}
+
+/** A prop from its definition, with its top-left corner at (x, y), at his size. Rigid (every point braced to every other). */
+export function makeProp(def: PropDef, x: number, y: number, scale: number) {
+  const t = new Thing('prop', { strokes: [], color: '#2a2c44', born: 0, done: true, title: def.name });
+  t.def = def; t.forever = true; t.scale = scale; t.friction = def.friction;
+  for (const [px, py] of def.outline) t.point(x + px * scale, y + py * scale);
+  for (const i of def.wheels ?? []) t.points[i].r = (def.wheel ?? 4) * scale;
+  t.outline = def.outline.map((_, i) => i);
+  for (let a = 0; a < t.points.length; a++) for (let b = a + 1; b < t.points.length; b++) t.stick(a, b);
+  t.refresh();
+  return t;
 }
 
 /** A box: 4 corners (top-left, top-right, bottom-right, bottom-left) with cross-braces so it stays square. */
@@ -332,6 +469,9 @@ export function rampSlopeId(n: number, up: 1 | -1) { return PROP_ID + n * 64 + (
 /** A fresh number for a thing that doesn't exist yet. */
 export const reserveThing = () => nextProp++;
 
+/** The props that come with him (in his inventory; none are out until you drop them in). */
+export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef].map((d) => parsePropDef(d)!);
+
 export class Props {
   balls: Ball[] = [];
   things: Thing[] = [];
@@ -372,6 +512,22 @@ export class Props {
   }
 
   remove(t: Thing) { this.things = this.things.filter((x) => x !== t); this.onPlatforms?.(); }
+
+  // ── props from his inventory ──
+  defs = new Map<string, PropDef>(BUILTIN_PROPS.map((d) => [d.id, d]));
+  addDefs(list: unknown[]) { for (const raw of list) { const d = parsePropDef(raw); if (d) this.defs.set(d.id, d); } }
+  get placed() { return this.things.filter((t) => t.def); }
+  /** Drop a prop in, its middle at x, falling from y. */
+  spawn(id: string, x: number, y: number, scale: number) {
+    const def = this.defs.get(id);
+    if (!def) return null;
+    const w = Math.max(...def.outline.map((p) => p[0])) * scale;
+    const t = makeProp(def, x - w / 2, y, scale);
+    this.add(t);
+    return t;
+  }
+  /** Which props are where (saved between runs). */
+  savePlaced() { return this.placed.map((t) => ({ id: t.def!.id, x: Math.round(t.center.x) })); }
 
   get platforms() { return [...this.things.flatMap((t) => t.platforms), ...this.wet.values()]; }
   /** Things he can get on top of (for "get on what he drew"). */
@@ -450,7 +606,7 @@ export class Props {
   }
 
   draw(ctx: CanvasRenderingContext2D, now: number) {
-    for (const t of this.things) t.draw(ctx, t.forever ? 1 : Math.max(0, Math.min(1, (DOODLE_LIFE - (now - t.doodle.born)) / 10)));
+    for (const t of this.things) t.draw(ctx, t.forever ? 1 : Math.max(0, Math.min(1, (DOODLE_LIFE - (now - t.doodle.born)) / 10)), now);
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 3;
     for (const b of this.balls) {

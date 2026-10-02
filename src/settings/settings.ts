@@ -11,8 +11,9 @@ interface Weigh { name: string; score: number; why: string; bias?: number }
 interface Drawing { title: string; shape: { x: number; y: number }[][]; color: string; at: number }
 interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at: number; by: 'him' | 'ai' | 'you'; weight: number }
 interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
+interface PropsView { kinds: { id: string; name: string; about: string }[]; placed: { i: number; id: string; name: string }[] }
 interface ItemsView { kinds: { id: string; name: string; about: string; use: string; drawn: boolean }[]; list: { uid: number; id: string; name: string; where: 'belt' | 'hand' | 'world' | 'cursor'; slot: number; drawn: boolean }[] }
-interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView; items?: ItemsView }
+interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView; items?: ItemsView; props?: PropsView }
 interface Stats {
   name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
   brain: { active: boolean; status: string; log: LogLine[] };
@@ -361,7 +362,7 @@ shell.onCollections((c) => {
     return fig;
   }).reverse() : [emptyNote('No drawings yet.')]));
 });
-shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); if (c.items) renderItems(c.items); });
+shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); if (c.items) renderItems(c.items); if (c.props) renderProps(c.props); });
 
 // ── Items tab ──
 const SLOTS = ['left hip', 'right hip', 'back', 'pocket'];
@@ -378,6 +379,13 @@ function renderItems(v: ItemsView) {
     ['Drop it in', () => shell.command(`item:spawn:${k.id}`)],
     ['Give him', () => shell.command(`item:give:${k.id}`)],
   ], k.about)));
+}
+function renderProps(v: PropsView) {
+  $('propKinds').replaceChildren(...v.kinds.map((k) => moveRow(k.name, 0, [['Drop it in', () => shell.command(`prop:spawn:${k.id}`)]], k.about)));
+  $('propPlaced').replaceChildren(...(v.placed.length
+    ? [...v.placed.map((p) => moveRow(p.name, 0, [['Put away', () => shell.command(`prop:remove:${p.i}`)]], 'on the desktop')),
+      moveRow('All of them', 0, [['Put everything away', () => shell.command('prop:clear')]], '')]
+    : [emptyNote('Nothing out on the desktop yet.')]));
 }
 $('openItems').addEventListener('click', () => shell.openItemsFolder());
 $('reloadItems').addEventListener('click', () => shell.reloadItems());

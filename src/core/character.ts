@@ -207,6 +207,10 @@ export class Character {
   tapFoot = false;
   /** Sitting on the edge of something with his legs hanging over: where the edge is, and which way it drops. */
   private ledge: { x: number; dir: number } | null = null;
+  /** Sitting on a seat (a chair, a couch): where his bottom goes. A skill keeps it up to date if the seat moves. */
+  seat: Vec | null = null;
+  /** Leaning back on the seat (a couch) instead of sitting up (a chair). */
+  lounge = false;
   /** Climbable walls (window sides, screen edges). */
   walls: Wall[] = [];
   /**
@@ -706,6 +710,17 @@ export class Character {
   }
   get onLedge() { return this.ledge !== null; }
 
+  /** Sit down on a seat at `at` (he should be standing right by it), facing `dir`. */
+  sitOn(at: Vec, dir: 1 | -1, lounge = false) {
+    if (this.mode !== 'ground') return false;
+    this.goalX = null; this.gesture = null;
+    this.facing = dir;
+    this.setMode('sit');
+    this.seat = { x: at.x, y: at.y };
+    this.lounge = lounge;
+    return true;
+  }
+
   lieDown() {
     if (this.mode !== 'ground' && this.mode !== 'sit') return;
     this.goalX = null; this.gesture = null;
@@ -979,7 +994,7 @@ export class Character {
     if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
     if (m !== 'air') { this.leapWall = null; this.airPunch = null; this.airReach = null; }
     if (m !== 'ground') { this.pushAt = null; this.pushY = null; }
-    if (m !== 'sit') this.ledge = null;
+    if (m !== 'sit') { this.ledge = null; this.seat = null; this.lounge = false; }
     if (m !== 'puppet') this.puppetMove = null;
     if (m !== 'roll') this.rolling = null;
     if (m !== 'air') { this.airFlip = null; this.flipDone = false; }
@@ -1906,6 +1921,7 @@ export class Character {
 
   private sitPose(t: Targets, s: Strengths) {
     if (this.ledge) { this.ledgePose(t, s); return; }
+    if (this.seat) { this.seatPose(t, s); return; }
     const d = this.d, sc = this.scale, P = this.posture, floor = this.groundY();
     const hip = this.pt(this.rootX, floor - 7 * sc);
     const lean = (1 + P.hunch * 8) * sc;
@@ -1943,6 +1959,28 @@ export class Character {
     t.kneeL = twoBoneIK3(hip, fL, d.thigh, d.shin, this.kneePole(B, 'L'));
     t.kneeR = twoBoneIK3(hip, fR, d.thigh, d.shin, this.kneePole(B, 'R'));
     Object.assign(s, { hip: 0.3, neck: 0.22, head: 0.25, kneeL: 0.2, kneeR: 0.2, footL: 0.12, footR: 0.12, elbowL: 0.08, elbowR: 0.08, handL: 0.1, handR: 0.1 });
+  }
+
+  /** On a chair or a couch: bottom on the seat, knees bent over its front edge, feet down toward the floor. */
+  private seatPose(t: Targets, s: Strengths) {
+    const d = this.d, sc = this.scale, P = this.posture, st = this.seat!, legLen = d.thigh + d.shin;
+    this.rootX = st.x;
+    const hip = this.pt(st.x, st.y - 3 * sc);
+    const lean = (this.lounge ? -9 : 1.5 + P.hunch * 6) * sc;
+    const neck = this.off(hip, lean, -Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)));
+    const ground = Math.min(this.bounds.floor, st.y + legLen);
+    const foot = (k: 'L' | 'R') => {
+      const kn = this.off(hip, d.thigh * 0.95, 1 * sc, sideOf(k) * 3.5 * sc);
+      const swing = this.lounge ? 0 : Math.sin(this.time * 1.7 + (k === 'L' ? 0 : 2)) * 0.12;
+      return { x: kn.x + this.facing * Math.sin(swing) * d.shin, y: Math.min(ground - 2, kn.y + d.shin * Math.cos(swing)), z: kn.z };
+    };
+    const fL = foot('L'), fR = foot('R');
+    const B = basis(this.yaw);
+    const knee = (k: 'L' | 'R', f: V3) => twoBoneIK3(hip, f, d.thigh, d.shin, this.kneePole(B, k));
+    const hand = (k: 'L' | 'R') => this.lounge ? this.off(neck, -4 * sc, 4 * sc, sideOf(k) * 9 * sc) : this.off(knee(k, k === 'L' ? fL : fR), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
+    this.fillLimbs(t, hip, neck, (this.lounge ? -0.1 : 0.1) + P.hunch * 0.6, 0, hand('L'), hand('R'), fL, fR);
+    t.kneeL = knee('L', fL); t.kneeR = knee('R', fR);
+    Object.assign(s, { hip: 0.4, neck: 0.25, head: 0.25, kneeL: 0.2, kneeR: 0.2, footL: 0.12, footR: 0.12, elbowL: 0.08, elbowR: 0.08, handL: 0.1, handR: 0.1 });
   }
 
   private liePose(t: Targets, s: Strengths) {

@@ -61,9 +61,18 @@ function readItemDefs(): unknown[] {
   const dir = itemsDir(), out: unknown[] = [];
   try {
     fs.mkdirSync(dir, { recursive: true });
-    const examples = path.join(__dirname, '../items');
-    if (!fs.readdirSync(dir).length && fs.existsSync(examples)) {
-      for (const f of fs.readdirSync(examples)) fs.copyFileSync(path.join(examples, f), path.join(dir, f));
+    // The example files (and the how-to) go in once each, so new ones that come with an update show
+    // up too, without bringing back any you deleted. (The guide is always the newest.)
+    const examples = path.join(__dirname, '../items'), marker = path.join(dir, '.copied.json');
+    let copied: string[] = [];
+    try { copied = JSON.parse(fs.readFileSync(marker, 'utf8')); } catch { copied = fs.readdirSync(dir); }
+    if (fs.existsSync(examples)) {
+      for (const f of fs.readdirSync(examples)) {
+        const to = path.join(dir, f);
+        if (f.endsWith('.md') || (!copied.includes(f) && !fs.existsSync(to))) fs.copyFileSync(path.join(examples, f), to);
+        if (!copied.includes(f)) copied.push(f);
+      }
+      fs.writeFileSync(marker, JSON.stringify(copied));
     }
     for (const f of fs.readdirSync(dir)) {
       if (!f.endsWith('.json')) continue;
