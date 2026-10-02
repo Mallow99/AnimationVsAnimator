@@ -4,6 +4,7 @@
 import { Pet, type PetConfig } from '../core/pet';
 import type { Bounds } from '../core/physics';
 import type { WinRect } from '../core/world';
+import type { BrainReply, BrainRequest } from '../core/brain';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -15,6 +16,7 @@ interface PetShell {
   onWindows(cb: (wins: WinRect[]) => void): void;
   pressed(): void;
   moveCursor(x: number, y: number): void;
+  ask(req: BrainRequest): Promise<{ ok: true; reply: BrainReply } | { ok: false; error: string }>;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
@@ -49,6 +51,12 @@ if (shell) {
   shell.onCommand((cmd) => pet.command(cmd));
   shell.onWindows((wins) => pet.setWindows(wins)); // other apps' windows become platforms
   pet.onMoveCursor = (x, y) => shell.moveCursor(x, y); // mischief mode
+  // AI brain: the desktop shell makes the actual call (it holds the API key).
+  pet.brain.ask = async (req) => {
+    const r = await shell.ask(req);
+    if (!r.ok) throw new Error(r.error);
+    return r.reply;
+  };
   setInterval(() => shell.sendStats(pet.stats()), 400);
 }
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools

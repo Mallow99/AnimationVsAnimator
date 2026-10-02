@@ -10,6 +10,8 @@ import path from 'node:path';
 import { DEFAULT_CONFIG, mergeConfig, type PetConfig } from '../core/config';
 import type { WinRect } from '../core/world';
 import { watchWindows, type WindowWatcher } from './windows';
+import * as llm from './llm';
+import type { BrainRequest } from '../core/brain';
 
 let win: BrowserWindow | null = null;
 let settingsWin: BrowserWindow | null = null;
@@ -110,8 +112,9 @@ function createOverlay() {
   screen.on('display-removed', fit);
 }
 
-function openSettings() {
-  if (settingsWin) { settingsWin.show(); settingsWin.focus(); return; }
+function openSettings(tab?: string) {
+  const goTo = () => { if (typeof tab === 'string') settingsWin?.webContents.send('settings:tab', tab); };
+  if (settingsWin) { settingsWin.show(); settingsWin.focus(); goTo(); return; }
   settingsWin = new BrowserWindow({
     width: 500,
     height: 760,
@@ -122,6 +125,7 @@ function openSettings() {
     webPreferences: { preload, contextIsolation: true, nodeIntegration: false },
   });
   settingsWin.loadFile(path.join(__dirname, '../settings/index.html'));
+  settingsWin.webContents.once('did-finish-load', goTo);
   settingsWin.once('ready-to-show', () => {
     settingsWin?.show();
     if (process.platform === 'darwin') app.focus({ steal: true });
@@ -136,7 +140,8 @@ function buildTrayMenu() {
   tray.setToolTip(config.name);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: config.name, enabled: false },
-    { label: 'Settings…', click: openSettings },
+    { label: 'Settings…', click: () => openSettings() },
+    { label: `Talk to ${config.name}…`, click: () => openSettings('control') },
     { label: 'Smack mode', type: 'checkbox', checked: config.smacking, click: () => setConfig({ smacking: !config.smacking }) },
     { label: 'Mischief mode', type: 'checkbox', checked: config.mischief, click: () => setConfig({ mischief: !config.mischief }) },
     { label: 'Climb on windows', type: 'checkbox', checked: config.windows, click: () => setConfig({ windows: !config.windows }) },
@@ -150,7 +155,7 @@ function buildTrayMenu() {
 function createTray() {
   // "Template" in the file name tells macOS to tint it to match the menu bar.
   tray = new Tray(path.join(__dirname, '../../assets/trayTemplate.png'));
-  if (process.platform !== 'darwin') tray.on('click', openSettings); // Windows: click opens settings
+  if (process.platform !== 'darwin') tray.on('click', () => openSettings()); // Windows: click opens settings
   buildTrayMenu();
 }
 
@@ -162,7 +167,14 @@ ipcMain.on('config:set', (_e, patch: unknown) => setConfig(patch));
 ipcMain.on('config:reset', () => setConfig(DEFAULT_CONFIG));
 ipcMain.on('pet:stats', (_e, stats: unknown) => settingsWin?.webContents.send('pet:stats', stats));
 ipcMain.on('pet:command', (_e, cmd: string) => win?.webContents.send('pet:command', cmd));
-ipcMain.on('settings:open', openSettings);
+ipcMain.on('settings:open', () => openSettings());
+// The AI brain: the overlay asks, main calls Claude with the saved key.
+ipcMain.handle('brain:ask', (_e, req: BrainRequest) => llm.ask(config.model, req));
+ipcMain.handle('brain:keyStatus', () => llm.keyStatus());
+ipcMain.on('brain:setKey', (_e, key: string) => {
+  llm.setKey(String(key ?? ''));
+  settingsWin?.webContents.send('brain:keyStatus', llm.keyStatus());
+});
 // You pressed on him. On macOS that (wrongly) activates our app, so hand focus right back.
 ipcMain.on('pet:pressed', () => watcher?.refocus());
 // Mischief mode: he grabbed your cursor. Overlay coordinates → screen coordinates.

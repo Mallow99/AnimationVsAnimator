@@ -115,7 +115,19 @@ Then: Android shell.
   motions that overlap a little (reach starts at 65% of the pull); the reaching hand travels in an arc.
   Feet stand on footholds and step one at a time; knees bend TOWARD the wall (was flipped = "spider legs");
   hips move out from the wall when a foot is high so the knee has room. ~56 px/s up a wall.
-- NEXT (new chat): milestone 4 — AI brain (chat/full modes), talking back, persona.
+- Milestone 4 (AI brain) — built, sim-tested with a fake AI; real API call NOT yet tried (needs the owner's key):
+  - `src/core/brain.ts` (platform-free): decides when to ask, builds the prompt (stable system prompt = persona +
+    rules; each turn = a [state] block with mood/doing/where/recent events + what you said), applies the reply
+    `{say, do}` (`do` = a COMMANDS name or "none", enforced by a JSON schema). Never drives joints.
+    Chat mode: only when you talk to him. Full mode: thinks every ≥40 s when idle (instinct waits up to 8 s
+    via `mind.holdUntil`), comments on notable events (≥15 s apart). Cap: 120 calls/hour. Remembers 8 exchanges.
+  - `src/electron/llm.ts`: Claude call in the main process with the official SDK (`@anthropic-ai/sdk`), structured
+    output, effort low, server-side refusal fallback (`fallbacks: "default"`) on models that support it. API key saved
+    in userData/brain-key, encrypted with Electron safeStorage; settings only ever sees the last 4 chars.
+  - Config: `persona` (≤1500 chars), `model` (default claude-opus-5-5). Settings: Talk box (Control tab), persona
+    (Mood tab), Brain section with key + model (General). Tray: "Talk to Blurp…". Long replies split into bubbles.
+- NEXT: owner tries the AI brain with a real key on the Mac. Options offered, not chosen yet: talk to him right on the
+  desktop (double-click him → a little text field) instead of the settings window; a local/free model (Ollama).
   Owner also wants more Desktop Goose / Shimeji behaviors and better animations over time.
 
 ## Ideas from research (not agreed yet — offer as options)
@@ -127,10 +139,9 @@ Then: Android shell.
   PowerShell window probe on Windows only, screenshot-based LLM brain, wall/ceiling climbing).
 
 ## Owner's wishlist (agreed, not built yet)
-- Memories and personality views in settings are placeholders until milestones 4–5.
+- Memories view in settings is a placeholder until milestone 5.
 - Moods as blended bars where all of them matter (complex emotions), not just the loudest one.
   (The dials already exist in mood.ts; reactions mostly use the dominant label today.)
-- A way to talk back to him once he can talk (milestone 4).
 
 ## Key files
 - `src/core/character.ts` body controller (modes, stepping, gestures). Tune feel here.

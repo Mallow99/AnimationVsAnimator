@@ -16,5 +16,8 @@
     "electron": "^44.5.1",
     "esbuild": "^0.28.2",
     "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0"
   }
 }

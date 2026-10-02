@@ -11,6 +11,7 @@ import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowWalls, type WinRect } from './world';
 import { drawBubble, drawCharacter, PixelLayer, shade } from './render';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
+import { Brain, splitSpeech } from './brain';
 
 export { DEFAULT_CONFIG, type PetConfig } from './config';
 
@@ -21,12 +22,15 @@ export class Pet {
   char: Character;
   readonly mood = new Mood();
   readonly mind = new Mind();
+  readonly brain = new Brain();
   readonly ctx: Ctx;
   /** Turn his mind off (for debugging poses by hand). */
   paused = false;
   private acc = 0;
   private press: { joint: JointName; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
   private bubble: { text: string; t: number; ttl: number } | null = null;
+  /** Longer things he says, shown one bubble at a time. */
+  private speech: string[] = [];
   private smackCooldown = 0;
   /** Set by the app: moves the real mouse cursor (desktop only). */
   onMoveCursor: ((x: number, y: number) => void) | null = null;
@@ -56,6 +60,7 @@ export class Pet {
       cursorEscaped: false,
       canGrabCursor: false,
     };
+    this.brain.onSpeak = (text) => this.speak(text);
   }
 
   /** Advance by real elapsed seconds (any frame rate). */
@@ -69,9 +74,10 @@ export class Pet {
       this.char.step(STEP);
       this.acc -= STEP;
     }
-    for (const e of this.char.drainEvents()) this.mind.onEvent(this.ctx, e);
-    if (!this.paused) this.mind.update(this.ctx, dt);
+    for (const e of this.char.drainEvents()) this.emit(e);
+    if (!this.paused) { this.mind.update(this.ctx, dt); this.brain.update(this.ctx, this.mind); }
     if (this.bubble && (this.bubble.t += dt) > this.bubble.ttl) this.bubble = null;
+    if (!this.bubble && this.speech.length) this.say(this.speech.shift()!);
     for (const h of this.hearts) { h.t += dt; h.y -= 40 * dt; h.x += h.drift * dt; }
     this.hearts = this.hearts.filter((h) => h.t < 1.4);
     this.ctx.doodles = this.ctx.doodles.filter((d) => this.ctx.world.time - d.born < DOODLE_LIFE);
@@ -79,6 +85,13 @@ export class Pet {
 
   say(text: string, secs?: number) {
     this.bubble = { text, t: 0, ttl: secs ?? Math.min(1.8 + text.length * 0.06, 5) };
+  }
+
+  /** Say something longer: split into bubble-sized pieces, shown one after another. */
+  speak(text: string) {
+    this.speech = splitSpeech(text);
+    this.bubble = null;
+    if (this.speech.length) this.say(this.speech.shift()!);
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -112,6 +125,7 @@ export class Pet {
   applyConfig(cfg: PetConfig) {
     const resized = this.config.scale !== cfg.scale;
     (this as { config: PetConfig }).config = structuredClone(cfg);
+    Object.assign(this.brain, { mode: cfg.mind, name: cfg.name, persona: cfg.persona });
     if (resized && this.ctx) {
       const old = this.char;
       this.char = new Character(old.bounds, old.x, cfg.scale);
@@ -181,7 +195,7 @@ export class Pet {
   /** Is the cursor over him? (decides whether clicks reach us or the desktop) */
   hit(x: number, y: number) { return this.char.hitTest(x, y) !== null; }
 
-  private emit(e: MindEvent) { this.mind.onEvent(this.ctx, e); }
+  private emit(e: MindEvent) { this.mind.onEvent(this.ctx, e); this.brain.noteEvent(this.ctx, e); }
 
   // ── input ──
 
@@ -271,6 +285,7 @@ export class Pet {
       recent: this.mind.recent.slice(-8),
       windows: this.winShown.length,
       platforms: this.ctx.world.platforms.length,
+      brain: { active: this.brain.active, status: this.brain.status, log: this.brain.log.slice(-20) },
     };
   }
 
@@ -283,6 +298,7 @@ export class Pet {
     const arg = rest.join(':');
     if (verb === 'do') { this.mind.command(this.ctx, arg); return; }
     if (verb === 'say') { if (arg.trim()) this.say(arg.trim().slice(0, 80)); return; }
+    if (verb === 'hear') { this.brain.hear(this.ctx, arg); return; }
     if (verb === 'mood') { const p = MOOD_PRESETS[arg]; if (p) { this.mood.asleep = false; Object.assign(this.mood.s, p); } return; }
     if (verb === 'setMood') {
       try {

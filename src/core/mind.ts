@@ -74,6 +74,8 @@ export class Mind {
   private lastCursorSeen = 0;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
+  /** While the AI brain is deciding what he does next, instinct waits until this time. */
+  holdUntil = 0;
 
   /** Recent skill names, newest last (for debugging and, later, the LLM). */
   get recent() { return this.history; }
@@ -99,7 +101,7 @@ export class Mind {
     } else if (this.queued && (c.char.ready || c.char.mode === 'sit')) {
       this.begin(c, this.queued);
       this.queued = null;
-    } else if (c.char.ready && c.world.time >= this.restUntil) {
+    } else if (c.char.ready && c.world.time >= this.restUntil && c.world.time >= this.holdUntil) {
       const o = this.choose(c);
       this.why = o.why;
       this.begin(c, o.make());
@@ -128,22 +130,30 @@ export class Mind {
     else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.s.happiness += dt / 600; // company
   }
 
-  /** Do something because you said so (from the settings window). */
-  command(c: Ctx, name: string) {
+  /** Is he free to start something new (not busy, not mid-air)? */
+  get idle() { return !this.skill && !this.queued; }
+
+  /**
+   * Do something because you said so (from the settings window), or because his AI brain decided to.
+   * Returns false if he can't do that right now (e.g. "get down" while on the floor).
+   * `quiet`: don't say "?" when he can't.
+   */
+  command(c: Ctx, name: string, why = 'you told him to', quiet = false): boolean {
     const ch = c.char, m = c.mood;
-    if (name === 'wake') { m.asleep = false; this.end(c); ch.standUp(); return; }
-    if (name === 'grabcursor' && !c.canGrabCursor) { c.say('(mischief mode is off)', 2); return; }
+    if (name === 'wake') { m.asleep = false; this.end(c); ch.standUp(); return true; }
+    if (name === 'grabcursor' && !c.canGrabCursor) { if (!quiet) c.say('(mischief mode is off)', 2); return false; }
     const gestures: Gesture[] = ['wave', 'laugh', 'shrug', 'stomp', 'stretch', 'cower'];
     if ((gestures as string[]).includes(name)) {
       this.interrupt(c, new Sequence(name, [{ gesture: name as Gesture, atCursor: true }]));
     } else {
       const o = this.options(c).find((x) => x.name === name);
-      if (!o) { c.say('?', 1); return; }
+      if (!o) { if (!quiet) c.say('?', 1); return false; }
       this.interrupt(c, o.make());
     }
     m.asleep = false;
-    this.why = 'you told him to';
+    this.why = why;
     if (ch.mode === 'lie' || ch.mode === 'sit') ch.standUp();
+    return true;
   }
 
   /** Forget the current plan (e.g. his body was rebuilt). */

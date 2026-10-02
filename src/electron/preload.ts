@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('petShell', {
   onWindows: on('world:windows'),
   pressed: () => ipcRenderer.send('pet:pressed'),
   moveCursor: (x: number, y: number) => ipcRenderer.send('pet:moveCursor', x, y),
+  ask: (req: unknown) => ipcRenderer.invoke('brain:ask', req),
   // shared
   getConfig: () => ipcRenderer.invoke('config:get'),
   onConfig: on('config:changed'),
@@ -23,4 +24,8 @@ contextBridge.exposeInMainWorld('petShell', {
   resetConfig: () => ipcRenderer.send('config:reset'),
   command: (cmd: string) => ipcRenderer.send('pet:command', cmd),
   onStats: on('pet:stats'),
+  keyStatus: () => ipcRenderer.invoke('brain:keyStatus'),
+  onKeyStatus: on('brain:keyStatus'),
+  setKey: (key: string) => ipcRenderer.send('brain:setKey', key),
+  onTab: on('settings:tab'),
 });

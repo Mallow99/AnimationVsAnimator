@@ -2,7 +2,7 @@
 // than real time, and make sure he behaves. `npm run sim`
 import { Character } from '../src/core/character';
 import type { Bounds } from '../src/core/physics';
-import { Pet } from '../src/core/pet';
+import { Pet, DEFAULT_CONFIG } from '../src/core/pet';
 import { FLOOR, type Platform } from '../src/core/physics';
 import { windowPlatforms } from '../src/core/world';
 
@@ -356,6 +356,68 @@ function reactionTo(mood: Partial<import('../src/core/mood').MoodState>) {
   check('sad: mostly ignores pokes', retaliations(sad) === 0 && sad.filter((n) => ['giggle', 'tag', 'boing', 'chase'].includes(n)).length === 0, sad.join(','));
   check('angry: fights back', retaliations(angry) >= 12, angry.join(','));
   check('playful: plays', playful.filter((n) => ['giggle', 'tag', 'boing', 'chase'].includes(n)).length >= 12, playful.join(','));
+}
+
+// ───── AI brain (milestone 4), with a fake AI: no network, no cost ─────
+{
+  const { splitSpeech } = await import('../src/core/brain');
+  const parts = splitSpeech('Okay okay. I will climb that window, and then I am going to sit on top of it and judge everyone below me. Forever.');
+  check('long replies split into bubble-sized pieces', parts.length >= 2 && parts.every((p) => p.length <= 70) && parts.join(' ').includes('Forever.'), JSON.stringify(parts));
+}
+type Req = import('../src/core/brain').BrainRequest;
+type Reply = import('../src/core/brain').BrainReply;
+async function brainPet(mode: 'offline' | 'chat' | 'full', answer: (req: Req) => Reply | Error) {
+  const pet = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), mind: mode });
+  const asked: Req[] = [];
+  pet.brain.ask = async (req) => { asked.push(req); const r = answer(req); if (r instanceof Error) throw r; return r; };
+  pet.paused = true; petFor(3, pet); pet.paused = false;
+  return { pet, asked };
+}
+async function live(pet: Pet, seconds: number) {
+  for (let i = 0; i < seconds * 60; i++) { pet.update(1 / 60); if (i % 5 === 0) await new Promise((r) => setImmediate(r)); }
+}
+{ // Chat: you ask him to dance, he answers and dances.
+  const { pet, asked } = await brainPet('chat', () => ({ say: 'oh you want moves? watch this', do: 'dance' }));
+  pet.command('hear:can you dance for me?');
+  await live(pet, 1);
+  const req = asked[0];
+  const sawState = !!req && req.messages[req.messages.length - 1].text.includes('[state]') && req.messages[req.messages.length - 1].text.includes('can you dance');
+  check('chat: he hears you, answers, and does it', asked.length === 1 && pet.mind.skill?.name === 'dance' && pet.brain.log.some((l) => l.who === 'him'), `asked=${asked.length} skill=${pet.mind.skill?.name}`);
+  check('chat: the AI gets his persona and current state', sawState && req.system.includes(DEFAULT_CONFIG.persona.slice(0, 30)));
+  pet.command('hear:what did I just ask?');
+  await live(pet, 1);
+  check('chat: remembers the conversation', asked.length === 2 && asked[1].messages.length === 3, `messages=${asked[1]?.messages.length}`);
+  await live(pet, 60);
+  check('chat: no AI calls unless you talk to him', asked.length === 2, `asked=${asked.length}`);
+}
+{ // Offline: he can't understand words, and never calls the AI.
+  const { pet, asked } = await brainPet('offline', () => ({ say: 'hi', do: 'none' }));
+  pet.command('hear:hello');
+  await live(pet, 1);
+  check('offline: talking to him makes no AI call', asked.length === 0 && pet.brain.log.some((l) => l.who === 'note'));
+}
+{ // Full: he decides for himself now and then, throttled; nonsense actions are ignored.
+  let n = 0;
+  const { pet, asked } = await brainPet('full', () => (++n % 2 ? { say: '', do: 'hop' } : { say: 'I can fly', do: 'fly' }));
+  const seen = new Set<string>();
+  for (let i = 0; i < 180 * 60; i++) {
+    pet.update(1 / 60);
+    if (pet.mind.skill) seen.add(pet.mind.skill.name);
+    if (i % 5 === 0) await new Promise((r) => setImmediate(r));
+  }
+  check('full: AI picks what he does', seen.has('hop'), [...seen].join(','));
+  check('full: thinks at most about once every 40 s', asked.length >= 2 && asked.length <= 5, `calls in 3 min=${asked.length}`);
+}
+{ // AI failing (no internet, bad key): he shrugs it off and instinct keeps running.
+  const { pet } = await brainPet('full', () => new Error("Couldn't reach the internet."));
+  pet.command('hear:hello?');
+  const seen = new Set<string>();
+  for (let i = 0; i < 90 * 60; i++) {
+    pet.update(1 / 60);
+    if (pet.mind.skill) seen.add(pet.mind.skill.name);
+    if (i % 5 === 0) await new Promise((r) => setImmediate(r));
+  }
+  check('AI errors: shown in the chat, he carries on by instinct', pet.brain.log.some((l) => l.who === 'note' && l.text.includes('internet')) && seen.size >= 2, [...seen].join(','));
 }
 
 console.log(failures ? `\n${failures} failing` : '\nall good');

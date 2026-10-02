@@ -55,6 +55,13 @@
     .slider small { color: var(--muted); font-size: 12px; }
     input[type="range"] { width: 100%; accent-color: var(--accent); }
     input[type="text"] { font: 15px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+    textarea { font: 14px/1.45 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; min-height: 110px; resize: vertical; }
+    input[type="password"] { font: 14px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+    .chat { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+    .chat p { margin: 0; padding: 7px 10px; border-radius: 10px; max-width: 85%; overflow-wrap: anywhere; }
+    .chat .you { justify-self: end; background: var(--accent); color: var(--accent-ink); }
+    .chat .him { justify-self: start; background: var(--track); }
+    .chat .note { justify-self: center; color: var(--muted); font-size: 12px; text-align: center; }
     input[type="color"] { width: 44px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 2px; }
     .inline { display: flex; align-items: center; gap: 10px; }
     .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -103,7 +110,8 @@
       </div>
       <div class="group">
         <h2>Personality</h2>
-        <div class="card"><p class="note">His written persona arrives with the AI brain in milestone 4. For now his personality comes from how his moods react.</p></div>
+        <textarea id="persona" maxlength="1500" aria-label="Persona"></textarea>
+        <p class="note">Who he is, in your words. His AI brain plays this character (Chat or Full brain, under General). His moods still come from what happens to him.</p>
       </div>
     </section>
 
@@ -115,9 +123,15 @@
         <div class="btns"><button class="btn ghost" id="clearDoodles" type="button">Clear his doodles</button></div>
       </div>
       <div class="group">
-        <h2>Make him say</h2>
-        <form class="inline" id="sayForm"><input type="text" id="sayText" maxlength="80" placeholder="hello!" /><button class="btn" type="submit">Say</button></form>
-        <p class="note">Just puts words in his bubble for now. Real conversation comes with the AI brain.</p>
+        <h2>Talk to him</h2>
+        <div class="card"><div class="chat" id="chat"><p class="note">Say hi. He answers in his speech bubble.</p></div></div>
+        <form class="inline" id="talkForm"><input type="text" id="talkText" maxlength="300" placeholder="hey, what are you up to?" /><button class="btn" type="submit">Send</button></form>
+        <p class="note" id="brainState"></p>
+      </div>
+      <div class="group">
+        <h2>Put words in his mouth</h2>
+        <form class="inline" id="sayForm"><input type="text" id="sayText" maxlength="80" placeholder="hello!" /><button class="btn ghost" type="submit">Say</button></form>
+        <p class="note">Shows exactly this in his bubble. No AI.</p>
       </div>
     </section>
 
@@ -156,8 +170,16 @@
         <h2>Brain</h2>
         <div class="card">
           <label class="radio"><input type="radio" name="mind" value="offline" /><span><span class="row-label">Offline</span><small>Instinct and moods only. No internet, no AI.</small></span></label>
-          <label class="radio off"><input type="radio" name="mind" value="chat" disabled /><span><span class="row-label">Chat</span><small>AI only for talking. Coming in milestone 4.</small></span></label>
-          <label class="radio off"><input type="radio" name="mind" value="full" disabled /><span><span class="row-label">Full</span><small>AI also decides what he does. Coming in milestone 4.</small></span></label>
+          <label class="radio"><input type="radio" name="mind" value="chat" /><span><span class="row-label">Chat</span><small>AI only when you talk to him. He can also do what you ask.</small></span></label>
+          <label class="radio"><input type="radio" name="mind" value="full" /><span><span class="row-label">Full</span><small>AI also decides what he does every ~40 s and comments on what happens to him. Uses the most API calls.</small></span></label>
+        </div>
+        <div class="card">
+          <span class="row-label">Claude API key</span>
+          <form class="inline" id="keyForm"><input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…" /><button class="btn" type="submit">Save</button><button class="btn ghost" id="forgetKey" type="button">Forget</button></form>
+          <small class="note" id="keyInfo"></small>
+          <span class="row-label">Model</span>
+          <input type="text" id="model" maxlength="60" spellcheck="false" />
+          <small class="note">Default: claude-opus-5-5 (smartest). Cheaper: claude-sonnet-5-5, or claude-haiku-4-5 (cheapest, fastest). API calls cost money; Full mode makes up to ~2 a minute.</small>
         </div>
       </div>
       <div class="group">

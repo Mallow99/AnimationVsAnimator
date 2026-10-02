@@ -6,7 +6,12 @@ import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
 import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
 
-interface Stats { name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number }
+interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number }
+interface Stats {
+  name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number;
+  brain: { active: boolean; status: string; log: LogLine[] };
+}
+interface KeyStatus { saved: boolean; hint: string; fromEnv: boolean }
 interface Shell {
   getConfig(): Promise<PetConfig>;
   onConfig(cb: (c: PetConfig) => void): void;
@@ -14,18 +19,22 @@ interface Shell {
   resetConfig(): void;
   command(cmd: string): void;
   onStats(cb: (s: Stats) => void): void;
+  keyStatus(): Promise<KeyStatus>;
+  onKeyStatus(cb: (k: KeyStatus) => void): void;
+  setKey(key: string): void;
+  onTab(cb: (tab: string) => void): void;
 }
 const shell = (window as unknown as { petShell: Shell }).petShell;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let cfg: PetConfig;
 
 // ── tabs ──
-for (const tab of document.querySelectorAll<HTMLButtonElement>('nav button')) {
-  tab.addEventListener('click', () => {
-    for (const t of document.querySelectorAll('nav button')) t.setAttribute('aria-selected', String(t === tab));
-    for (const p of document.querySelectorAll<HTMLElement>('[data-panel]')) p.hidden = p.dataset.panel !== tab.dataset.tab;
-  });
+function showTab(name: string) {
+  for (const t of document.querySelectorAll<HTMLButtonElement>('nav button')) t.setAttribute('aria-selected', String(t.dataset.tab === name));
+  for (const p of document.querySelectorAll<HTMLElement>('[data-panel]')) p.hidden = p.dataset.panel !== name;
 }
+for (const tab of document.querySelectorAll<HTMLButtonElement>('nav button')) tab.addEventListener('click', () => showTab(tab.dataset.tab!));
+shell.onTab((tab) => { showTab(tab); if (tab === 'control') $('talkText').focus(); });
 
 // ── mood ──
 const MOOD_ROWS: [keyof MoodState, string][] = [
@@ -68,6 +77,31 @@ $('sayForm').addEventListener('submit', (e) => {
   if (t.value.trim()) shell.command(`say:${t.value}`);
   t.value = '';
 });
+// ── talking ──
+$('talkForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const t = $<HTMLInputElement>('talkText');
+  if (t.value.trim()) shell.command(`hear:${t.value}`);
+  t.value = '';
+});
+let chatShown = '';
+function renderChat(log: LogLine[], status: string, active: boolean) {
+  const key = JSON.stringify(log) + status;
+  if (key === chatShown) return;
+  chatShown = key;
+  const box = $('chat');
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 30;
+  box.replaceChildren(...(log.length ? log : [{ who: 'note' as const, text: 'Say hi. He answers in his speech bubble.', at: 0 }]).map((l) => {
+    const p = document.createElement('p');
+    p.className = l.who;
+    p.textContent = l.text;
+    return p;
+  }));
+  if (atBottom) box.scrollTop = box.scrollHeight;
+  $('brainState').textContent = status === 'thinking…' ? 'He\'s thinking…'
+    : active ? '' : 'His brain is Offline, so he won\'t understand. Turn on Chat or Full under General → Brain.';
+}
+
 const DOING: Record<string, string> = {
   idle: 'Standing around', wander: 'Wandering', sit: 'Sitting', sulk: 'Sulking', sleep: 'Napping', chase: 'Chasing your cursor',
   hunt: 'Hunting your cursor', avoid: 'Keeping away from you', dance: 'Dancing', hop: 'Hopping', tantrum: 'Throwing a tantrum',
@@ -88,6 +122,7 @@ shell.onStats((s) => {
   $('doing').textContent = (DOING[s.doing] ?? s.doing) + (s.why ? ` — ${s.why}` : '');
   $('winInfo').textContent = s.windows ? `He can see ${s.windows} window(s) and ${s.platforms} window top(s) to stand on.` : 'He can\'t see any windows yet. If this stays at zero, check the Terminal for lines starting with [windows].';
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
+  if (s.brain) renderChat(s.brain.log, s.brain.status, s.brain.active);
 });
 $('resetMood').addEventListener('click', () => shell.command('resetMood'));
 $('clearDoodles').addEventListener('click', () => shell.command('clearDoodles'));
@@ -151,6 +186,24 @@ $<HTMLInputElement>('mischief').addEventListener('change', (e) => set({ mischief
 $<HTMLInputElement>('windows').addEventListener('change', (e) => set({ windows: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking: (e.target as HTMLInputElement).checked }));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
+$<HTMLTextAreaElement>('persona').addEventListener('input', (e) => set({ persona: (e.target as HTMLTextAreaElement).value }));
+$<HTMLInputElement>('model').addEventListener('change', (e) => set({ model: (e.target as HTMLInputElement).value.trim() }));
+
+// ── API key (kept by the desktop shell; this page only ever sees the last 4 characters) ──
+function showKey(k: KeyStatus) {
+  $('keyInfo').textContent = k.saved ? `Saved (${k.hint}). Stored on this computer only.`
+    : k.fromEnv ? 'Using the ANTHROPIC_API_KEY from your environment.'
+      : 'No key yet. Get one at console.anthropic.com → API Keys, then paste it here.';
+}
+$('keyForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = $<HTMLInputElement>('apiKey');
+  if (input.value.trim()) shell.setKey(input.value.trim());
+  input.value = '';
+});
+$('forgetKey').addEventListener('click', () => shell.setKey(''));
+shell.keyStatus().then(showKey);
+shell.onKeyStatus(showKey);
 $('resetAll').addEventListener('click', () => shell.resetConfig());
 
 // ── show the current settings ──
@@ -165,6 +218,9 @@ function render(c: PetConfig) {
   $<HTMLInputElement>('windows').checked = c.windows;
   $<HTMLInputElement>('mischief').checked = c.mischief;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.checked = r.value === c.mind;
+  const persona = $<HTMLTextAreaElement>('persona'), model = $<HTMLInputElement>('model');
+  if (document.activeElement !== persona) persona.value = c.persona;
+  if (document.activeElement !== model) model.value = c.model;
   for (const [input, out, key] of sliders) {
     const [a, b] = key.split('.');
     const v = b ? (c as any)[a][b] : (c as any)[a];

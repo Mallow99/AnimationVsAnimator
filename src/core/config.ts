@@ -12,8 +12,12 @@ export interface PetConfig {
   scale: number;   // overall size (1 ≈ 90 px tall)
   look: Look;
   body: BodyStyle;
-  /** offline = instinct only. chat / full = LLM (milestone 4). */
+  /** offline = instinct only. chat = AI for talking. full = AI also picks what he does. */
   mind: MindMode;
+  /** Who he is, in plain words. The AI brain plays this character. */
+  persona: string;
+  /** Which Claude model the AI brain uses. */
+  model: string;
   /** Swiping the cursor through him fast smacks him. Off by default so it doesn't happen by accident. */
   smacking: boolean;
   /** Stand on, climb and get carried by the windows on screen. */
@@ -28,12 +32,17 @@ export const DEFAULT_CONFIG: PetConfig = {
   look: { ...DEFAULT_LOOK },
   body: { ...DEFAULT_BODY },
   mind: 'offline',
+  persona: `A small stick figure who lives on top of your screen. Curious, a bit cheeky, easily bored, and very proud of his climbing. He knows he is made of lines and thinks that's cool. Talks in short, casual bursts like a kid texting. Likes you, mostly. Hates being thrown.`,
+  model: 'claude-opus-5-5',
   smacking: false,
   windows: true,
   mischief: false,
 };
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }
+
+/** Longest allowed text per field (anything not listed: 40 characters). */
+const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 60 };
 
 /** Every adjustable number: its limits, and how the settings window labels it. */
 export const RANGES: Record<string, Range> = {
@@ -67,7 +76,7 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
       if (!(k in target)) continue;
       const cur = target[k], key = prefix + k;
       if (typeof cur === 'number' && typeof v === 'number' && Number.isFinite(v)) target[k] = clamp(v, RANGES[key]);
-      else if (typeof cur === 'string' && typeof v === 'string') target[k] = v.slice(0, 40);
+      else if (typeof cur === 'string' && typeof v === 'string') target[k] = v.slice(0, TEXT_LIMITS[key] ?? 40);
       else if (typeof cur === 'boolean' && typeof v === 'boolean') target[k] = v;
     }
   };
@@ -77,5 +86,6 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   if (!['offline', 'chat', 'full'].includes(out.mind)) out.mind = 'offline';
   if (!/^#[0-9a-f]{6}$/i.test(out.look.color)) out.look.color = base.look.color;
   if (!out.name.trim()) out.name = base.name;
+  if (!/^[a-z0-9.-]+$/i.test(out.model)) out.model = base.model;
   return out;
 }
