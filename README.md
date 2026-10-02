@@ -39,9 +39,15 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   head. Even with his brain Offline he understands simple things ("dance", "sit down", "draw something", "fight me",
   "throw the ball", "surf", "kick that window", "my name is ...").
 - **Right-click him**: talk, take his things (his pen, his wooden sword, his mallet, his ball), give them back, fix him up, settings.
-- **His belt**: his pen lives on his hip (he draws with it, so no pen = no drawing) and his wooden sword on his back.
-  Take the sword and it dangles from your cursor: swing it at him. Click him to give it back, anywhere else to drop it.
-  He'll ask for his things back, and pick them up when they're lying around. Make your own items: Settings → Items.
+- **His belt and inventory**: he starts with just his pen (he draws with it, so no pen = no drawing). Everything else is in
+  his inventory (Settings → Items): **Drop it in** and it falls from the top of the screen and he goes to get it, or
+  **Give him** to put it on his belt. Take something from him (right-click) and it dangles from your cursor: press and hold
+  to swing it, let go to drop or throw it, let go on him to hand it back. He asks for his things back, and picks them up
+  when they're lying around.
+- **Props**: a chair, a couch, a TV and a scooter (Settings → Items → Props). He sits on the chair and couch, watches TV
+  (from the couch if it's near), rides the scooter across the screen. Drag them around; tip his chair and he falls off.
+- **Make your own items and props**: it's just a text file. See [docs/MAKING-THINGS.md](docs/MAKING-THINGS.md)
+  (also in the items folder: Settings → Items → Open items folder).
 - **He's 3D now**: he really turns, spins and flips, and his arms and legs pass in front of and behind each other.
 - **Breakable** (Settings → General, on by default): yank a hand or foot hard, smack him really hard, or slam him into
   the ground, and a limb can come off. No gore, just sparks. He stares at the stump, goes and gets it (hopping on one leg,
@@ -59,11 +65,22 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   caught. His sword and mallet whack his ball, things lying around, and the sides of windows. Throw one of his things at him
   and it bonks him.
 - **He moves your windows** (on by default; the first time, macOS asks you to allow it under Privacy & Security →
-  Accessibility, for Terminal or Electron): he walks up and pushes a window along, kicks one across the screen, and
+  Accessibility, for Terminal or Electron; if he says "they won't budge", Settings → General says what the helper reported): he walks up and pushes a window along, kicks one across the screen, and
   stands on one and surfs it across. He also knocks on windows ("anyone home?") and sits on their edges with his legs
   dangling. He leaves alone the window you're working in, and anything he draws on a window moves with it.
-- **His drawings come to life**: he draws a ball and kicks it around (you can throw it too, even at him), draws a box and
-  vaults onto it, draws a ledge and jumps up on it, and if you took his sword he draws himself a new one.
+- **His drawings come to life**, and they have weight: boxes fall, tumble and stack, and you can drag them. A ledge he
+  draws is stuck to the wall behind it until something knocks it loose (punch it, hit it, or pull it). A rope bridge
+  hangs limp in the middle. He draws a ball and kicks it around, and if you took his sword he draws a new one.
+- **He draws his way up**: when he wants up onto a window and doesn't feel like climbing, he draws the base of a ramp along
+  the floor, then walks up the slope while his pen draws it just ahead of his feet. A gap between windows: he draws a
+  bridge across, walking out over the gap behind his pen. Both turn real (the bridge sags when he's on it).
+- **He sees what you're doing** (Settings → General, on by default): he knows which app you're in and comments on it
+  (videos, chats, homework, code, Minecraft...), and on a Mac he can hop up and sit on things in your front window, like
+  your chat messages (and rides along when you scroll). Nothing inside your windows is read; with an AI brain on, the app
+  name and window title go into what he tells the AI.
+- **Emotions**: not just one mood but finer feelings. Annoyed (arms crossed, foot tapping, grumbling) isn't angry yet;
+  happy (hands behind his back, humming) isn't playful; there's excited, lonely, nervous, and quick flashes of proud
+  (hands on hips after a flip) and embarrassed (scratching his head after a faceplant).
 - **Memories**: he remembers what you do to him (and, with an AI brain, what you tell him). See and edit them in
   Settings → Mind → Memories. Saved in memory.json next to his settings.
 - **Inside his head** (Settings → Mind): his neurons in a 3D model of his head. Drag to turn it, drag a feeling to

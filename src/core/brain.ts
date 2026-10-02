@@ -169,7 +169,7 @@ const BODY_GUIDE = [
 const DRAW_GUIDE = [
   '',
   'DRAWING: {"draw": [strokes], "title": "what it is"} draws a doodle on the screen next to you with your pen. Each stroke is a list of [x, y] points (pen down from first to last) in a box from -50 to 50, y UP. Up to 12 strokes, 60 points each. It ends up about 50 pixels big, so keep it simple: a cat, a sword, a face, a word.',
-  'DRAWINGS COME TO LIFE: add "becomes" to a drawing and it turns real when you finish it: "ball" (a ball that bounces; then {"do":"kick"} to kick it around), "box" (drawn on the floor; you can stand on it, {"do":"getonit"} vaults onto it), "platform" (a ledge drawn in the air; {"do":"getonit"} jumps onto it), "item" (something you hold, like a sword, a bat or a wand; drawn upright with the handle at the bottom; {"do":"swing"} swings it).',
+  'DRAWINGS COME TO LIFE: add "becomes" to a drawing and it turns real when you finish it: "ball" (a ball that bounces; then {"do":"kick"} to kick it around), "box" (drawn on the floor; you can stand on it, {"do":"getonit"} vaults onto it), "platform" (a ledge drawn in the air, stuck to the wall behind it; {"do":"getonit"} jumps onto it), "ramp" (a wedge on the floor to walk up), "bridge" (a rope bridge in the air; it sags), "item" (something you hold, like a sword, a bat or a wand; drawn upright with the handle at the bottom; {"do":"swing"} swings it).',
   'Example: {"plan":[{"draw":[[[0,-50],[0,-28]],[[-6,-28],[6,-28]],[[-3,-28],[-3,40],[0,50],[3,40],[3,-28]]],"title":"sword","becomes":"item"},{"do":"swing"}]}',
   'Example cat face: {"draw":[[[-30,-25],[-35,15],[-20,35],[-10,15],[10,15],[20,35],[35,15],[30,-25],[0,-35],[-30,-25]],[[-12,5],[-12,0]],[[12,5],[12,0]],[[-5,-10],[0,-14],[5,-10]]],"title":"cat"}',
 ];
@@ -419,7 +419,9 @@ export class Brain {
       '- {"draw": [strokes], "title": "..."} draw something with your pen (see DRAWING). Only works if you have your pen.',
       'YOUR BELT: you wear a belt (left hip, right hip, back, and a pocket) where you keep your things. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mallet ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
-      'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling).',
+      'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling), "perch" (hop up and sit on something in their window, like a chat message).',
+      'DRAWING YOUR WAY: "ramp" draws a ramp up onto a window and walks up it; "bridge" draws a bridge across a gap to a window; "drawramp" draws one to jump off. Your drawings are solid and have weight.',
+      'PROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "ride" (the scooter). Only if they\'re out.',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
       ...(this.puppet ? BODY_GUIDE : []),
       ...DRAW_GUIDE,

@@ -228,8 +228,45 @@ Then: Android shell.
     Doodles finished over a window anchor to it (`Doodle.win`) and fade when it closes.
   - Fixed on the way: KickBall walked forever when the ball was against the screen edge; FetchItem gave up on a ball that
     was still bouncing; mischief drags now count as cursor movement.
-- NEXT: owner tests on the Mac. Riskiest: the Accessibility prompt/permission for moving windows (and which app macOS
-  names), the cursor flight feeling right with real mouse input (echo filtering), the talk box focus from last round.
+- Owner's test of that round: "way better"; but window push/kick/surf only said "?". Next round (built while away, all
+  sim-tested, poses and props checked in headless Chromium, Electron launches under Xvfb; NOT yet tried on a real Mac):
+  - Windows: `windowSides` (world.ts) = every visible side at any height (big windows under the menu bar too; the
+    climbing walls skip those). Commands you give skip his mood/"busy window" filters (`Mind.forced`) and say why when
+    he can't (`Mind.cant[name]`, e.g. "they won't budge. permission?"). The helper reports how moving went ("move: ..."
+    lines on stderr → `world:log` → `Pet.moveNote` → Settings). Fixed: blade hits only knocked windows swinging away.
+  - Inventory: a new him starts with just his pen (`STARTER_ITEMS`); Items tab Inventory = Drop it in (`item:spawn`,
+    falls from the top, 'itemSpawned' → he fetches it) / Give him. Carrying: press-and-hold to carry, release to drop or
+    throw (`carryHeld`, `letGoOfItem`), release on him = give back.
+  - Emotions: `Mood.emotion` (finer than `label`, which still drives choices; angry family now > 0.6 annoyance):
+    annoyed / angry, content / happy / playful / excited, sad / lonely, nervous / scared, flashes proud / embarrassed
+    (`mood.feel`). Body language: `Character.idleStyle` (crossed, hips, behind, hug; he turns toward you to show it),
+    `tapFoot`, gait 'creep', gesture 'scratch'; `Mind.mutter` lines; annoyed damps fun and grumbles at pokes.
+  - Drawing physics (props.ts rewrite): `Thing` = Verlet points + sticks, solved together (`begin`/`pass`/`end`), one-way
+    landing on window tops and other things' tops (worked out once per step: later passes used to sink points through),
+    `restOnEachOther` (edge-on-corner support). Kinds: box, ledge (pinned "into the wall" until a hit/pull > 28 px
+    `unstick`s it), ramp (wedge), bridge (chain, ends pinned, `stiff` 0.3 sticks so it sags under `carry()`ed weight),
+    prop. Slopes: `Platform.y2` + `platY`; Character `groundY(x)`, per-foot ground, `stepUpOrDown` (walk onto/off low
+    surfaces ≤ 12/14 px), `surfaceRange` follows those steps. Grab/drag any thing (`press.thing`).
+  - Drawing his way: `DrawRamp` (base walking away from the window, then up the slope behind the pen; `props.wet` =
+    wet ink that's already a platform; at the top → `makeRamp` with the same platform id), `BridgeTo` (out over a gap,
+    real `makeBridge` once across). Routes 'ramp'/'bridge' (`drawnRoute`, `reachableAbove(...).drawn`); climb prefers
+    drawing when tired or 35% of the time over wall/ceiling routes. Commands ramp, bridge, drawramp, ropebridge.
+  - Props: definition files with "type": "prop" (`PropDef`, `parsePropDef`; built-ins chair, couch, tv, scooter in
+    `src/core/props/`), `makeProp` (rigid, all-pairs sticks), `Props.spawn/savePlaced`, saved in the pet save.
+    Skills `SitOnProp` (`Character.sitOn` + `seatPose`, `lounge` on the couch, falls off when tipped), `WatchTV` (TV shows
+    little cartoons when `on`), `RideScooter`. Items tab → Props. `Pet.addDefs` splits item/prop files. Main copies new
+    example files into the user's items folder once each (`.copied.json`).
+  - Screen awareness (config `screenAware`): helper "ui on" → `{"ui": {app, title, win, els}}` lines. Mac: AX focused
+    window + tree walk (≤700 nodes, roles text/buttons/fields/images/links; positions only), AXManualAccessibility for
+    Electron apps; Windows: app + title only. `Pet.setScreen` → `world.screen` and `uiTops` platforms in the front window
+    (ids kept across scrolls). Mind: 'perch' (Chain: ClimbOnto + LedgeSit), `appKind` + APP_LINES comments on
+    'appChanged', long-session nudges; brain [state] "the person is using: App — title (N min)".
+  - docs/MAKING-THINGS.md: items + props how-to and "your own version of him" (name/color are settings; no texture files).
+- NEXT: owner tests on the Mac. Riskiest: Accessibility for moving windows and for reading UI positions (Terminal is
+  probably the app that needs it), how well chat apps expose their messages (Discord/Slack via AXManualAccessibility),
+  the cursor flight with real mouse input. Owner's idea for later: Minecraft-style blocks (fits the Thing physics), a house
+  on a second monitor (the overlay only covers the main screen today), and maybe a lighter shareable version (e.g. an
+  orange one named Leonard for JT).
 
 ## Ideas from research (not agreed yet — offer as options)
 - Shimeji-style: climb screen/window sides and ceilings, dangle from window edges, sit on a
@@ -248,7 +285,7 @@ Then: Android shell.
 - `src/core/character.ts` body controller (modes, stepping, gestures, limbs, parkour). Tune feel here.
 - `src/core/mood.ts` dials + posture. `src/core/mind.ts` choices + reactions. `src/core/skills.ts` skills.
 - `src/core/memory.ts` memories. `src/core/limbs.ts` loose limbs. `src/core/items.ts` + `src/core/items/*.json` items.
-- `src/core/props.ts` drawings that came to life. `src/app/sfx.ts` sound effects. `src/core/cursor.ts` your cursor flying when he hits it.
+- `src/core/props.ts` drawings that came to life + props (physics bodies). `docs/MAKING-THINGS.md` the how-to for item/prop files. `src/app/sfx.ts` sound effects. `src/core/cursor.ts` your cursor flying when he hits it.
 - `src/core/pet.ts` glue + input. `src/app/renderer.ts` page + click-through. `src/electron/main.ts` window.
 - Debug in DevTools: `pet.paused = true`, `pet.mood.s`, `pet.char.walkTo(x)`, `pet.char.doGesture('wave')`.
 
