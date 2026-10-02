@@ -179,7 +179,11 @@ export class Mind {
     // You coming back after a while: he's glad to see you.
     if (w.cursorMovedAt - this.lastCursorSeen > 120 && this.lastCursorSeen > 0 && !m.asleep) {
       m.nudge({ happiness: 0.08 * m.s.trust * 2, boredom: -0.25 });
-      if (m.s.trust > 0.35 && ch.ready) { this.interrupt(c, new Sequence('greet', [{ face: 'cursor' }, { say: pick(['oh hi!', 'hey!', "you're back"]) }, { gesture: 'wave' }])); this.why = 'you came back'; }
+      if (m.s.trust > 0.35 && ch.ready) {
+        const line = c.memory.recall('greet') ?? pick(['oh hi!', 'hey!', "you're back"]);
+        this.interrupt(c, new Sequence('greet', [{ face: 'cursor' }, { say: line }, { gesture: 'wave' }]));
+        this.why = 'you came back';
+      }
     }
     this.lastCursorSeen = w.cursorMovedAt;
     const away = w.time - w.cursorMovedAt;
@@ -396,7 +400,8 @@ export class Mind {
         this.why = 'you smacked him';
         const wasAsleep = m.asleep;
         m.asleep = false;
-        c.say(wasAsleep ? pick(['WHA-', '!?!']) : e.speed > 3000 ? pick(['OW!', 'HEY!!', 'OWW']) : pick(['ow!', 'hey!', '!!']), 1.3);
+        const remembers = !wasAsleep && chance(0.4) ? c.memory.recall('smacked') : null;
+        c.say(remembers ?? (wasAsleep ? pick(['WHA-', '!?!']) : e.speed > 3000 ? pick(['OW!', 'HEY!!', 'OWW']) : pick(['ow!', 'hey!', '!!'])), 1.3);
         if (wasAsleep) ch.standUp();
         const L = m.label;
         this.interrupt(c, L === 'scared' || L === 'sad'
@@ -417,7 +422,7 @@ export class Mind {
           this.interrupt(c, new Sequence('enjoy', [{ gesture: 'nuzzle', atCursor: true }]));
           this.why = 'you\'re petting him';
         }
-        if (chance(0.4)) c.say(pick([':)', '♪', 'hehe', 'mmm']), 1.2);
+        if (chance(0.4)) c.say((chance(0.3) ? c.memory.recall('petted') : null) ?? pick([':)', '♪', 'hehe', 'mmm']), 1.2);
         return;
 
       case 'grabbed': {
@@ -427,6 +432,7 @@ export class Mind {
         const L = m.label;
         if (L === 'angry') { c.say(pick(['put me down!', 'HEY', 'let go!'])); ch.doGesture('flail'); }
         else if (L === 'scared') { c.say(pick(['AAA', 'no no no', '!!'])); ch.doGesture('flail'); }
+        else if (chance(0.5) && c.memory.recall('grabbed')) c.say(c.memory.recall('grabbed')!, 1.6);
         else if (L === 'playful') c.say(pick(['wheee', 'hi!', 'up!']));
         else if (L === 'sad' || L === 'sleepy') c.say('...');
         else c.say(pick(['?', '!', 'oh']), 1.2);
@@ -516,6 +522,8 @@ export class Mind {
     if (!free) { c.say(L === 'angry' ? '!!' : '!', 0.8); return; }
 
     let react: Sequence | Skill | null = null;
+    const remembers = chance(0.15) ? c.memory.recall('poked') : null;
+    if (remembers) { c.say(remembers, 1.6); return; }
     switch (L) {
       case 'sad':
         // He just doesn't have it in him.

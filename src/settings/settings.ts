@@ -9,7 +9,9 @@ import { COMMANDS } from '../core/mind';
 interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
 interface Weigh { name: string; score: number; why: string }
 interface Drawing { title: string; shape: { x: number; y: number }[][]; color: string; at: number }
-interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[] }
+interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at: number; by: 'him' | 'ai' | 'you'; weight: number }
+interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
+interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView }
 interface Stats {
   name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number;
   brain: { active: boolean; status: string; log: LogLine[] };
@@ -345,7 +347,62 @@ shell.onCollections((c) => {
     return fig;
   }).reverse() : [emptyNote('No drawings yet.')]));
 });
-shell.command('sync'); // ask him for his drawings and moves
+shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); });
+shell.command('sync'); // ask him for his drawings, moves and memories
+
+// ── Mind tab: memories ──
+const KIND_LABEL = { you: 'about you', event: 'happened', opinion: 'opinion' } as const;
+const ago = (t: number) => {
+  const m = (Date.now() - t) / 60000;
+  return m < 1 ? 'just now' : m < 60 ? `${Math.round(m)} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+};
+let memShown = '';
+function renderMemory(m: MemoryView) {
+  const t = m.tally, parts = [['thrown', 'thrown'], ['poked', 'poked'], ['petted', 'petted'], ['smacked', 'smacked'], ['talks', 'talked to'], ['ripped', 'limbs lost']]
+    .filter(([k]) => t[k]).map(([k, label]) => `${label} ${t[k]}×`);
+  $('memTally').textContent = `Met you ${ago(m.firstMet).replace(' ago', '')} ago${parts.length ? ' · ' + parts.join(' · ') : ''}`;
+  const sum = $<HTMLTextAreaElement>('memSummary');
+  if (document.activeElement !== sum) sum.value = m.summary;
+  $('memSummaryInfo').textContent = m.summarizedAt ? `Last tidied ${ago(m.summarizedAt)}.` : '';
+  // Don't rebuild the list while you're editing a note.
+  const key = JSON.stringify(m.notes);
+  if (key === memShown || document.activeElement?.closest('#memNotes')) return;
+  memShown = key;
+  $('memNotes').replaceChildren(...(m.notes.length ? [...m.notes].reverse().map((n) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const kind = document.createElement('span');
+    kind.className = 'kind'; kind.textContent = KIND_LABEL[n.kind];
+    const text = document.createElement('span');
+    text.className = 'text'; text.textContent = n.text; text.contentEditable = 'plaintext-only';
+    text.title = `${n.by === 'you' ? 'written by you' : n.by === 'ai' ? 'written by his AI brain' : 'written by him (instinct)'} · ${new Date(n.at).toLocaleString()}`;
+    text.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); text.blur(); } });
+    text.addEventListener('blur', () => { if (text.textContent!.trim() && text.textContent !== n.text) shell.command(`memEdit:${n.id}:${text.textContent}`); });
+    const when = document.createElement('small');
+    when.textContent = ago(n.at);
+    const del = document.createElement('button');
+    del.className = 'btn ghost small'; del.type = 'button'; del.textContent = '✕'; del.title = 'Make him forget this';
+    del.addEventListener('click', () => shell.command(`memDel:${n.id}`));
+    row.append(kind, text, when, del);
+    return row;
+  }) : [emptyNote('No notes yet. He writes them as things happen.')]));
+}
+$('memSummary').addEventListener('change', (e) => shell.command(`memSummary:${(e.target as HTMLTextAreaElement).value}`));
+$('memForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const t = $<HTMLInputElement>('memText');
+  if (t.value.trim()) shell.command(`memAdd:${t.value.trim()}`);
+  t.value = '';
+});
+$('memTidy').addEventListener('click', () => shell.command('memTidy'));
+let clearArmed = 0;
+$('memClear').addEventListener('click', () => {
+  const b = $('memClear');
+  if (Date.now() - clearArmed < 4000) { shell.command('memClear'); b.textContent = 'Forget everything'; clearArmed = 0; return; }
+  clearArmed = Date.now();
+  b.textContent = 'Click again to wipe his memory';
+  setTimeout(() => { if (Date.now() - clearArmed >= 4000) b.textContent = 'Forget everything'; }, 4100);
+});
 
 // ── Mind tab: neurons ──
 // What he feels on the left, everything he could do in the middle (sized by how much he wants it),

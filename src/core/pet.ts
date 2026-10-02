@@ -13,6 +13,7 @@ import { drawBubble, drawCharacter, drawPixelBubble, drawPuffs, PixelLayer, shad
 import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, splitSpeech } from './brain';
 import type { Vec } from './math';
+import { Memory } from './memory';
 
 /** A finished drawing kept in his gallery. Shape is in a box from -0.5 to 0.5. */
 export interface Drawing { title: string; shape: Vec[][]; color: string; at: number }
@@ -28,6 +29,10 @@ export class Pet {
   readonly mood = new Mood();
   readonly mind = new Mind();
   readonly brain = new Brain();
+  /** His notes and summary (milestone 5). */
+  readonly memory = new Memory();
+  /** Called with his memory file's contents when it changes (the app writes it to disk). */
+  onMemorySave: ((json: string) => void) | null = null;
   readonly ctx: Ctx;
   /** Turn his mind off (for debugging poses by hand). */
   paused = false;
@@ -75,7 +80,9 @@ export class Pet {
       moveCursor: (x, y) => this.moveCursor(x, y),
       cursorEscaped: false,
       canGrabCursor: false,
+      memory: this.memory,
     };
+    this.memory.onChange = () => { this.onCollections?.(); this.onMemorySave?.(this.memory.save()); };
     this.brain.onSpeak = (text) => this.speak(text);
     this.ctx.savedMoves = this.brain.savedMoves;
     this.brain.onMoves = () => this.onCollections?.();
@@ -258,7 +265,25 @@ export class Pet {
   /** Is the cursor over him? (decides whether clicks reach us or the desktop) */
   hit(x: number, y: number) { return this.char.hitTest(x, y) !== null; }
 
-  private emit(e: MindEvent) { this.mind.onEvent(this.ctx, e); this.brain.noteEvent(this.ctx, e); }
+  private emit(e: MindEvent) {
+    this.remember(e);
+    this.mind.onEvent(this.ctx, e);
+    this.brain.noteEvent(this.ctx, e);
+  }
+
+  /** He counts what happens to him (his memory turns firsts and repeats into notes). */
+  private remember(e: MindEvent) {
+    const m = this.memory;
+    switch (e.type) {
+      case 'poked': m.count('poked'); break;
+      case 'petted': m.count('petted'); break;
+      case 'smacked': m.count('smacked'); break;
+      case 'grabbed': m.count('grabbed'); break;
+      case 'released': if (e.speed > 900) m.count('thrown'); break;
+      case 'crashed': m.count('crashed'); break;
+      case 'fellOff': m.count('fellOff'); break;
+    }
+  }
 
   // ── input ──
 
@@ -289,6 +314,7 @@ export class Pet {
     }
     w.cursor = { x, y };
     w.cursorMovedAt = w.time;
+    if (Date.now() - this.memory.lastSeen > 60_000) this.memory.sawYou();
     const over = !this.press && speed < 1200 && this.char.hitTest(x, y, 20) !== null;
     if (over) {
       if (!r.over || w.time - r.since > 2.5) { r.dist = 0; r.since = w.time; }
@@ -361,6 +387,7 @@ export class Pet {
       gallery: this.gallery,
       recentMoves: this.brain.recentMoves.map((m) => ({ name: m.name, poses: m.frames.length })),
       savedMoves: this.brain.savedMoves.map((m) => ({ name: m.name, poses: m.frames.length })),
+      memory: { summary: this.memory.summary, notes: this.memory.notes, tally: this.memory.tally, firstMet: this.memory.firstMet, summarizedAt: this.memory.summarizedAt },
     };
   }
 
@@ -373,7 +400,8 @@ export class Pet {
     const arg = rest.join(':');
     if (verb === 'do') { this.mind.command(this.ctx, arg); return; }
     if (verb === 'say') { if (arg.trim()) this.say(arg.trim().slice(0, 80)); return; }
-    if (verb === 'hear') { this.brain.hear(this.ctx, arg); return; }
+    if (verb === 'hear') { if (arg.trim()) this.memory.count('talks'); this.brain.hear(this.ctx, arg); return; }
+    if (this.memoryCommand(verb, arg)) return;
     if (this.collectionCommand(verb, arg)) { this.onCollections?.(); return; }
     if (verb === 'mood') { const p = MOOD_PRESETS[arg]; if (p) { this.mood.asleep = false; Object.assign(this.mood.s, p); } return; }
     if (verb === 'setMood') {
@@ -421,6 +449,24 @@ export class Pet {
       case 'forgetMove': if (!saved[i]) return false; saved.splice(i, 1); return true;
       case 'redraw': { const d = this.gallery[i]; if (d) this.mind.perform(this.ctx, [{ draw: d.shape, title: d.title }], 'you told him to'); return false; }
       case 'forgetDrawing': if (!this.gallery[i]) return false; this.gallery.splice(i, 1); return true;
+    }
+    return false;
+  }
+
+  /**
+   * His memories, from the Mind tab:
+   *   memAdd:<text>  memEdit:<id>:<text>  memDel:<id>  memSummary:<text>  memTidy  memClear
+   */
+  private memoryCommand(verb: string, arg: string): boolean {
+    const m = this.memory;
+    const [a, ...rest] = arg.split(':');
+    switch (verb) {
+      case 'memAdd': m.add(arg, 'you', 'you', 3); return true;
+      case 'memEdit': m.edit(Number(a), rest.join(':')); return true;
+      case 'memDel': m.remove(Number(a)); return true;
+      case 'memSummary': m.setSummary(arg); return true;
+      case 'memTidy': this.brain.tidy(this.ctx); return true;
+      case 'memClear': m.clear(); return true;
     }
     return false;
   }

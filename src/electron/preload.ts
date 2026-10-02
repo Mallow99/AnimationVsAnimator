@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('petShell', {
   pressed: () => ipcRenderer.send('pet:pressed'),
   moveCursor: (x: number, y: number) => ipcRenderer.send('pet:moveCursor', x, y),
   ask: (req: unknown) => ipcRenderer.invoke('brain:ask', req),
+  loadMemory: () => ipcRenderer.invoke('memory:load'),
+  saveMemory: (json: string) => ipcRenderer.send('memory:save', json),
   // shared
   getConfig: () => ipcRenderer.invoke('config:get'),
   onConfig: on('config:changed'),

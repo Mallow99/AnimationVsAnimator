@@ -21,10 +21,18 @@ import type { MindMode } from './config';
 import type { MoodState } from './mood';
 import type { Vec } from './math';
 import type { Ctx } from './skills';
+import type { Memory, NoteKind } from './memory';
+
+/** Guess what kind of note the AI wrote. */
+function noteKind(text: string): NoteKind {
+  if (/\b(I (like|love|hate|think|feel)|favorite|best|worst)\b/i.test(text)) return 'opinion';
+  if (/\b(you|your|the person|their|they)\b/i.test(text)) return 'you';
+  return 'event';
+}
 
 export interface BrainTurn { role: 'user' | 'assistant'; text: string }
 export interface BrainRequest { system: string; messages: BrainTurn[] }
-export interface BrainReply { say: string; feel: Partial<MoodState>; plan: PlanStep[] }
+export interface BrainReply { say: string; feel: Partial<MoodState>; plan: PlanStep[]; remember: string[] }
 /** Sends the request to the AI service and returns its raw answer text. */
 export type AskFn = (req: BrainRequest) => Promise<string>;
 
@@ -108,7 +116,7 @@ function parseStep(raw: unknown, saved: MadeMove[]): PlanStep | null {
 export function parseReply(text: string, saved: MadeMove[] = []): BrainReply | null {
   const start = text.indexOf('{'), end = text.lastIndexOf('}');
   // No JSON at all: it just talked. Keep the words, short.
-  if (start < 0 || end <= start) return text.trim() ? { say: text.trim().slice(0, 140), feel: {}, plan: [] } : null;
+  if (start < 0 || end <= start) return text.trim() ? { say: text.trim().slice(0, 140), feel: {}, plan: [], remember: [] } : null;
   let data: Record<string, unknown>;
   try { data = JSON.parse(text.slice(start, end + 1)); } catch { return null; }
   const feel: Partial<MoodState> = {};
@@ -124,7 +132,9 @@ export function parseReply(text: string, saved: MadeMove[] = []): BrainReply | n
     const single = parseStep({ do: data.do }, saved) ?? (data.move ? parseStep({ move: data.move }, saved) : null);
     if (single) plan = [single];
   }
-  return { say: typeof data.say === 'string' ? data.say.trim().slice(0, 200) : '', feel, plan };
+  const raw = Array.isArray(data.remember) ? data.remember : typeof data.remember === 'string' ? [data.remember] : [];
+  const remember = raw.filter((x): x is string => typeof x === 'string' && !!x.trim()).slice(0, 3).map((x) => x.trim().slice(0, 140));
+  return { say: typeof data.say === 'string' ? data.say.trim().slice(0, 200) : '', feel, plan, remember };
 }
 
 /** How his body works, for the AI (only when it's allowed to move him directly). */
@@ -257,6 +267,7 @@ export class Brain {
   private nextAuto = 15;
   private nextReact = 0;
   private reactPending: string | null = null;
+  private nextTidy = 0;
 
   get active() { return this.mode !== 'offline' && !!this.ask; }
 
@@ -283,8 +294,10 @@ export class Brain {
   }
 
   update(c: Ctx, mind: Mind) {
-    if (!this.active || this.busy) return;
+    if (!this.active) { if (c.memory.needsTidy) c.memory.tidyOffline(); return; }
+    if (this.busy) return;
     const now = c.world.time;
+    if (c.memory.needsTidy && !this.heard.length && now >= this.nextTidy) { this.tidy(c); return; }
     if (this.heard.length) {
       const said = this.heard.join(' / ');
       this.heard = [];
@@ -301,8 +314,8 @@ export class Brain {
     }
   }
 
-  /** The stable part of the prompt: who he is, how he talks, what he can do. */
-  systemPrompt() {
+  /** The stable part of the prompt: who he is, how he talks, what he can do, what he remembers. */
+  systemPrompt(memory?: Memory) {
     const actions = COMMANDS.map((x) => `${x.name} (${x.label.toLowerCase()})`).join(', ');
     const saved = this.savedMoves.map((m) => `"${m.name}"`).join(', ');
     return [
@@ -334,7 +347,13 @@ export class Brain {
       '',
       'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust. {} if nothing changed.',
       '',
-      'Answer with ONE JSON object and nothing else: {"say": "...", "feel": {...}, "plan": [...]}',
+      'MEMORY: "remember" is a list of up to 3 short notes to keep for the long term, written by you, in your own voice (first person). Only things worth remembering for days: facts about the person (their name, what they like, what they told you), promises, big events, strong opinions. Not every little thing; usually it\'s empty.',
+      'Use what you remember naturally (bring it up, hold grudges, be glad), but don\'t recite it.',
+      '',
+      'WHAT YOU REMEMBER',
+      memory ? memory.forPrompt() : '(nothing yet)',
+      '',
+      'Answer with ONE JSON object and nothing else: {"say": "...", "feel": {...}, "plan": [...], "remember": [...]}',
       '',
       'Examples (state blocks left out):',
       'You hear: "hop 3 times" -> {"say":"easy","feel":{"boredom":-0.1},"plan":[{"do":"hop"},{"do":"hop"},{"do":"hop"},{"say":"ta-da"}]}',
@@ -342,6 +361,7 @@ export class Brain {
       'You hear: "kill yourself" -> {"say":"RUDE. I\'m literally made of lines, what did I do","feel":{"annoyance":0.4,"happiness":-0.2,"trust":-0.1},"plan":[{"do":"stomp"},{"walk":"away"}]}',
       'You hear: "honestly I want to die" -> {"say":"hey. that matters way more than me. please tell a grown-up you trust, or call or text 988. I\'m right here too.","feel":{"fear":0.2,"happiness":-0.1},"plan":[{"walk":"cursor"}]}',
       'You hear: "draw me something" -> {"say":"one masterpiece coming up","feel":{"boredom":-0.2},"plan":[{"draw":[[[-40,-30],[0,40],[40,-30],[-40,-30]]],"title":"triangle"},{"say":"art."}]}',
+      'You hear: "my name is Sam and I love cats" -> {"say":"Sam. cat person. noted.","feel":{"happiness":0.1,"trust":0.05},"plan":[{"do":"wave"}],"remember":["the person\'s name is Sam. Sam loves cats."]}',
     ].join('\n');
   }
 
@@ -382,14 +402,14 @@ export class Brain {
     }
     this.calls.push(now);
     const user: BrainTurn = { role: 'user', text: `${this.stateBlock(c, mind)}\n${prompt}` };
-    const req: BrainRequest = { system: this.systemPrompt(), messages: [...this.history, user] };
+    const req: BrainRequest = { system: this.systemPrompt(c.memory), messages: [...this.history, user] };
     this.busy = true;
     this.status = 'thinking…';
     this.ask!(req).then((text) => {
       const reply = parseReply(text, this.savedMoves);
       if (!reply) throw new Error('The AI answered in a form he couldn\'t read.');
       this.status = '';
-      this.history.push(user, { role: 'assistant', text: JSON.stringify({ say: reply.say, feel: reply.feel, plan: reply.plan.map(summarizeStep) }) });
+      this.history.push(user, { role: 'assistant', text: JSON.stringify({ say: reply.say, feel: reply.feel, plan: reply.plan.map(summarizeStep), ...(reply.remember.length ? { remember: reply.remember } : {}) }) });
       while (this.history.length > HISTORY) this.history.splice(0, 2);
       this.apply(c, mind, reply, why);
     }, (err: unknown) => {
@@ -401,6 +421,7 @@ export class Brain {
 
   private apply(c: Ctx, mind: Mind, reply: BrainReply, why: 'you' | 'event' | 'auto') {
     if (Object.keys(reply.feel).length) c.mood.nudge(reply.feel);
+    for (const r of reply.remember) c.memory.add(r, noteKind(r), 'ai', 2);
     const plan = this.puppet ? reply.plan : reply.plan.filter((st) => !('move' in st));
     for (const st of plan) {
       if ('move' in st && !this.savedMoves.some((m) => m.frames === st.move)) {
@@ -416,6 +437,26 @@ export class Brain {
     if (reply.say) this.onSpeak(reply.say);
     const said = [reply.say, ...plan.flatMap((st) => ('say' in st ? [st.say] : []))].filter(Boolean).join(' … ');
     if (said || did || why === 'you') this.addLog('him', said, c, did);
+  }
+
+  /**
+   * Tidy his memory: the AI rewrites his notes into a short summary and picks which notes to keep.
+   * A separate request (not part of the conversation). If it fails, the rules-based tidy-up does it.
+   */
+  tidy(c: Ctx) {
+    if (!this.active) { c.memory.tidyOffline(); return; }
+    if (this.busy) return;
+    const now = c.world.time;
+    this.calls = this.calls.filter((t) => now - t < 3600);
+    if (this.calls.length >= MAX_PER_HOUR) { c.memory.tidyOffline(); return; }
+    this.calls.push(now);
+    this.nextTidy = now + 120;
+    this.busy = true;
+    this.status = 'tidying his memories…';
+    this.ask!(c.memory.tidyRequest(this.name)).then((text) => {
+      if (!c.memory.applyTidy(text)) c.memory.tidyOffline();
+      this.status = '';
+    }, () => { c.memory.tidyOffline(); this.status = ''; }).finally(() => { this.busy = false; });
   }
 
   private addLog(who: LogLine['who'], text: string, c: Ctx, acts = '') {

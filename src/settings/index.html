@@ -73,6 +73,11 @@
     .gallery figcaption { font-size: 12px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .gallery .btns { justify-content: center; gap: 4px; }
     .btn.small { padding: 5px 8px; font-size: 12px; }
+    .notes .row { align-items: flex-start; }
+    .notes .kind { font: 600 10px/1.8 var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent); min-width: 54px; }
+    .notes .text { flex: 1; white-space: normal !important; overflow-wrap: anywhere; cursor: text; border-radius: 4px; padding: 0 3px; }
+    .notes .text:focus { outline: 1px solid var(--accent); background: var(--bg); }
+    .notes small { white-space: nowrap; }
     .chat p { margin: 0; padding: 7px 10px; border-radius: 10px; max-width: 85%; overflow-wrap: anywhere; }
     .chat .you { justify-self: end; background: var(--accent); color: var(--accent-ink); }
     .chat .him { justify-self: start; background: var(--track); }
@@ -170,7 +175,20 @@
       </div>
       <div class="group">
         <h2>Memories</h2>
-        <div class="card"><p class="note">He doesn't keep memories yet. They arrive in milestone 5, as a notes file he writes and tidies up himself.</p></div>
+        <div class="card">
+          <p class="recent" id="memTally">—</p>
+          <span class="row-label">Summary</span>
+          <textarea id="memSummary" maxlength="1200" aria-label="Memory summary" placeholder="Nothing summed up yet. Once enough notes pile up, he tidies them into a summary here."></textarea>
+          <small class="note" id="memSummaryInfo"></small>
+          <span class="row-label">Notes</span>
+          <div id="memNotes" class="list notes"></div>
+          <form class="inline" id="memForm"><input type="text" id="memText" maxlength="140" placeholder="tell him something to remember" /><button class="btn" type="submit">Add</button></form>
+          <div class="btns">
+            <button class="btn ghost small" id="memTidy" type="button">Tidy up now</button>
+            <button class="btn ghost small" id="memClear" type="button">Forget everything</button>
+          </div>
+        </div>
+        <p class="note">His notes, in his words: things about you, things that happened, his opinions. With an AI brain on, he writes his own and every so often the AI tidies them into the summary. Offline, he still counts what you do to him and remembers it. Click a note to edit it; your edits are his memories now. Saved in memory.json next to his settings.</p>
       </div>
     </section>
 

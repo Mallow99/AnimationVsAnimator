@@ -18,6 +18,8 @@ interface PetShell {
   pressed(): void;
   moveCursor(x: number, y: number): void;
   ask(req: BrainRequest): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
+  loadMemory(): Promise<string | null>;
+  saveMemory(json: string): void;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
@@ -41,7 +43,19 @@ const pet = new Pet(bounds());
 // Remember his mood between runs (browser storage works in Electron too).
 const SAVE_KEY = 'pet-save';
 try { pet.load(localStorage.getItem(SAVE_KEY)); } catch { /* storage blocked */ }
-const save = () => { try { localStorage.setItem(SAVE_KEY, pet.save()); } catch { /* ignore */ } };
+// His memories: a file next to his settings on the desktop, browser storage in preview mode.
+const MEMORY_KEY = 'pet-memory';
+let memoryLoaded = !shell;
+try { if (!shell) pet.memory.load(localStorage.getItem(MEMORY_KEY)); } catch { /* storage blocked */ }
+shell?.loadMemory().then((json) => { pet.memory.load(json); memoryLoaded = true; pet.onCollections?.(); }, () => { memoryLoaded = true; });
+let memTimer: ReturnType<typeof setTimeout> | undefined;
+const saveMemory = () => {
+  if (!memoryLoaded) return; // don't overwrite the file before we've read it
+  const json = pet.memory.save();
+  if (shell) shell.saveMemory(json); else try { localStorage.setItem(MEMORY_KEY, json); } catch { /* ignore */ }
+};
+pet.onMemorySave = () => { clearTimeout(memTimer); memTimer = setTimeout(saveMemory, 1000); };
+const save = () => { try { localStorage.setItem(SAVE_KEY, pet.save()); } catch { /* ignore */ } saveMemory(); };
 setInterval(save, 15000);
 window.addEventListener('beforeunload', save);
 

@@ -41,6 +41,17 @@ function setConfig(patch: unknown) {
   updateWatcher();
 }
 
+// ───────────── his memory file ─────────────
+// memory.json in the app's data folder: his notes and summary (milestone 5). Plain JSON, so you can read it.
+
+const memoryPath = () => path.join(app.getPath('userData'), 'memory.json');
+function saveMemory(json: string) {
+  if (typeof json !== 'string' || json.length > 2_000_000) return;
+  const tmp = memoryPath() + '.tmp';
+  // Write to a temporary file first, then swap it in, so a crash mid-write can't wipe his memories.
+  fs.writeFile(tmp, json, (err) => { if (!err) fs.rename(tmp, memoryPath(), () => {}); });
+}
+
 // ───────────── other windows (platforms) ─────────────
 
 /** Convert screen rectangles to the overlay's coordinates (its top-left is 0,0). */
@@ -174,6 +185,8 @@ ipcMain.on('pet:stats', (_e, stats: unknown) => settingsWin?.webContents.send('p
 ipcMain.on('pet:collections', (_e, data: unknown) => settingsWin?.webContents.send('pet:collections', data));
 ipcMain.on('pet:command', (_e, cmd: string) => win?.webContents.send('pet:command', cmd));
 ipcMain.on('settings:open', () => openSettings());
+ipcMain.handle('memory:load', () => { try { return fs.readFileSync(memoryPath(), 'utf8'); } catch { return null; } });
+ipcMain.on('memory:save', (_e, json: string) => saveMemory(json));
 // The AI brain: the overlay asks, main calls the AI service with the saved key.
 ipcMain.handle('brain:ask', (_e, req: BrainRequest) => llm.ask(config.provider, config.model, req));
 ipcMain.handle('brain:keyStatus', (_e, provider: ProviderId) => llm.keyStatus(provider in PROVIDERS ? provider : config.provider));

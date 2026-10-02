@@ -499,5 +499,63 @@ async function live(pet: Pet, seconds: number) {
   check('prompt: in character, plans, moves, drawing, and the 988 exception', ['not an assistant', '"plan"', 'MAKING UP MOVES', 'DRAWING', '988'].every((k) => sys.includes(k)));
 }
 
+// ───── memories (milestone 5) ─────
+function throwHim(pet: Pet) {
+  const c = pet.char, n = c.body.j.neck;
+  pet.pointerDown(n.x, n.y + 3, 0);
+  pet.pointerMove(n.x, n.y - 100, 0, -900, 300);
+  petFor(0.2, pet);
+  pet.pointerMove(n.x + 60, n.y - 200, 1800, -900, 500);
+  pet.pointerUp(n.x + 60, n.y - 200);
+  petFor(5, pet);
+}
+{ // Offline: he counts what you do, writes notes about it, and brings it up later.
+  const pet = new Pet(bounds);
+  pet.paused = true; petFor(2, pet); pet.paused = false;
+  throwHim(pet); throwHim(pet); throwHim(pet); throwHim(pet);
+  const notes = pet.memory.notes.map((n) => n.text);
+  check('memory: being thrown gets written down', pet.memory.tally.thrown === 4 && notes.some((t) => t.includes('threw me')) && notes.some((t) => t.includes('throw me a lot')), notes.join(' | '));
+  const said: string[] = [];
+  const origSay = pet.ctx.say;
+  pet.ctx.say = (t, s) => { said.push(t); origSay(t, s); };
+  for (let i = 0; i < 12; i++) {
+    const n = pet.char.body.j.neck;
+    pet.pointerDown(n.x, n.y + 3, 0); pet.pointerMove(n.x, n.y - 20, 0, -50, 300); petFor(0.3, pet);
+    pet.pointerUp(n.x, n.y - 20); petFor(3, pet);
+  }
+  check('memory: offline, he remembers being thrown when you pick him up', said.some((t) => /throw|last time/.test(t)), said.join(' | '));
+  const copy = new Pet(bounds);
+  copy.memory.load(pet.memory.save());
+  check('memory: saves and loads', copy.memory.notes.length === pet.memory.notes.length && copy.memory.tally.thrown === 4);
+}
+{ // AI: it can write notes, sees them in its prompt, and tidies them into a summary.
+  let tidyAsked = 0;
+  const { pet, asked } = await brainPet('chat', (req) => {
+    if (req.system.includes('tidying the memory notes')) { tidyAsked++; return { summary: 'Sam likes cats. Sam throws me sometimes.', keep: [1] }; }
+    return { say: 'Sam. noted.', feel: {}, plan: [], remember: ['the person\'s name is Sam'] };
+  });
+  pet.command('hear:my name is Sam');
+  await live(pet, 1);
+  check('memory: the AI writes notes', pet.memory.notes.some((n) => n.by === 'ai' && n.text.includes('Sam')), JSON.stringify(pet.memory.notes));
+  pet.command('hear:what is my name?');
+  await live(pet, 1);
+  check('memory: notes go into his AI prompt', asked[asked.length - 1].system.includes("the person's name is Sam"));
+  for (let i = 0; i < 20; i++) pet.memory.add(`little thing number ${i}`, 'event');
+  await live(pet, 2);
+  check('memory: the AI tidies notes into a summary', tidyAsked === 1 && pet.memory.summary.includes('Sam likes cats') && pet.memory.notes.length <= 3, `tidy=${tidyAsked} notes=${pet.memory.notes.length} summary=${pet.memory.summary}`);
+  pet.command('memAdd:I like pizza');
+  const mine = pet.memory.notes.find((n) => n.by === 'you');
+  pet.command(`memEdit:${mine?.id}:I like pizza with pineapple`);
+  pet.command(`memDel:${pet.memory.notes.find((n) => n.by !== 'you')?.id}`);
+  check('memory: you can add, edit and delete notes', !!mine && mine.text.includes('pineapple') && pet.memory.notes.every((n) => n.by === 'you'), JSON.stringify(pet.memory.notes));
+}
+{ // Offline tidy-up: notes don't pile up forever.
+  const pet = new Pet(bounds);
+  for (let i = 0; i < 20; i++) { const n = pet.memory.add(`thing ${i}`, 'event'); if (n) n.at -= 2 * 3600 * 1000; }
+  pet.memory.tally.thrown = 3;
+  petFor(0.5, pet);
+  check('memory: offline tidy-up sums things up', pet.memory.notes.length < 10 && pet.memory.summary.includes('thrown me 3 times'), `notes=${pet.memory.notes.length} ${pet.memory.summary}`);
+}
+
 console.log(failures ? `\n${failures} failing` : '\nall good');
 process.exit(failures ? 1 : 0);

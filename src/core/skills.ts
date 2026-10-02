@@ -8,6 +8,7 @@ import { GRAVITY, type Bounds, type Platform } from './physics';
 import { surfaceBelow, type Wall } from './world';
 import { SHAPES, type Doodle } from './doodles';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
+import type { Memory } from './memory';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none';
 
@@ -49,6 +50,8 @@ export interface Ctx {
   onDrawn?: (d: Doodle) => void;
   /** Moves he learned (made up by his AI brain, kept by you). He can show them off on his own. */
   savedMoves?: { name: string; frames: Keyframe[] }[];
+  /** His notes about you and his life (milestone 5). */
+  memory: Memory;
 }
 
 export abstract class Skill {
