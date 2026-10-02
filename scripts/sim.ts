@@ -711,6 +711,9 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
   check('right-click menu: talk, take his things', opened && rows[0].startsWith('Talk') && rows.includes('Take pen') && rows.includes('Take wooden sword') && pen.where === 'cursor', rows?.join(' | '));
   const said: string[] = [];
   const origSay = pet.ctx.say; pet.ctx.say = (t, x) => { said.push(t); origSay(t, x); };
+  // Calm and a bit tired, so he isn't off on a 40-second monkey-bars run when it's time to ask for it back.
+  pet.command('mood:calm');
+  pet.command('setMood:{"energy":0.35}');
   petFor(1, pet);
   pet.mind.command(pet.ctx, 'doodle');
   petFor(2, pet);
@@ -759,9 +762,13 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
   const j = pet.char.body.j;
   pet.cursor(pet.char.x + 45, j.neck.y - 5, 0, 0);
   pet.mind.command(pet.ctx, 'slash');
-  let swordOut = false;
-  petFor(5, pet, () => { pet.cursor(pet.char.x + pet.char.facing * 45, j.neck.y - 5, 0, 0); if (pet.items.find('swing')!.where === 'hand') swordOut = true; });
-  check('slash: draws his sword and hits the cursor', swordOut && hits > 0 && pet.items.find('swing')!.where === 'belt', `out=${swordOut} hits=${hits}`);
+  let swordOut = false, putAway = false;
+  petFor(5, pet, () => {
+    pet.cursor(pet.char.x + pet.char.facing * 45, j.neck.y - 5, 0, 0);
+    const where = pet.items.find('swing')!.where;
+    if (where === 'hand') swordOut = true; else if (swordOut && where === 'belt') putAway = true;
+  });
+  check('slash: draws his sword and hits the cursor, puts it away after', swordOut && hits > 0 && putAway, `out=${swordOut} hits=${hits} away=${putAway}`);
 }
 { // Double-click: talk box (no poke). Offline, he still understands simple words.
   const pet = calmPet();
@@ -998,6 +1005,8 @@ function events(pet: Pet) {
   const { pet, step } = desktopPet();
   const got = events(pet);
   pet.command('mood:calm');
+  pet.mind.command(pet.ctx, 'sit'); // just sitting there, minding his own business
+  step(1);
   const h = pet.char.body.j.head;
   pet.cursor(h.x, h.y - pet.char.d.headR - 6, 0, 0);
   // You leave the mouse sitting there (it doesn't move; he may wander under it).
@@ -1048,7 +1057,8 @@ function events(pet: Pet) {
   pet.cursor(at.x, at.y, 0, 0);
   pet.mind.command(pet.ctx, 'hang');
   let hung = false;
-  step(4, () => { if (pet.char.hangingOn) hung = true; if (!pet.char.hangingOn && !hung) pet.ctx.world.cursorMovedAt = pet.ctx.world.time; });
+  for (let i = 0; i < 240 && !pet.char.hangingOn; i++) step(1 / 60);
+  hung = pet.char.hangingOn;
   // Carry him to the right, slowly: he comes along.
   const x0 = pet.char.x;
   for (let i = 0; i < 40 && pet.char.hangingOn; i++) { const c = pet.ctx.world.cursor!; pet.cursor(c.x + 4, c.y, 240, 0); pet.update(1 / 60); }
@@ -1056,7 +1066,7 @@ function events(pet: Pet) {
   const got = events(pet);
   for (let i = 0; i < 6 && pet.char.hangingOn; i++) { const c = pet.ctx.world.cursor!; pet.cursor(c.x + 50, c.y - 20, 3000, -1200); pet.update(1 / 60); }
   step(4);
-  check('hangs off your cursor, gets carried, shaken off he flies', hung && carried > 60 && got.includes('released') && !pet.char.hangingOn && ['ground', 'sit', 'roll', 'ragdoll', 'getup'].includes(pet.char.mode), `hung=${hung} carried=${carried.toFixed(0)} ${got.join(',')} mode=${pet.char.mode}`);
+  check('hangs off your cursor, gets carried, shaken off he flies', hung && carried > 60 && got.includes('released') && ['landed', 'crashed', 'rolled'].some((e) => got.includes(e)) && !pet.char.hangingOn, `hung=${hung} carried=${carried.toFixed(0)} ${got.join(',')} mode=${pet.char.mode}`);
 }
 
 // ───── his ball ─────
@@ -1066,15 +1076,16 @@ function events(pet: Pet) {
   const ball = pet.items.find('throw')!;
   pet.cursor(pet.char.x + 260, pet.char.body.j.neck.y - 40, 0, 0);
   pet.mind.command(pet.ctx, 'throw');
-  let flew = false;
+  let flew = false, back = false;
   const DBG: string[] = []; let lastS = '';
   step(16, (t) => {
     if (ball.where === 'world' && ball.speed > 300) flew = true;
+    if (flew && ball.where === 'belt' && ball.slot === 3) back = true; // (what he does with it after that is up to him)
     const sk = pet.mind.skill as unknown as { name: string; phase?: string; sub?: { name: string; phase?: string } } | null;
     const st = `${sk?.name ?? '-'}:${sk?.phase ?? ''}${sk?.sub ? '>' + sk.sub.name + ':' + sk.sub.phase : ''} ${ball.where}`;
     if (st !== lastS) { DBG.push(`${t.toFixed(1)} ${st} b=${ball.at.x.toFixed(0)},${ball.at.y.toFixed(0)} him=${pet.char.x.toFixed(0)}/${pet.char.mode}`); lastS = st; }
   });
-  const okBall = flew && got.includes('hitCursor') && ball.where === 'belt' && ball.slot === 3;
+  const okBall = flew && got.includes('hitCursor') && back;
   check('ball: thrown at the cursor, hits it, goes back in his pocket', okBall, `flew=${flew} where=${ball.where} ${got.join(',')}${okBall ? '' : '\n' + DBG.join('\n')}`);
 }
 { // Just playing: bounce it off the floor and catch it.
