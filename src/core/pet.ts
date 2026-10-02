@@ -33,6 +33,12 @@ interface WinMotion {
   push?: number;
 }
 
+/** What you're doing, from the desktop helper: the app in front, its window's title, and rects of things in that window. */
+export interface ScreenReport { app: string; title: string; win: number; trusted: boolean; els: [number, number, number, number][] }
+
+/** Platform ids for things in your windows (text, buttons) start here. */
+const UI_ID = 2_000_000_000;
+
 /** A finished drawing kept in his gallery. Shape is in a box from -0.5 to 0.5. */
 export interface Drawing { title: string; shape: Vec[][]; color: string; at: number }
 
@@ -117,6 +123,12 @@ export class Pet {
   private winQuiet = new Map<number, { x: number; y: number; until: number }>();
   /** Where the desktop last said each window was (not smoothed, not overridden). */
   private winReported = new Map<number, WinRect>();
+  /** What you're doing (app, title, since when), from the desktop. */
+  screen: { app: string; title: string; win: number; since: number; trusted: boolean } | null = null;
+  /** Tops of the things in your front window he can stand on (text, buttons, messages), and the rects they came from. */
+  private uiPlats: Platform[] = [];
+  private uiSeen: { id: number; x: number; y: number; w: number; h: number }[] = [];
+  private uiNext = 0;
   /** Saved props whose definition (one of your files) hasn't arrived yet. */
   private pendingProps: { id: string; x: number }[] = [];
   /** Moving windows didn't work (no permission?): don't try again until this time. */
@@ -189,7 +201,7 @@ export class Pet {
       // Standing on something he drew: his weight pushes on it (a bridge sags under him).
       const under = this.props.thingOf(this.char.support);
       if (under && (this.char.mode === 'ground' || this.char.mode === 'sit')) under.carry(this.char.support, this.char.x);
-      this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.windowPlats);
+      this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.uiPlats.length ? [...this.windowPlats, ...this.uiPlats] : this.windowPlats);
       this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms);
       this.ballContact();
       this.acc -= STEP;
@@ -499,9 +511,43 @@ export class Pet {
     this.char.setWalls(this.ctx.world.walls);
   }
 
-  /** Everything he can stand on: window tops plus boxes and ledges he drew. */
+  /**
+   * What you're doing, from the desktop: which app, its window's title, and where the text and buttons
+   * in your front window are. Their top edges become things he can stand (and sit) on. When the page
+   * scrolls they move, and he rides along. Null = he can't tell (the setting's off).
+   */
+  setScreen(ui: ScreenReport | null) {
+    const now = this.ctx.world.time;
+    if (!ui) { this.screen = null; this.ctx.world.screen = null; this.uiPlats = []; this.ctx.world.uiTops = []; this.refreshPlatforms(); return; }
+    if (!this.screen || this.screen.app !== ui.app) {
+      const was = this.screen?.app;
+      this.screen = { app: ui.app, title: ui.title, win: ui.win, since: now, trusted: ui.trusted };
+      if (was !== undefined) this.emit({ type: 'appChanged', app: ui.app, title: ui.title });
+    } else Object.assign(this.screen, { title: ui.title, win: ui.win, trusted: ui.trusted });
+    this.ctx.world.screen = this.screen;
+    // Only things in the window in front (the one you're using), and only where they're on screen.
+    const front = this.winShown[0], b = this.ctx.world.bounds, head = this.headroom();
+    const seen: typeof this.uiSeen = [], plats: Platform[] = [];
+    if (front && front.id === ui.win) {
+      for (const [x, y, w, h] of ui.els.slice(0, 40)) {
+        if (y < b.top + head || y > b.floor - 10 || x < front.x - 2 || x + w > front.x + front.w + 2 || y < front.y + 20) continue;
+        if (plats.some((p) => Math.abs(p.y - y) < 3 && p.x1 < x + w && p.x2 > x)) continue; // the same top twice (nested things)
+        // The same thing as last time (moved by scrolling, maybe): it keeps its id, so he rides along.
+        const prev = this.uiSeen.find((q) => Math.abs(q.x - x) < 3 && Math.abs(q.w - w) < 3 && Math.abs(q.h - h) < 3 && Math.abs(q.y - y) < 200 && !seen.includes(q));
+        const id = prev?.id ?? UI_ID + (this.uiNext++ % 1_000_000);
+        seen.push({ id, x, y, w, h });
+        plats.push({ id, x1: x, x2: x + w, y });
+      }
+    }
+    this.uiSeen = seen;
+    this.uiPlats = plats;
+    this.ctx.world.uiTops = plats;
+    this.refreshPlatforms();
+  }
+
+  /** Everything he can stand on: window tops, things in your front window, and things he drew. */
   private refreshPlatforms() {
-    const all = [...this.windowPlats, ...this.props.platforms];
+    const all = [...this.windowPlats, ...this.uiPlats, ...this.props.platforms];
     this.ctx.world.platforms = all;
     this.char.setPlatforms(all);
   }

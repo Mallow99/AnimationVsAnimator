@@ -39,6 +39,12 @@ export interface PetConfig {
   knockCursor: boolean;
   /** He can push, kick and surf on your windows (moves them for real; macOS asks for Accessibility permission). */
   moveWindows: boolean;
+  /**
+   * He can see what you're doing: which app you're in and its window title (he comments on it), and where
+   * the text and buttons in it are (he sits on them). Stays on your computer, except that with an AI brain
+   * on, the app name and title go into what he tells the AI.
+   */
+  screenAware: boolean;
   /** Little blips when he talks, like characters in indie games. */
   sound: boolean;
   /** Limbs can come off: big crashes, hard smacks, or yanking a hand or foot. He puts them back on. */
@@ -69,6 +75,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   mischief: false,
   knockCursor: true,
   moveWindows: true,
+  screenAware: true,
   sound: true,
   destructible: true,
   sfx: true,

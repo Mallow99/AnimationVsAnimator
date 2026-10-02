@@ -1010,6 +1010,36 @@ function calmPet() {
   check('props are saved', copy.props.placed.length === 1 && Math.abs(copy.props.placed[0].center.x - 400) < 60, `${copy.props.placed.map((t) => t.def!.id + '@' + t.center.x.toFixed(0))}`);
 }
 
+// ───── what you're doing (your front window) ─────
+{ // A chat app in front: he hops up onto a message and sits on its edge; scroll the page and he rides along.
+  const pet = calmPet();
+  const win = { id: 5, x: 400, y: 100, w: 700, h: 700 };
+  pet.setWindows([win]);
+  pet.paused = true; petFor(0.3, pet);
+  const msg = (y: number): [number, number, number, number][] => [[560, y, 220, 40], [700, y - 120, 260, 40]];
+  pet.setScreen({ app: 'Messages', title: 'Sam', win: 5, trusted: true, els: msg(700) });
+  pet.paused = false;
+  pet.mind.command(pet.ctx, 'perch');
+  let sat = false;
+  petFor(25, pet, () => { if (pet.char.onLedge && pet.char.support >= 2_000_000_000) sat = true; });
+  const before = pet.char.body.j.hip.y;
+  pet.setScreen({ app: 'Messages', title: 'Sam', win: 5, trusted: true, els: msg(650) }); // you scrolled
+  petFor(1, pet);
+  const rode = before - pet.char.body.j.hip.y;
+  check('sits on a chat message in your window, rides along when it scrolls', sat && rode > 35, `sat=${sat} rose=${rode.toFixed(0)} support=${pet.char.support} skill=${pet.mind.skill?.name}`);
+}
+{ // Switching apps: now and then he says something about what you're up to.
+  const pet = calmPet();
+  const said: string[] = [];
+  const o = pet.ctx.say; pet.ctx.say = (t, x) => { said.push(t); o(t, x); };
+  pet.setScreen({ app: 'Finder', title: '', win: 0, trusted: true, els: [] });
+  for (let i = 0; i < 12; i++) {
+    petFor(30, pet);
+    pet.setScreen({ app: i % 2 ? 'Minecraft' : 'Visual Studio Code', title: '', win: 0, trusted: true, els: [] });
+  }
+  check('he comments on what you are doing', said.some((t) => /MINECRAFT|house|creepers|tree|code|bugs|cooler|in there/i.test(t)), said.join(' | '));
+}
+
 // ───── memories (milestone 5) ─────
 function throwHim(pet: Pet) {
   const c = pet.char, n = c.body.j.neck;

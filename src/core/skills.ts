@@ -26,6 +26,10 @@ export interface World {
   walls: Wall[];         // window sides and screen edges he can climb
   windows: WinRect[];    // the windows on screen (front-most first), where they are right now
   sides: Wall[];         // every visible window side, at any height (for pushing and kicking them)
+  /** What you're doing: the app in front, its window's title, since when (world.time). Null if he can't tell. */
+  screen?: { app: string; title: string; since: number } | null;
+  /** Things in your front window he can stand on (text, buttons, chat messages): their top edges. */
+  uiTops?: Platform[];
 }
 
 /** Things he has learned from experience. Saved between runs. */
@@ -94,6 +98,26 @@ export abstract class Skill {
   /** Called every frame. Return true when finished. */
   abstract update(c: Ctx, dt: number): boolean;
   stop(_c: Ctx) {}
+}
+
+/** Do some skills one after the other (each one is made when its turn comes). */
+export class Chain extends Skill {
+  private i = -1;
+  private sub: Skill | null = null;
+  constructor(readonly name: string, private steps: ((c: Ctx) => Skill | null)[]) { super(); }
+  update(c: Ctx, dt: number) {
+    if (this.sub) {
+      this.sub.t += dt;
+      if (!this.sub.update(c, dt)) return false;
+      this.sub.stop(c); this.sub = null;
+    }
+    while (++this.i < this.steps.length) {
+      this.sub = this.steps[this.i](c);
+      if (this.sub) { this.sub.start(c); return false; }
+    }
+    return true;
+  }
+  stop(c: Ctx) { this.sub?.stop(c); }
 }
 
 // ───────────── Sequence: a little script of steps ─────────────

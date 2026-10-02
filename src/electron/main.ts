@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_CONFIG, mergeConfig, PROVIDERS, type PetConfig, type ProviderId } from '../core/config';
 import type { WinRect } from '../core/world';
-import { watchWindows, type WindowWatcher } from './windows';
+import { watchWindows, type UiReport, type WindowWatcher } from './windows';
 import * as llm from './llm';
 import type { BrainRequest } from '../core/brain';
 
@@ -110,12 +110,21 @@ function updateWatcher() {
     watcher = watchWindows((wins) => {
       lastWins = config.windows ? toOverlay(wins) : [];
       win?.webContents.send('world:windows', lastWins);
-    }, (m) => { console.log('[windows]', m); win?.webContents.send('world:log', m); });
+    }, (m) => { console.log('[windows]', m); win?.webContents.send('world:log', m); }, (ui) => sendUi(ui));
   } else if (!need && watcher) {
     watcher.stop();
     watcher = null;
   }
   if (!config.windows && lastWins.length) { lastWins = []; win?.webContents.send('world:windows', []); }
+  watcher?.setUi(config.screenAware && config.windows);
+  if (!config.screenAware) win?.webContents.send('world:ui', null);
+}
+
+/** What you're doing (app, title, where things are in its window): to the overlay, in its coordinates. */
+function sendUi(ui: UiReport) {
+  if (!config.screenAware) return;
+  const els = toOverlay(ui.els.map(([x, y, w, h], i) => ({ id: i, x, y, w, h }))).map((r) => [r.x, r.y, r.w, r.h]);
+  win?.webContents.send('world:ui', { app: String(ui.app ?? '').slice(0, 60), title: String(ui.title ?? '').slice(0, 80), win: ui.win, trusted: ui.trusted, els });
 }
 
 // ───────────── windows ─────────────

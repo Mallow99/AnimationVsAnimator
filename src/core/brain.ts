@@ -467,6 +467,7 @@ export class Brain {
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,
+      ...(c.world.screen ? [`the person is using: ${c.world.screen.app}${c.world.screen.title ? ` — "${c.world.screen.title}"` : ''} (for ${Math.max(1, Math.round((c.world.time - c.world.screen.since) / 60))} min)`] : []),
       ...(ch.whole ? [] : [`body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`]),
       `cursor: ${cursor}`,
       `recently: ${recent || 'nothing much'}`,

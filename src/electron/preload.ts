@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('petShell', {
   onCommand: on('pet:command'),
   onWindows: on('world:windows'),
   onWindowsLog: on('world:log'),
+  onUi: on('world:ui'),
   pressed: () => ipcRenderer.send('pet:pressed'),
   moveCursor: (x: number, y: number) => ipcRenderer.send('pet:moveCursor', x, y),
   moveWindow: (id: number, x: number, y: number, w: number, h: number) => ipcRenderer.send('pet:moveWindow', id, x, y, w, h),

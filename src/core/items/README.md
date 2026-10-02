@@ -1,5 +1,7 @@
 # Item definition files
 
+(The full step-by-step guide, for items AND props, is MAKING-THINGS.md in this folder.)
+
 Each `.json` file here is one thing he can carry on his belt and use. The ones in this
 folder ship with him. You can make your own: on the desktop, Settings → Items →
 "Open items folder", copy one of these files there, change it, and click "Reload items".

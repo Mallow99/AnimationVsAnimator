@@ -2,6 +2,8 @@
 # Only positions and sizes are read: no window titles, no screen contents.
 # "cursor X Y" on stdin moves the mouse pointer there (he grabbed it, or knocked it flying).
 # "win ID X Y" moves that window so its visible top-left corner is at (X, Y) (he pushed or kicked it).
+# "ui on" / "ui off": every couple of seconds, also report which app you're using and its window title
+# (so he can comment on it). Nothing from inside the window.
 param([int]$SelfPid = -1)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"
@@ -29,6 +31,25 @@ public static class PetWindows {
   }
   static System.Collections.Generic.HashSet<string> said = new System.Collections.Generic.HashSet<string>();
   static void Note(string key, string text) { lock (said) { if (said.Add(key)) { Console.Error.WriteLine(text); Console.Error.Flush(); } } }
+  public static volatile bool UiOn = false;
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  static string Json(string s) {
+    var b = new StringBuilder("\"");
+    foreach (var c in s.Length > 80 ? s.Substring(0, 80) : s) { if (c == '"' || c == '\\') b.Append('\\').Append(c); else if (c < ' ') b.Append(' '); else b.Append(c); }
+    return b.Append('"').ToString();
+  }
+  /** The app you're using and its window's title, as one JSON line (or null if nothing's in front). */
+  public static string Ui(uint self) {
+    var h = GetForegroundWindow();
+    if (h == IntPtr.Zero) return null;
+    uint pid; GetWindowThreadProcessId(h, out pid);
+    if (pid == self) return null;
+    var t = new StringBuilder(256); GetWindowText(h, t, 256);
+    string app = "";
+    try { app = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; } catch { }
+    return "{\"ui\":{\"app\":" + Json(app) + ",\"title\":" + Json(t.ToString()) + ",\"win\":" + (h.ToInt64() & 0x7fffffff) + ",\"trusted\":true,\"els\":[]}}";
+  }
   public static void ListenForCursor() {
     var t = new Thread(() => {
       string line;
@@ -37,6 +58,8 @@ public static class PetWindows {
         int x, y; long id;
         if (p.Length == 3 && p[0] == "cursor" && int.TryParse(p[1], out x) && int.TryParse(p[2], out y)) SetCursorPos(x, y);
         else if (p.Length == 4 && p[0] == "win" && long.TryParse(p[1], out id) && int.TryParse(p[2], out x) && int.TryParse(p[3], out y)) MoveWin(id, x, y);
+        else if (line == "ui on") UiOn = true;
+        else if (line == "ui off") UiOn = false;
       }
     });
     t.IsBackground = true;
@@ -78,10 +101,17 @@ public static class PetWindows {
 [PetWindows]::SetProcessDPIAware() | Out-Null   # report real pixels; the app converts them
 [PetWindows]::ListenForCursor()
 $last = ''
+$lastUi = ''
+$uiAt = [DateTime]::MinValue
 $lastChange = [DateTime]::Now
 while ($true) {
   $json = [PetWindows]::List([uint32]$SelfPid)
   if ($json -ne $last) { $last = $json; $lastChange = [DateTime]::Now; [Console]::Out.WriteLine($json); [Console]::Out.Flush() }
+  if ([PetWindows]::UiOn -and ([DateTime]::Now - $uiAt).TotalSeconds -gt 1.5) {
+    $uiAt = [DateTime]::Now
+    $ui = [PetWindows]::Ui([uint32]$SelfPid)
+    if ($ui -and $ui -ne $lastUi) { $lastUi = $ui; [Console]::Out.WriteLine($ui); [Console]::Out.Flush() }
+  }
   # ~60 checks a second while windows are moving, 10 a second when nothing has moved for a bit.
   if (([DateTime]::Now - $lastChange).TotalSeconds -lt 1.5) { Start-Sleep -Milliseconds 16 } else { Start-Sleep -Milliseconds 100 }
 }

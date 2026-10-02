@@ -20,7 +20,12 @@ export interface WindowWatcher {
   moveCursor(x: number, y: number): void;
   /** Move another app's window so its top-left is at (x, y), in the helper's own screen coordinates. */
   moveWindow(id: number, x: number, y: number): void;
+  /** Report what you're doing (app, window title, where things are in it): on or off. */
+  setUi(on: boolean): void;
 }
+
+/** What you're doing, from the helper: the app in front, its window's title, and rects of things in it (screen coords). */
+export interface UiReport { app: string; title: string; win: number; trusted: boolean; els: [number, number, number, number][] }
 
 const nativeDir = path.join(__dirname, 'native');
 
@@ -41,7 +46,8 @@ async function macHelper(log: (m: string) => void): Promise<string | null> {
   });
 }
 
-export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: string) => void): WindowWatcher {
+export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: string) => void, onUi: (ui: UiReport) => void = () => {}): WindowWatcher {
+  let uiOn = false;
   let child: ChildProcess | null = null;
   let stopped = false;
   let failures = 0;
@@ -59,9 +65,11 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
       const bin = await macHelper(log);
       if (!bin || stopped) return;
       child = spawn(bin, [String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'] });
+      if (uiOn) child.stdin?.write('ui on\n');
     } else if (process.platform === 'win32') {
       child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
         path.join(nativeDir, 'windows-win.ps1'), '-SelfPid', String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+      if (uiOn) child.stdin?.write('ui on\n');
     } else {
       log('window awareness is only available on macOS and Windows');
       return;
@@ -76,9 +84,10 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
         buf = buf.slice(nl + 1);
         if (!line) continue;
         try {
-          const wins = JSON.parse(line) as WinRect[];
-          if (!seenAny) { seenAny = true; log(`helper running: sees ${wins.length} window(s)`); }
-          onUpdate(wins); failures = 0;
+          const data = JSON.parse(line) as WinRect[] | { ui?: UiReport };
+          if (!Array.isArray(data)) { if (data?.ui) onUi(data.ui); continue; }
+          if (!seenAny) { seenAny = true; log(`helper running: sees ${data.length} window(s)`); }
+          onUpdate(data); failures = 0;
         } catch { /* half a line or noise: skip */ }
       }
     });
@@ -99,5 +108,6 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
     refocus() { if (process.platform === 'darwin') child?.stdin?.write('refocus\n'); },
     moveCursor(x, y) { child?.stdin?.write(`cursor ${Math.round(x)} ${Math.round(y)}\n`); },
     moveWindow(id, x, y) { child?.stdin?.write(`win ${Math.round(id)} ${Math.round(x)} ${Math.round(y)}\n`); },
+    setUi(on) { uiOn = on; child?.stdin?.write(on ? 'ui on\n' : 'ui off\n'); },
   };
 }

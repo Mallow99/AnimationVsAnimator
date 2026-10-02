@@ -212,6 +212,7 @@ $<HTMLInputElement>('name').addEventListener('input', (e) => set({ name: (e.targ
 $<HTMLInputElement>('mischief').addEventListener('change', (e) => set({ mischief: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('windows').addEventListener('change', (e) => set({ windows: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('moveWindows').addEventListener('change', (e) => set({ moveWindows: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>('screenAware').addEventListener('change', (e) => set({ screenAware: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('knockCursor').addEventListener('change', (e) => set({ knockCursor: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.target as HTMLInputElement).checked }));
@@ -270,6 +271,7 @@ function render(c: PetConfig) {
   $<HTMLInputElement>('mischief').checked = c.mischief;
   $<HTMLInputElement>('moveWindows').checked = c.moveWindows;
   $<HTMLInputElement>('knockCursor').checked = c.knockCursor;
+  $<HTMLInputElement>('screenAware').checked = c.screenAware;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.checked = r.value === c.mind;
   const persona = $<HTMLTextAreaElement>('persona'), model = $<HTMLInputElement>('model');
   if (document.activeElement !== persona) persona.value = c.persona;

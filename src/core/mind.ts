@@ -16,7 +16,7 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, RideScooter, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
+  Chain, routeTo, Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, RideScooter, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
@@ -24,6 +24,7 @@ export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { t
   | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number }
   | { type: 'itemSpawned'; name: string; uid: number } // something new appeared (you dropped it in from his inventory)
   | { type: 'propSpawned'; id: string; name: string }   // a prop (a chair, a TV...) dropped in
+  | { type: 'appChanged'; app: string; title: string }  // you switched to another app
   | { type: 'bonked'; speed: number } // a ball hit him
   | { type: 'hitCursor'; power: number; by: string } // he hit your cursor (and maybe sent it flying)
   | { type: 'cursorFreed' }   // you took your cursor back mid-flight
@@ -33,6 +34,30 @@ export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { t
 interface Option { name: string; score: number; why: string; make: () => Skill }
 
 const cur0 = (w: { cursor: Vec | null }) => w.cursor !== null;
+
+/** What kind of thing you're doing, from the app's name and its window's title. */
+export function appKind(app: string, title: string) {
+  const a = `${app} ${title}`.toLowerCase();
+  if (/minecraft/.test(a)) return 'minecraft';
+  if (/youtube|netflix|twitch|disney\+|hulu|prime video|crunchyroll|vlc|iina|quicktime/.test(a)) return 'video';
+  if (/discord|messages|slack|whatsapp|telegram|signal|teams|messenger|instagram|snapchat|imessage/.test(a)) return 'chat';
+  if (/canvas|classroom|google docs|docs\.google|quizlet|khan|word|pages|notion|homework|assignment|essay/.test(a)) return 'school';
+  if (/visual studio|vs ?code|code|xcode|terminal|iterm|cursor|intellij|pycharm|sublime|github/.test(a)) return 'code';
+  if (/steam|roblox|fortnite|epic games|valorant|league of legends|game/.test(a)) return 'game';
+  if (/spotify|music|soundcloud|apple music/.test(a)) return 'music';
+  if (/safari|chrome|firefox|arc|edge|brave|opera/.test(a)) return 'browser';
+  return 'other';
+}
+const APP_LINES: Record<string, string[]> = {
+  video: ['what are we watching?', 'is it a cartoon?', 'can I watch too?', 'ooh. show.'],
+  chat: ['who are you talking to?', 'say hi from me', 'ooh. gossip?', 'tell them about me'],
+  school: ['homework?', 'you got this', "I won't distract you. (I will)", 'study time huh'],
+  code: ["coding? I'm made of code, you know", 'fix any bugs?', 'make me cooler while you are in there', 'is that me in there'],
+  game: ['ooh can I play?', "don't die", 'gamer time'],
+  minecraft: ['MINECRAFT', 'build me a house!', 'watch out for creepers', 'punch a tree for me'],
+  music: ['♪ good song?', 'turn it up', '♪♪'],
+  browser: ['what are you looking up?', 'so many tabs...', 'googling stuff?'],
+};
 
 /** One step of a plan (from his AI brain): done in order. */
 export type PlanStep =
@@ -153,6 +178,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'knock', label: 'Knock on a window' }, { name: 'ledgesit', label: 'Sit on the edge' }, { name: 'hang', label: 'Hang off the cursor' },
   { name: 'ramp', label: 'Draw a ramp up to a window' }, { name: 'bridge', label: 'Draw a bridge to a window' }, { name: 'drawramp', label: 'Draw a ramp (and jump off it)' },
   { name: 'ropebridge', label: 'Draw a rope bridge' },
+  { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'ride', label: 'Ride the scooter' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
@@ -243,6 +269,7 @@ export class Mind {
     ch.idleStyle = E === 'annoyed' ? 'crossed' : E === 'proud' ? 'hips' : E === 'happy' ? 'behind' : E === 'nervous' || E === 'lonely' ? 'hug' : 'none';
     ch.tapFoot = E === 'annoyed' || (E === 'bored' && this.chill);
     this.mutter(c);
+    this.noticeWhatYoureDoing(c);
     // Moving around tires him out (running more), on top of the slow drain over time.
     if (ch.walking) m.s.energy -= dt / (ch.posture.speed > 1.2 ? 900 : 1800);
     // You coming back after a while: he's glad to see you.
@@ -283,6 +310,21 @@ export class Mind {
     const away = w.time - w.cursorMovedAt;
     if (away > 300) { m.s.boredom += dt / 300; m.s.happiness -= dt / 1200; } // ignored for 5+ min: lonely
     else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.s.happiness += dt / 600; // company
+  }
+
+  private appTalkAt = 20;
+  private longAt = -1;
+  /** He notices what you're doing (the app in front) and says something about it, now and then. */
+  private noticeWhatYoureDoing(c: Ctx) {
+    const sc = c.world.screen, w = c.world, m = c.mood;
+    if (!sc || m.asleep || !c.char.ready || w.time < this.appTalkAt) return;
+    const mins = (w.time - sc.since) / 60;
+    // Been at the same thing a long while.
+    if (mins > 40 && (this.longAt < 0 || w.time - this.longAt > 30 * 60)) {
+      this.longAt = w.time; this.appTalkAt = w.time + 120;
+      c.say(pick([`you've been on ${sc.app} for ${Math.round(mins)} minutes`, `${Math.round(mins)} minutes of ${sc.app}...`, 'break time? stretch with me']), 2.4);
+      if (chance(0.5)) c.char.doGesture('stretch');
+    }
   }
 
   private mutterAt = 30;
@@ -448,6 +490,7 @@ export class Mind {
       ...this.windowOptions(c),
       ...this.windowPranks(c),
       ...this.propOptions(c),
+      ...this.perchOptions(c),
       ...this.itemOptions(c),
       ...this.parkourOptions(c),
       ...this.liveDrawingOptions(c),
@@ -582,6 +625,19 @@ export class Mind {
       prank('surf', 'surfing on your window', L === 'playful' ? 0.55 : L === 'bored' ? 0.4 : 0.06, () => new WindowSurf());
     }
     return opts;
+  }
+
+  /** Things in your front window to stand and sit on (text, buttons, chat messages): he hops up onto one and sits on its edge. */
+  private perchOptions(c: Ctx): Option[] {
+    const ch = c.char, w = c.world, tops = w.uiTops ?? [], L = c.mood.label;
+    if (!tops.length || !ch.whole || ch.legCount < 2) { if (this.forced) this.cant.perch = !w.screen ? "I can't see what's on your screen" : 'nothing in your window to sit on'; return []; }
+    const reach = tops.map((t) => ({ t, r: routeTo(c, t) })).filter((o) => o.r && o.r.kind === 'jump');
+    if (!reach.length) { if (this.forced) this.cant.perch = "can't reach anything in your window from here"; return []; }
+    const o = reach[Math.floor(Math.random() * reach.length)];
+    const chat = w.screen ? appKind(w.screen.app, w.screen.title) === 'chat' : false;
+    return [{ name: 'perch', why: chat ? 'sitting on your messages' : 'hopping up onto something in your window',
+      score: L === 'sleepy' || L === 'sad' ? 0.05 : (chat ? 0.45 : 0.15) + c.mood.s.boredom * 0.2,
+      make: () => new Chain('perch', [() => new ClimbOnto(o.t, o.r!), (cc) => (cc.char.support === o.t.id ? new LedgeSit(rand(8, 20)) : null)]) }];
   }
 
   /** His furniture and toys: sit down, watch TV, ride the scooter. */
@@ -750,6 +806,16 @@ export class Mind {
         this.interrupt(c, new Sequence('look', [{ wait: 1.2 }, { gesture: 'lookAround' }]));
         this.afterThat = make;
         this.why = `you dropped in a ${e.name.toLowerCase()}`;
+        return;
+      }
+      case 'appChanged': {
+        // You switched apps: sometimes he has something to say about the new one.
+        const w = c.world;
+        if (m.asleep || w.time < this.appTalkAt || !chance(0.45)) return;
+        const lines = APP_LINES[appKind(e.app, e.title)];
+        if (!lines) return;
+        this.appTalkAt = w.time + rand(90, 200);
+        c.say(pick(lines), 2);
         return;
       }
       case 'itemGiven':
