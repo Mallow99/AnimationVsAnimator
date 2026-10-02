@@ -36,8 +36,9 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   with "Let the AI move his body" on, the AI makes up the move itself. Edit who he is under Mood → Personality.
   Free services have daily limits; Offline mode needs no internet and no key.
 - **Talk to him right on the desktop**: double-click him, or right-click → Talk. A little text box pops up over his
-  head. Even with his brain Offline he understands simple things ("dance", "sit down", "draw something", "my name is ...").
-- **Right-click him**: talk, take his things (his pen, his wooden sword), give them back, fix him up, settings.
+  head. Even with his brain Offline he understands simple things ("dance", "sit down", "draw something", "fight me",
+  "throw the ball", "surf", "kick that window", "my name is ...").
+- **Right-click him**: talk, take his things (his pen, his wooden sword, his mallet, his ball), give them back, fix him up, settings.
 - **His belt**: his pen lives on his hip (he draws with it, so no pen = no drawing) and his wooden sword on his back.
   Take the sword and it dangles from your cursor: swing it at him. Click him to give it back, anywhere else to drop it.
   He'll ask for his things back, and pick them up when they're lying around. Make your own items: Settings → Items.
@@ -46,6 +47,19 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   the ground, and a limb can come off. No gore, just sparks. He stares at the stump, goes and gets it (hopping on one leg,
   or dragging himself along if both legs are gone), and sticks it back on. Hold a limb up to his stump to help.
 - **Parkour**: he rolls out of big landings, does flips and wall jumps, and vaults onto low ledges.
+- **He hits your cursor** (on by default; Settings → General or the tray icon): his punches, kicks, sword, mallet and ball
+  send your real cursor flying across the screen. Move your mouse and it's yours again straight away.
+  - When he's playful he spars with it ("fight me!"): fists up, punch combos, high kicks, jumping punches.
+    Angry, it's a real brawl. Leave your cursor parked on his head and he swats it off.
+  - Swipe at him (Smack mode) while his sword is out and he might parry it and knock your cursor back.
+- **His things do stuff**: the **mallet** on his left hip comes down overhead (on your cursor, or on the window he's standing
+  on, which dips and springs back). The **bouncy ball** in his pocket gets thrown at your cursor, or bounced off the floor and
+  caught. His sword and mallet whack his ball, things lying around, and the sides of windows. Throw one of his things at him
+  and it bonks him.
+- **He moves your windows** (on by default; the first time, macOS asks you to allow it under Privacy & Security →
+  Accessibility, for Terminal or Electron): he walks up and pushes a window along, kicks one across the screen, and
+  stands on one and surfs it across. He also knocks on windows ("anyone home?") and sits on their edges with his legs
+  dangling. He leaves alone the window you're working in, and anything he draws on a window moves with it.
 - **His drawings come to life**: he draws a ball and kicks it around (you can throw it too, even at him), draws a box and
   vaults onto it, draws a ledge and jumps up on it, and if you took his sword he draws himself a new one.
 - **Memories**: he remembers what you do to him (and, with an AI brain, what you tell him). See and edit them in

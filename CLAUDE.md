@@ -196,7 +196,38 @@ Then: Android shell.
     to do it; drag/scroll a choice to change his preference (config `biases`, multiplied into instinct scores).
 - Untested on real hardware this round: the desktop talk box getting keyboard focus (macOS panel window / Windows
   focusable toggle), right-click on the overlay, sounds through real speakers, opening the items folder.
-- NEXT: owner tests the overhaul on the Mac (talk box focus is the riskiest bit), then picks what's next.
+- Items + cursor + windows round (owner: "give his items functionality, let him hit my cursor more and knock it around,
+  more life in how he interacts with his environment, access the windows"; built while away, sim-tested, poses checked in
+  headless Chromium, Electron launches under Xvfb; NOT yet tried on a real Mac/PC):
+  - `src/core/cursor.ts` CursorBody: a knocked cursor flies (light gravity, bounces off edges, lands on window tops/floor),
+    `Pet.knockCursor` + `flyCursor` move the real pointer every frame. Telling our moves from yours: a trail of where we
+    put it; a reported position near it (34 px mid-flight, 3 px after) is an echo, anything else = you took it back.
+    Config `knockCursor` (default on). The helper now runs if windows OR mischief OR knockCursor is on.
+  - Character: gestures `punch`, `swat`, `highkick`, `knock`; `jumpPunch(at)` (+ `airPunch` in airPose); `guard` (fists up);
+    `strike` = {joint, power, id} during the fast part of an attack; `Pet.strikes()` checks it against the cursor, balls,
+    items lying around and window sides. `pushAt` (both palms on a wall), `surf` (crouch, arms out), `sitEdge(dir)` +
+    `ledgePose` (sit on an edge, legs dangling and swinging).
+  - Skills: `Brawl` ('spar' playful / 'brawl' angry, replaces the angry 'hunt'), `ThrowItem` ('throw' at the cursor with a
+    ballistic aim / 'bounce' and catch), `SwordSwing(times, atCursor, 'swing'|'smash')` (mallet = overhead; approach puts
+    the cursor on the circle the far end sweeps), `PushWindow`, `KickWindow`, `WindowSurf`, `KnockWindow`, `LedgeSit`.
+    Mind: swat reaction when your cursor sits still on him for 2.2 s; `windowPranks()` (cooldown 50 s / 25 s angry; skips
+    the window your cursor is busy in unless he's angry); parry in the smack path (`Pet.parry`).
+  - Items: `use` smash/throw, `belt: 'pocket'` (slot 3, hidden), `bounce`; built-ins mallet (`hammer.json`) and bouncy ball;
+    `Items.known` + `giveNewBuiltins` so old saves get new built-ins once. World-item physics moved into the fixed 120 Hz loop
+    (`Items.stepWorld`; it used to run per frame). `Item.tipVel`, `push()`, `thrownAt`. `bladeHits()`: swung items whack
+    balls/items/limbs/window sides; mallet on the window he stands on = a springy dip. `flyingItems()`: thrown things hit
+    the cursor or bonk him.
+  - Windows: Pet `winMotion` (slide with friction, or spring `home` for knocks/stomps), `shoveWindow`/`pushWindow`,
+    reports for a window he's moving are overridden (and for 0.6 s after: `winQuiet`). If the desktop keeps reporting it
+    where it started, `windowsStuckUntil` (+10 min), 'windowStuck' event, note in settings. Native: `win ID X Y` on the
+    helper's stdin — macOS: AX API (`_AXUIElementGetWindow` to match window numbers; asks for Accessibility once; TCC
+    gives the permission to the responsible app, i.e. Terminal when run with npm start), Windows: SetWindowPos (offset
+    for the invisible borders; maximized windows skipped). Main `pet:moveWindow`, gated by `moveWindows` + `windows`.
+    Doodles finished over a window anchor to it (`Doodle.win`) and fade when it closes.
+  - Fixed on the way: KickBall walked forever when the ball was against the screen edge; FetchItem gave up on a ball that
+    was still bouncing; mischief drags now count as cursor movement.
+- NEXT: owner tests on the Mac. Riskiest: the Accessibility prompt/permission for moving windows (and which app macOS
+  names), the cursor flight feeling right with real mouse input (echo filtering), the talk box focus from last round.
 
 ## Ideas from research (not agreed yet — offer as options)
 - Shimeji-style: climb screen/window sides and ceilings, dangle from window edges, sit on a
@@ -215,7 +246,7 @@ Then: Android shell.
 - `src/core/character.ts` body controller (modes, stepping, gestures, limbs, parkour). Tune feel here.
 - `src/core/mood.ts` dials + posture. `src/core/mind.ts` choices + reactions. `src/core/skills.ts` skills.
 - `src/core/memory.ts` memories. `src/core/limbs.ts` loose limbs. `src/core/items.ts` + `src/core/items/*.json` items.
-- `src/core/props.ts` drawings that came to life. `src/app/sfx.ts` sound effects.
+- `src/core/props.ts` drawings that came to life. `src/app/sfx.ts` sound effects. `src/core/cursor.ts` your cursor flying when he hits it.
 - `src/core/pet.ts` glue + input. `src/app/renderer.ts` page + click-through. `src/electron/main.ts` window.
 - Debug in DevTools: `pet.paused = true`, `pet.mood.s`, `pet.char.walkTo(x)`, `pet.char.doGesture('wave')`.
 
