@@ -295,7 +295,14 @@ export class Mind {
       case 'petted':
         m.nudge({ happiness: 0.08, trust: 0.015, annoyance: -0.15, boredom: -0.2 });
         if (m.asleep) return;
-        c.say(m.s.annoyance > 0.5 ? 'hmph' : pick(['♥', '♥', ':)', '♪']), 1.5);
+        if (m.s.annoyance > 0.5) { c.say('hmph', 1.2); return; }
+        // Lean into it, unless he's in the middle of something important.
+        if ((ch.mode === 'ground' || ch.mode === 'sit') && !(this.skill instanceof Sequence && this.skill.name === 'enjoy')) {
+          if (ch.mode === 'sit') ch.standUp();
+          this.interrupt(c, new Sequence('enjoy', [{ gesture: 'nuzzle', atCursor: true }]));
+          this.why = 'you\'re petting him';
+        }
+        if (chance(0.4)) c.say(pick([':)', '♪', 'hehe', 'mmm']), 1.2);
         return;
 
       case 'grabbed': {

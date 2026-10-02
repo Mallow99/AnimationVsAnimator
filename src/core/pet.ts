@@ -27,6 +27,7 @@ export class Pet {
   private press: { joint: JointName; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
   private bubble: { text: string; t: number; ttl: number } | null = null;
   private smackCooldown = 0;
+  private hearts: { x: number; y: number; t: number; drift: number }[] = [];
   private winTarget: WinRect[] | null = null;
   private winShown: WinRect[] = [];
   private pixels = new PixelLayer();
@@ -61,6 +62,8 @@ export class Pet {
     for (const e of this.char.drainEvents()) this.mind.onEvent(this.ctx, e);
     if (!this.paused) this.mind.update(this.ctx, dt);
     if (this.bubble && (this.bubble.t += dt) > this.bubble.ttl) this.bubble = null;
+    for (const h of this.hearts) { h.t += dt; h.y -= 40 * dt; h.x += h.drift * dt; }
+    this.hearts = this.hearts.filter((h) => h.t < 1.4);
   }
 
   say(text: string, secs?: number) {
@@ -71,6 +74,15 @@ export class Pet {
     const look = this.config.look;
     if (look.pixel > 1) this.pixels.draw(ctx, this.char, look);
     else drawCharacter(ctx, this.char, look);
+    for (const h of this.hearts) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - h.t / 1.4);
+      ctx.fillStyle = '#ff5c8a';
+      ctx.font = `${Math.round(14 + h.t * 6)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('♥', h.x, h.y);
+      ctx.restore();
+    }
     if (this.bubble) {
       const b = this.bubble;
       const alpha = Math.min(1, b.t * 8, (b.ttl - b.t) * 4);
@@ -168,11 +180,15 @@ export class Pet {
     }
     w.cursor = { x, y };
     w.cursorMovedAt = w.time;
-    const over = !this.press && speed < 1200 && this.char.hitTest(x, y, 14) !== null;
+    const over = !this.press && speed < 1200 && this.char.hitTest(x, y, 20) !== null;
     if (over) {
       if (!r.over || w.time - r.since > 2.5) { r.dist = 0; r.since = w.time; }
       r.dist += Math.hypot(x - r.lastX, y - r.lastY);
-      if (r.dist > 350) { r.dist = 0; r.since = w.time; this.emit({ type: 'petted' }); }
+      if (r.dist > 180) {
+        r.dist = 0; r.since = w.time;
+        this.emit({ type: 'petted' });
+        if (!this.mood.asleep || Math.random() < 0.3) for (let i = 0; i < 2; i++) this.hearts.push({ x: x + (Math.random() - 0.5) * 20, y: y - 10, t: 0, drift: (Math.random() - 0.5) * 30 });
+      }
     }
     r.over = over; r.lastX = x; r.lastY = y;
   }

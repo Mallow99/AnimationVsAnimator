@@ -428,9 +428,7 @@ export class GetDown extends Skill {
 // ───────────── preset sequences ─────────────
 
 export const presets = {
-  dance: () => new Sequence('dance', [
-    { say: '♪' }, { jump: 280 }, { face: 'flip' }, { jump: 280 }, { gesture: 'wave' }, { face: 'flip' }, { jump: 380 }, { gesture: 'laugh' },
-  ]),
+  dance: () => new Sequence('dance', [{ say: '♪' }, { gesture: 'dance' }, { say: '♫', secs: 1.2 }, { gesture: 'dance' }]),
   hop: (energy: number) => new Sequence('hop', [{ jump: 330 + energy * 280, vx: rand(-120, 120) }]),
   tantrum: () => new Sequence('tantrum', [
     { face: 'cursor' }, { say: pick(['!!', 'ugh.', 'hmph']) }, { gesture: 'stomp' }, { gesture: 'stomp' }, { gesture: 'pokeBack', atCursor: true },

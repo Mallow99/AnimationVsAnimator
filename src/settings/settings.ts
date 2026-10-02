@@ -71,7 +71,7 @@ $('sayForm').addEventListener('submit', (e) => {
 const DOING: Record<string, string> = {
   idle: 'Standing around', wander: 'Wandering', sit: 'Sitting', sulk: 'Sulking', sleep: 'Napping', chase: 'Chasing your cursor',
   hunt: 'Hunting your cursor', avoid: 'Keeping away from you', dance: 'Dancing', hop: 'Hopping', tantrum: 'Throwing a tantrum',
-  greet: 'Saying hi', retaliate: 'Getting you back', glare: 'Glaring at you', flinch: 'Flinching', giggle: 'Giggling',
+  greet: 'Saying hi', enjoy: 'Enjoying the pets', retaliate: 'Getting you back', glare: 'Glaring at you', flinch: 'Flinching', giggle: 'Giggling',
   tag: 'Playing tag', boing: 'Bouncing', 'poke-back': 'Poking you back', huh: 'Confused', shrug: 'Shrugging', woken: 'Woken up',
   again: 'Wants to go again', mope: 'Moping', 'shake-off': 'Shaking it off', wave: 'Waving', laugh: 'Laughing', stomp: 'Stomping',
   cower: 'Cowering', explore: 'Exploring', climb: 'Climbing onto a window', monkeybars: 'Monkey bars', climbwall: 'Climbing', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',

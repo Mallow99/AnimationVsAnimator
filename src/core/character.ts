@@ -18,7 +18,7 @@ import type { Wall } from './world';
 
 export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie' | 'climb' | 'ceiling';
 
-export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower';
+export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower' | 'dance' | 'nuzzle';
 
 export type CharEvent =
   | { type: 'landed'; speed: number }
@@ -58,7 +58,7 @@ type Strengths = Partial<Record<JointName, number>>;
 interface Foot { x: number; swinging: boolean; t: number; fromX: number; toX: number; dur: number; lift: number }
 
 const GESTURE_TIME: Record<Gesture, number> = {
-  stomp: 0.75, wave: 1.4, shrug: 0.9, laugh: 1.4, flail: 1.2, pokeBack: 0.5, stretch: 1.8, lookAround: 2.2, cower: 1.6,
+  stomp: 0.75, wave: 1.4, shrug: 0.9, laugh: 1.9, flail: 1.2, pokeBack: 0.5, stretch: 2.4, lookAround: 2.2, cower: 1.6, dance: 4, nuzzle: 1.6,
 };
 
 export class Character {
@@ -608,7 +608,7 @@ export class Character {
         ft.swinging = true; ft.t = 0; ft.fromX = ft.x;
         ft.dur = stepT;
         ft.toX = landAt(k, stepT);
-        ft.lift = (3 + 3 * P.bounce + (this.running ? 4 : 0) + Math.min(Math.abs(ft.toX - ft.fromX), 40) * 0.08) * sc * B.lift;
+        ft.lift = (3 + 3 * P.bounce + (this.running ? 9 : 0) + Math.min(Math.abs(ft.toX - ft.fromX), 40) * 0.08) * sc * B.lift;
       }
     }
     // Don't let the body outrun the feet: if the planted foot is trailing too far, ease off.
@@ -654,7 +654,8 @@ export class Character {
     this.hipTarget = hip;
 
     // Torso leans into motion; sadness hunches it, anger pitches it forward.
-    const lean = clamp(this.rootVX * 0.05 * B.lean, -10 * sc, 10 * sc) + f * (P.hunch * 5 + P.tension * 3) * sc + f * this.crouch * 0.5;
+    const runLean = this.running && moving ? f * 9 * sc : 0; // AvA-style run: pitched forward
+    const lean = runLean + clamp(this.rootVX * 0.05 * B.lean, -10 * sc, 10 * sc) + f * (P.hunch * 5 + P.tension * 3) * sc + f * this.crouch * 0.5;
     const neck = { x: hip.x + lean, y: hip.y - Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)) };
     // Head up by default; only a real mood drops it.
     let tilt = f * P.hunch * 0.6;
@@ -663,13 +664,14 @@ export class Character {
     // Arms swing opposite the legs.
     const armLen = d.upperArm + d.foreArm;
     const ready = P.tension > 0.5;
-    const handY = neck.y + armLen * (ready ? 0.6 : 0.8 + 0.17 * B.armHang);
+    const sprinting = this.running && moving;
+    const handY = neck.y + armLen * (sprinting ? 0.5 : ready ? 0.6 : 0.8 + 0.17 * B.armHang); // running: elbows bent
     // Even "hanging" arms sit a touch apart (front one forward, back one behind),
     // otherwise in side view they lie on top of the torso and blur into it.
     const frontFwd = f * (ready ? 9 : 5 - 2.5 * B.armHang) * sc;
     const backFwd = f * (ready ? 6 : -(1.5 + 1.5 * B.armHang)) * sc;
     // Each hand swings with the opposite foot, along an arc (it rises a little at either end).
-    const swingAmt = 0.65 * B.armSwing;
+    const swingAmt = (sprinting ? 1.0 : 0.65) * B.armSwing; // running: arms pump
     const armAt = (footX: number, fwd: number) => {
       const o = (footX - this.rootX) * swingAmt;
       return { x: neck.x + fwd + o, y: handY - Math.abs(o) * 0.3 };
@@ -712,12 +714,54 @@ export class Character {
           break;
         }
         case 'laugh': {
-          const shake = Math.abs(Math.sin(g.t * 22)) * 3 * sc;
-          hipT = { x: hip.x, y: hip.y + shake };
-          neckT = { x: neck.x + f * 5 * sc, y: neck.y + 3 * sc + shake };
-          handL = { x: hip.x + f * 5 * sc, y: hip.y - 6 * sc };
-          handR = { x: hip.x + f * 8 * sc, y: hip.y - 10 * sc };
-          tilt += f * 0.4 * Math.sin(g.t * 22);
+          const beat = Math.abs(Math.sin(g.t * 18)); // the chuckle bounce
+          const front = f > 0 ? 'R' : 'L';
+          if (u < 0.45) {
+            // Head thrown back, hands on his belly.
+            const k = smooth(u / 0.15);
+            neckT = { x: neck.x - f * 4 * sc * k, y: neck.y + beat * 1.5 * sc };
+            tilt += -f * 0.7 * k;
+            handL = { x: hip.x + f * 4 * sc, y: hip.y - 8 * sc };
+            handR = { x: hip.x + f * 7 * sc, y: hip.y - 13 * sc };
+          } else {
+            // Doubled over, slapping his knee.
+            const k = smooth((u - 0.45) / 0.15) * (1 - smooth((u - 0.85) / 0.15));
+            neckT = { x: neck.x + f * 12 * sc * k, y: neck.y + 8 * sc * k + beat * 1.5 * sc };
+            hipT = { x: hip.x - f * 2 * sc * k, y: hip.y + 2 * sc * k };
+            tilt += f * 0.5 * k;
+            const slap = { x: hip.x + f * 7 * sc, y: hip.y + (d.thigh + d.shin) * 0.4 - Math.abs(Math.sin(g.t * 13)) * 9 * sc * k };
+            const rest = { x: neckT.x + f * 4 * sc, y: neckT.y + 18 * sc };
+            if (front === 'R') { handR = slap; handL = rest; } else { handL = slap; handR = rest; }
+          }
+          break;
+        }
+        case 'dance': {
+          // Two beats a second: bob down on the beat, sway side to side, tap alternate feet,
+          // and switch between a disco point and hands-on-hips every two beats.
+          const b = g.t * 2, ph = b % 1, n = Math.floor(b);
+          const sway = Math.sin(b * Math.PI) * 4 * sc;
+          const down = (1 - Math.sin(Math.PI * ph)) * 4 * sc;
+          hipT = { x: hip.x + sway, y: hip.y + down };
+          neckT = { x: hipT.x + sway * 0.6, y: hipT.y - d.torso };
+          const lift = Math.sin(Math.PI * ph) * 7 * sc, half = this.stanceHalf() + 2 * sc;
+          footL = { x: this.rootX - half, y: floor - 2 - (n % 2 === 0 ? lift : 0) };
+          footR = { x: this.rootX + half, y: floor - 2 - (n % 2 === 1 ? lift : 0) };
+          const point = Math.floor(b / 2) % 2 === 0;
+          const up = { x: neckT.x + 13 * sc, y: neckT.y - 22 * sc }, low = { x: neckT.x - 12 * sc, y: neckT.y + 22 * sc };
+          const hipHand = (side: number) => ({ x: hipT.x + side * 7 * sc, y: hipT.y - 5 * sc });
+          handR = point ? up : hipHand(1);
+          handL = point ? low : hipHand(-1);
+          tilt += Math.sin(b * Math.PI) * 0.25;
+          break;
+        }
+        case 'nuzzle': {
+          // Being petted: lean into it and sway a little, hands together.
+          const k = Math.min(1, u * 4) * Math.min(1, (1 - u) * 4);
+          const dir = sign(g.x - neck.x);
+          neckT = { x: neck.x + dir * 5 * sc * k, y: neck.y + 2 * sc * k };
+          tilt += dir * 0.55 * k + Math.sin(g.t * 6) * 0.15 * k;
+          handL = { x: neck.x + f * 5 * sc, y: neck.y + 15 * sc };
+          handR = { x: neck.x + f * 8 * sc, y: neck.y + 15 * sc };
           break;
         }
         case 'flail': {
@@ -737,11 +781,14 @@ export class Character {
           break;
         }
         case 'stretch': {
-          const k = Math.sin(Math.PI * clamp(u, 0, 1));
-          handL = { x: lerp(handL.x, neck.x - 5 * sc, k), y: lerp(handL.y, neck.y - 27 * sc, k) };
-          handR = { x: lerp(handR.x, neck.x + 5 * sc, k), y: lerp(handR.y, neck.y - 27 * sc, k) };
-          neckT = { x: neck.x - f * 4 * sc * k, y: neck.y };
-          tilt += -f * 0.4 * k;
+          // Up on his toes with arms overhead, lean back, then let it all go.
+          const up = smooth(clamp(u / 0.3, 0, 1)) * (1 - smooth(clamp((u - 0.78) / 0.22, 0, 1)));
+          const back = Math.sin(Math.PI * clamp((u - 0.25) / 0.5, 0, 1));
+          hipT = { x: hip.x - f * 2 * sc * back, y: hip.y - 3 * sc * up };
+          neckT = { x: neck.x - f * 7 * sc * back, y: neck.y - 3 * sc * up };
+          handL = { x: lerp(handL.x, neckT.x - 6 * sc - f * 5 * sc * back, up), y: lerp(handL.y, neckT.y - 30 * sc, up) };
+          handR = { x: lerp(handR.x, neckT.x + 6 * sc - f * 5 * sc * back, up), y: lerp(handR.y, neckT.y - 30 * sc, up) };
+          tilt += -f * 0.6 * back;
           break;
         }
         case 'lookAround': {
