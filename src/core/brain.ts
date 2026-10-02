@@ -6,32 +6,78 @@
 // bubble. Reflexes stay instant and offline: a poke still gets an immediate
 // reaction from instinct; the brain may add a comment a second later.
 //
+// With "let the AI move his body" on, it can also make up its own moves: a list
+// of poses his muscles pull toward, one after another (see Character.puppet).
+// Physics still applies, so he can float, flip and fall over, but not break apart.
+//
 // The model call itself happens in the desktop shell (it holds the API key).
 // This file decides WHEN to ask, WHAT to tell the model, and what to do with
 // the answer. `ask` is plugged in from outside, so the headless tests can use a fake.
 
 import { COMMANDS, type Mind, type MindEvent } from './mind';
+import { PUPPET_JOINTS, type Keyframe, type PuppetJoint } from './character';
 import type { MindMode } from './config';
 import type { Ctx } from './skills';
 
 export interface BrainTurn { role: 'user' | 'assistant'; text: string }
 export interface BrainRequest { system: string; messages: BrainTurn[] }
-export interface BrainReply { say: string; do: string }
+export interface BrainReply { say: string; do: string; move?: Keyframe[] | null }
 export type AskFn = (req: BrainRequest) => Promise<BrainReply>;
 
 /** Everything he can choose to do, plus "none". */
 export const ACTIONS = ['none', ...COMMANDS.map((c) => c.name)];
 
-/** The exact shape the model must answer in (JSON schema, enforced by the API). */
-export const REPLY_SCHEMA = {
-  type: 'object',
-  properties: {
-    say: { type: 'string', description: 'What he says out loud, in his speech bubble. Empty string to stay quiet.' },
-    do: { type: 'string', enum: ACTIONS, description: 'One action to do now, or "none".' },
-  },
-  required: ['say', 'do'],
-  additionalProperties: false,
-};
+/** Longest made-up move: this many poses, this many seconds. */
+const MAX_FRAMES = 16, MAX_MOVE_SECONDS = 10;
+
+/** Check a made-up move from the AI and clean it up. Anything malformed is dropped. */
+export function parseMove(raw: unknown): Keyframe[] | null {
+  if (!Array.isArray(raw)) return null;
+  const frames: Keyframe[] = [];
+  let total = 0;
+  for (const k of raw.slice(0, MAX_FRAMES)) {
+    if (!k || typeof k !== 'object') continue;
+    const src = (k as { pose?: unknown }).pose && typeof (k as { pose?: unknown }).pose === 'object' ? (k as { pose: Record<string, unknown> }).pose : (k as Record<string, unknown>);
+    const pose: Keyframe['pose'] = {};
+    for (const name of PUPPET_JOINTS) {
+      const v = src[name];
+      if (Array.isArray(v) && v.length >= 2 && Number.isFinite(Number(v[0])) && Number.isFinite(Number(v[1]))) pose[name as PuppetJoint] = [Number(v[0]), Number(v[1])];
+    }
+    if (!Object.keys(pose).length) continue;
+    const t = Math.min(3, Math.max(0.1, Number((k as { t?: unknown }).t) || 0.5));
+    if (total + t > MAX_MOVE_SECONDS) break;
+    total += t;
+    frames.push({ t, pose });
+  }
+  return frames.length ? frames : null;
+}
+
+/** Read the AI's answer. Forgiving: finds the JSON even inside extra text or code fences. */
+export function parseReply(text: string): BrainReply | null {
+  const start = text.indexOf('{'), end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return text.trim() ? { say: text.trim().slice(0, 200), do: 'none' } : null;
+  let data: Record<string, unknown>;
+  try { data = JSON.parse(text.slice(start, end + 1)); } catch { return null; }
+  return {
+    say: typeof data.say === 'string' ? data.say : '',
+    do: typeof data.do === 'string' && ACTIONS.includes(data.do) ? data.do : 'none',
+    move: parseMove(data.move),
+  };
+}
+
+/** How his body works, for the AI (only when it's allowed to move him directly). */
+const BODY_GUIDE = [
+  '',
+  'You can also move your body directly with "move": a list of poses that your muscles pull toward, one after another. Use it for anything not in the action list: handstands, floating, spinning, flips, weird dances, impossible stunts. Be inventive and a bit strange. Physics still applies: gravity pulls, unbalanced poses wobble or topple, and when the move ends you drop and land (high drops hurt).',
+  'Each pose: {"t": seconds to get there (0.1 to 3), then any body parts as [x, y]}. Body parts: head, neck, hip, frontHand, backHand, frontElbow, backElbow, frontFoot, backFoot, frontKnee, backKnee. "front" = the side facing forward.',
+  'Coordinates are pixels: x = forward (negative = behind), y = UP from the ground under where you stand. The first pose starts from wherever you are now. Parts you leave out stay put; elbows, knees and head bend naturally if you never mention them.',
+  'Your body: head 16 above neck, torso 30 (neck to hip), each arm 30 (neck to hand, elbow halfway), each leg 40 (hip to foot, knee halfway). Bones keep their length, so keep parts within reach of each other.',
+  'Standing still you are: head [0,87], neck [0,71], hip [0,41], frontHand [3,42], backHand [-3,42], frontFoot [6,2], backFoot [-6,2].',
+  'Up to 16 poses and 10 seconds. Moving the hip up off the ground makes you float. Head below hip = upside down. x from -300 to 300, y from 0 to 400.',
+  'Example handstand: [{"t":0.5,"hip":[0,28],"neck":[16,50],"frontHand":[24,2],"backHand":[20,2]},{"t":0.7,"frontHand":[4,2],"backHand":[-4,2],"neck":[0,30],"head":[0,15],"hip":[0,60],"frontFoot":[4,98],"backFoot":[-4,98]},{"t":1.4,"frontFoot":[28,88],"backFoot":[-28,88]},{"t":0.8,"hip":[0,41],"neck":[0,71],"head":[0,87],"frontHand":[3,42],"backHand":[-3,42],"frontFoot":[6,2],"backFoot":[-6,2]}]',
+  'Example float up and flip: [{"t":1.2,"hip":[0,170],"neck":[0,200],"frontHand":[30,195],"backHand":[-30,195],"frontFoot":[10,135],"backFoot":[-10,135]},{"t":1,"neck":[0,140],"head":[0,125],"frontFoot":[6,210],"backFoot":[-6,210]},{"t":1,"hip":[0,60],"neck":[0,90],"head":[0,106],"frontFoot":[6,22],"backFoot":[-6,22]}]',
+  'Use "move" when asked to do something unusual, and now and then on your own when you feel like showing off. Otherwise set "move": null.',
+];
 
 export interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number }
 
@@ -90,6 +136,8 @@ export class Brain {
   mode: MindMode = 'offline';
   name = 'Blurp';
   persona = '';
+  /** May the AI make up its own moves (move his body directly)? */
+  puppet = true;
   /** The conversation so far, for the settings window. */
   log: LogLine[] = [];
   /** "thinking…", an error, or empty. */
@@ -166,7 +214,10 @@ export class Brain {
       '- Stay in character. Don\'t mention being an AI or a language model unless the person asks directly.',
       '',
       `Actions you can choose: ${actions}.`,
-      'Answer with JSON only, like {"say": "hi!", "do": "wave"}.',
+      ...(this.puppet ? BODY_GUIDE : []),
+      this.puppet
+        ? 'Answer with JSON only: {"say": "...", "do": "<action or none>", "move": null or [poses]}. If you give a move, "do" is ignored.'
+        : 'Answer with JSON only, like {"say": "hi!", "do": "wave"}.',
     ].join('\n');
   }
 
@@ -226,7 +277,10 @@ export class Brain {
     const say = typeof reply.say === 'string' ? reply.say.trim() : '';
     const act = ACTIONS.includes(reply.do) ? reply.do : 'none';
     let did = '';
-    if (act !== 'none') {
+    const move = this.puppet ? reply.move : null;
+    if (move?.length) {
+      if (mind.perform(c, move, why === 'you' ? 'you asked (AI move)' : 'his own idea (AI move)')) did = `made-up move, ${move.length} poses`;
+    } else if (act !== 'none') {
       const reason = why === 'you' ? 'you asked (AI)' : 'his own idea (AI)';
       if (mind.command(c, act, reason, true)) did = act;
     }

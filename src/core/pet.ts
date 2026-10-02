@@ -125,7 +125,7 @@ export class Pet {
   applyConfig(cfg: PetConfig) {
     const resized = this.config.scale !== cfg.scale;
     (this as { config: PetConfig }).config = structuredClone(cfg);
-    Object.assign(this.brain, { mode: cfg.mind, name: cfg.name, persona: cfg.persona });
+    Object.assign(this.brain, { mode: cfg.mind, name: cfg.name, persona: cfg.persona, puppet: cfg.puppet });
     if (resized && this.ctx) {
       const old = this.char;
       this.char = new Character(old.bounds, old.x, cfg.scale);

@@ -28,11 +28,12 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
 - **Mischief mode** (Settings → General, off by default): Desktop Goose style, he grabs your cursor
   and drags it around for a moment. Move your mouse to take it back. He also doodles on your screen.
 - **Control tab** in Settings: make him do anything on command, drag his mood bars, make him talk.
-- **Talk to him** (AI brain): Settings → General → Brain, paste a Claude API key (from console.anthropic.com),
-  and pick **Chat** (AI only when you talk to him) or **Full** (he also decides what to do and comments on things).
-  Then type to him in Settings → Control → Talk to him, or pick "Talk to Blurp…" from the tray icon. He answers in his
-  speech bubble and can do what you ask ("dance!"). Edit who he is under Mood → Personality.
-  API calls cost money (Full mode uses the most); Offline mode needs no internet and no key.
+- **Talk to him** (AI brain, free): Settings → General → Brain. Pick a service (Google Gemini is the default), click
+  "Get a free key", make the key on their site (no credit card), paste it, and pick **Chat** (AI only when you talk
+  to him) or **Full** (he also decides what to do and comments on things). Type to him in Settings → Control →
+  Talk to him, or pick "Talk to Blurp…" from the tray icon. Ask him for weird stuff ("do a handstand", "float"):
+  with "Let the AI move his body" on, the AI makes up the move itself. Edit who he is under Mood → Personality.
+  Free services have daily limits; Offline mode needs no internet and no key.
 - **Leave him alone**: he wanders, sits, explores, gets bored, and eventually naps.
   Poke him while he's asleep at your own risk.
 

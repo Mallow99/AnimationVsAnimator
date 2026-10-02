@@ -420,5 +420,49 @@ async function live(pet: Pet, seconds: number) {
   check('AI errors: shown in the chat, he carries on by instinct', pet.brain.log.some((l) => l.who === 'note' && l.text.includes('internet')) && seen.size >= 2, [...seen].join(','));
 }
 
+// ───── made-up moves (the AI moving his body directly) ─────
+{
+  const { parseReply } = await import('../src/core/brain');
+  const handstand = [
+    { t: 0.5, pose: { hip: [0, 28], neck: [16, 50], frontHand: [24, 2], backHand: [20, 2] } },
+    { t: 0.7, pose: { frontHand: [4, 2], backHand: [-4, 2], neck: [0, 30], head: [0, 15], hip: [0, 60], frontFoot: [4, 98], backFoot: [-4, 98] } },
+    { t: 1.4, pose: { frontFoot: [28, 88], backFoot: [-28, 88] } },
+    { t: 0.8, pose: { hip: [0, 41], neck: [0, 71], head: [0, 87], frontHand: [3, 42], backHand: [-3, 42], frontFoot: [6, 2], backFoot: [-6, 2] } },
+  ] as import('../src/core/character').Keyframe[];
+  const c = new Character(bounds, 600);
+  run(c, 1);
+  c.puppet(handstand);
+  let upsideDown = false;
+  run(c, 2, () => { if (c.body.j.head.y > c.body.j.hip.y + 20) upsideDown = true; });
+  run(c, 4);
+  check('made-up move: handstand happens, then he ends up standing', upsideDown && upright(c), `mode=${c.mode}`);
+  const f = new Character(bounds, 600);
+  run(f, 1);
+  f.puppet([{ t: 1.2, pose: { hip: [0, 200], neck: [0, 230], frontFoot: [5, 160], backFoot: [-5, 160] } }, { t: 1, pose: { hip: [0, 200] } }]);
+  let highest = 0;
+  run(f, 2.2, () => { highest = Math.max(highest, 800 - f.body.j.hip.y); });
+  run(f, 6);
+  check('made-up move: floating works, and he gets back up after', highest > 150 && upright(f), `hip rose ${highest.toFixed(0)}px, mode=${f.mode}`);
+  const g = new Character(bounds, 600);
+  run(g, 1);
+  g.puppet([{ t: 0.2, pose: { head: [300, -20], hip: [-300, 400], frontHand: [9999, 0], backFoot: [0, 400] } }, { t: 0.1, pose: { head: [-300, 400], frontFoot: [300, 0] } }]);
+  run(g, 10);
+  check('made-up move: nonsense poses can\'t break him', upright(g) && g.x > 0 && g.x < 1400, `mode=${g.mode}`);
+  const r = parseReply('Sure!\n```json\n{"say":"watch","do":"none","move":[{"t":0.5,"hip":[0,90]},{"t":"x","bogus":[1,2]},{"t":9,"neck":["a",3]}]}\n```');
+  check('AI reply parsing: finds the JSON, keeps only valid poses', !!r && r.say === 'watch' && r.move?.length === 1 && r.move[0].pose.hip?.[1] === 90, JSON.stringify(r));
+}
+{ // Chat: you ask for something weird, the AI makes up a move, he does it.
+  const { pet } = await brainPet('chat', () => ({ say: 'behold', do: 'none', move: [{ t: 1, pose: { hip: [0, 120], neck: [0, 150] } }, { t: 1, pose: { hip: [0, 41], neck: [0, 71] } }] }));
+  pet.command('hear:float for me');
+  let floated = false;
+  for (let i = 0; i < 4 * 60; i++) { pet.update(1 / 60); if (pet.char.puppeting) floated = true; if (i % 5 === 0) await new Promise((r) => setImmediate(r)); }
+  check('chat: AI-made move gets performed', floated, `skill=${pet.mind.skill?.name}`);
+  pet.applyConfig({ ...pet.config, puppet: false });
+  pet.command('hear:float again');
+  let again = false;
+  for (let i = 0; i < 4 * 60; i++) { pet.update(1 / 60); if (pet.char.puppeting) again = true; if (i % 5 === 0) await new Promise((r) => setImmediate(r)); }
+  check('body control off: AI moves are ignored', !again);
+}
+
 console.log(failures ? `\n${failures} failing` : '\nall good');
 process.exit(failures ? 1 : 0);

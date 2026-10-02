@@ -115,17 +115,23 @@ Then: Android shell.
   motions that overlap a little (reach starts at 65% of the pull); the reaching hand travels in an arc.
   Feet stand on footholds and step one at a time; knees bend TOWARD the wall (was flipped = "spider legs");
   hips move out from the wall when a foot is high so the knee has room. ~56 px/s up a wall.
-- Milestone 4 (AI brain) — built, sim-tested with a fake AI; real API call NOT yet tried (needs the owner's key):
+- Milestone 4 (AI brain) — built, sim-tested with a fake AI and end-to-end in Electron with a faked web response;
+  a real call NOT yet tried (needs the owner's free key). Owner has no money for paid APIs: FREE services only.
   - `src/core/brain.ts` (platform-free): decides when to ask, builds the prompt (stable system prompt = persona +
-    rules; each turn = a [state] block with mood/doing/where/recent events + what you said), applies the reply
-    `{say, do}` (`do` = a COMMANDS name or "none", enforced by a JSON schema). Never drives joints.
-    Chat mode: only when you talk to him. Full mode: thinks every ≥40 s when idle (instinct waits up to 8 s
-    via `mind.holdUntil`), comments on notable events (≥15 s apart). Cap: 120 calls/hour. Remembers 8 exchanges.
-  - `src/electron/llm.ts`: Claude call in the main process with the official SDK (`@anthropic-ai/sdk`), structured
-    output, effort low, server-side refusal fallback (`fallbacks: "default"`) on models that support it. API key saved
-    in userData/brain-key, encrypted with Electron safeStorage; settings only ever sees the last 4 chars.
-  - Config: `persona` (≤1500 chars), `model` (default claude-opus-5-5). Settings: Talk box (Control tab), persona
-    (Mood tab), Brain section with key + model (General). Tray: "Talk to Blurp…". Long replies split into bubbles.
+    rules + body guide; each turn = a [state] block with mood/doing/where/recent events + what you said), parses the
+    reply `{say, do, move}` leniently (finds JSON in fences/extra text). Chat mode: only when you talk to him. Full mode:
+    thinks every ≥40 s when idle (instinct waits up to 8 s via `mind.holdUntil`), comments on notable events
+    (≥15 s apart). Cap: 120 calls/hour. Remembers 8 exchanges.
+  - Body control (owner asked for it: "weird things he couldn't normally do"): `move` = up to 16 keyframes / 10 s,
+    positions [x forward, y UP] in px from the ground under him; parts left out stay put, elbows/knees/head
+    auto-bent. `Character.puppet()` / 'puppet' mode: muscles (0.3) pull toward interpolated poses, NOT internal,
+    so he can levitate; physics still applies; ends in 'air' so he lands/crashes normally. `PuppetMove` skill,
+    `mind.perform()`. Config `puppet` (on by default).
+  - `src/electron/llm.ts`: plain fetch to OpenAI-compatible chat completions (no SDK, no new dependency).
+    Providers in config.ts `PROVIDERS`: Google Gemini (default, model `gemini-flash-latest`), Groq, OpenRouter
+    `:free` models. JSON mode, retried without it on a 400. "Find models" lists what the key can use (model names
+    change often). Keys per provider in userData/brain-keys, encrypted with safeStorage.
+  - The Claude SDK version was dropped (owner can't pay); it's in git history if ever wanted.
 - NEXT: owner tries the AI brain with a real key on the Mac. Options offered, not chosen yet: talk to him right on the
   desktop (double-click him → a little text field) instead of the settings window; a local/free model (Ollama).
   Owner also wants more Desktop Goose / Shimeji behaviors and better animations over time.

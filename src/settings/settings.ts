@@ -1,7 +1,7 @@
 // The settings window: live mood bars, look and movement presets plus sliders
 // for every number, and general options. Changes apply to Blurp instantly.
 
-import { RANGES, type PetConfig } from '../core/config';
+import { PROVIDERS, RANGES, type PetConfig, type ProviderId } from '../core/config';
 import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
 import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
@@ -11,7 +11,7 @@ interface Stats {
   name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number;
   brain: { active: boolean; status: string; log: LogLine[] };
 }
-interface KeyStatus { saved: boolean; hint: string; fromEnv: boolean }
+interface KeyStatus { provider: ProviderId; saved: boolean; hint: string }
 interface Shell {
   getConfig(): Promise<PetConfig>;
   onConfig(cb: (c: PetConfig) => void): void;
@@ -19,7 +19,8 @@ interface Shell {
   resetConfig(): void;
   command(cmd: string): void;
   onStats(cb: (s: Stats) => void): void;
-  keyStatus(): Promise<KeyStatus>;
+  keyStatus(provider: ProviderId): Promise<KeyStatus>;
+  listModels(): Promise<{ ok: true; models: string[] } | { ok: false; error: string }>;
   onKeyStatus(cb: (k: KeyStatus) => void): void;
   setKey(key: string): void;
   onTab(cb: (tab: string) => void): void;
@@ -188,13 +189,28 @@ $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
 $<HTMLTextAreaElement>('persona').addEventListener('input', (e) => set({ persona: (e.target as HTMLTextAreaElement).value }));
 $<HTMLInputElement>('model').addEventListener('change', (e) => set({ model: (e.target as HTMLInputElement).value.trim() }));
+$<HTMLInputElement>('puppet').addEventListener('change', (e) => set({ puppet: (e.target as HTMLInputElement).checked }));
 
-// ── API key (kept by the desktop shell; this page only ever sees the last 4 characters) ──
+// ── AI service + key (kept by the desktop shell; this page only ever sees the last 4 characters) ──
+const providerSel = $<HTMLSelectElement>('provider');
+for (const [id, p] of Object.entries(PROVIDERS)) providerSel.add(new Option(p.label + (p.free ? ' (free)' : ''), id));
+providerSel.addEventListener('change', () => {
+  const id = providerSel.value as ProviderId;
+  set({ provider: id, model: PROVIDERS[id].model });
+  $('modelList').replaceChildren();
+  shell.keyStatus(id).then(showKey);
+});
 function showKey(k: KeyStatus) {
-  $('keyInfo').textContent = k.saved ? `Saved (${k.hint}). Stored on this computer only.`
-    : k.fromEnv ? 'Using the ANTHROPIC_API_KEY from your environment.'
-      : 'No key yet. Get one at console.anthropic.com → API Keys, then paste it here.';
+  if (k.provider !== providerSel.value) return;
+  $('keyInfo').textContent = k.saved ? `Saved (${k.hint}). Stored on this computer only.` : `No ${PROVIDERS[k.provider].label} key yet.`;
 }
+$('findModels').addEventListener('click', async () => {
+  $('modelInfo').textContent = 'Asking…';
+  const r = await shell.listModels();
+  if (!r.ok) { $('modelInfo').textContent = r.error; return; }
+  $('modelList').replaceChildren(...r.models.map((m) => new Option(m, m)));
+  $('modelInfo').textContent = `${r.models.length} model(s) available. Click the Model box to pick one.`;
+});
 $('keyForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $<HTMLInputElement>('apiKey');
@@ -202,7 +218,7 @@ $('keyForm').addEventListener('submit', (e) => {
   input.value = '';
 });
 $('forgetKey').addEventListener('click', () => shell.setKey(''));
-shell.keyStatus().then(showKey);
+shell.getConfig().then((c) => shell.keyStatus(c.provider).then(showKey));
 shell.onKeyStatus(showKey);
 $('resetAll').addEventListener('click', () => shell.resetConfig());
 
@@ -221,6 +237,9 @@ function render(c: PetConfig) {
   const persona = $<HTMLTextAreaElement>('persona'), model = $<HTMLInputElement>('model');
   if (document.activeElement !== persona) persona.value = c.persona;
   if (document.activeElement !== model) model.value = c.model;
+  providerSel.value = c.provider;
+  $<HTMLAnchorElement>('keyLink').href = PROVIDERS[c.provider].keyUrl;
+  $<HTMLInputElement>('puppet').checked = c.puppet;
   for (const [input, out, key] of sliders) {
     const [a, b] = key.split('.');
     const v = b ? (c as any)[a][b] : (c as any)[a];

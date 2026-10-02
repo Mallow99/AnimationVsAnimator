@@ -2,7 +2,7 @@
 // The mind (offline instinct now, an LLM later) only ever picks skills —
 // it never moves joints directly.
 
-import type { Character, Gesture } from './character';
+import type { Character, Gesture, Keyframe } from './character';
 import type { Mood } from './mood';
 import { GRAVITY, type Bounds, type Platform } from './physics';
 import { surfaceBelow, type Wall } from './world';
@@ -450,6 +450,21 @@ export class GetDown extends Skill {
     return this.t > 30;
   }
   stop(c: Ctx) { c.char.stop(); }
+}
+
+// ───────────── made-up moves (his AI brain moving his body directly) ─────────────
+
+export class PuppetMove extends Skill {
+  readonly name = 'move';
+  private ok = false;
+  constructor(private frames: Keyframe[]) { super(); }
+  start(c: Ctx) { c.look = 'none'; this.ok = c.char.puppet(this.frames); }
+  update(c: Ctx) {
+    if (!this.ok) return true;
+    // Done once the move has played and he's back on his feet (or has given up after a long while).
+    return (this.t > 0.3 && !c.char.puppeting && c.char.ready) || this.t > 20;
+  }
+  stop(c: Ctx) { c.char.endPuppet(); }
 }
 
 // ───────────── mischief ─────────────

@@ -1,93 +1,109 @@
-// The AI brain's connection to Claude. Runs in the main process only, so the API
-// key never reaches the pet's page or the settings page.
+// The AI brain's connection to the outside world. Runs in the main process only,
+// so API keys never reach the pet's page or the settings page.
 //
-// The key is saved in the app's data folder, encrypted with the operating
-// system's keychain when available (Electron safeStorage). If you haven't saved
-// one, the Anthropic SDK falls back to the ANTHROPIC_API_KEY environment variable.
+// All the supported services (Google Gemini, Groq, OpenRouter) speak the same
+// "OpenAI-compatible chat completions" format, so one plain web request covers
+// them all — no extra libraries. Each service gets its own key, saved in the app's
+// data folder and encrypted with the operating system's keychain when available.
 
-import Anthropic from '@anthropic-ai/sdk';
 import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ACTIONS, REPLY_SCHEMA, type BrainReply, type BrainRequest } from '../core/brain';
+import { PROVIDERS, type ProviderId } from '../core/config';
+import { parseReply, type BrainReply, type BrainRequest } from '../core/brain';
 
-const keyPath = () => path.join(app.getPath('userData'), 'brain-key');
-let cachedKey: string | null | undefined;
-let client: Anthropic | null = null;
+const keyPath = () => path.join(app.getPath('userData'), 'brain-keys');
+let keys: Partial<Record<ProviderId, string>> | null = null;
 
-function loadKey(): string | null {
-  if (cachedKey !== undefined) return cachedKey;
+function loadKeys() {
+  if (keys) return keys;
   try {
     const raw = fs.readFileSync(keyPath());
-    cachedKey = raw[0] === 0x50 /* "P" = plain */ ? raw.subarray(1).toString('utf8') : safeStorage.decryptString(raw.subarray(1));
-  } catch { cachedKey = null; }
-  return cachedKey;
+    const text = raw[0] === 0x50 /* "P" = plain */ ? raw.subarray(1).toString('utf8') : safeStorage.decryptString(raw.subarray(1));
+    keys = JSON.parse(text);
+  } catch { keys = {}; }
+  return keys!;
 }
 
-/** Save (or with an empty string, forget) the API key. */
-export function setKey(key: string) {
-  key = key.trim();
-  client = null;
-  if (!key) { cachedKey = null; fs.rm(keyPath(), { force: true }, () => {}); return; }
-  cachedKey = key;
+function saveKeys() {
+  const text = JSON.stringify(keys ?? {});
   const enc = safeStorage.isEncryptionAvailable();
-  const body = enc ? safeStorage.encryptString(key) : Buffer.from(key, 'utf8');
+  const body = enc ? safeStorage.encryptString(text) : Buffer.from(text, 'utf8');
   fs.writeFileSync(keyPath(), Buffer.concat([Buffer.from(enc ? 'E' : 'P'), body]), { mode: 0o600 });
 }
 
-/** For the settings window: is a key set? Shows only the last 4 characters. */
-export function keyStatus() {
-  const k = loadKey();
-  return { saved: !!k, hint: k ? `…${k.slice(-4)}` : '', fromEnv: !k && !!process.env.ANTHROPIC_API_KEY };
+/** Save (or with an empty string, forget) the key for one service. */
+export function setKey(provider: ProviderId, key: string) {
+  const k = loadKeys();
+  key = key.trim();
+  if (key) k[provider] = key; else delete k[provider];
+  saveKeys();
 }
 
-function getClient() {
-  if (!client) {
-    const key = loadKey();
-    client = key ? new Anthropic({ apiKey: key, maxRetries: 1 }) : new Anthropic({ maxRetries: 1 });
-  }
-  return client;
+/** For the settings window: is a key saved for this service? Shows only the last 4 characters. */
+export function keyStatus(provider: ProviderId) {
+  const k = loadKeys()[provider];
+  return { provider, saved: !!k, hint: k ? `…${k.slice(-4)}` : '' };
 }
-
-// Server-side fallback (if the model declines for safety reasons, the API retries on
-// a fallback model inside the same call) and `effort` aren't accepted by every model.
-const SUPPORTS_FALLBACKS = new Set(['claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5', 'claude-fable-5-1']);
-const NO_EFFORT = /haiku/;
 
 export type AskResult = { ok: true; reply: BrainReply } | { ok: false; error: string };
 
-export async function ask(model: string, req: BrainRequest): Promise<AskResult> {
-  if (!loadKey() && !process.env.ANTHROPIC_API_KEY) return { ok: false, error: 'No API key yet. Add one in Settings → General → Brain.' };
-  try {
-    const res = await getClient().beta.messages.create({
+function explain(status: number, body: string, provider: ProviderId, model: string): string {
+  const name = PROVIDERS[provider].label;
+  if (status === 401 || status === 403) return `${name} rejected the API key. Check it in Settings → General → Brain.`;
+  if (status === 404) return `${name} doesn't know the model "${model}". Use "Find models" in Settings to pick one.`;
+  if (status === 429) return `${name}'s free limit is used up for now (too many requests). He'll try again later.`;
+  if (status >= 500) return `${name} is having trouble right now (error ${status}).`;
+  return `${name} error ${status}: ${body.slice(0, 200)}`;
+}
+
+/** Services that refused JSON mode for a model: ask without it next time. */
+const noJsonMode = new Set<string>();
+
+export async function ask(provider: ProviderId, model: string, req: BrainRequest): Promise<AskResult> {
+  const p = PROVIDERS[provider], key = loadKeys()[provider];
+  if (!key) return { ok: false, error: `No ${p.label} key yet. Get a free one at ${p.keyUrl} and paste it in Settings → General → Brain.` };
+  const send = (json: boolean) => fetch(`${p.base}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
       model,
-      max_tokens: 4000, // includes his (short) thinking; the reply itself is tiny
-      system: req.system,
-      messages: req.messages.map((m) => ({ role: m.role, content: m.text })),
-      output_config: {
-        format: { type: 'json_schema', schema: REPLY_SCHEMA },
-        // He's chatting, not solving puzzles: low effort keeps replies quick and cheap.
-        ...(NO_EFFORT.test(model) ? {} : { effort: 'low' as const }),
-      },
-      ...(SUPPORTS_FALLBACKS.has(model) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
-    });
-    if (res.stop_reason === 'refusal') return { ok: true, reply: { say: '...', do: 'none' } };
-    const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
-    let reply: Partial<BrainReply>;
-    try { reply = JSON.parse(text); } catch { return { ok: false, error: 'The AI answered in a form he couldn\'t read.' }; }
-    return {
-      ok: true,
-      reply: { say: typeof reply.say === 'string' ? reply.say : '', do: ACTIONS.includes(reply.do ?? '') ? reply.do! : 'none' },
-    };
+      messages: [{ role: 'system', content: req.system }, ...req.messages.map((m) => ({ role: m.role, content: m.text }))],
+      temperature: 0.9,
+      max_tokens: 3000, // room for a made-up move (a list of poses) plus any thinking the model does
+      ...(json ? { response_format: { type: 'json_object' } } : {}),
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+  try {
+    const tag = `${provider}:${model}`;
+    let res = await send(!noJsonMode.has(tag));
+    if (res.status === 400 && !noJsonMode.has(tag)) { noJsonMode.add(tag); res = await send(false); } // some models don't do JSON mode
+    const body = await res.text();
+    if (!res.ok) return { ok: false, error: explain(res.status, body, provider, model) };
+    const text: string = JSON.parse(body)?.choices?.[0]?.message?.content ?? '';
+    const reply = parseReply(text);
+    return reply ? { ok: true, reply } : { ok: false, error: 'The AI answered in a form he couldn\'t read.' };
   } catch (err) {
-    // Most specific first.
-    if (err instanceof Anthropic.AuthenticationError) return { ok: false, error: 'The API key was rejected. Check it in Settings → General → Brain.' };
-    if (err instanceof Anthropic.PermissionDeniedError) return { ok: false, error: `This API key can't use the model "${model}".` };
-    if (err instanceof Anthropic.NotFoundError) return { ok: false, error: `Unknown model "${model}". Check the model name in Settings.` };
-    if (err instanceof Anthropic.RateLimitError) return { ok: false, error: 'Too many requests right now (rate limited). He\'ll try again later.' };
-    if (err instanceof Anthropic.BadRequestError) return { ok: false, error: `The API refused the request: ${err.message}` };
-    if (err instanceof Anthropic.APIConnectionError) return { ok: false, error: 'Couldn\'t reach the internet.' };
-    if (err instanceof Anthropic.APIError) return { ok: false, error: `AI error ${err.status ?? ''}: ${err.message}` };
-    return { ok: false, error: String(err) };
+    if (err instanceof Error && err.name === 'TimeoutError') return { ok: false, error: `${p.label} took too long to answer.` };
+    return { ok: false, error: 'Couldn\'t reach the internet.' };
+  }
+}
+
+/** Ask the service which models this key can use (so you don't have to guess names). */
+export async function listModels(provider: ProviderId): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> {
+  const p = PROVIDERS[provider], key = loadKeys()[provider];
+  if (!key) return { ok: false, error: 'Save a key first.' };
+  try {
+    const res = await fetch(`${p.base}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(20000) });
+    const body = await res.text();
+    if (!res.ok) return { ok: false, error: explain(res.status, body, provider, '') };
+    const data = JSON.parse(body)?.data ?? [];
+    let ids: string[] = data.map((m: { id?: string }) => String(m.id ?? '').replace(/^models\//, '')).filter(Boolean);
+    if (provider === 'openrouter') ids = ids.filter((id) => id.endsWith(':free')); // only the free ones
+    if (provider === 'gemini') ids = ids.filter((id) => /gemini/.test(id) && !/embedding|image|tts|audio|live/.test(id));
+    return { ok: true, models: ids.sort() };
+  } catch {
+    return { ok: false, error: 'Couldn\'t reach the internet.' };
   }
 }

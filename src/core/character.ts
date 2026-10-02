@@ -16,7 +16,18 @@ import { collide, collidePlatforms, FLOOR, integrate, NONE, solveSticks, type Bo
 import { clamp, dist, distToSegment, lerp, sign, smooth, twoBoneIK, type Vec } from './math';
 import type { Wall } from './world';
 
-export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie' | 'climb' | 'ceiling';
+export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie' | 'climb' | 'ceiling' | 'puppet';
+
+/** Body parts a puppet keyframe can place. "front" = the side facing the way he faces. */
+export const PUPPET_JOINTS = ['head', 'neck', 'hip', 'frontHand', 'backHand', 'frontElbow', 'backElbow', 'frontFoot', 'backFoot', 'frontKnee', 'backKnee'] as const;
+export type PuppetJoint = (typeof PUPPET_JOINTS)[number];
+/**
+ * One pose in a made-up move. `t` = seconds to get here from the previous pose.
+ * Positions are [x, y] in pixels at normal size: x forward (the way he faces), y UP,
+ * measured from the ground right under where he stood when the move began.
+ * Parts left out keep their previous place (elbows, knees and head bend naturally if never given).
+ */
+export interface Keyframe { t: number; pose: Partial<Record<PuppetJoint, [number, number]>> }
 
 export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower' | 'dance' | 'nuzzle';
 
@@ -141,6 +152,13 @@ export class Character {
   private held: { joint: JointName; x: number; y: number; vx: number; vy: number } | null = null;
   private gesture: { name: Gesture; t: number; x: number; y: number; fired: boolean } | null = null;
   private jumpPrep: { t: number; vx: number; vy: number } | null = null;
+  /** A made-up move being played (his AI brain moving his body directly). */
+  private puppetMove: {
+    times: number[];                  // seconds to reach each pose
+    poses: Record<JointName, Vec>[];  // [start, keyframe 1, keyframe 2, ...], every part filled in
+    auto: Set<JointName>;             // parts never given: bent naturally instead
+    f: number; time: number; total: number;
+  } | null = null;
 
   constructor(public bounds: Bounds, x: number, scale = 1) {
     this.d = makeDims(scale);
@@ -367,7 +385,7 @@ export class Character {
     const speed = Math.hypot(vx, vy);
     this.stun = Math.max(this.stun, clamp(speed / 1500, 0, 1) * 0.5);
     if (speed > 1200 && (this.mode === 'climb' || this.mode === 'ceiling')) { this.letGo(); return; } // knocked off
-    if (speed > 1500 && (this.mode === 'ground' || this.mode === 'sit')) {
+    if (speed > 1500 && (this.mode === 'ground' || this.mode === 'sit' || this.mode === 'puppet')) {
       this.setMode('ragdoll');
       this.events.push({ type: 'tripped' });
     }
@@ -456,6 +474,7 @@ export class Character {
       case 'ragdoll': break;
       case 'climb': this.climbPose(dt, t, s); break;
       case 'ceiling': this.ceilingPose(dt, t, s); break;
+      case 'puppet': this.puppetPose(dt, t, s); break;
     }
 
     const b = this.body;
@@ -491,6 +510,7 @@ export class Character {
     if (m !== 'ceiling') this.hang = null;
     if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
     if (m !== 'air') this.leapWall = null;
+    if (m !== 'puppet') this.puppetMove = null;
     if (m === 'air' || m === 'held') this.support = NONE;
     this.mode = m;
     this.modeTime = 0;
@@ -1107,6 +1127,71 @@ export class Character {
       t.handL = { x: wx, y: neck.y - 6 * sc }; t.handR = { x: wx, y: neck.y - 12 * sc };
       s.handL = s.handR = 0.12;
     }
+  }
+
+  // ───────────── puppet (moves made up by his AI brain) ─────────────
+
+  /**
+   * Play a made-up move: his muscles pull each body part toward the keyframe poses
+   * in turn. Physics still applies, so impossible poses wobble, topple or float,
+   * and when the move ends he drops and lands (or crashes) like any other time.
+   */
+  puppet(frames: Keyframe[]) {
+    if (!['ground', 'sit', 'lie'].includes(this.mode) || !frames.length) return false;
+    const sc = this.scale, f = this.facing, ox = this.rootX, oy = this.groundY();
+    const map: Record<PuppetJoint, JointName> = {
+      head: 'head', neck: 'neck', hip: 'hip',
+      frontHand: f > 0 ? 'handR' : 'handL', backHand: f > 0 ? 'handL' : 'handR',
+      frontElbow: f > 0 ? 'elbowR' : 'elbowL', backElbow: f > 0 ? 'elbowL' : 'elbowR',
+      frontFoot: f > 0 ? 'footR' : 'footL', backFoot: f > 0 ? 'footL' : 'footR',
+      frontKnee: f > 0 ? 'kneeR' : 'kneeL', backKnee: f > 0 ? 'kneeL' : 'kneeR',
+    };
+    // Fill in every keyframe completely: parts it doesn't name stay where they were.
+    const start = {} as Record<JointName, Vec>;
+    for (const n of JOINTS) start[n] = { x: this.body.j[n].x, y: this.body.j[n].y };
+    const poses = [start];
+    const given = new Set<JointName>();
+    for (const k of frames) {
+      const next = { ...poses[poses.length - 1] };
+      for (const [name, xy] of Object.entries(k.pose) as [PuppetJoint, [number, number]][]) {
+        next[map[name]] = { x: ox + f * clamp(xy[0], -300, 300) * sc, y: oy - clamp(xy[1], -20, 400) * sc };
+        given.add(map[name]);
+      }
+      poses.push(next);
+    }
+    const auto = new Set<JointName>((['head', 'elbowL', 'elbowR', 'kneeL', 'kneeR'] as JointName[]).filter((n) => !given.has(n)));
+    this.goalX = null; this.gesture = null; this.stayDown = false;
+    this.setMode('puppet');
+    const times = frames.map((k) => k.t);
+    this.puppetMove = { times, poses, auto, f, time: 0, total: times.reduce((x, y) => x + y, 0) };
+    return true;
+  }
+
+  get puppeting() { return this.mode === 'puppet'; }
+
+  /** Stop a made-up move early. */
+  endPuppet() { if (this.mode === 'puppet') this.setMode('air'); }
+
+  private puppetPose(dt: number, t: Targets, s: Strengths) {
+    const pm = this.puppetMove!, d = this.d, f = pm.f;
+    pm.time += dt;
+    if (pm.time > pm.total + 0.25) { this.setMode('air'); this.airPose(t, s, 0.07); return; }
+    // Which keyframe are we heading to, and how far along?
+    let acc = 0, k = 0;
+    while (k < pm.times.length - 1 && acc + pm.times[k] < pm.time) { acc += pm.times[k]; k++; }
+    const a = pm.poses[k], b = pm.poses[k + 1];
+    const u = smooth(pm.times[k] > 0 ? (pm.time - acc) / pm.times[k] : 1);
+    for (const n of JOINTS) t[n] = { x: lerp(a[n].x, b[n].x, u), y: lerp(a[n].y, b[n].y, u) };
+    const hip = t.hip!, neck = t.neck!;
+    if (pm.auto.has('head')) {
+      const dx = neck.x - hip.x, dy = neck.y - hip.y, len = Math.hypot(dx, dy) || 1;
+      t.head = { x: neck.x + (dx / len) * d.neck, y: neck.y + (dy / len) * d.neck };
+    }
+    if (pm.auto.has('elbowL')) t.elbowL = twoBoneIK(neck.x, neck.y, t.handL!.x, t.handL!.y, d.upperArm, d.foreArm, f);
+    if (pm.auto.has('elbowR')) t.elbowR = twoBoneIK(neck.x, neck.y, t.handR!.x, t.handR!.y, d.upperArm, d.foreArm, f);
+    if (pm.auto.has('kneeL')) t.kneeL = twoBoneIK(hip.x, hip.y, t.footL!.x, t.footL!.y, d.thigh, d.shin, -f);
+    if (pm.auto.has('kneeR')) t.kneeR = twoBoneIK(hip.x, hip.y, t.footR!.x, t.footR!.y, d.thigh, d.shin, -f);
+    for (const n of JOINTS) s[n] = 0.3;
   }
 
   // ───────────── climbing ─────────────

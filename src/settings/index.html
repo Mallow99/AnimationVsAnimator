@@ -56,6 +56,8 @@
     input[type="range"] { width: 100%; accent-color: var(--accent); }
     input[type="text"] { font: 15px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
     textarea { font: 14px/1.45 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; min-height: 110px; resize: vertical; }
+    select { font: 14px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+    a { color: var(--accent); }
     input[type="password"] { font: 14px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
     .chat { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
     .chat p { margin: 0; padding: 7px 10px; border-radius: 10px; max-width: 85%; overflow-wrap: anywhere; }
@@ -174,12 +176,17 @@
           <label class="radio"><input type="radio" name="mind" value="full" /><span><span class="row-label">Full</span><small>AI also decides what he does every ~40 s and comments on what happens to him. Uses the most API calls.</small></span></label>
         </div>
         <div class="card">
-          <span class="row-label">Claude API key</span>
-          <form class="inline" id="keyForm"><input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…" /><button class="btn" type="submit">Save</button><button class="btn ghost" id="forgetKey" type="button">Forget</button></form>
+          <span class="row-label">AI service</span>
+          <select id="provider"></select>
+          <small class="note">All free: make an account on their website, create an API key, paste it below. No credit card. <a id="keyLink" href="#" target="_blank">Get a free key →</a></small>
+          <span class="row-label">API key</span>
+          <form class="inline" id="keyForm"><input type="password" id="apiKey" autocomplete="off" placeholder="paste your key" /><button class="btn" type="submit">Save</button><button class="btn ghost" id="forgetKey" type="button">Forget</button></form>
           <small class="note" id="keyInfo"></small>
           <span class="row-label">Model</span>
-          <input type="text" id="model" maxlength="60" spellcheck="false" />
-          <small class="note">Default: claude-opus-5-5 (smartest). Cheaper: claude-sonnet-5-5, or claude-haiku-4-5 (cheapest, fastest). API calls cost money; Full mode makes up to ~2 a minute.</small>
+          <div class="inline"><input type="text" id="model" maxlength="80" spellcheck="false" list="modelList" /><button class="btn ghost" id="findModels" type="button">Find models</button></div>
+          <datalist id="modelList"></datalist>
+          <small class="note" id="modelInfo">Free tiers have daily limits; if he stops answering, he's probably used today's share. "Find models" lists what your key can use.</small>
+          <label class="switch"><span><span class="row-label">Let the AI move his body</span><br /><small class="note">It can make up its own moves (handstands, floating, flips…), not just pick from his normal skills. Physics still applies, so it may go wrong in funny ways.</small></span><input type="checkbox" id="puppet" /></label>
         </div>
       </div>
       <div class="group">

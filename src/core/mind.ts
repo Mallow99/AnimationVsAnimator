@@ -10,11 +10,11 @@
 // Later an LLM mind can sit on top of this: same skills, same mood, it just
 // gets a say in the choices and adds real words.
 
-import type { CharEvent, Gesture } from './character';
+import type { CharEvent, Gesture, Keyframe } from './character';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  AvoidCursor, ChaseCursor, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
+  AvoidCursor, ChaseCursor, PuppetMove, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
@@ -151,6 +151,17 @@ export class Mind {
       this.interrupt(c, o.make());
     }
     m.asleep = false;
+    this.why = why;
+    if (ch.mode === 'lie' || ch.mode === 'sit') ch.standUp();
+    return true;
+  }
+
+  /** Play a move his AI brain made up. */
+  perform(c: Ctx, frames: Keyframe[], why: string) {
+    const ch = c.char;
+    if (!['ground', 'sit', 'lie'].includes(ch.mode)) return false;
+    c.mood.asleep = false;
+    this.interrupt(c, new PuppetMove(frames));
     this.why = why;
     if (ch.mode === 'lie' || ch.mode === 'sit') ch.standUp();
     return true;

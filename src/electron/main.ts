@@ -4,10 +4,10 @@
 //  - A settings window.
 //  - His settings, saved as pet.json in the app's data folder and shared with every window.
 
-import { app, BrowserWindow, ipcMain, Menu, screen, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_CONFIG, mergeConfig, type PetConfig } from '../core/config';
+import { DEFAULT_CONFIG, mergeConfig, PROVIDERS, type PetConfig, type ProviderId } from '../core/config';
 import type { WinRect } from '../core/world';
 import { watchWindows, type WindowWatcher } from './windows';
 import * as llm from './llm';
@@ -126,6 +126,11 @@ function openSettings(tab?: string) {
   });
   settingsWin.loadFile(path.join(__dirname, '../settings/index.html'));
   settingsWin.webContents.once('did-finish-load', goTo);
+  // Links (like "Get a free key") open in your normal browser.
+  settingsWin.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
   settingsWin.once('ready-to-show', () => {
     settingsWin?.show();
     if (process.platform === 'darwin') app.focus({ steal: true });
@@ -168,12 +173,13 @@ ipcMain.on('config:reset', () => setConfig(DEFAULT_CONFIG));
 ipcMain.on('pet:stats', (_e, stats: unknown) => settingsWin?.webContents.send('pet:stats', stats));
 ipcMain.on('pet:command', (_e, cmd: string) => win?.webContents.send('pet:command', cmd));
 ipcMain.on('settings:open', () => openSettings());
-// The AI brain: the overlay asks, main calls Claude with the saved key.
-ipcMain.handle('brain:ask', (_e, req: BrainRequest) => llm.ask(config.model, req));
-ipcMain.handle('brain:keyStatus', () => llm.keyStatus());
+// The AI brain: the overlay asks, main calls the AI service with the saved key.
+ipcMain.handle('brain:ask', (_e, req: BrainRequest) => llm.ask(config.provider, config.model, req));
+ipcMain.handle('brain:keyStatus', (_e, provider: ProviderId) => llm.keyStatus(provider in PROVIDERS ? provider : config.provider));
+ipcMain.handle('brain:models', () => llm.listModels(config.provider));
 ipcMain.on('brain:setKey', (_e, key: string) => {
-  llm.setKey(String(key ?? ''));
-  settingsWin?.webContents.send('brain:keyStatus', llm.keyStatus());
+  llm.setKey(config.provider, String(key ?? ''));
+  settingsWin?.webContents.send('brain:keyStatus', llm.keyStatus(config.provider));
 });
 // You pressed on him. On macOS that (wrongly) activates our app, so hand focus right back.
 ipcMain.on('pet:pressed', () => watcher?.refocus());

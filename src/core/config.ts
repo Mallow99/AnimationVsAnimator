@@ -7,6 +7,14 @@ import { DEFAULT_LOOK, type Look } from './render';
 
 export type MindMode = 'offline' | 'chat' | 'full';
 
+/** Where his AI brain runs. The free ones just need a key from their website (no credit card). */
+export type ProviderId = 'gemini' | 'groq' | 'openrouter';
+export const PROVIDERS: Record<ProviderId, { label: string; free: boolean; model: string; keyUrl: string; base: string }> = {
+  gemini: { label: 'Google Gemini', free: true, model: 'gemini-flash-latest', keyUrl: 'https://aistudio.google.com/apikey', base: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  groq: { label: 'Groq', free: true, model: 'llama-3.3-70b-versatile', keyUrl: 'https://console.groq.com/keys', base: 'https://api.groq.com/openai/v1' },
+  openrouter: { label: 'OpenRouter (free models)', free: true, model: 'meta-llama/llama-3.3-70b-instruct:free', keyUrl: 'https://openrouter.ai/keys', base: 'https://openrouter.ai/api/v1' },
+};
+
 export interface PetConfig {
   name: string;
   scale: number;   // overall size (1 ≈ 90 px tall)
@@ -16,8 +24,11 @@ export interface PetConfig {
   mind: MindMode;
   /** Who he is, in plain words. The AI brain plays this character. */
   persona: string;
-  /** Which Claude model the AI brain uses. */
+  /** Which AI service his brain uses, and which of its models. */
+  provider: ProviderId;
   model: string;
+  /** Let the AI move his body directly (make up its own poses and moves), not just pick from his skills. */
+  puppet: boolean;
   /** Swiping the cursor through him fast smacks him. Off by default so it doesn't happen by accident. */
   smacking: boolean;
   /** Stand on, climb and get carried by the windows on screen. */
@@ -33,7 +44,9 @@ export const DEFAULT_CONFIG: PetConfig = {
   body: { ...DEFAULT_BODY },
   mind: 'offline',
   persona: `A small stick figure who lives on top of your screen. Curious, a bit cheeky, easily bored, and very proud of his climbing. He knows he is made of lines and thinks that's cool. Talks in short, casual bursts like a kid texting. Likes you, mostly. Hates being thrown.`,
-  model: 'claude-opus-5-5',
+  provider: 'gemini',
+  model: PROVIDERS.gemini.model,
+  puppet: true,
   smacking: false,
   windows: true,
   mischief: false,
@@ -42,7 +55,7 @@ export const DEFAULT_CONFIG: PetConfig = {
 export interface Range { min: number; max: number; step: number; label: string; hint: string }
 
 /** Longest allowed text per field (anything not listed: 40 characters). */
-const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 60 };
+const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 80, provider: 20 };
 
 /** Every adjustable number: its limits, and how the settings window labels it. */
 export const RANGES: Record<string, Range> = {
@@ -86,6 +99,8 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   if (!['offline', 'chat', 'full'].includes(out.mind)) out.mind = 'offline';
   if (!/^#[0-9a-f]{6}$/i.test(out.look.color)) out.look.color = base.look.color;
   if (!out.name.trim()) out.name = base.name;
-  if (!/^[a-z0-9.-]+$/i.test(out.model)) out.model = base.model;
+  if (!(out.provider in PROVIDERS)) out.provider = base.provider;
+  // A bad model name, or one left over from before he had a choice of services: use the service's default.
+  if (!/^[a-z0-9._:/-]+$/i.test(out.model) || /^claude-/.test(out.model)) out.model = PROVIDERS[out.provider].model;
   return out;
 }
