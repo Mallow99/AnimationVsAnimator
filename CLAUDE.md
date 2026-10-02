@@ -1,0 +1,60 @@
+# AnimationVsAnimator — project brief
+
+A desktop pet: a procedural stick figure living in a transparent, always-on-top,
+click-through overlay. Inspired by Alan Becker's *Animator vs. Animation*.
+No pre-baked animations — all motion comes from physics + procedural controllers.
+
+## Working rules
+- The owner is a high-school student, new to code. Claude writes nearly all of it.
+  Explain decisions in plain language; define jargon the first time.
+- Work in milestones. Each ends with something the owner can run and see.
+  Go as far as can be verified in the cloud container; stop where only a real Mac/PC can confirm.
+- Commit after every working step with a clear message.
+- When something breaks: explain what went wrong and why, then fix.
+- Look/feel/behavior choices: offer options, let the owner choose.
+- Keep it LIGHTWEIGHT: total install < 1 GB, few dependencies, no ticket/process overhead.
+- No model identifiers in commits or code.
+
+## Architecture
+```
+src/core/      Platform-free TypeScript. Physics, body, skills, mood, mind, rendering.
+               Must never import Electron, Node, or OS APIs. Runs in any browser view.
+src/app/       The overlay page (canvas + input). Talks to the shell via a tiny bridge
+               (window.petShell). Also runs in a plain browser as "preview mode".
+src/electron/  Desktop shell (macOS + Windows): the transparent window, click-through,
+               and later OS adapters (window positions, etc.) behind one interface.
+android/       (future) Kotlin overlay hosting src/app in a WebView.
+scripts/       Build (esbuild), headless physics sim tests, browser preview.
+```
+
+Layers inside core:
+1. **Body** — Verlet physics (joints = points, bones = fixed-length sticks). "Muscles" pull
+   joints toward a target pose; strength 0 = ragdoll. IK places feet and bends knees/elbows.
+2. **Skills** — small controllers: walk_to, jump, sit, sleep, stomp, chase/avoid cursor, say...
+3. **Mood** — needs/emotion dials (energy, happiness, boredom, annoyance, trust).
+   Events move dials; dials shape posture, speed, and reactions (e.g. ignores pokes when sad).
+4. **Mind** — picks skills. Three modes (config):
+   - Mode 0 offline: instinct (utility scoring over mood) + emotes/canned lines.
+   - Mode 1 chat: same, plus an LLM only for conversation.
+   - Mode 2 full: LLM also picks goals every several seconds / on events. Never drives joints.
+   LLM provider swappable (cloud API or Ollama/OpenAI-compatible). Throttled.
+5. **Cheap learning** — remembers outcomes (e.g. a big drop hurt → wary of big drops).
+
+## Roadmap
+1. Overlay + ragdoll body, drag/drop/throw, gets back up.            
+2. Walk/jump/idle/sit/sleep, mood engine, offline reactions (Mode 0).
+3. Window awareness (windows are platforms), cursor awareness, follow across desktops
+   and optionally walk to another desktop on his own (fakes the desktop-switch shortcut).
+4. LLM modes 1 & 2, speech bubbles, `pet.json` persona (name, persona, color, model).
+5. Memory file, periodically summarized.
+6. Interacting with other apps, incl. drawing with his OWN pen (not the user's cursor),
+   e.g. hosting JS Paint (jspaint.app) inside our app.
+7. Learned movement (experimental; physics runs headless for training).
+8. Customization (accessories/items with definition files), tray settings, packaging.
+Then: Android shell.
+
+## Commands
+- `npm start`     build + launch the pet (Electron)
+- `npm run preview` build + open in a normal browser window (no click-through)
+- `npm run sim`   headless physics tests
+- `npm run typecheck`
