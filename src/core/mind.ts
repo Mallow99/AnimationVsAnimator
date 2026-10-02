@@ -173,6 +173,10 @@ export class Mind {
   /** When he last swatted your cursor off him, and last messed with a window. */
   private swatAt = -100;
   private hungAt = -100;
+  /** Building options for something you asked for directly (skip mood and politeness filters). */
+  private forced = false;
+  /** Why he can't do each thing you asked for (said instead of "?"). */
+  private cant: Record<string, string> = {};
   private windowPrankAt = -100;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
@@ -274,9 +278,13 @@ export class Mind {
   command(c: Ctx, name: string, why = 'you told him to', quiet = false): boolean {
     const ch = c.char, m = c.mood;
     if (name === 'wake') { m.asleep = false; this.end(c); ch.standUp(); return true; }
+    // Asked directly, he skips his own "not in the mood" and "you're busy in that window" filters.
+    this.forced = true; this.cant = {};
     const s = this.makeSkill(c, name);
+    this.forced = false;
     if (!s) {
-      if (!quiet) c.say(name === 'grabcursor' ? '(mischief mode is off)' : '?', name === 'grabcursor' ? 2 : 1);
+      const reason = name === 'grabcursor' ? '(mischief mode is off)' : this.cant[name] || '?';
+      if (!quiet) c.say(reason, reason.length > 2 ? 2.2 : 1);
       return false;
     }
     this.interrupt(c, s);
@@ -487,21 +495,32 @@ export class Mind {
    * on their edges. Not too often, and not the window you're busy in (unless he's mad).
    */
   private windowPranks(c: Ctx): Option[] {
-    const s = c.mood.s, L = c.mood.label, ch = c.char, w = c.world, opts: Option[] = [];
+    const s = c.mood.s, L = c.mood.label, ch = c.char, w = c.world, opts: Option[] = [], forced = this.forced;
     if (ch.support >= 0 && ch.whole) {
       opts.push({ name: 'ledgesit', why: L === 'sad' ? 'sitting on the edge, feeling down' : 'sitting on the edge, legs dangling',
         score: 0.2 + (1 - s.energy) * 0.45 + s.boredom * 0.2 + (L === 'sad' ? 0.4 : 0), make: () => new LedgeSit(rand(8, 20)) });
-    }
-    if (!ch.whole || L === 'sleepy' || L === 'sad' || L === 'scared' || s.energy < 0.3) return opts;
-    const fresh = w.time - this.windowPrankAt > (L === 'angry' ? 25 : 50);
+    } else if (forced) this.cant.ledgesit = "I'm not up on anything";
+    const pranks = ['knock', 'pushwindow', 'kickwindow', 'surf'];
+    if (!ch.whole) { if (forced) for (const n of pranks) this.cant[n] = 'not without all my limbs'; return opts; }
+    if (!forced && (L === 'sleepy' || L === 'sad' || L === 'scared' || s.energy < 0.3)) return opts;
+    const fresh = forced || w.time - this.windowPrankAt > (L === 'angry' ? 25 : 50);
     const cur = w.cursor;
-    // The window you're working in right now (cursor inside it, moving): leave it alone.
+    // The window you're working in right now (cursor inside it, moving): leave it alone (unless you asked).
     const busy = (id?: number) => {
+      if (forced) return false;
       const r = w.windows.find((x) => x.id === id);
       return !!r && !!cur && w.time - w.cursorMovedAt < 4 && cur.x >= r.x && cur.x <= r.x + r.w && cur.y >= r.y && cur.y <= r.y + r.h && L !== 'angry';
     };
-    const sides = windowSidesAtHand(c).filter((x) => Math.abs(x.x - ch.x) < 600);
+    const sides = windowSidesAtHand(c).filter((x) => forced || Math.abs(x.x - ch.x) < 600);
     const side = sides.find((x) => !busy(x.win));
+    if (forced) {
+      const why = c.windowMoves === 'off' ? '(moving windows is off in settings)' : c.windowMoves === 'stuck' ? "they won't budge. permission?"
+        : c.windowMoves === 'unsupported' ? "can't move windows here" : '';
+      const reach = !w.windows.length ? "I don't see any windows" : !side ? 'no window I can reach from here' : '';
+      this.cant.knock = reach;
+      this.cant.pushwindow = this.cant.kickwindow = reach || why;
+      this.cant.surf = ch.supportPlatform()?.win === undefined ? 'I need to be standing on a window' : why;
+    }
     const prank = (name: string, why: string, score: number, make: () => Skill) =>
       opts.push({ name, why, score: fresh ? score : 0, make: () => { this.windowPrankAt = w.time; return make(); } });
     if (side) {

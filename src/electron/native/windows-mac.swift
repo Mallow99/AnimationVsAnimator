@@ -31,6 +31,13 @@ var pendingMoves: [Int: CGPoint] = [:]
 var pidOf: [Int: pid_t] = [:]
 var axCache: [Int: AXUIElement] = [:]
 var askedTrust = false
+var said = Set<String>()
+/** Tell the pet app (once per kind of message): it shows up in the Terminal and in his settings. */
+func note(_ key: String, _ text: String) {
+  if said.contains(key) { return }
+  said.insert(key)
+  FileHandle.standardError.write((text + "\n").data(using: .utf8)!)
+}
 // Don't freeze the real mouse for a moment after we move the pointer (macOS does that by default).
 CGEventSource(stateID: .combinedSessionState)?.localEventsSuppressionInterval = 0
 
@@ -52,14 +59,19 @@ func moveWindow(_ id: Int, _ p: CGPoint) {
     if !askedTrust {
       askedTrust = true
       _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-      FileHandle.standardError.write("moving windows needs Accessibility permission: System Settings > Privacy & Security > Accessibility\n".data(using: .utf8)!)
     }
+    note("trust", "move: no Accessibility permission yet. System Settings > Privacy & Security > Accessibility: switch on the app he runs in (Terminal, or Electron), then restart him.")
     return
   }
-  guard let w = axWindow(id) else { return }
+  guard let w = axWindow(id) else {
+    note("find\(pidOf[id] ?? 0)", "move: couldn't find window \(id) through Accessibility (app pid \(pidOf[id] ?? 0)); some apps don't allow it")
+    return
+  }
   var pt = p
   guard let v = AXValueCreate(.cgPoint, &pt) else { return }
-  if AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, v) != .success { axCache[id] = nil }
+  let err = AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, v)
+  if err != .success { axCache[id] = nil; note("set\(err.rawValue)", "move: the window refused to move (AX error \(err.rawValue))") }
+  else { note("ok", "move: moved a window, Accessibility works") }
 }
 
 FileHandle.standardInput.readabilityHandler = { h in

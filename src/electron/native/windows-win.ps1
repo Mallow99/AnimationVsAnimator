@@ -24,8 +24,11 @@ public static class PetWindows {
     if (!GetWindowRect(h, out wr)) return;
     if (DwmGetWindowAttribute(h, 9, out fr, 16) != 0) fr = wr;
     // NOSIZE | NOZORDER | NOACTIVATE | ASYNCWINDOWPOS (don't wait on a busy app)
-    SetWindowPos(h, IntPtr.Zero, x - (fr.L - wr.L), y - (fr.T - wr.T), 0, 0, 0x0001 | 0x0004 | 0x0010 | 0x4000);
+    if (SetWindowPos(h, IntPtr.Zero, x - (fr.L - wr.L), y - (fr.T - wr.T), 0, 0, 0x0001 | 0x0004 | 0x0010 | 0x4000)) Note("ok", "move: moved a window");
+    else Note("fail", "move: a window refused to move (it may belong to an app running as administrator)");
   }
+  static System.Collections.Generic.HashSet<string> said = new System.Collections.Generic.HashSet<string>();
+  static void Note(string key, string text) { lock (said) { if (said.Add(key)) { Console.Error.WriteLine(text); Console.Error.Flush(); } } }
   public static void ListenForCursor() {
     var t = new Thread(() => {
       string line;

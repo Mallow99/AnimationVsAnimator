@@ -82,3 +82,32 @@ export function windowWalls(wins: WinRect[], bounds: Bounds, headroom = 30): Wal
   }
   return out;
 }
+
+/**
+ * Every visible side of every window, at any height (for pushing, kicking and knocking on them).
+ * Unlike `windowWalls` (for climbing), big windows right under the menu bar count too, and a side
+ * doesn't need to reach the window's top.
+ */
+export function windowSides(wins: WinRect[], bounds: Bounds): Wall[] {
+  const out: Wall[] = [];
+  for (let i = 0; i < wins.length; i++) {
+    const w = wins[i];
+    for (const [x, face, n] of [[w.x, 1, 0], [w.x + w.w, -1, 1]] as const) {
+      if (x <= bounds.left + 4 || x >= bounds.right - 4) continue;
+      let segs: [number, number][] = [[Math.max(w.y, bounds.top), Math.min(w.y + w.h, bounds.floor)]];
+      for (let k = 0; k < i && segs.length; k++) {
+        const f = wins[k];
+        if (x < f.x || x > f.x + f.w) continue;
+        segs = segs.flatMap(([a, b]): [number, number][] => {
+          if (f.y + f.h <= a || f.y >= b) return [[a, b]];
+          const parts: [number, number][] = [];
+          if (f.y > a) parts.push([a, f.y]);
+          if (f.y + f.h < b) parts.push([f.y + f.h, b]);
+          return parts;
+        });
+      }
+      segs.forEach(([a, b], m) => { if (b - a > 20) out.push({ id: w.id * 64 + 32 + n * 8 + m, x, y1: a, y2: b, face, top: 'platform', win: w.id }); });
+    }
+  }
+  return out;
+}

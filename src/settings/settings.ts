@@ -14,7 +14,7 @@ interface MemoryView { summary: string; notes: Note[]; tally: Record<string, num
 interface ItemsView { kinds: { id: string; name: string; about: string; use: string; drawn: boolean }[]; list: { uid: number; id: string; name: string; where: 'belt' | 'hand' | 'world' | 'cursor'; slot: number; drawn: boolean }[] }
 interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView; items?: ItemsView }
 interface Stats {
-  name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean;
+  name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
   brain: { active: boolean; status: string; log: LogLine[] };
   mind?: { weigh: Weigh[]; thinking: boolean };
 }
@@ -143,7 +143,8 @@ shell.onStats((s) => {
   }
   $('label').textContent = s.asleep ? 'asleep' : s.label;
   $('doing').textContent = (DOING[s.doing] ?? s.doing) + (s.why ? ` — ${s.why}` : '');
-  $('moveInfo').textContent = s.windowsStuck ? "He tried to move a window and it didn't budge. On a Mac: System Settings → Privacy & Security → Accessibility, and switch on the app he runs in (Terminal or Electron). He'll try again in a few minutes." : '';
+  $('moveInfo').textContent = (s.windowsStuck ? "He tried to move a window and it didn't budge. On a Mac: System Settings → Privacy & Security → Accessibility, and switch on the app he runs in (Terminal or Electron), then restart him. " : '')
+    + (s.moveNote ? `Last word from the window helper: ${s.moveNote}` : '');
   $('winInfo').textContent = s.windows ? `He can see ${s.windows} window(s) and ${s.platforms} window top(s) to stand on.` : 'He can\'t see any windows yet. If this stays at zero, check the Terminal for lines starting with [windows].';
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
   if (s.brain) renderChat(s.brain.log, s.brain.status, s.brain.active);

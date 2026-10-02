@@ -1143,6 +1143,22 @@ const W1 = () => [{ id: 7, x: 700, y: 380, w: 420, h: 420 }];
   step(8);
   check("windows won't move: he notices and stops trying", got.includes('windowStuck') && !pet.ctx.canMoveWindows && pet.stats().windowsStuck === true, got.join(','));
 }
+{ // A big window right under the menu bar (no room on top to stand): he can still kick it when you ask.
+  const { pet, wins, step } = desktopPet({ wins: [{ id: 9, x: 760, y: 0, w: 560, h: 800 }] });
+  pet.command('mood:sleepy'); // and even when he's not in the mood
+  pet.mind.command(pet.ctx, 'kickwindow');
+  let far = 0;
+  step(10, () => { far = Math.max(far, wins[0].x); });
+  check('kick a big window that starts under the menu bar, even when sleepy', far > 820, `went to x=${far.toFixed(0)}`);
+}
+{ // Asked for something he can't do: he says why instead of "?".
+  const pet = calmPet();
+  const said: string[] = [];
+  const o = pet.ctx.say; pet.ctx.say = (t, x) => { said.push(t); o(t, x); };
+  pet.mind.command(pet.ctx, 'pushwindow');
+  pet.mind.command(pet.ctx, 'surf');
+  check("can't do it: he says why", said.includes("I don't see any windows") && said.includes('I need to be standing on a window'), said.join(' | '));
+}
 { // He leaves alone the window you're working in.
   const { pet } = desktopPet({ wins: W1() });
   pet.command('mood:playful');

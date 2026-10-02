@@ -101,7 +101,7 @@ function updateWatcher() {
     watcher = watchWindows((wins) => {
       lastWins = config.windows ? toOverlay(wins) : [];
       win?.webContents.send('world:windows', lastWins);
-    }, (m) => console.log('[windows]', m));
+    }, (m) => { console.log('[windows]', m); win?.webContents.send('world:log', m); });
   } else if (!need && watcher) {
     watcher.stop();
     watcher = null;

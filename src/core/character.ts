@@ -193,6 +193,8 @@ export class Character {
   airReach: Vec | null = null;
   /** Pushing something at this x (a window's side): both hands on it, leaning in. */
   pushAt: number | null = null;
+  /** How high his hands go on what he's pushing (null = chest height). */
+  pushY: number | null = null;
   /** Riding a window across the screen: knees bent, arms out. */
   surf = false;
   /** Sitting on the edge of something with his legs hanging over: where the edge is, and which way it drops. */
@@ -916,7 +918,7 @@ export class Character {
     if (m !== 'ceiling') this.hang = null;
     if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
     if (m !== 'air') { this.leapWall = null; this.airPunch = null; this.airReach = null; }
-    if (m !== 'ground') this.pushAt = null;
+    if (m !== 'ground') { this.pushAt = null; this.pushY = null; }
     if (m !== 'sit') this.ledge = null;
     if (m !== 'puppet') this.puppetMove = null;
     if (m !== 'roll') this.rolling = null;
@@ -1514,7 +1516,8 @@ export class Character {
     // Pushing something (a window's side): both palms flat on it at chest height, leaning in.
     if (this.pushAt !== null && !g) {
       const wx = this.pushAt - this.facing * 1.5 * sc;
-      const palm = (k: 'L' | 'R', dy: number) => ({ x: wx, y: neck.y + dy, z: this.rootZ + this.latZ(k, 5 * sc) });
+      const py = this.pushY ?? neck.y;
+      const palm = (k: 'L' | 'R', dy: number) => ({ x: wx, y: py + dy, z: this.rootZ + this.latZ(k, 5 * sc) });
       handL = this.reachToward(neck, palm('L', (frontIsR ? 6 : 2) * sc), 'L');
       handR = this.reachToward(neck, palm('R', (frontIsR ? 2 : 6) * sc), 'R');
       neckT = this.off(neck, 9 * sc, 4 * sc);

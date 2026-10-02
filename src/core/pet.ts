@@ -8,7 +8,7 @@ import type { Bounds } from './physics';
 import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
-import { windowPlatforms, windowWalls, type WinRect } from './world';
+import { windowPlatforms, windowSides, windowWalls, type WinRect } from './world';
 import { beltParts, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
 import { drawItem, itemFromDrawing, Items, type Item } from './items';
 import { Props, type Ball } from './props';
@@ -117,6 +117,8 @@ export class Pet {
   private winReported = new Map<number, WinRect>();
   /** Moving windows didn't work (no permission?): don't try again until this time. */
   windowsStuckUntil = -1;
+  /** The desktop helper's latest word on moving windows ("moved a window", "no permission yet"...). */
+  moveNote = '';
 
   constructor(bounds: Bounds, readonly config: PetConfig = structuredClone(DEFAULT_CONFIG)) {
     this.char = new Character(bounds, (bounds.left + bounds.right) / 2, config.scale);
@@ -127,10 +129,14 @@ export class Pet {
     const pet = this;
     this.ctx = {
       get cursorPlay() { return pet.config.knockCursor; },
+      get windowMoves() {
+        return !pet.config.moveWindows || !pet.config.windows ? 'off' as const : !pet.onMoveWindow ? 'unsupported' as const
+          : pet.ctx.world.time <= pet.windowsStuckUntil ? 'stuck' as const : 'ok' as const;
+      },
       get canMoveWindows() { return pet.config.moveWindows && pet.config.windows && !!pet.onMoveWindow && pet.ctx.world.time > pet.windowsStuckUntil; },
       char: this.char,
       mood: this.mood,
-      world: { bounds, cursor: null, cursorMovedAt: -100, time: 0, platforms: [], walls: windowWalls([], bounds), windows: [] },
+      world: { bounds, cursor: null, cursorMovedAt: -100, time: 0, platforms: [], walls: windowWalls([], bounds), windows: [], sides: [] },
       lessons: { ...DEFAULT_LESSONS },
       look: 'default',
       say: (text, secs) => this.say(text, secs),
@@ -279,7 +285,7 @@ export class Pet {
   /** A knock on a window's side: it wobbles a little. */
   private knockOnWindow(at: { x: number; y: number }) {
     const sc = this.char.scale;
-    const wl = this.ctx.world.walls.find((w) => w.win !== undefined && Math.abs(w.x - at.x) < 10 * sc && at.y >= w.y1 && at.y <= w.y2);
+    const wl = this.ctx.world.sides.find((w) => Math.abs(w.x - at.x) < 10 * sc && at.y >= w.y1 - 4 && at.y <= w.y2 + 4);
     if (wl) this.shoveWindow(wl.win!, wl.face * 60, 0, true);
   }
 
@@ -481,6 +487,7 @@ export class Pet {
     this.windowPlats = windowPlatforms(shown, this.ctx.world.bounds, 40, this.headroom());
     this.refreshPlatforms();
     this.ctx.world.walls = windowWalls(shown, this.ctx.world.bounds, this.headroom());
+    this.ctx.world.sides = windowSides(shown, this.ctx.world.bounds);
     this.char.setWalls(this.ctx.world.walls);
   }
 
@@ -561,6 +568,7 @@ export class Pet {
     this.char.setBounds(b);
     this.ctx.world.bounds = b;
     this.ctx.world.walls = windowWalls(this.winShown, b, this.headroom());
+    this.ctx.world.sides = windowSides(this.winShown, b);
     this.char.setWalls(this.ctx.world.walls);
   }
 
@@ -879,7 +887,7 @@ export class Pet {
     }
     // A window's side: punched or kicked, it shoots off the way he hit it.
     if (this.ctx.canMoveWindows) {
-      for (const wl of w.walls) {
+      for (const wl of w.sides) {
         if (wl.win === undefined || this.winMotion.has(wl.win) || p.y < wl.y1 || p.y > wl.y2) continue;
         if (Math.min(from.x, p.x) - 5 * sc > wl.x || Math.max(from.x, p.x) + 5 * sc < wl.x) continue;
         if (Math.sign(jv.x) === -wl.face && Math.abs(jv.x) > 80) continue; // pulling back, not hitting it
@@ -940,12 +948,12 @@ export class Pet {
       }
       // Windows: the blade crossing one of their sides knocks them.
       if (this.ctx.canMoveWindows) {
-        for (const wl of w.walls) {
+        for (const wl of w.sides) {
           if (wl.win === undefined || !ready(wl) || this.winMotion.has(wl.win)) continue;
           if (Math.min(a.x, b.x) > wl.x || Math.max(a.x, b.x) < wl.x) continue;
           const yAt = a.x === b.x ? a.y : a.y + (b.y - a.y) * ((wl.x - a.x) / (b.x - a.x));
           if (yAt < wl.y1 || yAt > wl.y2) continue;
-          if (Math.sign(v.x) !== -wl.face && Math.abs(v.x) > 100) continue; // swinging away from it
+          if (Math.sign(v.x) === -wl.face && Math.abs(v.x) > 100) continue; // swinging away from it
           this.bladeCooldown.set(wl, w.time + 0.5);
           this.shoveWindow(wl.win, -wl.face * (250 + 450 * power), it.def.use === 'smash' ? 120 : 0);
           this.sound(it.def.use === 'smash' ? 'bonk' : 'clang', 0.8);
@@ -1082,6 +1090,7 @@ export class Pet {
       recent: this.mind.recent.slice(-8),
       windows: this.winShown.length,
       windowsStuck: this.ctx.world.time < this.windowsStuckUntil,
+      moveNote: this.moveNote,
       platforms: this.ctx.world.platforms.length,
       brain: { active: this.brain.active, status: this.brain.status, log: this.brain.log.slice(-20) },
       // For the neurons view: everything he's weighing, how much, and what won.

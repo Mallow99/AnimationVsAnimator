@@ -24,6 +24,7 @@ export interface World {
   platforms: Platform[]; // window tops he can stand on
   walls: Wall[];         // window sides and screen edges he can climb
   windows: WinRect[];    // the windows on screen (front-most first), where they are right now
+  sides: Wall[];         // every visible window side, at any height (for pushing and kicking them)
 }
 
 /** Things he has learned from experience. Saved between runs. */
@@ -77,6 +78,8 @@ export interface Ctx {
   hangOnCursor?: () => boolean;
   /** He's allowed to play with your cursor (hit it, hang off it): the "He can hit your cursor" setting. */
   cursorPlay?: boolean;
+  /** Can he move windows right now, and if not, why not. */
+  windowMoves?: 'ok' | 'off' | 'unsupported' | 'stuck';
   /** Drawings that came to life: balls, boxes, ledges. */
   props?: Props;
   /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
@@ -1285,14 +1288,22 @@ export class ThrowItem extends Skill {
 
 // ───────────── your windows ─────────────
 
-/** Window sides he could walk up to and put his hands on from where he stands (nearest first). */
+/**
+ * Window sides he could walk up to and hit or push from where he stands (nearest first): any part of
+ * the side that's level with his body, from his head down to his feet.
+ */
 export function windowSidesAtHand(c: Ctx): Wall[] {
   const ch = c.char, j = ch.body.j, arm = ch.d.upperArm + ch.d.foreArm;
-  return c.world.walls
-    .filter((w) => w.win !== undefined && w.y1 < j.neck.y - 4 * ch.scale && w.y2 > j.hip.y && w.win !== ch.supportPlatform()?.win
+  const top = j.head.y - ch.d.headR, feet = Math.max(j.footL.y, j.footR.y);
+  return c.world.sides
+    .filter((w) => w.win !== ch.supportPlatform()?.win && Math.min(w.y2, feet) - Math.max(w.y1, top) > 16 * ch.scale
       && canStandAt(ch, w.x - w.face * arm * 0.75))
     .sort((a, b) => Math.abs(a.x - ch.x) - Math.abs(b.x - ch.x));
 }
+
+/** Where on a window's side to aim (his body height, clamped to the part of the side that's there). */
+const onSide = (w: Wall, y: number) => clamp(y, w.y1 + 5, w.y2 - 5);
+const sideNow = (c: Ctx, w: Wall) => c.world.sides.find((x) => x.id === w.id) ?? c.world.sides.find((x) => x.win === w.win && x.face === w.face);
 
 /**
  * Walking up to a spot for a window trick: true once he's there. If something stopped him
@@ -1320,7 +1331,7 @@ export class PushWindow extends Skill {
   }
   update(c: Ctx) {
     const ch = c.char;
-    const w = c.world.walls.find((x) => x.id === this.wall.id);
+    const w = sideNow(c, this.wall);
     if (!w) return true; // the window's gone (or covered)
     this.wall = w;
     const arm = ch.d.upperArm + ch.d.foreArm;
@@ -1328,14 +1339,14 @@ export class PushWindow extends Skill {
       if (this.t > 10) return true;
       if (!arrive(c, w.x - w.face * arm * 0.72)) return false;
       ch.facing = w.face;
-      ch.pushAt = w.x;
+      ch.pushAt = w.x; ch.pushY = onSide(w, ch.body.j.neck.y + 4 * ch.scale);
       this.phase = 'push'; this.t = 0; this.lastX = w.x;
       c.say(pick(['hnngh', 'heave', 'hup...', 'move it']), 1.4);
       return false;
     }
     if (this.phase === 'push') {
       if (ch.mode !== 'ground') return true;
-      ch.pushAt = w.x;
+      ch.pushAt = w.x; ch.pushY = onSide(w, ch.body.j.neck.y + 4 * ch.scale);
       this.moved += Math.abs(w.x - this.lastX);
       this.lastX = w.x;
       // Lean in and walk it along, a step at a time.
@@ -1365,15 +1376,16 @@ export class KickWindow extends Skill {
     ch.walkTo(this.wall.x - this.wall.face * (ch.d.thigh + ch.d.shin) * 0.8, Math.abs(this.wall.x - ch.x) > 200);
   }
   update(c: Ctx) {
-    const ch = c.char, w = c.world.walls.find((x) => x.id === this.wall.id) ?? this.wall;
+    const ch = c.char, w = sideNow(c, this.wall) ?? this.wall;
     if (this.phase === 'walk') {
       if (this.t > 10) return true;
-      if (!arrive(c, w.x - w.face * (ch.d.thigh + ch.d.shin) * 0.8)) return false;
+      const j = ch.body.j, legLen = ch.d.thigh + ch.d.shin;
+      // A kick if the side comes down to his hips, else a punch at whatever part of it he can reach.
+      const kick = w.y2 > j.hip.y - 8 * ch.scale && w.y1 < j.hip.y + legLen * 0.5;
+      if (!arrive(c, w.x - w.face * (kick ? legLen * 0.8 : (ch.d.upperArm + ch.d.foreArm) * 0.8))) return false;
       ch.facing = w.face;
-      const j = ch.body.j, high = w.y2 > j.hip.y + 6 * ch.scale;
-      // Low enough: a kick at hip height. Else (the window ends above his hips): a punch.
-      if (high) ch.doGesture('highkick', { x: w.x + w.face * 6, y: j.hip.y - 2 * ch.scale });
-      else ch.doGesture('punch', { x: w.x + w.face * 6, y: Math.min(j.neck.y + 4 * ch.scale, w.y2 - 4) });
+      if (kick) ch.doGesture('highkick', { x: w.x + w.face * 6, y: onSide(w, j.hip.y - 2 * ch.scale) });
+      else ch.doGesture('punch', { x: w.x + w.face * 6, y: onSide(w, j.neck.y + 4 * ch.scale) });
       c.say(pick(['HI-YAH', 'hyah!', 'kiai!']), 1);
       this.phase = 'kick'; this.t = 0;
       return false;
@@ -1435,12 +1447,12 @@ export class KnockWindow extends Skill {
   constructor(private wall: Wall) { super(); }
   start(c: Ctx) { c.look = 'none'; c.char.walkTo(this.wall.x - this.wall.face * (c.char.d.upperArm + c.char.d.foreArm) * 0.7); }
   update(c: Ctx) {
-    const ch = c.char, w = c.world.walls.find((x) => x.id === this.wall.id) ?? this.wall;
+    const ch = c.char, w = sideNow(c, this.wall) ?? this.wall;
     if (this.phase === 'walk') {
       if (this.t > 10) return true;
       if (!arrive(c, w.x - w.face * (ch.d.upperArm + ch.d.foreArm) * 0.7)) return false;
       ch.facing = w.face;
-      ch.doGesture('knock', { x: w.x, y: ch.body.j.neck.y + 2 * ch.scale });
+      ch.doGesture('knock', { x: w.x, y: onSide(w, ch.body.j.neck.y + 2 * ch.scale) });
       this.phase = 'knock'; this.t = 0;
       return false;
     }

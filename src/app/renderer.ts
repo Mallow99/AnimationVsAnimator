@@ -16,6 +16,7 @@ interface PetShell {
   sendCollections(data: unknown): void;
   onCommand(cb: (cmd: string) => void): void;
   onWindows(cb: (wins: WinRect[]) => void): void;
+  onWindowsLog(cb: (line: string) => void): void;
   pressed(): void;
   moveCursor(x: number, y: number): void;
   moveWindow(id: number, x: number, y: number, w: number, h: number): void;
@@ -71,6 +72,7 @@ if (shell) {
   shell.onConfig((c) => pet.applyConfig(c));
   shell.onCommand((cmd) => pet.command(cmd));
   shell.onWindows((wins) => pet.setWindows(wins)); // other apps' windows become platforms
+  shell.onWindowsLog((line) => { if (line.startsWith('move:')) pet.moveNote = line.slice(5).trim(); }); // how moving windows is going
   pet.onMoveCursor = (x, y) => shell.moveCursor(x, y); // mischief mode, and knocking it flying
   pet.onMoveWindow = (id, x, y, w, h) => shell.moveWindow(id, x, y, w, h); // he pushes your windows around
   // AI brain: the desktop shell makes the actual call (it holds the API key).
