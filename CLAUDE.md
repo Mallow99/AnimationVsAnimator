@@ -61,6 +61,18 @@ Then: Android shell.
   headless Chromium screenshots, Electron launch under Xvfb. NOT yet verified on a real
   Mac/PC: click-through, always-on-top, feel.
 
+- Design pass (in progress): body style + look are now parameters (`BodyStyle` in character.ts,
+  `Look` in render.ts, incl. pixel-art mode). New pendulum walk. Design lab: `npm run lab`
+  (also published as a private artifact). Waiting on the owner's picks.
+
+## Owner's wishlist (agreed, not built yet)
+- Rename to Blurp/Blurple, bluish-purple color (picking the exact shade in the lab).
+- Settings window from the menu-bar icon: name, color, size, visual presets, mind mode.
+  Also stat views: mood bars, memories, personality.
+- Moods as blended bars where all of them matter (complex emotions), not just the loudest one.
+  (The dials already exist in mood.ts; reactions mostly use the dominant label today.)
+- A way to talk back to him once he can talk (milestone 4).
+
 ## Key files
 - `src/core/character.ts` body controller (modes, stepping, gestures). Tune feel here.
 - `src/core/mood.ts` dials + posture. `src/core/mind.ts` choices + reactions. `src/core/skills.ts` skills.

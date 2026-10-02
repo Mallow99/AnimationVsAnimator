@@ -64,6 +64,15 @@ export class Body {
     ];
   }
 
+  /** Resize the head (and the neck that holds it) on the fly. */
+  setHead(headR: number, neck: number) {
+    this.dims.headR = headR;
+    this.dims.neck = neck;
+    this.j.head.r = headR;
+    this.sticks[0].len = neck;
+    this.sticks[10].len = (neck + this.dims.torso) * 0.8;
+  }
+
   /** Shove one joint with a velocity (pixels/second). */
   push(name: JointName, vx: number, vy: number, dt: number) {
     const p = this.j[name];

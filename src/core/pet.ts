@@ -1,20 +1,21 @@
 // The Pet ties everything together: body + mood + mind + speech, and turns
 // raw mouse input into things that happen to him (poke, grab, throw, pet).
 
-import { Character } from './character';
+import { Character, DEFAULT_BODY, type BodyStyle } from './character';
 import type { JointName } from './body';
 import type { Bounds } from './physics';
 import { Mood } from './mood';
 import { Mind, type MindEvent } from './mind';
 import type { Ctx } from './skills';
-import { drawBubble, drawCharacter, type Style } from './render';
+import { DEFAULT_LOOK, drawBubble, drawCharacter, PixelLayer, type Look } from './render';
 
 export type MindMode = 'offline' | 'chat' | 'full';
 
 export interface PetConfig {
   name: string;
   scale: number;
-  style: Style;
+  look: Look;
+  body: BodyStyle;
   /** offline = instinct only. chat / full = LLM (milestone 4). */
   mind: MindMode;
 }
@@ -22,7 +23,8 @@ export interface PetConfig {
 export const DEFAULT_CONFIG: PetConfig = {
   name: 'Orange',
   scale: 1.1,
-  style: { color: '#f7931e', lineWidth: 4.5, showJoints: false },
+  look: { ...DEFAULT_LOOK },
+  body: { ...DEFAULT_BODY },
   mind: 'offline',
 };
 
@@ -40,10 +42,12 @@ export class Pet {
   private press: { joint: JointName; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
   private bubble: { text: string; t: number; ttl: number } | null = null;
   private smackCooldown = 0;
+  private pixels = new PixelLayer();
   private rub = { dist: 0, since: 0, lastX: 0, lastY: 0, over: false };
 
-  constructor(bounds: Bounds, readonly config: PetConfig = DEFAULT_CONFIG) {
+  constructor(bounds: Bounds, readonly config: PetConfig = structuredClone(DEFAULT_CONFIG)) {
     this.char = new Character(bounds, (bounds.left + bounds.right) / 2, config.scale);
+    this.applyConfig(config);
     // Start him up in the air so he drops in.
     this.char.body.translate(0, -Math.min(260, (bounds.floor - bounds.top) * 0.4));
     this.char.mode = 'air';
@@ -75,12 +79,21 @@ export class Pet {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    drawCharacter(ctx, this.char, this.config.style);
+    const look = this.config.look;
+    if (look.pixel > 1) this.pixels.draw(ctx, this.char, look);
+    else drawCharacter(ctx, this.char, look);
     if (this.bubble) {
       const b = this.bubble;
       const alpha = Math.min(1, b.t * 8, (b.ttl - b.t) * 4);
       drawBubble(ctx, this.char, b.text, alpha, this.ctx.world.bounds);
     }
+  }
+
+  /** Apply a (possibly changed) look/body config live. */
+  applyConfig(cfg: PetConfig) {
+    (this as { config: PetConfig }).config = cfg;
+    this.char.style = { ...cfg.body };
+    this.char.setHeadSize(cfg.look.headSize);
   }
 
   setBounds(b: Bounds) { this.char.setBounds(b); this.ctx.world.bounds = b; }

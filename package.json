@@ -8,6 +8,7 @@
     "build": "node scripts/build.mjs",
     "start": "node scripts/build.mjs && electron .",
     "preview": "node scripts/build.mjs && node scripts/preview.mjs",
+    "lab": "node scripts/build.mjs lab && node scripts/preview.mjs dist/lab/index.html",
     "sim": "node scripts/build.mjs sim && node .build/sim.mjs",
     "typecheck": "tsc --noEmit"
   },

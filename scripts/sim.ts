@@ -151,7 +151,6 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
 { // Fast swipe through him = smack. Slow rub = petting.
   const pet = new Pet(bounds);
   petFor(3, pet);
-  pet.paused = false;
   const got: string[] = [];
   const orig = pet.mind.onEvent.bind(pet.mind);
   pet.mind.onEvent = (c, e) => { got.push(e.type); orig(c, e); };
@@ -160,8 +159,16 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   for (let i = -6; i <= 6; i++) pet.cursor(x0 + i * 40, y, 2400, 0); // 40px per event at 60fps ≈ 2400 px/s
   petFor(0.2, pet);
   check('fast swipe smacks him', got.includes('smacked') && pet.mood.s.annoyance > before + 0.2, got.join(','));
-  petFor(4, pet);
-  got.length = 0;
+}
+{
+  const pet = new Pet(bounds);
+  petFor(3, pet);
+  pet.paused = true; // hold still so the rub stays on him
+  pet.char.stop();
+  petFor(1, pet);
+  const got: string[] = [];
+  const orig = pet.mind.onEvent.bind(pet.mind);
+  pet.mind.onEvent = (c, e) => { got.push(e.type); orig(c, e); };
   const hx = pet.char.x, hy = pet.char.body.j.hip.y - 10;
   for (let i = 0; i < 60; i++) { pet.cursor(hx + Math.sin(i / 3) * 12, hy, Math.cos(i / 3) * 240, 0); pet.update(1 / 60); }
   check('slow rub pets him (no smack)', got.includes('petted') && !got.includes('smacked'), got.join(','));
