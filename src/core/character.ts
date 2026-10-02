@@ -50,6 +50,12 @@ export interface Keyframe {
 
 /** How far a body part sits to his side (px at size 1), when a pose doesn't say. +1 = his left. */
 const SIDE: Partial<Record<JointName, number>> = { handL: 8, handR: -8, elbowL: 6, elbowR: -6, footL: 5, footR: -5, kneeL: 5, kneeR: -5 };
+/** A damped spring: pulls s.x toward `target`. Stiffness k, damping c (lower = bouncier, more overshoot). */
+function spring(s: { x: number; v: number }, target: number, dt: number, k: number, c: number) {
+  s.v += (-(s.x - target) * k - s.v * c) * dt;
+  s.x += s.v * dt;
+}
+
 /** +1 for his left side, -1 for his right. */
 const sideOf = (k: 'L' | 'R') => (k === 'L' ? 1 : -1);
 
@@ -217,6 +223,19 @@ export class Character {
   private held: { joint: JointName; limb?: LooseLimb; idx?: number; x: number; y: number; vx: number; vy: number } | null = null;
   private gesture: { name: Gesture; t: number; x: number; y: number; fired: boolean } | null = null;
   private jumpPrep: { t: number; vx: number; vy: number } | null = null;
+  // ── animation principles (Becker's toolbox) ──
+  /** Follow-through: a springy offset (px) his arms swing with when he speeds up or stops. */
+  private sway = { x: 0, v: 0 };
+  /** Overlap: his head dips and bobs back after a landing. */
+  private nodSpring = { x: 0, v: 0 };
+  /** Squash and stretch: + = stretched tall (rising fast), - = squashed (just landed). For drawing only. */
+  private squashSpring = { x: 0, v: 0 };
+  private prevRootVX = 0;
+  /** Anticipation: a beat of wind-up before he breaks into a run. */
+  private windup = 0;
+  /** How squashed (-) or stretched (+) to draw him right now (physics never changes). */
+  get squash() { return this.squashSpring.x; }
+
   /** Parkour: a forward roll out of a big landing. */
   private rolling: { t: number; dur: number; dir: number; x0: number; speed: number } | null = null;
   /** A flip in the air (off a jump or a wall): +1 = front flip, -1 = backflip. */
@@ -501,6 +520,8 @@ export class Character {
     const r = this.surfaceRange();
     const pad = 6 * this.scale;
     this.goalX = offEdge ? clamp(x, this.bounds.left + 20, this.bounds.right - 20) : clamp(x, r.x1 + pad, r.x2 - pad);
+    // Anticipation: breaking into a run from standing, he loads up for a split second first.
+    if (run && !this.running && Math.abs(this.rootVX) < 20 && Math.abs(this.goalX - this.rootX) > 60) this.windup = 0.14;
     this.running = run;
   }
 
@@ -713,6 +734,9 @@ export class Character {
     let internal = false;
     this.hipTarget = null;
     if (this.mode !== 'puppet') this.turnToward(dt);
+    // Squash and stretch: stretched along a fast rise or fall, springing back after a squash on landing.
+    const vy = (this.body.j.hip.y - this.body.j.hip.py) / dt;
+    spring(this.squashSpring, this.mode === 'air' ? clamp(Math.abs(vy) / 9000, 0, 0.09) : 0, dt, 260, 13);
 
     switch (this.mode) {
       case 'ground': this.groundPose(dt, t, s); break;
@@ -893,6 +917,7 @@ export class Character {
           const vx = (j.hip.x - j.hip.px) / dt;
           if (hipVYBefore > 850 && hipVYBefore <= 1400 && this.whole) {
             this.events.push({ type: 'landed', speed: hipVYBefore });
+            this.squashSpring.v -= 3.5;
             this.startRoll(Math.abs(vx) > 40 ? sign(vx) : this.facing, Math.abs(vx), hipVYBefore);
             break;
           }
@@ -908,6 +933,8 @@ export class Character {
           this.rootVX = clamp((j.hip.x - j.hip.px) / dt, -150, 150) * 0.5;
           this.plantFeet();
           this.crouch = clamp(hipVYBefore / 1150, 0.15, 1) * 16 * this.scale;
+          this.squashSpring.v -= clamp(hipVYBefore / 1150, 0.15, 1) * 4.2;
+          this.nodSpring.v += clamp(hipVYBefore / 1150, 0.15, 1) * 7;
           this.events.push({ type: 'landed', speed: hipVYBefore });
         } else if (otherDown || (anyFoot && upsideDown) || j.handL.grounded || j.handR.grounded) {
           this.crash(Math.max(hipVYBefore, 0));
@@ -1047,8 +1074,14 @@ export class Character {
         want = sign(dx) * Math.min(this.walkSpeed * speedMul, Math.abs(dx) * 4);
       }
     }
+    if (this.windup > 0) { this.windup -= dt; want = 0; this.crouch = Math.max(this.crouch, 7 * sc); }
     const accel = 450 * speedMul;
     this.rootVX += clamp(want - this.rootVX, -accel * dt, accel * dt);
+    // Follow-through: arms swing on past when he stops short, and trail when he takes off.
+    const acc = (this.rootVX - this.prevRootVX) / dt;
+    this.prevRootVX = this.rootVX;
+    spring(this.sway, clamp(-acc * 0.02, -9, 9) * sc, dt, 120, 9);
+    spring(this.nodSpring, 0, dt, 90, 8);
     this.rootX += this.rootVX * dt;
     // He drifts back to the middle of his depth band as he goes about his business.
     this.rootZ += (0 - this.rootZ) * Math.min(1, dt * (Math.abs(this.rootVX) > 10 ? 1.5 : 0.4));
@@ -1160,14 +1193,14 @@ export class Character {
 
     // Torso leans into motion; sadness hunches it, anger pitches it forward; reaching low, he bends over.
     const lean = (moving ? G.lean * sc : 0) + clamp(this.rootVX * this.facing * 0.05 * B.lean, -10 * sc, 10 * sc)
-      + (hunch * 5 + P.tension * 3) * sc + this.crouch * 0.5 + stoop * d.torso * 0.78;
+      + (hunch * 5 + P.tension * 3) * sc + this.crouch * 0.5 + stoop * d.torso * 0.78 - (this.windup > 0 ? 5 * sc : 0);
     const neck = this.off(hip, lean, -Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)));
     // Head up by default; only a real mood drops it. nod = tipped forward, cock = tipped toward his left.
     let nod = hunch * 0.6 + (this.gait === 'sulk' && moving ? 0.3 : 0); // sulking: eyes on the floor
     let cock = 0;
     // Only a slight nod toward what he's looking at; turning to face it does most of the work.
     if (this.look) nod += clamp((this.look.y - neck.y) / 600, -0.15, 0.15);
-    nod += this.stare * 0.75;
+    nod += this.stare * 0.75 + this.nodSpring.x * 0.06 + this.sway.x * this.facing * 0.015;
     /** Tip his head toward screen-right (or left, negative) whichever way he's turned. */
     const tiltX = (a: number) => { nod += a * Math.cos(this.yaw); cock += a * Math.sin(this.yaw); };
 
@@ -1190,6 +1223,11 @@ export class Character {
     const near = this.nearSide, frontIsR = near === 'R';
     let handL = armAt(this.feet.R, frontIsR ? backFwd : frontFwd, 'L');
     let handR = armAt(this.feet.L, frontIsR ? frontFwd : backFwd, 'R');
+    // Follow-through on the arms, and the jump's wind-up: arms swing back while he crouches.
+    const prep = this.jumpPrep ? smooth(this.jumpPrep.t / 0.16) : 0;
+    const swayed = (h: V3) => ({ x: h.x + this.sway.x, y: h.y - Math.abs(this.sway.x) * 0.3, z: h.z });
+    handL = swayed(prep ? lerp3(handL, this.off(neck, -13 * sc, 12 * sc, 5 * sc), prep) : handL);
+    handR = swayed(prep ? lerp3(handR, this.off(neck, -13 * sc, 12 * sc, -5 * sc), prep) : handR);
     if (this.gait === 'pocket' && !ready) {
       // Hands tucked in his pockets, elbows out.
       const back = this.off(hip, -4 * sc, -1 * sc, 0), front = this.off(hip, 2 * sc, -1 * sc, 0);
@@ -1644,7 +1682,8 @@ export class Character {
     const legLen = d.thigh + d.shin;
     const tuck = vy < 0 ? 0.35 : 0.1; // knees up while rising, reach down while falling
     const falling = vy > 700;
-    const handOut = falling ? -16 : 4;
+    // Arms: thrown up on the way up (follow-through from the jump), out for balance coming down.
+    const handOut = falling ? -16 : vy < -250 ? -18 : 4;
     // One arm out forward and one back (out to his sides a little), legs reaching for the ground.
     const near = this.nearSide, far = near === 'R' ? 'L' : 'R';
     const hands = { [near]: this.off(neck, 14 * sc, handOut * sc, sideOf(near) * 4 * sc), [far]: this.off(neck, -14 * sc, handOut * sc, sideOf(far) * 4 * sc) } as Record<'L' | 'R', V3>;

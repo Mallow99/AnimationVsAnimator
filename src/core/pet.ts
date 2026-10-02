@@ -202,6 +202,19 @@ export class Pet {
     if (e.type === 'landed' && (e.speed ?? 0) > 350) burst(feetX, feetY, 6, 60 + (e.speed ?? 0) * 0.05);
     if (e.type === 'crashed') { burst(j.hip.x, Math.max(j.hip.y, j.head.y) + 4, 12, 110); this.freeze = 0.07; }
     if (e.type === 'stomped') burst(feetX, feetY, 5, 70);
+    // Sound effects for what his body does.
+    switch (e.type) {
+      case 'step': this.sound('step', 0.5); break;
+      case 'landed': if ((e.speed ?? 0) > 350) this.sound('thud', Math.min(1, (e.speed ?? 0) / 1200)); break;
+      case 'crashed': this.sound('crash', Math.min(1, (e.speed ?? 600) / 1400)); if (!this.mood.asleep) this.sound('oof'); break;
+      case 'tripped': this.sound('thud', 0.5); break;
+      case 'stomped': this.sound('thud', 0.6); break;
+      case 'jumped': case 'wallJump': this.sound('jump', 0.6); break;
+      case 'rolled': this.sound('roll'); break;
+      case 'released': if ((e.speed ?? 0) > 900) this.sound('whoosh', 0.6); break;
+      case 'limbOff': this.sound('snap'); break;
+      case 'limbOn': this.sound('click'); break;
+    }
     if (e.type === 'limbOff' || e.type === 'limbOn') {
       // No gore: a burst of pixel sparks, and a hit-stop when it snaps.
       const off = e.type === 'limbOff', at = e as unknown as { x: number; y: number };
@@ -223,6 +236,8 @@ export class Pet {
 
   draw(ctx: CanvasRenderingContext2D) {
     const look = this.config.look;
+    // Squash and stretch (drawing only): scale him about his feet for a moment.
+    const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
     const extras: DepthPart[] = [...beltParts(this.char, '#3a2a22'), ...this.items.onHim.map((it) => this.itemPart(it))];
     if (look.pixel > 1) {
@@ -233,6 +248,7 @@ export class Pet {
       for (const piece of this.char.loosePieces) drawLooseLimb(ctx, piece, look, this.char.scale);
       for (const it of this.items.list) if (it.where === 'world' || it.where === 'cursor') drawItem(ctx, it);
     }
+    restore();
     if (this.sparks.length) drawSparks(ctx, this.sparks, Math.max(1, Math.round(look.pixel)));
     if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
@@ -440,6 +456,7 @@ export class Pet {
         if (limb && speed > 3400 && this.char.destructible) this.char.detach(limb, { x: vx * k, y: vy * k - 150, z: (Math.random() - 0.5) * 500 });
         this.char.poke(joint, vx * k, vy * k - 150);
         this.smackCooldown = w.time + 0.35;
+        this.sound('smack', Math.min(1, speed / 3000));
         this.emit({ type: 'smacked', speed });
         this.freeze = 0.06;
         break;
@@ -643,6 +660,25 @@ export class Pet {
 
   /** Play a sound effect (if sounds are on). */
   sound(name: string, strength = 1) { if (this.config.sfx) this.onSound?.(name, strength); }
+
+  /**
+   * Squash and stretch: move his joints (just for drawing) as if he were squashed (s < 0)
+   * or stretched (s > 0) about his feet. Returns a function that puts them back.
+   */
+  private squashFor(s: number): () => void {
+    if (Math.abs(s) < 0.004) return () => {};
+    const j = this.char.body.j, pts = this.char.body.points;
+    const px = (j.footL.x + j.footR.x) / 2, py = Math.max(j.footL.y, j.footR.y);
+    const saved = pts.map((p) => [p.x, p.y] as const);
+    const sy = 1 + s, sx = 1 - s * 0.6;
+    for (const p of pts) { p.x = px + (p.x - px) * sx; p.y = py + (p.y - py) * sy; }
+    const items = this.items.onHim.map((it) => [it, it.at] as const);
+    for (const [it] of items) it.at = { x: px + (it.at.x - px) * sx, y: py + (it.at.y - py) * sy, z: it.at.z };
+    return () => {
+      pts.forEach((p, i) => { p.x = saved[i][0]; p.y = saved[i][1]; });
+      for (const [it, at] of items) it.at = at;
+    };
+  }
 
   /** How one of the things on him is drawn, in depth order with his limbs. */
   private itemPart(it: Item): DepthPart {

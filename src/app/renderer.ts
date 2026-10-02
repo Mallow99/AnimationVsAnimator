@@ -5,6 +5,7 @@ import { Pet, type PetConfig } from '../core/pet';
 import type { Bounds } from '../core/physics';
 import type { WinRect } from '../core/world';
 import type { BrainRequest } from '../core/brain';
+import { playBlip, playSfx } from './sfx';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -85,23 +86,10 @@ if (shell) {
 }
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools
 
-// ── his voice: tiny square-wave blips, one per couple of letters (like Undertale or Animal Crossing) ──
-let audio: AudioContext | null = null;
-pet.onBlip = (pitch) => {
-  try {
-    audio ??= new AudioContext();
-    if (audio.state === 'suspended') { audio.resume(); return; } // browsers need a click first
-    const t = audio.currentTime, osc = audio.createOscillator(), gain = audio.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(pitch, t);
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.035, t + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-    osc.connect(gain).connect(audio.destination);
-    osc.start(t);
-    osc.stop(t + 0.06);
-  } catch { /* no sound available */ }
-};
+// ── his voice and sound effects (made in code: see sfx.ts) ──
+// Voice: tiny square-wave blips, one per couple of letters (like Undertale or Animal Crossing).
+pet.onBlip = (pitch) => playBlip(pitch, pet.config.volume);
+pet.onSound = (name, strength) => playSfx(name, strength, pet.config.volume, 0.8 + pet.mood.s.happiness * 0.4);
 
 function resize() {
   const dpr = window.devicePixelRatio || 1; // Retina screens have 2+ real pixels per point
