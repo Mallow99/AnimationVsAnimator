@@ -9,8 +9,9 @@ import { surfaceBelow, type Wall } from './world';
 import { SHAPES, type Doodle } from './doodles';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 import type { Memory } from './memory';
+import type { LimbId } from './body';
 
-export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none';
+export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none' | 'target';
 
 export interface World {
   bounds: Bounds;
@@ -52,6 +53,8 @@ export interface Ctx {
   savedMoves?: { name: string; frames: Keyframe[] }[];
   /** His notes about you and his life (milestone 5). */
   memory: Memory;
+  /** What he looks at when `look` is 'target'. */
+  lookTarget?: Vec | null;
 }
 
 export abstract class Skill {
@@ -75,7 +78,8 @@ export type Step =
   | { jump: number; vx?: number | 'cursor' }
   | { face: 'cursor' | 'away' | 'flip' }
   | { look: LookMode }
-  | { sit: number };
+  | { sit: number }
+  | { pop: LimbId };
 
 export class Sequence extends Skill {
   private i = 0;
@@ -102,6 +106,7 @@ export class Sequence extends Skill {
     if ('wait' in st) return true;
     if ('look' in st) { c.look = st.look; return true; }
     if ('sit' in st) { if (!ch.ready) return false; ch.sit(); return true; }
+    if ('pop' in st) { ch.detach(st.pop, { x: -ch.facing * 120, y: -260, z: 80 }); return true; }
     if (!ch.ready) return false;
     if ('gesture' in st) { ch.doGesture(st.gesture, st.atCursor && cur ? cur : undefined); return true; }
     if ('walkTo' in st) {
@@ -583,6 +588,140 @@ export class GrabCursor extends Skill {
     return this.t > this.until;
   }
   stop(c: Ctx) { c.char.handTarget = null; c.char.stop(); }
+}
+
+// ───────────── losing a limb, and getting it back ─────────────
+
+const LIMB_NAME: Record<LimbId, string> = { armL: 'arm', armR: 'arm', legL: 'leg', legR: 'leg' };
+
+/**
+ * A limb came off. The Animator vs. Animation way: he stares at the stump, looks around,
+ * goes and gets it (hopping or crawling if it's a leg), picks it up and sticks it back on,
+ * then tries it out. If he can't get it back (you're holding it, it landed somewhere he
+ * can't reach), he gives up after a while and draws himself a new one.
+ */
+export class Reattach extends Skill {
+  readonly name = 'reattach';
+  private phase: 'stare' | 'go' | 'pick' | 'bring' | 'test' | 'redraw' = 'stare';
+  private limb: LimbId | null = null;
+  private next = 0;
+  private stuck = 0;
+  private nagged = -10;
+  private testUntil = 0;
+  private redrawAt = 0;
+
+  start(c: Ctx) {
+    this.choose(c);
+    if (this.limb) {
+      // Stare down at where it used to be.
+      const st = c.char.stumpOf(this.limb);
+      c.look = 'target';
+      c.lookTarget = { x: st.x + c.char.facing * 25, y: st.y + 60 };
+      c.char.stare = 1;
+    }
+    c.say(pick(['...', '...huh.', '.', 'uh']), 1.3);
+  }
+
+  /** Which limb to fetch first: arms first (he needs a hand to pick things up), the nearest one. */
+  private choose(c: Ctx) {
+    const ch = c.char, left = [...ch.missing.keys()];
+    left.sort((a, b) => (a.startsWith('arm') ? 0 : 1) - (b.startsWith('arm') ? 0 : 1) || Math.abs(ch.missing.get(a)!.root.x - ch.x) - Math.abs(ch.missing.get(b)!.root.x - ch.x));
+    this.limb = left[0] ?? null;
+  }
+
+  update(c: Ctx, dt: number) {
+    const ch = c.char;
+    if (!this.limb || !ch.missing.has(this.limb)) {
+      // Back on. Anything else missing? Go get that too; else try it out.
+      if (this.phase !== 'test' && this.limb) { this.phase = 'test'; this.testUntil = this.t + 1.6; this.tryOut(c, this.limb); }
+      if (this.phase === 'test') {
+        if (this.t < this.testUntil) return false;
+        if (ch.missing.size) { this.limb = null; this.choose(c); this.phase = 'go'; return false; }
+        return true;
+      }
+      this.choose(c);
+      if (!this.limb) return true;
+    }
+    const piece = ch.missing.get(this.limb)!;
+    const hand = ch.useHand;
+    switch (this.phase) {
+      case 'stare':
+        if (this.t > 1.5) {
+          c.say(pick([`MY ${LIMB_NAME[this.limb].toUpperCase()}`, '!!', `hey. that's my ${LIMB_NAME[this.limb]}`, 'oh come ON']), 1.6);
+          this.phase = 'go'; this.next = this.t + 0.6;
+          ch.stare = 0;
+          c.look = 'target';
+        }
+        return false;
+      case 'go': {
+        if (this.t < this.next || !(ch.ready || ch.mode === 'ground')) return this.t > 60;
+        this.next = this.t + 0.3;
+        c.lookTarget = { x: piece.root.x, y: piece.root.y };
+        if (piece.heldBy === 'user') {
+          // You've got it. He wants it back.
+          if (c.world.time - this.nagged > 5) { this.nagged = c.world.time; c.say(pick(['give it back!', 'hey! mine!', 'I need that']), 1.6); }
+          if (c.world.cursor) ch.walkTo(c.world.cursor.x);
+          this.stuck += 0.3;
+        } else {
+          const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y, ch.body.j.hip.y);
+          const tooHigh = piece.root.y < feet - 70 * ch.scale && Math.max(...piece.points.map((p) => p.y)) < feet - 40 * ch.scale;
+          if (tooHigh) this.stuck += 0.3;
+          const dx = piece.root.x - ch.x;
+          if (Math.abs(dx) > 14 * ch.scale) ch.walkTo(piece.root.x - Math.sign(dx) * 8 * ch.scale, Math.abs(dx) > 200);
+          else if (!tooHigh) { ch.stop(); ch.facing = Math.sign(dx) || ch.facing; this.phase = 'pick'; this.next = this.t; }
+        }
+        if (this.stuck > 25) {
+          this.phase = 'redraw'; this.redrawAt = this.t;
+          ch.stop();
+          c.say(pick(["fine. I'll draw a new one", 'whatever. new one.', 'good thing I have a pen']), 1.8);
+        }
+        return false;
+      }
+      case 'pick': {
+        if (!hand) {
+          // No hands to pick it up with: nudge it into place with his shoulder (it snaps on when close).
+          ch.handTarget = null;
+          if (this.t - this.next > 1.2) { ch.attach(this.limb); }
+          return false;
+        }
+        // Reach down for its torn end.
+        ch.handTarget = { x: piece.root.x, y: piece.root.y };
+        const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
+        if (Math.hypot(h.x - piece.root.x, h.y - piece.root.y) < 7 * ch.scale && ch.holdLimb(piece, hand)) { this.phase = 'bring'; this.next = this.t; }
+        else if (this.t - this.next > 3 || Math.abs(piece.root.x - ch.x) > 40 * ch.scale) { ch.handTarget = null; this.phase = 'go'; }
+        return false;
+      }
+      case 'bring': {
+        // Hold it up to the stump; it clicks back on when it gets there.
+        if (ch.holdingLimb !== piece) { ch.handTarget = null; this.phase = 'go'; return false; }
+        const st = ch.stumpOf(this.limb);
+        ch.handTarget = { x: st.x + ch.facing * 2 * ch.scale, y: st.y };
+        if (this.t - this.next > 4) { ch.dropLimb(); ch.attach(this.limb); } // close enough: shove it on
+        return false;
+      }
+      case 'redraw': {
+        // Can't get it back. Draw a new one: scribble at the stump with his hand, and it grows back.
+        const st = ch.stumpOf(this.limb);
+        c.lookTarget = { x: st.x + ch.facing * 10, y: st.y + 30 };
+        const u = this.t - this.redrawAt;
+        ch.handTarget = hand ? { x: st.x + ch.facing * (6 + Math.sin(u * 30) * 4) * ch.scale, y: st.y + (this.limb.startsWith('leg') ? 12 : 6) * ch.scale + Math.cos(u * 23) * 4 * ch.scale } : null;
+        if (u > 2) { ch.handTarget = null; ch.regrow(this.limb); }
+        return false;
+      }
+      default: return true;
+    }
+  }
+
+  /** Back on: give it a try. */
+  private tryOut(c: Ctx, limb: LimbId) {
+    const ch = c.char;
+    ch.handTarget = null;
+    c.say(pick(['good as new', 'there.', 'ok. better.', 'click.']), 1.4);
+    if (limb.startsWith('leg') && ch.legCount === 2) ch.doGesture('stomp');
+    else if (ch.useHand) ch.doGesture('wave');
+  }
+
+  stop(c: Ctx) { c.char.handTarget = null; c.char.dropLimb(); c.char.stop(); c.char.stare = 0; }
 }
 
 // ───────────── preset sequences ─────────────

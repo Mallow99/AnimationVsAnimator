@@ -129,6 +129,7 @@ const DOING: Record<string, string> = {
   again: 'Wants to go again', mope: 'Moping', 'shake-off': 'Shaking it off', wave: 'Waving', laugh: 'Laughing', stomp: 'Stomping',
   cower: 'Cowering', explore: 'Exploring', climb: 'Climbing onto a window', monkeybars: 'Monkey bars', climbwall: 'Climbing', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
   getup: 'Getting up', ground: 'Standing', lie: 'Lying down', ceiling: 'Hanging from the top of the screen',
+  reattach: 'Getting his limb back', loseArm: 'Taking his arm off', loseLeg: 'Taking his leg off', move: 'Doing a made-up move',
 };
 shell.onStats((s) => {
   for (const [k] of MOOD_ROWS) {
@@ -206,6 +207,7 @@ $<HTMLInputElement>('mischief').addEventListener('change', (e) => set({ mischief
 $<HTMLInputElement>('windows').addEventListener('change', (e) => set({ windows: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>('destructible').addEventListener('change', (e) => set({ destructible: (e.target as HTMLInputElement).checked }));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
 $<HTMLTextAreaElement>('persona').addEventListener('input', (e) => set({ persona: (e.target as HTMLTextAreaElement).value }));
 $<HTMLInputElement>('model').addEventListener('change', (e) => set({ model: (e.target as HTMLInputElement).value.trim() }));
@@ -253,6 +255,7 @@ function render(c: PetConfig) {
   $<HTMLInputElement>('color').value = c.look.color;
   $<HTMLInputElement>('smacking').checked = c.smacking;
   $<HTMLInputElement>('sound').checked = c.sound;
+  $<HTMLInputElement>('destructible').checked = c.destructible;
   $<HTMLInputElement>('windows').checked = c.windows;
   $<HTMLInputElement>('mischief').checked = c.mischief;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.checked = r.value === c.mind;

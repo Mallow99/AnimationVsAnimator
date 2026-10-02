@@ -37,6 +37,8 @@ export interface PetConfig {
   mischief: boolean;
   /** Little blips when he talks, like characters in indie games. */
   sound: boolean;
+  /** Limbs can come off: big crashes, hard smacks, or yanking a hand or foot. He puts them back on. */
+  destructible: boolean;
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
@@ -53,6 +55,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   windows: true,
   mischief: false,
   sound: true,
+  destructible: true,
 };
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }

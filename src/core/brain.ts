@@ -189,11 +189,13 @@ function describe(e: MindEvent): string | null {
     case 'reachedTop': return 'he climbed to the top of a wall';
     case 'letGo': return 'he let go of the wall';
     case 'landed': return e.speed > 600 ? 'he landed a big jump' : null;
+    case 'limbOff': return `${e.yanked ? 'you yanked his' : 'his'} ${e.limb.startsWith('arm') ? 'arm' : 'leg'} ${e.yanked ? 'clean off' : 'came off'}`;
+    case 'limbOn': return `he got his ${e.limb.startsWith('arm') ? 'arm' : 'leg'} back on`;
     default: return null;
   }
 }
 /** Events worth a spoken reaction in full mode. */
-const REACT_TO = new Set(['smacked', 'crashed', 'released', 'petted', 'reachedTop']);
+const REACT_TO = new Set(['smacked', 'crashed', 'released', 'petted', 'reachedTop', 'limbOff']);
 
 /** Break a long reply into bubble-sized pieces at sentence or word boundaries. */
 export function splitSpeech(text: string, max = 70): string[] {
@@ -391,6 +393,7 @@ export class Brain {
       `mood: ${m.asleep ? 'asleep' : m.label} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)})`,
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
+      ...(ch.whole ? [] : [`body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`]),
       `cursor: ${cursor}`,
       `recently: ${recent || 'nothing much'}`,
       '[/state]',

@@ -2,6 +2,7 @@
 // a normal browser, and (later) an Android WebView.
 
 import type { Character } from './character';
+import type { LooseLimb } from './limbs';
 import { drawPixelText, FONT_HEIGHT, textWidth, wrapPixelText } from './pixelfont';
 
 /** How he looks. Edited from the settings / presets. */
@@ -47,7 +48,9 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look) {
   const torsoZ = (j.neck.z + j.hip.z) / 2, depthRange = 5 * sc;
   const colorAt = (z: number) => shade(look.color, -0.22 * Math.min(1, Math.max(0, (torsoZ - z) / depthRange)));
   const parts: { z: number; draw: () => void }[] = [];
+  const ghost = c.body.ghost;
   const limb = (pts: { x: number; y: number; z: number }[]) => {
+    if (pts.some((p) => ghost.has(nameOf(c, p)))) return; // that limb came off
     const z = pts.slice(1).reduce((a, p) => a + p.z, 0) / (pts.length - 1);
     parts.push({ z, draw: () => { ctx.strokeStyle = colorAt(z); path(pts); } });
   };
@@ -72,6 +75,23 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look) {
   ctx.restore();
 }
 
+function nameOf(c: Character, p: object) {
+  for (const [n, q] of Object.entries(c.body.j)) if (q === p) return n as keyof typeof c.body.j;
+  return 'hip';
+}
+
+/** A limb that came off: drawn like the rest of him, shaded by how far back it is. */
+export function drawLooseLimb(ctx: Ctx2D, piece: LooseLimb, look: Look, scale: number) {
+  const [a, b, c] = piece.points;
+  ctx.save();
+  ctx.globalAlpha *= piece.fade;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.lineWidth = look.lineWidth * scale;
+  ctx.strokeStyle = shade(look.color, -0.22 * Math.min(1, Math.max(0, -((a.z + b.z + c.z) / 3) / (5 * scale))));
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+  ctx.restore();
+}
+
 /**
  * Pixel-art mode: draw him onto a tiny canvas (one pixel per "art pixel"),
  * snap every pixel to fully on or off, then blow it up without smoothing.
@@ -80,24 +100,35 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look) {
 export class PixelLayer {
   private cv: OffscreenCanvas | null = null;
 
+  /** Draw him (and any limbs he's lost) as pixel art. */
   draw(ctx: CanvasRenderingContext2D, c: Character, look: Look) {
     const p = Math.max(2, Math.round(look.pixel));
-    const pad = c.d.headR + look.lineWidth * c.scale + p * 3;
+    const thick = { ...look, lineWidth: Math.max(look.lineWidth, (1.5 * p) / c.scale) };
+    this.paint(ctx, c.body.points, c.d.headR + look.lineWidth * c.scale + p * 3, look, (g) => drawCharacter(g, c, thick));
+    for (const piece of c.loosePieces) this.paint(ctx, piece.points, look.lineWidth * c.scale + p * 3, look, (g) => drawLooseLimb(g, piece, thick, c.scale));
+  }
+
+  /**
+   * Draw anything (around `pts`) onto a tiny canvas (one pixel per "art pixel"),
+   * snap every pixel to fully on or off, then blow it up without smoothing.
+   */
+  paint(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[], pad: number, look: Look, drawIt: (g: OffscreenCanvasRenderingContext2D) => void) {
+    const p = Math.max(2, Math.round(look.pixel));
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const pt of c.body.points) {
+    for (const pt of pts) {
       minX = Math.min(minX, pt.x); minY = Math.min(minY, pt.y);
       maxX = Math.max(maxX, pt.x); maxY = Math.max(maxY, pt.y);
     }
     // Snap to the pixel grid so the pixels don't shimmer as he moves.
     const x0 = Math.floor((minX - pad) / p) * p, y0 = Math.floor((minY - pad) / p) * p;
     const w = Math.ceil((maxX + pad - x0) / p), h = Math.ceil((maxY + pad - y0) / p);
-    if (!this.cv || this.cv.width < w || this.cv.height < h) this.cv = new OffscreenCanvas(Math.max(w, 64), Math.max(h, 64));
+    if (w <= 0 || h <= 0 || w > 4000 || h > 4000) return;
+    if (!this.cv || this.cv.width < w || this.cv.height < h) this.cv = new OffscreenCanvas(Math.max(w, 64, this.cv?.width ?? 0), Math.max(h, 64, this.cv?.height ?? 0));
     const g = this.cv.getContext('2d', { willReadFrequently: true })!;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, w, h);
     g.setTransform(1 / p, 0, 0, 1 / p, -x0 / p, -y0 / p);
-    // Keep limbs at least ~1.5 art-pixels thick so they don't break up.
-    drawCharacter(g, c, { ...look, lineWidth: Math.max(look.lineWidth, (1.5 * p) / c.scale) });
+    drawIt(g);
     const img = g.getImageData(0, 0, w, h), a = img.data;
     for (let i = 3; i < a.length; i += 4) a[i] = a[i] >= 110 ? 255 : 0;
     if (look.outline) {
@@ -201,6 +232,20 @@ export function drawPixelBubble(ctx: CanvasRenderingContext2D, c: Character, tex
     left -= line.length + 1;
     drawPixelText(ctx, part, x + padX * p, y + (padY + i * lineH) * p, p);
   });
+  ctx.restore();
+}
+
+/** Sparks when a limb snaps off or clicks back on: bright pixel squares that fly out and fall. */
+export interface Spark { x: number; y: number; vx: number; vy: number; t: number; life: number; color: string }
+
+export function drawSparks(ctx: CanvasRenderingContext2D, sparks: Spark[], p: number) {
+  ctx.save();
+  for (const s of sparks) {
+    ctx.globalAlpha = Math.max(0, 1 - s.t / s.life);
+    ctx.fillStyle = s.color;
+    const size = Math.max(p, 2);
+    ctx.fillRect(Math.round(s.x / p) * p - size / 2, Math.round(s.y / p) * p - size / 2, size, size);
+  }
   ctx.restore();
 }
 

@@ -15,7 +15,7 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  AvoidCursor, ChaseCursor, PuppetMove, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
+  AvoidCursor, ChaseCursor, PuppetMove, Reattach, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
@@ -96,6 +96,7 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   tantrum: { annoyance: -0.25 },
   hunt: { annoyance: -0.15, energy: -0.04 },
   sleep: { happiness: 0.06 },
+  reattach: { happiness: 0.08, fear: -0.1 },
 };
 
 /** Things you can tell him to do from the settings window. */
@@ -107,6 +108,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'doodle', label: 'Doodle' }, { name: 'grabcursor', label: 'Grab cursor (mischief)' }, { name: 'tantrum', label: 'Tantrum' }, { name: 'sulk', label: 'Sulk' },
   { name: 'wave', label: 'Wave' }, { name: 'laugh', label: 'Laugh' }, { name: 'shrug', label: 'Shrug' },
   { name: 'stomp', label: 'Stomp' }, { name: 'stretch', label: 'Stretch' }, { name: 'cower', label: 'Cower' },
+  { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
 export class Mind {
@@ -229,6 +231,12 @@ export class Mind {
   makeSkill(c: Ctx, name: string): Skill | null {
     if (name === 'wake') { c.mood.asleep = false; return new Sequence('wake', [{ wait: 0.1 }]); }
     if (name === 'grabcursor' && !c.canGrabCursor) return null;
+    if (name === 'loseArm' || name === 'loseLeg') {
+      // On purpose, for a gag (or because you told him to): pops one off with a little jump.
+      const ch = c.char, l = name === 'loseArm' ? (ch.facing > 0 ? 'armL' : 'armR') : (ch.facing > 0 ? 'legL' : 'legR');
+      if (!ch.destructible || !ch.hasLimb(l)) return null;
+      return new Sequence(name, [{ say: pick(['watch this', 'hold on', 'heh']) }, { wait: 0.4 }, { pop: l }]);
+    }
     const gestures: Gesture[] = ['wave', 'laugh', 'shrug', 'stomp', 'stretch', 'cower'];
     if ((gestures as string[]).includes(name)) return new Sequence(name, [{ gesture: name as Gesture, atCursor: true }]);
     return this.options(c).find((x) => x.name === name)?.make() ?? null;
@@ -286,6 +294,11 @@ export class Mind {
   /** Everything he could do right now, how much he wants to, and why. */
   private options(c: Ctx): Option[] {
     const s = c.mood.s, L = c.mood.label, w = c.world, ch = c.char;
+    // Missing a limb: getting it back comes first.
+    if (!ch.whole) return [
+      { name: 'reattach', score: 5, why: 'wants his limb back', make: () => new Reattach() },
+      { name: 'idle', score: 0.2, why: 'catching his breath', make: () => new Idle(rand(1, 2)) },
+    ];
     const cur = w.cursor;
     const cursorActive = !!cur && w.time - w.cursorMovedAt < 6;
     const near = cursorActive && Math.abs(cur!.x - ch.x) < 250;
@@ -367,6 +380,7 @@ export class Mind {
       case 'none': ch.look = null; return;
       case 'down': ch.look = { x: ch.x + ch.facing * 40, y: head.y + 200 }; return;
       case 'cursor': ch.look = cur; return;
+      case 'target': ch.look = c.lookTarget ?? null; return;
       case 'away':
         ch.look = cur ? { x: ch.x - sign(cur.x - ch.x) * 300, y: head.y } : null;
         return;
@@ -392,6 +406,16 @@ export class Mind {
   onEvent(c: Ctx, e: MindEvent) {
     const m = c.mood, ch = c.char;
     switch (e.type) {
+      case 'limbOff': {
+        m.asleep = false;
+        m.nudge({ fear: 0.15, happiness: -0.1, annoyance: e.yanked ? 0.25 : 0.08, trust: e.yanked ? -0.04 : 0, boredom: -0.4 });
+        this.why = e.yanked ? 'you pulled his limb off' : 'a limb came off';
+        if (!(this.skill instanceof Reattach)) this.interrupt(c, new Reattach());
+        return;
+      }
+      case 'limbOn':
+        if (!(this.skill instanceof Reattach)) c.say(pick(['oh. thanks.', 'click.', 'better']), 1.2);
+        return;
       case 'poked': return this.onPoke(c);
 
       case 'smacked': {

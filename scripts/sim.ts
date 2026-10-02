@@ -1,6 +1,8 @@
 // Headless physics checks: run the character with no screen, many times faster
 // than real time, and make sure he behaves. `npm run sim`
-import { Character } from '../src/core/character';
+import { Character as BaseCharacter } from '../src/core/character';
+/** Characters in these tests don't break unless a test says so (limbs snapping off is tested on its own). */
+class Character extends BaseCharacter { constructor(...a: ConstructorParameters<typeof BaseCharacter>) { super(...a); this.destructible = false; } }
 import type { Bounds } from '../src/core/physics';
 import { Pet, DEFAULT_CONFIG } from '../src/core/pet';
 import { FLOOR, type Platform } from '../src/core/physics';
@@ -539,6 +541,105 @@ async function live(pet: Pet, seconds: number) {
   const { parseMove } = await import('../src/core/brain');
   const m = parseMove([{ t: 0.5, hip: [0, 50, 10] }, { t: 1, flip: 360 }, { t: 1, roll: 'x', turn: 90 }]);
   check('3D moves: side coordinates, flips and turns are read', m?.length === 3 && m[0].pose.hip?.[2] === 10 && m[1].flip === 360 && m[2].turn === 90 && !m[2].roll, JSON.stringify(m));
+}
+
+// ───── destructible: limbs come off and go back on ─────
+function yankHand(pet: Pet, speed = 3200) {
+  const c = pet.char, h = c.frontHand, events: string[] = [];
+  pet.pointerDown(h.x, h.y, 0);
+  pet.pointerMove(h.x + 3, h.y + 3, 0, 0, 200);
+  petFor(0.2, pet);
+  let x = h.x, y = h.y;
+  for (let i = 0; i < 8; i++) {
+    x -= c.facing * speed / 60; y -= 10;
+    pet.pointerMove(x, y, -c.facing * speed, -600, 400 + i * 16);
+    pet.update(1 / 60);
+  }
+  return { x, y, events };
+}
+{ // Yank his hand hard: the arm comes off and you're left holding it. Let go: he fetches it and puts it back on.
+  const pet = new Pet(bounds);
+  pet.paused = true; petFor(3, pet); pet.paused = false;
+  const got: string[] = [];
+  const orig = pet.mind.onEvent.bind(pet.mind);
+  pet.mind.onEvent = (c, e) => { got.push(e.type); orig(c, e); };
+  const { x, y } = yankHand(pet);
+  const piece = [...pet.char.missing.values()][0];
+  check('yank a hand hard: the arm comes off in your hand', got.includes('limbOff') && !!piece && piece.heldBy === 'user', got.join(','));
+  // Hold it a moment, then drop it a little way from him.
+  for (let i = 0; i < 30; i++) { pet.pointerMove(x, y, 0, 0, 600 + i * 16); pet.update(1 / 60); }
+  pet.pointerUp(x, y);
+  let stared = false, picked = false;
+  petFor(30, pet, () => { if (pet.char.stare > 0.5) stared = true; if (pet.char.holdingLimb) picked = true; });
+  check('he stares at the stump, picks his arm up and puts it back on', stared && picked && pet.char.whole && got.includes('limbOn'), `stared=${stared} picked=${picked} whole=${pet.char.whole} skill=${pet.mind.skill?.name}`);
+  check('losing a limb goes in his memory', pet.memory.tally.ripped === 1 && pet.memory.notes.some((n) => n.text.includes('ripped')));
+}
+{ // Breakable off: yanking does nothing.
+  const pet = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
+  pet.paused = true; petFor(3, pet);
+  const { x, y } = yankHand(pet);
+  pet.pointerUp(x, y); petFor(3, pet);
+  check('breakable off: limbs stay on', pet.char.whole);
+}
+{ // Lose a leg: he falls, then hops over on one leg to get it.
+  const pet = new Pet(bounds);
+  pet.paused = true; petFor(3, pet); pet.paused = false;
+  const c = pet.char;
+  const leg = c.detach('legL', { x: 500, y: -400, z: 0 })!;
+  let hopped = false;
+  petFor(1.5, pet);
+  const startX = c.x;
+  petFor(40, pet, () => { if (c.mode === 'ground' && c.legCount === 1 && Math.abs(c.x - startX) > 30) hopped = true; });
+  check('loses a leg: hops over on one leg and puts it back', hopped && c.whole && ['ground', 'sit'].includes(c.mode), `hopped=${hopped} whole=${c.whole} legX=${leg.root.x.toFixed(0)} x=${c.x.toFixed(0)} mode=${c.mode}`);
+}
+{ // Both legs gone: he crawls.
+  const c = new Character(bounds, 600);
+  c.destructible = true;
+  run(c, 1);
+  c.detach('legL'); c.detach('legR');
+  run(c, 4);
+  c.walkTo(450);
+  const x0 = c.x;
+  run(c, 6);
+  check('no legs: drags himself along on his arms', c.mode === 'ground' && c.x < x0 - 30 && c.body.j.neck.y < c.body.j.hip.y, `x ${x0.toFixed(0)} → ${c.x.toFixed(0)} mode=${c.mode}`);
+}
+{ // You hold the limb up to his stump: it clicks back on.
+  const pet = new Pet(bounds);
+  pet.paused = true; petFor(3, pet);
+  const c = pet.char;
+  const arm = c.detach('armR', { x: 300, y: -100, z: 0 })!;
+  petFor(1.5, pet);
+  const r = arm.root;
+  pet.pointerDown(r.x, r.y, 0); pet.pointerMove(r.x + 4, r.y, 0, 0, 200); petFor(0.2, pet);
+  const st = c.stumpOf('armR');
+  for (let i = 0; i < 40; i++) { pet.pointerMove(st.x, st.y, 0, 0, 400 + i * 16); pet.update(1 / 60); }
+  pet.pointerUp(st.x, st.y);
+  check('you hold his arm to the stump: it goes back on', c.whole, `missing=${[...c.missing.keys()]}`);
+}
+{ // Out of reach (up on a window he can't climb without it): he draws a new one.
+  const pet = new Pet(bounds);
+  pet.setWindows([{ id: 1, x: 900, y: 300, w: 300, h: 500 }]);
+  pet.paused = true; petFor(3, pet); pet.paused = false;
+  const c = pet.char;
+  const arm = c.detach('armL')!;
+  for (const p of arm.points) { p.x = p.px = 1000 + Math.random() * 10; p.y = p.py = 280; }
+  petFor(50, pet);
+  check('limb out of reach: he draws himself a new one', c.whole && arm.fading, `whole=${c.whole} skill=${pet.mind.skill?.name}`);
+}
+{ // Really big crash (thrown down hard): a limb can snap off.
+  const c = new Character(bounds, 600);
+  c.destructible = true;
+  let off = 0;
+  for (let k = 0; k < 12 && !off; k++) {
+    c.grab('neck', c.body.j.neck.x, c.body.j.neck.y);
+    run(c, 0.5, () => c.moveHold(600, 150, 0, 0));
+    run(c, 0.12, (t) => c.moveHold(600, 150 + 2600 * t, 0, 2600)); // a hard throw straight down
+    c.release();
+    off += run(c, 2).filter((e) => e === 'limbOff').length;
+    for (const l of [...c.missing.keys()]) c.regrow(l);
+    run(c, 4);
+  }
+  check('a huge crash can snap a limb off', off > 0);
 }
 
 // ───── memories (milestone 5) ─────

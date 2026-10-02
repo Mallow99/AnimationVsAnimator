@@ -161,6 +161,7 @@ function buildTrayMenu() {
     { label: 'Smack mode', type: 'checkbox', checked: config.smacking, click: () => setConfig({ smacking: !config.smacking }) },
     { label: 'Mischief mode', type: 'checkbox', checked: config.mischief, click: () => setConfig({ mischief: !config.mischief }) },
     { label: 'Climb on windows', type: 'checkbox', checked: config.windows, click: () => setConfig({ windows: !config.windows }) },
+    { label: 'Breakable', type: 'checkbox', checked: config.destructible, click: () => setConfig({ destructible: !config.destructible }) },
     { type: 'separator' },
     { label: 'Drop him in again', click: () => win?.webContents.send('pet:command', 'respawn') },
     { label: 'Reload', click: () => win?.reload() },

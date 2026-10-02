@@ -24,7 +24,8 @@ export interface Platform {
   wx?: number;  // that window's left x (to tell real moves from parts getting covered)
 }
 
-export interface Stick { a: Point; b: Point; len: number; minOnly?: boolean }
+/** A bone. `minOnly`: only keeps the ends from getting too close. `off`: broken (a limb came off). */
+export interface Stick { a: Point; b: Point; len: number; minOnly?: boolean; off?: boolean }
 
 /**
  * The space he lives in. In milestone 3 window tops became extra floors.
@@ -54,6 +55,7 @@ export function integrate(points: Point[], dt: number, airDrag = 0.9995) {
 
 export function solveSticks(sticks: Stick[]) {
   for (const s of sticks) {
+    if (s.off) continue;
     const dx = s.b.x - s.a.x, dy = s.b.y - s.a.y, dz = s.b.z - s.a.z;
     const d = Math.hypot(dx, dy, dz) || 1e-6;
     if (s.minOnly && d >= s.len) continue;

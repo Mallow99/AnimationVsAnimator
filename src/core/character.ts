@@ -17,7 +17,8 @@
 // pass in front of and behind each other. He lives in a thin band of depth just in
 // front of your screen; the drawing stays flat, z only decides what's in front.
 
-import { Body, JOINTS, makeDims, type Dims, type JointName } from './body';
+import { Body, JOINTS, LIMB_JOINTS, LIMBS, limbOf, makeDims, type Dims, type JointName, type LimbId } from './body';
+import { LooseLimb } from './limbs';
 import { collide, collidePlatforms, FLOOR, integrate, NONE, solveSticks, type Bounds, type Platform } from './physics';
 import {
   basis, clamp, dist, dist3, distToSegment, inFrame, lerp, lerp3, sign, smooth, twoBoneIK, twoBoneIK3, type Basis, type V3, type Vec,
@@ -69,7 +70,9 @@ export type CharEvent =
   | { type: 'carried'; speed: number } // the window under him moved
   | { type: 'reachedTop' }      // climbed to the top of a wall
   | { type: 'letGo' }           // dropped off a wall or the ceiling
-  | { type: 'step' };           // a foot touched down (footstep sounds)
+  | { type: 'step' }            // a foot touched down (footstep sounds)
+  | { type: 'limbOff'; limb: LimbId; x: number; y: number; yanked: boolean } // a limb came off
+  | { type: 'limbOn'; limb: LimbId; x: number; y: number };                 // and went back on
 
 /** How he carries himself. Part of his "look"; set from the settings / presets. */
 export interface BodyStyle {
@@ -132,6 +135,8 @@ export class Character {
   get turnF() { return Math.cos(this.yaw); }
   /** How much he faces you (0 = side view, 1 = facing you, -1 = back to you). */
   get turnS() { return Math.sin(this.yaw); }
+  /** Staring down at something (his stump, after losing a limb): 0 … 1. */
+  stare = 0;
   /** Something outside (a skill) can ask him to turn toward you a bit: 0 … 1. */
   presentWant = 0;
   private present = 0;
@@ -143,6 +148,14 @@ export class Character {
   walkSpeed = 62;
   /** When true he stays down after falling / lying (sleeping, sulking). */
   stayDown = false;
+  /** Can limbs come off (big crashes, hard smacks, yanking a hand or foot)? */
+  destructible = true;
+  /** Limbs that came off, lying around (or being held), by which limb they are. */
+  readonly missing = new Map<LimbId, LooseLimb>();
+  /** How long a limb has been yanked hard enough to come off. */
+  private yank = 0;
+  private hopPhase = 0;
+  private crawlPhase = 0;
 
   private events: CharEvent[] = [];
   /** Window tops he can stand on (set by the pet from the desktop shell). */
@@ -196,7 +209,8 @@ export class Character {
   private walkH = 0;
   private hipTarget: V3 | null = null;
   private getup: { from: Record<JointName, V3>; crouch: Targets; stand: Targets; x: number } | null = null;
-  private held: { joint: JointName; x: number; y: number; vx: number; vy: number } | null = null;
+  /** What your cursor is holding: one of his joints, or one of his loose limbs (`limb`, point `idx`). */
+  private held: { joint: JointName; limb?: LooseLimb; idx?: number; x: number; y: number; vx: number; vy: number } | null = null;
   private gesture: { name: Gesture; t: number; x: number; y: number; fired: boolean } | null = null;
   private jumpPrep: { t: number; vx: number; vy: number } | null = null;
   /** A made-up move being played (his AI brain moving his body directly). */
@@ -257,6 +271,128 @@ export class Character {
   get walking() { return this.mode === 'ground' && this.goalX !== null; }
   get climbingWall() { return this.mode === 'climb' ? this.climb!.wall : null; }
 
+  // ───────────── limbs coming off and going back on ─────────────
+
+  hasLimb(l: LimbId) { return this.body.has(l); }
+  get legCount() { return (this.hasLimb('legL') ? 1 : 0) + (this.hasLimb('legR') ? 1 : 0); }
+  get whole() { return this.missing.size === 0; }
+  /** The hand he uses for things: his front one if he has it, else the other, else none. */
+  get useHand(): 'L' | 'R' | null {
+    const front = this.facing > 0 ? 'R' : 'L', back = front === 'R' ? 'L' : 'R';
+    return this.hasLimb(front === 'R' ? 'armR' : 'armL') ? front : this.hasLimb(back === 'R' ? 'armR' : 'armL') ? back : null;
+  }
+
+  /**
+   * A limb comes off: its bones snap, and the limb becomes a loose piece with the speed it had.
+   * Returns the piece (null if it can't: not breakable, or already off).
+   */
+  detach(l: LimbId, kick?: V3, yanked = false): LooseLimb | null {
+    if (!this.destructible || !this.hasLimb(l)) return null;
+    const J = LIMB_JOINTS[l], j = this.body.j, d = this.d;
+    const arm = l === 'armL' || l === 'armR';
+    const piece = new LooseLimb(l, [j[J.root], j[J.mid], j[J.end]], arm ? [d.upperArm, d.foreArm] : [d.thigh, d.shin]);
+    if (kick) for (const p of piece.points) { p.px -= kick.x * this.dt; p.py -= kick.y * this.dt; p.pz -= kick.z * this.dt; }
+    // The torn end starts just off the stump.
+    const root = piece.root, dx = piece.points[1].x - root.x, dy = piece.points[1].y - root.y, dl = Math.hypot(dx, dy) || 1;
+    root.x += (dx / dl) * 2 * this.scale; root.y += (dy / dl) * 2 * this.scale;
+    if (arm) { const h = l === 'armL' ? 'L' : 'R'; this.releaseGrip(h); }
+    this.body.removeLimb(l);
+    this.missing.set(l, piece);
+    this.events.push({ type: 'limbOff', limb: l, x: j[J.root].x, y: j[J.root].y, yanked });
+    // Losing a leg (or an arm while hanging on with it) means he goes down.
+    if (!arm && ['ground', 'sit', 'getup', 'puppet'].includes(this.mode)) this.setMode('ragdoll');
+    else if (arm && (this.mode === 'climb' || this.mode === 'ceiling')) this.letGo();
+    this.stun = Math.max(this.stun, 0.35);
+    return piece;
+  }
+
+  /** Put a loose limb back on (it snaps into place at the stump). */
+  attach(l: LimbId) {
+    const piece = this.missing.get(l);
+    if (!piece) return;
+    if (this.held?.limb === piece) this.held = null;
+    const [, mid, end] = piece.points;
+    this.body.restoreLimb(l, mid, end);
+    this.missing.delete(l);
+    const r = this.body.j[LIMB_JOINTS[l].root];
+    this.events.push({ type: 'limbOn', limb: l, x: r.x, y: r.y });
+    if (!(l === 'armL' || l === 'armR') && this.mode === 'ground') this.plantFeet();
+  }
+
+  /** Grow (or draw) a new limb in place of a lost one; the old piece fades away. */
+  regrow(l: LimbId) {
+    const piece = this.missing.get(l);
+    if (!piece) return;
+    const J = LIMB_JOINTS[l], r = this.body.j[J.root];
+    const arm = l === 'armL' || l === 'armR', d = this.d;
+    const len1 = arm ? d.upperArm : d.thigh, len2 = arm ? d.foreArm : d.shin;
+    this.body.restoreLimb(l, { x: r.x, y: r.y + len1, z: r.z }, { x: r.x, y: r.y + len1 + len2, z: r.z });
+    this.missing.delete(l);
+    piece.fading = true;
+    this.fadingPieces.push(piece);
+    if (this.held?.limb === piece) this.held = null;
+    this.events.push({ type: 'limbOn', limb: l, x: r.x, y: r.y });
+    if (!arm && this.mode === 'ground') this.plantFeet();
+  }
+  /** Old limbs fading out after he grew new ones. */
+  readonly fadingPieces: LooseLimb[] = [];
+  /** Everything loose: missing limbs plus ones fading away. */
+  get loosePieces() { return [...this.missing.values(), ...this.fadingPieces]; }
+
+  /** He takes hold of a loose limb by its torn end, with one hand. */
+  holdLimb(piece: LooseLimb, hand: 'L' | 'R') {
+    if (piece.heldBy === 'user') return false;
+    this.heldLimb = { piece, hand };
+    piece.heldBy = 'him';
+    return true;
+  }
+  dropLimb() { if (this.heldLimb) { this.heldLimb.piece.heldBy = null; this.heldLimb = null; } }
+  private heldLimb: { piece: LooseLimb; hand: 'L' | 'R' } | null = null;
+  get holdingLimb() { return this.heldLimb?.piece ?? null; }
+
+  /** Where a limb attaches on his body (shoulder = neck, hip). */
+  stumpOf(l: LimbId) { return this.body.j[LIMB_JOINTS[l].root]; }
+
+  /** Which loose limb (and which of its points) is under (x, y)? */
+  hitLimb(x: number, y: number, pad = 8): { piece: LooseLimb; idx: number } | null {
+    for (const piece of this.missing.values()) if (piece.distTo(x, y) < pad) return { piece, idx: piece.nearest(x, y) };
+    return null;
+  }
+
+  /** Loose limbs' physics, his hand carrying one, and limbs snapping back on when held to the stump. */
+  private stepLimbs(dt: number) {
+    const bounds = { ...this.bounds, depth: this.bounds.depth ?? 40 * this.scale };
+    for (const piece of this.loosePieces) {
+      if (this.held?.limb === piece) {
+        const p = piece.points[this.held.idx ?? 0];
+        p.invMass = 0;
+        p.x = this.held.x; p.y = this.held.y; p.z *= 0.97;
+        p.px = p.x - this.held.vx * dt; p.py = p.y - this.held.vy * dt; p.pz = p.z;
+      }
+      const hl = this.heldLimb;
+      if (hl?.piece === piece) {
+        const h = this.body.j[hl.hand === 'L' ? 'handL' : 'handR'];
+        const p = piece.root;
+        p.invMass = 0;
+        p.px = p.x; p.py = p.y; p.pz = p.z;
+        p.x = h.x; p.y = h.y; p.z = h.z;
+      }
+      piece.step(dt, bounds, this.platforms);
+      for (const p of piece.points) p.invMass = 1;
+    }
+    if (this.heldLimb && !this.hasLimb(this.heldLimb.hand === 'L' ? 'armL' : 'armR')) this.dropLimb();
+    for (let i = this.fadingPieces.length - 1; i >= 0; i--) if (this.fadingPieces[i].fade <= 0) this.fadingPieces.splice(i, 1);
+    // Held up to the stump (by him, by you, or it just landed there): it goes back on.
+    for (const [l, piece] of this.missing) {
+      const st = this.stumpOf(l);
+      if (piece.age > 0.8 && dist3(piece.root, st) < 9 * this.scale) {
+        if (this.heldLimb?.piece === piece) this.heldLimb = null;
+        this.attach(l);
+      }
+    }
+    this.body.parkGhosts();
+  }
+
   // ───────────── grabbing ─────────────
 
   /** Latch a hand onto a point. The hand stays exactly there until released. */
@@ -281,6 +417,7 @@ export class Character {
    */
   grabWall(wall: Wall, dir: -1 | 1) {
     if (this.mode !== 'ground' && this.mode !== 'air' && this.mode !== 'sit') return false;
+    if (!this.whole) return false; // climbing takes all four limbs
     const j = this.body.j, armLen = this.d.upperArm + this.d.foreArm;
     this.leapWall = null;
     this.goalX = null; this.gesture = null; this.jumpPrep = null;
@@ -299,7 +436,7 @@ export class Character {
 
   /** Run-and-jump at a wall, catching it with his hands. */
   leapAt(wall: Wall, vy = -430) {
-    if (this.mode !== 'ground') return false;
+    if (this.mode !== 'ground' || !this.whole) return false;
     const dx = this.wallX(wall) - this.x;
     this.facing = sign(dx);
     this.leapWall = wall;
@@ -406,7 +543,7 @@ export class Character {
   stop() { this.goalX = null; }
 
   jump(vx: number, vy: number) {
-    if (this.mode !== 'ground' || this.jumpPrep) return;
+    if (this.mode !== 'ground' || this.jumpPrep || this.legCount === 0) return;
     this.goalX = null;
     this.gesture = null;
     this.jumpPrep = { t: 0, vx, vy };
@@ -480,8 +617,23 @@ export class Character {
     if (this.held) Object.assign(this.held, { x, y, vx, vy });
   }
 
+  /** You pick up one of his loose limbs (by point idx). */
+  grabLimb(piece: LooseLimb, idx: number, x: number, y: number) {
+    if (this.heldLimb?.piece === piece) this.dropLimb();
+    piece.heldBy = 'user';
+    this.held = { joint: 'hip', limb: piece, idx, x, y, vx: 0, vy: 0 };
+  }
+
   release() {
     if (!this.held) return;
+    const lp = this.held.limb;
+    if (lp) {
+      const p = lp.points[this.held.idx ?? 0];
+      p.px = p.x - clamp(this.held.vx, -2500, 2500) * this.dt; p.py = p.y - clamp(this.held.vy, -2500, 2500) * this.dt;
+      lp.heldBy = null;
+      this.held = null;
+      return;
+    }
     const p = this.body.j[this.held.joint];
     const max = 2500;
     const vx = clamp(this.held.vx, -max, max), vy = clamp(this.held.vy, -max, max);
@@ -493,7 +645,8 @@ export class Character {
     this.events.push({ type: 'released', speed });
   }
 
-  isHeld() { return this.held !== null; }
+  /** You're holding him (not just one of his loose limbs). */
+  isHeld() { return this.held !== null && !this.held.limb; }
 
   /** Which joint (if any) is under the given point. */
   hitTest(x: number, y: number, pad = 7): JointName | null {
@@ -502,14 +655,17 @@ export class Character {
       ['neck', 'hip'], ['neck', 'elbowL'], ['elbowL', 'handL'], ['neck', 'elbowR'], ['elbowR', 'handR'],
       ['hip', 'kneeL'], ['kneeL', 'footL'], ['hip', 'kneeR'], ['kneeR', 'footR'], ['head', 'neck'],
     ];
+    const ghost = this.body.ghost;
     let hit = dist(x, y, j.head.x, j.head.y) < this.d.headR + pad;
     for (const [a, b] of bones) {
       if (hit) break;
+      if (ghost.has(a) || ghost.has(b)) continue;
       if (distToSegment(x, y, j[a].x, j[a].y, j[b].x, j[b].y) < pad) hit = true;
     }
     if (!hit) return null;
     let best: JointName = 'hip', bestD = Infinity;
     for (const n of JOINTS) {
+      if (ghost.has(n)) continue;
       const dd = dist(x, y, j[n].x, j[n].y);
       if (dd < bestD) { bestD = dd; best = n; }
     }
@@ -566,13 +722,28 @@ export class Character {
       p.px = p.x; p.py = p.y; p.pz = p.z; // keep its motion so the body swings naturally when it lets go
       p.x = g.cx; p.y = g.cy; p.z = g.cz;
     }
-    if (this.held) {
+    if (this.held && !this.held.limb) {
       const p = b.j[this.held.joint];
       p.x = this.held.x; p.y = this.held.y;
       p.z *= 0.97; // the mouse can't hold depth: drift back to the middle
       p.px = p.x - this.held.vx * dt; p.py = p.y - this.held.vy * dt; p.pz = p.z;
+      // Yanked hard by a hand or a foot: that limb comes off, and you're left holding it.
+      const limb = limbOf(this.held.joint);
+      const speed = Math.hypot(this.held.vx, this.held.vy);
+      this.yank = limb && this.destructible && speed > 2700 && this.modeTime > 0.1 ? this.yank + dt : 0;
+      if (limb && this.yank > 0.03) {
+        const { x, y, vx, vy } = this.held, idx = this.held.joint === LIMB_JOINTS[limb].mid ? 1 : 2;
+        this.held = null;
+        b.j[LIMB_JOINTS[limb].mid].invMass = b.j[LIMB_JOINTS[limb].end].invMass = 1;
+        this.setMode('ragdoll');
+        const piece = this.detach(limb, undefined, true);
+        if (piece) { piece.heldBy = 'user'; this.held = { joint: 'hip', limb: piece, idx, x, y, vx, vy }; }
+        this.yank = 0;
+      }
     }
     for (const p of b.points) { p.grounded = false; p.on = NONE; }
+    // Remember how fast each joint was falling, to tell how hard it hits the ground.
+    const fall = this.destructible && (this.mode === 'ragdoll' || this.mode === 'air') ? b.points.map((p) => (p.y - p.py) / dt) : null;
     const friction = this.mode === 'ragdoll' || this.mode === 'lie' ? 0.4 : 0.25;
     const bounds = { ...this.bounds, depth: this.bounds.depth ?? 40 * this.scale };
     for (let i = 0; i < 8; i++) {
@@ -580,7 +751,28 @@ export class Character {
       collide(b.points, bounds, friction);
       collidePlatforms(b.points, this.platforms, friction);
     }
+    if (fall) this.checkImpacts(fall);
+    if (this.missing.size || this.fadingPieces.length) this.stepLimbs(dt);
     this.afterStep(dt, hipVY);
+  }
+
+  private lastBreak = -10;
+  /** Slammed into the ground hard enough, a hand or foot takes its limb off with it. */
+  private checkImpacts(fall: number[]) {
+    if (this.time - this.lastBreak < 0.5) return;
+    const b = this.body;
+    for (const l of LIMBS) {
+      if (!this.hasLimb(l)) continue;
+      for (const n of [LIMB_JOINTS[l].end, LIMB_JOINTS[l].mid]) {
+        const p = b.j[n], v = fall[b.points.indexOf(p)];
+        if (!p.grounded || v < 1700) continue;
+        if (Math.random() < clamp((v - 1700) / 1500, 0, 0.5) * this.breakChance) {
+          this.lastBreak = this.time;
+          this.detach(l, { x: (p.x - p.px) / this.dt * 0.4, y: -v * 0.25, z: (Math.random() - 0.5) * 500 });
+          return;
+        }
+      }
+    }
   }
 
   /** A turn in progress: from one body angle to another over a set time, eased in and out. */
@@ -728,9 +920,24 @@ export class Character {
     }
   }
 
+  /** 0..1: how likely a really big crash is to snap a limb off (tests set it to 1). */
+  breakChance = 1;
+
   private crash(speed: number) {
     this.setMode('ragdoll');
     this.events.push({ type: 'crashed', speed });
+    // A really hard landing can snap a limb off: whichever was moving fastest.
+    if (this.destructible && speed > 1700 && Math.random() < clamp((speed - 1700) / 1300, 0, 0.6) * this.breakChance) {
+      const j = this.body.j;
+      const fastest = LIMBS.filter((l) => this.hasLimb(l)).map((l) => {
+        const e = j[LIMB_JOINTS[l].end];
+        return { l, v: Math.hypot(e.x - e.px, e.y - e.py) };
+      }).sort((a, b) => b.v - a.v)[0];
+      if (fastest) {
+        const e = j[LIMB_JOINTS[fastest.l].end];
+        this.detach(fastest.l, { x: (e.x - e.px) / this.dt * 0.3, y: -300, z: (Math.random() - 0.5) * 600 });
+      }
+    }
   }
 
   private plantFeet() {
@@ -756,6 +963,7 @@ export class Character {
    */
   private standHeight() {
     const L = this.d.thigh + this.d.shin, half = this.stanceHalf();
+    if (this.legCount === 1) return L * 0.97; // on one leg: straight under him
     const straight = Math.sqrt(L * L - 2 * half * half);
     return straight * (0.9 + 0.1 * this.style.stand) + (this.style.stand > 0.97 ? 1.5 * this.scale : 0);
   }
@@ -765,6 +973,7 @@ export class Character {
    * one back, and out to his sides), so he reads as an upside-down V from any angle.
    */
   private standFoot(k: 'L' | 'R', yaw = this.yaw, x = this.rootX): V3 {
+    if (this.legCount === 1) return this.off(this.pt(x, this.groundY() - 2), 1 * this.scale, 0, sideOf(k) * 1.5 * this.scale, yaw);
     const st = this.stanceHalf();
     return this.off(this.pt(x, this.groundY() - 2), -sideOf(k) * st, 0, sideOf(k) * st, yaw);
   }
@@ -790,8 +999,9 @@ export class Character {
     }
 
     // Locomotion: slide an invisible "root" toward the goal; the feet chase it.
-    const G = GAITS[this.gait];
-    const speedMul = P.speed * (this.running ? 2.3 : G.speed);
+    // (Missing a leg: he hops, slower. Missing both: he drags himself along on his arms.)
+    const G = GAITS[this.gait], legs = this.legCount;
+    const speedMul = legs === 2 ? P.speed * (this.running ? 2.3 : G.speed) : legs === 1 ? P.speed * (this.running ? 1 : 0.6) : 0.3;
     let want = 0;
     if (this.goalX !== null && !this.gesture && !this.jumpPrep && this.crouch < 6 * sc) {
       const dx = this.goalX - this.rootX;
@@ -823,6 +1033,8 @@ export class Character {
     else if (this.look && Math.abs(this.look.x - this.rootX) > 25 && !this.gesture) this.facing = sign(this.look.x - this.rootX);
     const f = this.turnF;
     const root = this.pt(this.rootX, floor - 2);
+    if (legs === 0) { this.crawlPose(dt, t, s, floor); return; }
+    if (legs === 1) { this.hopPose(dt, t, s, floor); return; }
 
     // Running has its own cycle (see runPose).
     if (this.running && moving && this.crouch < 6 * sc) { this.runPose(dt, t, s, floor); return; }
@@ -904,21 +1116,23 @@ export class Character {
     this.walkH = lerp(this.walkH || standH, reachH, 0.35);
     const hipH = lerp(standH, Math.min(standH, this.walkH), clamp(speed / 40, 0, 1));
     const hunch = this.gait === 'sulk' && moving ? Math.max(P.hunch, 0.7) : P.hunch;
+    const stoop = this.stoop(dt, floor - 2 - standH - d.torso);
     const bob = moving
       ? Math.sin(Math.PI * swingT) * (0.4 + 2.5 * P.bounce) * sc * B.bob * G.bob
       : Math.sin(this.time * 2.1) * 0.6 * sc;
-    const hip = this.pt(this.rootX, floor - 2 - hipH + this.crouch + hunch * 2 * sc - bob);
+    const hip = this.pt(this.rootX, floor - 2 - hipH + this.crouch + hunch * 2 * sc - bob + stoop * legLen * 0.62);
     this.hipTarget = hip;
 
-    // Torso leans into motion; sadness hunches it, anger pitches it forward.
+    // Torso leans into motion; sadness hunches it, anger pitches it forward; reaching low, he bends over.
     const lean = (moving ? G.lean * sc : 0) + clamp(this.rootVX * this.facing * 0.05 * B.lean, -10 * sc, 10 * sc)
-      + (hunch * 5 + P.tension * 3) * sc + this.crouch * 0.5;
+      + (hunch * 5 + P.tension * 3) * sc + this.crouch * 0.5 + stoop * d.torso * 0.78;
     const neck = this.off(hip, lean, -Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)));
     // Head up by default; only a real mood drops it. nod = tipped forward, cock = tipped toward his left.
     let nod = hunch * 0.6 + (this.gait === 'sulk' && moving ? 0.3 : 0); // sulking: eyes on the floor
     let cock = 0;
     // Only a slight nod toward what he's looking at; turning to face it does most of the work.
     if (this.look) nod += clamp((this.look.y - neck.y) / 600, -0.15, 0.15);
+    nod += this.stare * 0.75;
     /** Tip his head toward screen-right (or left, negative) whichever way he's turned. */
     const tiltX = (a: number) => { nod += a * Math.cos(this.yaw); cock += a * Math.sin(this.yaw); };
 
@@ -1078,20 +1292,101 @@ export class Character {
       if (g.t >= dur) this.gesture = null;
     }
 
-    // A skill is steering his front hand (drawing, grabbing the cursor).
-    const reachFor = this.handTarget && !g ? this.handTarget : null;
+    // A skill is steering his front hand (drawing, grabbing the cursor, picking something up).
+    const useHand = this.useHand;
+    const reachFor = this.handTarget && !g && useHand ? this.handTarget : null;
     if (reachFor) {
-      const hand = this.reachToward(neckT, reachFor, this.facing > 0 ? 'R' : 'L');
-      if (this.facing > 0) handR = hand; else handL = hand;
+      const hand = this.reachToward(neckT, reachFor, useHand!);
+      if (useHand === 'R') handR = hand; else handL = hand;
     }
-    this.fillLimbs(t, hipT, neckT, nod, cock, handL, handR, footL, footR);
+    this.fillLimbs(t, hipT, neckT, nod + stoop * 0.6, cock, handL, handR, footL, footR);
     const plant = (k: 'L' | 'R') => (this.feet[k].swinging ? 0.35 : 0.6);
     Object.assign(s, {
       hip: 0.25, neck: 0.25, head: 0.3, kneeL: 0.2, kneeR: 0.2, footL: plant('L'), footR: plant('R'),
       elbowL: 0.1, elbowR: 0.1, handL: 0.09, handR: 0.09,
     });
     if (g && g.name !== 'lookAround') Object.assign(s, { handL: 0.2, handR: 0.2, elbowL: 0.15, elbowR: 0.15 });
-    if (reachFor) Object.assign(s, this.facing > 0 ? { handR: 0.45, elbowR: 0.2 } : { handL: 0.45, elbowL: 0.2 });
+    if (reachFor) Object.assign(s, useHand === 'R' ? { handR: 0.45, elbowR: 0.2 } : { handL: 0.45, elbowL: 0.2 });
+  }
+
+  private stoopNow = 0;
+  /**
+   * Reaching for something low (picking a thing up off the floor): how far to bend over, 0..1.
+   * `neckY` = where his neck is when standing straight. Eased, so he bends and straightens smoothly.
+   */
+  private stoop(dt: number, neckY: number) {
+    const armLen = this.d.upperArm + this.d.foreArm, legLen = this.d.thigh + this.d.shin;
+    const at = this.handTarget && !this.gesture && this.useHand ? this.handTarget : null;
+    const want = at ? clamp((at.y - (neckY + armLen * 0.8)) / (legLen * 0.8), 0, 1) : 0;
+    this.stoopNow += (want - this.stoopNow) * (1 - Math.exp(-dt * 8));
+    return this.stoopNow;
+  }
+
+  /**
+   * One leg missing: he stands on the one he's got, arms out for balance,
+   * and gets around in little hops.
+   */
+  private hopPose(dt: number, t: Targets, s: Strengths, floor: number) {
+    const d = this.d, sc = this.scale, P = this.posture, L = d.thigh + d.shin;
+    const leg: 'L' | 'R' = this.hasLimb('legL') ? 'L' : 'R';
+    const moving = Math.abs(this.rootVX) > 10;
+    let lift = 0;
+    if (moving) {
+      const before = this.hopPhase;
+      this.hopPhase = (this.hopPhase + dt * 2.8) % 1;
+      if (this.hopPhase < before) this.events.push({ type: 'step' });
+      lift = Math.sin(Math.PI * this.hopPhase) * 9 * sc;
+    } else this.hopPhase = 0;
+    this.crouch = Math.max(0, this.crouch - dt * 45 * sc);
+    const stoop = this.stoop(dt, floor - 2 - L * 0.97 - d.torso);
+    const ground = this.pt(this.rootX, floor - 2 - lift);
+    const foot = this.off(ground, 1 * sc, 0, sideOf(leg) * 1.5 * sc);
+    this.feet[leg].x = foot.x; this.feet[leg].z = foot.z;
+    const hip = this.pt(this.rootX, floor - 2 - L * 0.97 - lift + this.crouch + (moving ? 2 * sc * Math.cos(Math.PI * this.hopPhase) ** 2 : 0) + stoop * L * 0.62);
+    this.hipTarget = hip;
+    const lean = (2 + P.hunch * 5) * sc + stoop * d.torso * 0.78;
+    const neck = this.off(hip, lean, -Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)));
+    // Arms out to the sides for balance, flapping a little with each hop.
+    const flap = moving ? Math.sin(Math.PI * this.hopPhase) * 6 * sc : 0;
+    let handL = this.off(neck, 3 * sc, 14 * sc - flap, 16 * sc), handR = this.off(neck, 3 * sc, 14 * sc - flap, -16 * sc);
+    const useHand = this.useHand, at = this.handTarget && useHand ? this.handTarget : null;
+    if (at) { const h = this.reachToward(neck, at, useHand!); if (useHand === 'R') handR = h; else handL = h; }
+    const other = this.body.j[leg === 'L' ? 'footR' : 'footL'];
+    this.fillLimbs(t, hip, neck, 0.1 + stoop * 0.6, 0, handL, handR, leg === 'L' ? foot : other, leg === 'R' ? foot : other);
+    Object.assign(s, { hip: 0.3, neck: 0.25, head: 0.3, kneeL: 0.2, kneeR: 0.2, footL: 0.6, footR: 0.6, elbowL: 0.12, elbowR: 0.12, handL: 0.12, handR: 0.12 });
+    if (at) Object.assign(s, useHand === 'R' ? { handR: 0.45, elbowR: 0.2 } : { handL: 0.45, elbowL: 0.2 });
+  }
+
+  /**
+   * No legs: he drags himself along on his elbows and hands, hips on the ground,
+   * looking up. With no arms either he can only lie there propped up, waiting for help.
+   */
+  private crawlPose(dt: number, t: Targets, s: Strengths, floor: number) {
+    const d = this.d, sc = this.scale;
+    const arms = (['L', 'R'] as const).filter((k) => this.hasLimb(k === 'L' ? 'armL' : 'armR'));
+    if (!arms.length) { this.rootVX = 0; this.goalX = null; }
+    const moving = Math.abs(this.rootVX) > 4;
+    if (moving) {
+      const before = this.crawlPhase;
+      this.crawlPhase = (this.crawlPhase + dt * 1.8) % 1;
+      if ((before < 0.5) !== (this.crawlPhase < 0.5)) this.events.push({ type: 'step' });
+    }
+    const pitch = arms.length ? 1.05 : 1.3;
+    const hip = this.pt(this.rootX, floor - 3 * sc);
+    this.hipTarget = hip;
+    const neck = this.off(hip, Math.sin(pitch) * d.torso, -Math.cos(pitch) * d.torso);
+    const ground = { x: neck.x, y: floor - 2, z: neck.z };
+    const handAt = (k: 'L' | 'R') => {
+      if (!moving) return this.off(ground, 8 * sc, 0, sideOf(k) * 5 * sc);
+      const u = (this.crawlPhase + (k === 'L' ? 0 : 0.5)) % 1;
+      // Planted: the hand stays put while he pulls past it. Then it lifts and reaches forward again.
+      if (u < 0.5) return this.off(ground, lerp(14, -2, u / 0.5) * sc, 0, sideOf(k) * 5 * sc);
+      const k2 = (u - 0.5) / 0.5;
+      return this.off(ground, lerp(-2, 14, smooth(k2)) * sc, -Math.sin(Math.PI * k2) * 6 * sc, sideOf(k) * 5 * sc);
+    };
+    const j = this.body.j;
+    this.fillLimbs(t, hip, neck, -0.5, 0, handAt('L'), handAt('R'), j.footL, j.footR);
+    Object.assign(s, { hip: 0.25, neck: 0.25, head: 0.3, elbowL: 0.15, elbowR: 0.15, handL: 0.3, handR: 0.3 });
   }
 
   /** Where hand k gets to reaching for a spot on screen (as far as his arm goes). */
@@ -1185,16 +1480,24 @@ export class Character {
   /** A calm standing pose at x (used as the end of getting up). */
   private standPose(x: number): Targets {
     const d = this.d, sc = this.scale, yaw = this.facing > 0 ? 0 : Math.PI, floor = this.groundY();
+    if (this.legCount === 0) {
+      // No legs: "standing" is propped up on his arms.
+      const hip = this.pt(x, floor - 3 * sc, 0), neck = this.off(hip, Math.sin(1.05) * d.torso, -Math.cos(1.05) * d.torso, 0, yaw);
+      const t: Targets = {}, ground = { x: neck.x, y: floor - 2, z: 0 };
+      this.fillLimbs(t, hip, neck, -0.5, 0, this.off(ground, 8 * sc, 0, 5 * sc, yaw), this.off(ground, 8 * sc, 0, -5 * sc, yaw), hip, hip, yaw);
+      return t;
+    }
     const hip = this.pt(x, floor - 2 - this.standHeight(), 0);
     const neck = this.off(hip, 0.5 * sc, -d.torso, 0, yaw);
     const hy = (d.upperArm + d.foreArm) * (0.8 + 0.17 * this.style.armHang);
     const t: Targets = {};
-    const footAt = (k: 'L' | 'R') => this.off(this.pt(x, floor - 2, 0), -sideOf(k) * this.stanceHalf(), 0, sideOf(k) * this.stanceHalf(), yaw);
+    const footAt = (k: 'L' | 'R') => this.standFoot(k, yaw, x);
     this.fillLimbs(t, hip, neck, 0.05, 0, this.off(neck, 2 * sc, hy, 5 * sc, yaw), this.off(neck, 3 * sc, hy, -5 * sc, yaw), footAt('L'), footAt('R'), yaw);
     return t;
   }
 
   private crouchPose(x: number): Targets {
+    if (this.legCount === 0) return this.standPose(x);
     const d = this.d, sc = this.scale, yaw = this.facing > 0 ? 0 : Math.PI, floor = this.groundY();
     const hip = this.pt(x, floor - 17 * sc, 0);
     const ang = 0.9; // torso pitched forward ~50°

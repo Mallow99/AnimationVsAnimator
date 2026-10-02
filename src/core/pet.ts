@@ -9,7 +9,9 @@ import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowWalls, type WinRect } from './world';
-import { drawBubble, drawCharacter, drawPixelBubble, drawPuffs, PixelLayer, shade, type Puff } from './render';
+import { drawBubble, drawCharacter, drawLooseLimb, drawPixelBubble, drawPuffs, drawSparks, PixelLayer, shade, type Puff, type Spark } from './render';
+import type { LooseLimb } from './limbs';
+import { limbOf } from './body';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, splitSpeech } from './brain';
 import type { Vec } from './math';
@@ -37,7 +39,9 @@ export class Pet {
   /** Turn his mind off (for debugging poses by hand). */
   paused = false;
   private acc = 0;
-  private press: { joint: JointName; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
+  private press: { joint: JointName; limb?: { piece: LooseLimb; idx: number }; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
+  /** Sparks from limbs snapping off and clicking back on. */
+  private sparks: Spark[] = [];
   /** His speech bubble. Letters type out one by one (`shown`), with a little blip for each. */
   private bubble: { text: string; t: number; ttl: number; shown: number } | null = null;
   /** Called for each blip of his voice (the app plays it). `pitch` in Hz. */
@@ -111,6 +115,8 @@ export class Pet {
     if (this.bubble) this.typeOut(this.bubble, dt);
     if (this.bubble && this.bubble.t > this.bubble.ttl) this.bubble = null;
     for (const f of this.puffs) { f.t += dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.92; f.vy *= 0.92; }
+    for (const s of this.sparks) { s.t += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 900 * dt; s.vx *= 0.97; }
+    this.sparks = this.sparks.filter((s) => s.t < s.life);
     this.puffs = this.puffs.filter((f) => f.t < f.life);
     if (!this.bubble && this.speech.length) this.say(this.speech.shift()!);
     for (const h of this.hearts) { h.t += dt; h.y -= 40 * dt; h.x += h.drift * dt; }
@@ -153,6 +159,16 @@ export class Pet {
     if (e.type === 'landed' && (e.speed ?? 0) > 350) burst(feetX, feetY, 6, 60 + (e.speed ?? 0) * 0.05);
     if (e.type === 'crashed') { burst(j.hip.x, Math.max(j.hip.y, j.head.y) + 4, 12, 110); this.freeze = 0.07; }
     if (e.type === 'stomped') burst(feetX, feetY, 5, 70);
+    if (e.type === 'limbOff' || e.type === 'limbOn') {
+      // No gore: a burst of pixel sparks, and a hit-stop when it snaps.
+      const off = e.type === 'limbOff', at = e as unknown as { x: number; y: number };
+      const colors = off ? ['#ffffff', '#ffe66d', '#ffd23f', shade(this.config.look.color, 0.5)] : ['#ffffff', shade(this.config.look.color, 0.6)];
+      for (let i = 0; i < (off ? 18 : 9); i++) {
+        const a = Math.random() * Math.PI * 2, v = (off ? 160 : 90) + Math.random() * (off ? 260 : 120);
+        this.sparks.push({ x: at.x, y: at.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - (off ? 120 : 60), t: 0, life: 0.35 + Math.random() * 0.4, color: colors[i % colors.length] });
+      }
+      if (off) this.freeze = 0.09;
+    }
   }
 
   /** Say something longer: split into bubble-sized pieces, shown one after another. */
@@ -165,7 +181,11 @@ export class Pet {
   draw(ctx: CanvasRenderingContext2D) {
     const look = this.config.look;
     if (look.pixel > 1) this.pixels.draw(ctx, this.char, look);
-    else drawCharacter(ctx, this.char, look);
+    else {
+      drawCharacter(ctx, this.char, look);
+      for (const piece of this.char.loosePieces) drawLooseLimb(ctx, piece, look, this.char.scale);
+    }
+    if (this.sparks.length) drawSparks(ctx, this.sparks, Math.max(1, Math.round(look.pixel)));
     if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
     // His pen, while he's drawing.
@@ -207,6 +227,7 @@ export class Pet {
       this.mind.reset(this.ctx);
     }
     this.char.style = { ...cfg.body };
+    this.char.destructible = cfg.destructible;
     if (this.ctx) this.ctx.inkColor = shade(cfg.look.color, -0.35);
     this.char.setHeadSize(cfg.look.headSize);
   }
@@ -262,8 +283,8 @@ export class Pet {
     this.char.setWalls(this.ctx.world.walls);
   }
 
-  /** Is the cursor over him? (decides whether clicks reach us or the desktop) */
-  hit(x: number, y: number) { return this.char.hitTest(x, y) !== null; }
+  /** Is the cursor over him, or one of his loose limbs? (decides whether clicks reach us or the desktop) */
+  hit(x: number, y: number) { return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null; }
 
   private emit(e: MindEvent) {
     this.remember(e);
@@ -282,6 +303,7 @@ export class Pet {
       case 'released': if (e.speed > 900) m.count('thrown'); break;
       case 'crashed': m.count('crashed'); break;
       case 'fellOff': m.count('fellOff'); break;
+      case 'limbOff': m.count('ripped'); if (e.yanked) m.add('you ripped my ' + (e.limb.startsWith('arm') ? 'arm' : 'leg') + ' off. RUDE.', 'you', 'him', 3); break;
     }
   }
 
@@ -305,6 +327,9 @@ export class Pet {
         const joint = this.char.hitTest(px, py, 4);
         if (!joint) continue;
         const k = Math.min(speed, 5000) / speed * 0.55; // a share of the swipe's speed goes into him
+        // A really hard swipe through an arm or a leg knocks it clean off.
+        const limb = limbOf(joint);
+        if (limb && speed > 3400 && this.char.destructible) this.char.detach(limb, { x: vx * k, y: vy * k - 150, z: (Math.random() - 0.5) * 500 });
         this.char.poke(joint, vx * k, vy * k - 150);
         this.smackCooldown = w.time + 0.35;
         this.emit({ type: 'smacked', speed });
@@ -331,7 +356,13 @@ export class Pet {
   // Press on him: nothing yet. Drag (or hold a moment) = pick up. Quick click = poke.
   pointerDown(x: number, y: number, now: number) {
     const joint = this.char.hitTest(x, y);
-    if (!joint) return false;
+    if (!joint) {
+      // Not him: maybe one of his limbs lying around.
+      const limb = this.char.hitLimb(x, y);
+      if (!limb) return false;
+      this.press = { joint: 'hip', limb, x, y, t: now, moved: false, grabbed: false };
+      return true;
+    }
     this.press = { joint, x, y, t: now, moved: false, grabbed: false };
     return true;
   }
@@ -342,7 +373,8 @@ export class Pet {
     if (Math.hypot(x - p.x, y - p.y) > 5) p.moved = true;
     if (!p.grabbed && (p.moved || now - p.t > 180)) {
       p.grabbed = true;
-      this.char.grab(p.joint, x, y);
+      if (p.limb) this.char.grabLimb(p.limb.piece, p.limb.idx, x, y);
+      else this.char.grab(p.joint, x, y);
     }
     if (p.grabbed) this.char.moveHold(x, y, vx, vy);
   }
@@ -352,6 +384,7 @@ export class Pet {
     if (!p) return;
     this.press = null;
     if (p.grabbed) { this.char.release(); return; }
+    if (p.limb) { const q = p.limb.piece.points[p.limb.idx]; q.px = q.x + Math.sign(q.x - x || 1) * -3; q.py = q.y + 4; return; } // flick it
     // A poke: push away from where you clicked.
     const hip = this.char.body.j.hip;
     const dir = Math.abs(x - hip.x) > 2 ? Math.sign(hip.x - x) : -this.char.facing;
@@ -371,6 +404,7 @@ export class Pet {
       label: this.mood.label,
       asleep: this.mood.asleep,
       doing: this.mind.skill?.name ?? this.char.mode,
+      missing: [...this.char.missing.keys()],
       why: this.mind.why,
       recent: this.mind.recent.slice(-8),
       windows: this.winShown.length,
@@ -422,6 +456,7 @@ export class Pet {
       const b = this.ctx.world.bounds, j = this.char.body.j;
       this.mind.reset(this.ctx);
       if (this.char.isHeld()) this.char.release();
+      for (const l of [...this.char.missing.keys()]) this.char.regrow(l);
       this.char.body.translate((b.left + b.right) / 2 - j.hip.x, b.top + 120 - j.hip.y);
       this.char.body.launch(0, 0, 1 / 120);
       this.char.mode = 'air';
