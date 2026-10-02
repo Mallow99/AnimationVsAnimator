@@ -405,7 +405,8 @@ async function live(pet: Pet, seconds: number) {
     if (i % 5 === 0) await new Promise((r) => setImmediate(r));
   }
   check('full: AI picks what he does', seen.has('hop'), [...seen].join(','));
-  check('full: thinks at most about once every 40 s', asked.length >= 2 && asked.length <= 5, `calls in 3 min=${asked.length}`);
+  const auto = asked.filter((r) => r.messages[r.messages.length - 1].text.includes('Nobody said anything')).length;
+  check('full: thinks on his own at most about once every 40 s', auto >= 2 && auto <= 5 && asked.length <= 9, `own-idea calls=${auto}, all calls=${asked.length} in 3 min`);
 }
 { // AI failing (no internet, bad key): he shrugs it off and instinct keeps running.
   const { pet } = await brainPet('full', () => new Error("Couldn't reach the internet."));
@@ -469,7 +470,7 @@ async function live(pet: Pet, seconds: number) {
   pet.command('hear:hop 3 times');
   let jumps = 0;
   const orig = pet.mind.onEvent.bind(pet.mind);
-  pet.mind.onEvent = (c, e) => { if (e.type === 'jumped') jumps++; orig(c, e); };
+  pet.mind.onEvent = (c, e) => { if (e.type === 'jumped' && pet.mind.why === 'you asked (AI)') jumps++; orig(c, e); }; // (not his own hops afterwards)
   for (let i = 0; i < 12 * 60; i++) { pet.update(1 / 60); if (i % 5 === 0) await new Promise((r) => setImmediate(r)); }
   const line = pet.brain.log.find((l) => l.who === 'him');
   check('plan: "hop 3 times" means three hops', jumps === 3, `jumps=${jumps}`);
