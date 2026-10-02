@@ -38,7 +38,7 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look) {
     ctx.stroke();
   };
   // Back limbs first, a shade darker, so the figure reads with depth.
-  const back = c.facing > 0 ? 'L' : 'R', front = c.facing > 0 ? 'R' : 'L';
+  const back = c.turnF > 0 ? 'L' : 'R', front = c.turnF > 0 ? 'R' : 'L';
   ctx.strokeStyle = shade(look.color, -0.22);
   path(j.hip, j[`knee${back}`], j[`foot${back}`]);
   path(j.neck, j[`elbow${back}`], j[`hand${back}`]);

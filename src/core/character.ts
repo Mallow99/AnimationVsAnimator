@@ -27,7 +27,15 @@ export type PuppetJoint = (typeof PUPPET_JOINTS)[number];
  * measured from the ground right under where he stood when the move began.
  * Parts left out keep their previous place (elbows, knees and head bend naturally if never given).
  */
-export interface Keyframe { t: number; pose: Partial<Record<PuppetJoint, [number, number]>> }
+export interface Keyframe {
+  t: number;
+  pose: Partial<Record<PuppetJoint, [number, number]>>;
+  /** Degrees to spin while getting to this pose (360 = a full turn; positive turns toward you first). */
+  turn?: number;
+}
+
+/** How far a body part sits to his side (px at size 1): what shows when he turns to face you. +1 = his left. */
+const SIDE: Partial<Record<JointName, number>> = { handL: 8, handR: -8, elbowL: 6, elbowR: -6, footL: 5, footR: -5, kneeL: 5, kneeR: -5 };
 
 export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower' | 'dance' | 'nuzzle';
 
@@ -89,7 +97,19 @@ export class Character {
   readonly body: Body;
   readonly d: Dims;
   mode: Mode = 'ground';
+  /** Which way he faces: 1 = right, -1 = left. */
   facing = 1;
+  /**
+   * How his body is actually turned, as an angle: 0 = facing right, π = facing left,
+   * π/2 = facing you. Physics is flat (2D); this only changes where his poses put his
+   * limbs, so turning around is a smooth spin through a front view (a "2.5D" look)
+   * instead of an instant flip. It follows `facing`, or a made-up move drives it.
+   */
+  yaw = 0;
+  /** How much his forward direction points right on screen (1 right … -1 left). */
+  get turnF() { return Math.cos(this.yaw); }
+  /** How much he faces you (0 = side view, 1 = facing you, -1 = back to you). */
+  get turnS() { return Math.sin(this.yaw); }
   posture: Posture = { hunch: 0, bounce: 0, tension: 0, speed: 1 };
   style: BodyStyle = { ...DEFAULT_BODY };
   gait: Gait = 'normal';
@@ -155,9 +175,11 @@ export class Character {
   /** A made-up move being played (his AI brain moving his body directly). */
   private puppetMove: {
     times: number[];                  // seconds to reach each pose
-    poses: Record<JointName, Vec>[];  // [start, keyframe 1, keyframe 2, ...], every part filled in
+    poses: Record<JointName, Vec>[];  // [start, keyframe 1, ...] in his own frame (x forward, y up), every part filled in
+    yaws: number[];                   // body angle at each of those
     auto: Set<JointName>;             // parts never given: bent naturally instead
-    f: number; time: number; total: number;
+    ox: number; oy: number;           // the spot on the ground where the move started
+    time: number; total: number;
   } | null = null;
 
   constructor(public bounds: Bounds, x: number, scale = 1) {
@@ -463,6 +485,7 @@ export class Character {
     const s: Strengths = {};
     let internal = false;
     this.hipTarget = null;
+    if (this.mode !== 'puppet') this.turnToward(dt);
 
     switch (this.mode) {
       case 'ground': this.groundPose(dt, t, s); break;
@@ -503,6 +526,28 @@ export class Character {
       collidePlatforms(b.points, this.platforms, friction);
     }
     this.afterStep(dt, hipVY);
+  }
+
+  /** A turn in progress: from one body angle to another over a set time, eased in and out. */
+  private turning: { from: number; to: number; t: number; dur: number } | null = null;
+
+  /** Swing his body angle toward the way he faces: a quick turn through the front view. */
+  private turnToward(dt: number) {
+    const target = this.facing > 0 ? 0 : Math.PI;
+    const tw = this.turning;
+    if (!tw || Math.abs(Math.cos(tw.to) - Math.cos(target)) > 1e-6) {
+      let diff = target - this.yaw;
+      diff -= Math.round(diff / (2 * Math.PI)) * 2 * Math.PI; // shortest way round
+      if (Math.abs(diff) > Math.PI - 0.01) diff = (this.turnF > 0 ? 1 : -1) * Math.PI; // a half turn: go via facing you
+      if (Math.abs(diff) < 0.002) { this.yaw = target; this.turning = null; return; }
+      // About a third of a second for a full about-face; quicker when running.
+      const dur = Math.max(0.1, (Math.abs(diff) / Math.PI) * (this.running ? 0.2 : 0.32));
+      this.turning = { from: this.yaw, to: this.yaw + diff, t: 0, dur };
+    }
+    const w = this.turning!;
+    w.t += dt;
+    this.yaw = lerp(w.from, w.to, smooth(w.t / w.dur));
+    if (w.t >= w.dur) { this.yaw = w.to; this.turning = null; }
   }
 
   private setMode(m: Mode) {
@@ -696,7 +741,7 @@ export class Character {
     const moving = Math.abs(this.rootVX) > 10;
     if (moving) this.facing = sign(this.rootVX);
     else if (this.look && Math.abs(this.look.x - this.rootX) > 25 && !this.gesture) this.facing = sign(this.look.x - this.rootX);
-    const f = this.facing;
+    const f = this.turnF, side = this.turnS;
 
     // Running has its own cycle (see runPose).
     if (this.running && moving && this.crouch < 6 * sc) { this.runPose(dt, t, s, floor); return; }
@@ -710,7 +755,7 @@ export class Character {
     const stance = this.stanceHalf();
     const ideal = moving
       ? { L: this.rootX, R: this.rootX }
-      : { L: this.rootX - f * stance, R: this.rootX + f * stance };
+      : { L: this.rootX - f * stance + side * stance, R: this.rootX + f * stance - side * stance };
     const stepT = moving ? clamp(stepLen / speed, 0.16, 0.5) : 0.22;
     const landAt = (k: 'L' | 'R', remaining: number) =>
       moving ? this.rootX + this.rootVX * remaining + dir * stepLen * 0.5 : ideal[k];
@@ -807,6 +852,9 @@ export class Character {
     const frontIsR = f > 0;
     let handL = armAt(this.feet.R.x, frontIsR ? backFwd : frontFwd);
     let handR = armAt(this.feet.L.x, frontIsR ? frontFwd : backFwd);
+    // Turned toward you, his arms hang out to his sides.
+    handL = { x: handL.x + side * 7 * sc, y: handL.y };
+    handR = { x: handR.x - side * 7 * sc, y: handR.y };
     if (this.gait === 'pocket' && !ready) {
       // Hands tucked in his pockets, elbows out.
       const back = { x: hip.x - f * 4 * sc, y: hip.y - 1 * sc }, front = { x: hip.x + f * 2 * sc, y: hip.y - 1 * sc };
@@ -972,7 +1020,7 @@ export class Character {
    * Arms are bent and pump opposite the legs; the body pitches forward.
    */
   private runPose(dt: number, t: Targets, s: Strengths, floor: number) {
-    const d = this.d, sc = this.scale, f = this.facing, L = d.thigh + d.shin;
+    const d = this.d, sc = this.scale, f = this.turnF, L = d.thigh + d.shin;
     const angry = this.gait === 'stomp';
     const speed = Math.abs(this.rootVX), stride = L * (angry ? 1.7 : 2.3);
     this.runPhase = (this.runPhase + (speed * dt) / stride) % 1;
@@ -1108,7 +1156,7 @@ export class Character {
   }
 
   private airPose(t: Targets, s: Strengths, k: number) {
-    const d = this.d, sc = this.scale, f = this.facing, j = this.body.j;
+    const d = this.d, sc = this.scale, f = this.turnF, j = this.body.j;
     const hip = { x: j.hip.x, y: j.hip.y };
     const vy = (j.hip.y - j.hip.py) / this.dt;
     const neck = { x: hip.x + f * 2 * sc, y: hip.y - d.torso };
@@ -1146,24 +1194,29 @@ export class Character {
       frontFoot: f > 0 ? 'footR' : 'footL', backFoot: f > 0 ? 'footL' : 'footR',
       frontKnee: f > 0 ? 'kneeR' : 'kneeL', backKnee: f > 0 ? 'kneeL' : 'kneeR',
     };
-    // Fill in every keyframe completely: parts it doesn't name stay where they were.
+    // Poses are kept in his own frame (x forward, y up, in screen pixels) and turned
+    // onto the screen every step, so he can spin in the middle of a move.
     const start = {} as Record<JointName, Vec>;
-    for (const n of JOINTS) start[n] = { x: this.body.j[n].x, y: this.body.j[n].y };
+    for (const n of JOINTS) start[n] = { x: (this.body.j[n].x - ox) * f, y: oy - this.body.j[n].y };
     const poses = [start];
     const given = new Set<JointName>();
     for (const k of frames) {
       const next = { ...poses[poses.length - 1] };
       for (const [name, xy] of Object.entries(k.pose) as [PuppetJoint, [number, number]][]) {
-        next[map[name]] = { x: ox + f * clamp(xy[0], -300, 300) * sc, y: oy - clamp(xy[1], -20, 400) * sc };
+        next[map[name]] = { x: clamp(xy[0], -300, 300) * sc, y: clamp(xy[1], -20, 400) * sc };
         given.add(map[name]);
       }
       poses.push(next);
     }
     const auto = new Set<JointName>((['head', 'elbowL', 'elbowR', 'kneeL', 'kneeR'] as JointName[]).filter((n) => !given.has(n)));
+    // Body angle at each keyframe (spins add up).
+    const yaws = [f > 0 ? 0 : Math.PI];
+    for (const k of frames) yaws.push(yaws[yaws.length - 1] + ((clamp(k.turn ?? 0, -1440, 1440) * Math.PI) / 180) * (f > 0 ? 1 : -1));
     this.goalX = null; this.gesture = null; this.stayDown = false;
     this.setMode('puppet');
+    this.yaw = yaws[0];
     const times = frames.map((k) => k.t);
-    this.puppetMove = { times, poses, auto, f, time: 0, total: times.reduce((x, y) => x + y, 0) };
+    this.puppetMove = { times, poses, yaws, auto, ox, oy, time: 0, total: times.reduce((x, y) => x + y, 0) };
     return true;
   }
 
@@ -1173,15 +1226,26 @@ export class Character {
   endPuppet() { if (this.mode === 'puppet') this.setMode('air'); }
 
   private puppetPose(dt: number, t: Targets, s: Strengths) {
-    const pm = this.puppetMove!, d = this.d, f = pm.f;
+    const pm = this.puppetMove!, d = this.d, sc = this.scale;
     pm.time += dt;
-    if (pm.time > pm.total + 0.25) { this.setMode('air'); this.airPose(t, s, 0.07); return; }
+    if (pm.time > pm.total + 0.25) {
+      // Done: whichever way he ended up facing is his facing now.
+      this.yaw = ((this.yaw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      this.facing = this.turnF >= 0 ? 1 : -1;
+      this.setMode('air'); this.airPose(t, s, 0.07); return;
+    }
     // Which keyframe are we heading to, and how far along?
     let acc = 0, k = 0;
     while (k < pm.times.length - 1 && acc + pm.times[k] < pm.time) { acc += pm.times[k]; k++; }
     const a = pm.poses[k], b = pm.poses[k + 1];
     const u = smooth(pm.times[k] > 0 ? (pm.time - acc) / pm.times[k] : 1);
-    for (const n of JOINTS) t[n] = { x: lerp(a[n].x, b[n].x, u), y: lerp(a[n].y, b[n].y, u) };
+    this.yaw = lerp(pm.yaws[k], pm.yaws[k + 1], u);
+    const f = this.turnF, side = this.turnS;
+    // Turn his own frame onto the screen: forward shrinks as he turns toward you, sides spread out.
+    for (const n of JOINTS) {
+      const bx = lerp(a[n].x, b[n].x, u), by = lerp(a[n].y, b[n].y, u);
+      t[n] = { x: pm.ox + bx * f + (SIDE[n] ?? 0) * side * sc, y: pm.oy - by };
+    }
     const hip = t.hip!, neck = t.neck!;
     if (pm.auto.has('head')) {
       const dx = neck.x - hip.x, dy = neck.y - hip.y, len = Math.hypot(dx, dy) || 1;
