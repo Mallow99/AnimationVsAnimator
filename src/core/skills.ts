@@ -4,7 +4,8 @@
 
 import type { Character, Gesture } from './character';
 import type { Mood } from './mood';
-import type { Bounds } from './physics';
+import { GRAVITY, type Bounds, type Platform } from './physics';
+import { surfaceBelow } from './world';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none';
@@ -14,7 +15,15 @@ export interface World {
   cursor: Vec | null;
   cursorMovedAt: number; // world.time when the cursor last moved
   time: number;          // seconds since start
+  platforms: Platform[]; // window tops he can stand on
 }
+
+/** Things he has learned from experience. Saved between runs. */
+export interface Lessons {
+  /** Biggest drop (px, at size 1) he's willing to jump down. Shrinks when a jump down hurts him. */
+  safeDrop: number;
+}
+export const DEFAULT_LESSONS: Lessons = { safeDrop: 420 };
 
 /** Everything a skill can see and touch. */
 export interface Ctx {
@@ -22,6 +31,7 @@ export interface Ctx {
   mood: Mood;
   world: World;
   look: LookMode;
+  lessons: Lessons;
   say(text: string, secs?: number): void;
 }
 
@@ -80,7 +90,7 @@ export class Sequence extends Skill {
       let x: number;
       if (st.walkTo === 'cursor') x = cur ? cur.x : ch.x;
       else if (st.walkTo === 'away') x = ch.x - sign((cur?.x ?? ch.x + 1) - ch.x) * rand(200, 400);
-      else if (st.walkTo === 'edge') x = ch.x - b.left > b.right - ch.x ? b.left + 40 : b.right - 40;
+      else if (st.walkTo === 'edge') { const r = ch.surfaceRange(); x = ch.x - r.x1 > r.x2 - ch.x ? r.x1 : r.x2; }
       else x = st.walkTo;
       ch.walkTo(x, st.run);
       return true;
@@ -134,9 +144,10 @@ export class Idle extends Skill {
 export class Wander extends Skill {
   readonly name = 'wander';
   start(c: Ctx) {
-    const b = c.world.bounds, ch = c.char;
-    let x = rand(b.left + 40, b.right - 40);
-    if (Math.abs(x - ch.x) < 150) x = ch.x + sign(x - ch.x) * 150;
+    const ch = c.char, r = ch.surfaceRange();
+    let x = rand(r.x1 + 10, r.x2 - 10);
+    const far = Math.min(150, (r.x2 - r.x1) / 3);
+    if (Math.abs(x - ch.x) < far) x = ch.x + sign(x - ch.x) * far;
     ch.walkTo(x, chance(c.mood.s.energy * 0.15));
   }
   update(c: Ctx) { return (this.t > 0.2 && !c.char.walking) || this.t > 25; }
@@ -201,6 +212,95 @@ export class AvoidCursor extends Skill {
       ch.walkTo(ch.x - sign(cur.x - ch.x) * rand(200, 350), c.mood.s.fear > 0.3);
     }
     return this.t > this.dur;
+  }
+  stop(c: Ctx) { c.char.stop(); }
+}
+
+// ───────────── windows: climbing up and getting down ─────────────
+
+/** How high he can jump, in px (grows with his size). */
+export const maxClimb = (ch: Character) => 230 * ch.scale;
+
+/** Window tops he could jump up onto from where he stands. */
+export function reachableAbove(c: Ctx): Platform[] {
+  const ch = c.char, floorY = ch.body.j.footL.y, range = ch.surfaceRange();
+  return c.world.platforms.filter((p) => {
+    const h = floorY - p.y;
+    if (p.id === ch.support || h < 40 * ch.scale || h > maxClimb(ch) || p.x2 - p.x1 < 50) return false;
+    // Must be able to get close: overlapping our surface, or within a short hop of its ends.
+    const gap = Math.max(p.x1 - range.x2, range.x1 - p.x2, 0);
+    return gap < 90 * ch.scale;
+  });
+}
+
+/** Drop height (px) if he hops off the given side of what he's standing on. */
+export function dropFrom(c: Ctx, side: -1 | 1) {
+  const ch = c.char, r = ch.surfaceRange(), y = ch.body.j.footL.y;
+  const x = side < 0 ? r.x1 - 25 * ch.scale : r.x2 + 25 * ch.scale;
+  if (x < c.world.bounds.left || x > c.world.bounds.right) return Infinity;
+  return surfaceBelow(x, y + 5, c.world.platforms, c.world.bounds.floor).y - y;
+}
+
+export class ClimbOnto extends Skill {
+  readonly name = 'climb';
+  private phase: 'walk' | 'jump' | 'check' = 'walk';
+  private tries = 0;
+  private launchX = 0;
+  constructor(private target: Platform) { super(); }
+
+  start(c: Ctx) { this.planLaunch(c); c.look = 'none'; }
+
+  private planLaunch(c: Ctx) {
+    const ch = c.char, t = this.target, r = ch.surfaceRange(), m = 16 * ch.scale;
+    // Best: stand right under the window (overlap) and jump straight up through it.
+    const lo = Math.max(r.x1 + m, t.x1 + m), hi = Math.min(r.x2 - m, t.x2 - m);
+    this.launchX = lo <= hi ? clamp(ch.x, lo, hi) : t.x1 > r.x2 ? r.x2 - m : r.x1 + m;
+    ch.walkTo(this.launchX);
+    this.phase = 'walk';
+  }
+
+  update(c: Ctx) {
+    const ch = c.char, t = c.world.platforms.find((p) => p.id === this.target.id);
+    if (!t) return true; // the window went away
+    this.target = t;
+    if (this.phase === 'walk' && ch.ready && !ch.walking) {
+      const h = ch.body.j.footL.y - t.y + 28 * ch.scale;
+      const vy = Math.sqrt(2 * GRAVITY * Math.max(h, 10));
+      const landX = clamp(ch.x, t.x1 + 20 * ch.scale, t.x2 - 20 * ch.scale);
+      const vx = clamp(((landX - ch.x) / (vy / GRAVITY)) * 0.9, -320, 320);
+      ch.facing = sign(landX - ch.x + 0.01);
+      ch.jump(vx, -vy);
+      this.phase = 'jump';
+      this.t = 0;
+    } else if (this.phase === 'jump' && this.t > 0.3 && ch.ready) {
+      if (ch.support === t.id) { if (chance(0.4)) c.say(pick(['ha!', 'up!', 'made it'])); return true; }
+      if (++this.tries >= 2) { c.say(pick(['hmph.', 'nope', 'too high'])); return true; }
+      this.planLaunch(c);
+    }
+    return this.t > 20;
+  }
+  stop(c: Ctx) { c.char.stop(); }
+}
+
+export class GetDown extends Skill {
+  readonly name = 'getdown';
+  private phase: 'walk' | 'hop' = 'walk';
+  drop = 0;
+  constructor(private side: -1 | 1) { super(); }
+  start(c: Ctx) {
+    const ch = c.char, r = ch.surfaceRange();
+    this.drop = dropFrom(c, this.side);
+    ch.walkTo(this.side < 0 ? r.x1 : r.x2);
+  }
+  update(c: Ctx) {
+    const ch = c.char;
+    if (this.phase === 'walk' && ch.ready && !ch.walking) {
+      ch.facing = this.side;
+      ch.jump(this.side * 130, -260);
+      this.phase = 'hop';
+      this.t = 0;
+    }
+    return (this.phase === 'hop' && this.t > 0.4 && ch.mode !== 'air') || this.t > 20;
   }
   stop(c: Ctx) { c.char.stop(); }
 }

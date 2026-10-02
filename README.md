@@ -21,6 +21,9 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   big ones knock him flat, and he'll remember he didn't like that.
 - **Smack** him (turn on Smack mode first): swipe the cursor through him fast.
 - **Pet** him: rub the cursor back and forth over him without clicking. ♥
+- **Windows are platforms**: he climbs onto your open windows, stands on title bars, gets carried
+  when you drag a window, and falls when you close or minimize it. He learns which drops are too high.
+  (First run on a Mac compiles a tiny helper, which takes a few seconds.)
 - **Leave him alone**: he wanders, sits, explores, gets bored, and eventually naps.
   Poke him while he's asleep at your own risk.
 

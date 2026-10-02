@@ -13,7 +13,7 @@
 import type { CharEvent } from './character';
 import { chance, pick, rand, sign } from './math';
 import {
-  AvoidCursor, ChaseCursor, Idle, presets, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
+  AvoidCursor, ChaseCursor, ClimbOnto, dropFrom, GetDown, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
@@ -28,12 +28,20 @@ export class Mind {
   private lookAt: { x: number; y: number } | null = null;
   private lookUntil = 0;
   private history: string[] = [];
+  private onWindowSince = -1;   // world.time he got onto the window he's on (-1 = on the floor)
+  private lastSupport = -1;
+  private quipAt = 0;           // rate-limits little remarks
+  private stuckAsked = 0;
 
   /** Recent skill names, newest last (for debugging and, later, the LLM). */
   get recent() { return this.history; }
 
   update(c: Ctx, dt: number) {
     c.mood.tick(dt);
+    if (c.char.support !== this.lastSupport && c.char.mode === 'ground') {
+      this.lastSupport = c.char.support;
+      this.onWindowSince = c.char.support >= 0 ? c.world.time : -1;
+    }
     c.char.posture = c.mood.posture();
 
     if (this.skill) {
@@ -93,6 +101,7 @@ export class Mind {
       { name: 'explore', score: L === 'bored' ? 1.2 : 0.15, make: presets.explore },
       { name: 'stretch', score: 0.1 + (1 - s.energy) * 0.4, make: presets.stretch },
       { name: 'sigh', score: L === 'bored' ? 0.6 : 0, make: presets.sigh },
+      ...this.windowOptions(c),
     ];
     // Square the scores so strong urges win more often; avoid repeating himself.
     let total = 0;
@@ -107,6 +116,32 @@ export class Mind {
       if (r <= 0) return opts[i].make();
     }
     return opts[0].make();
+  }
+
+  /** Climbing onto windows and getting back down. */
+  private windowOptions(c: Ctx): Option[] {
+    const s = c.mood.s, L = c.mood.label, ch = c.char, opts: Option[] = [];
+    const up = reachableAbove(c);
+    if (up.length && L !== 'sleepy' && L !== 'sad') {
+      const target = up[Math.floor(Math.random() * up.length)];
+      opts.push({ name: 'climb', score: 0.3 + s.boredom * 0.9 + s.energy * 0.4 + (L === 'playful' ? 0.4 : 0), make: () => new ClimbOnto(target) });
+    }
+    if (ch.support >= 0) {
+      const onFor = c.world.time - this.onWindowSince;
+      const want = 0.15 + Math.min(onFor / 60, 1) * 0.6 + (L === 'sleepy' ? 0.3 : 0);
+      const safe = c.lessons.safeDrop * ch.scale;
+      const sides = ([-1, 1] as const).map((side) => ({ side, drop: dropFrom(c, side) })).filter((o) => o.drop < safe);
+      if (sides.length) {
+        const best = sides.reduce((a, b) => (a.drop < b.drop ? a : b));
+        opts.push({ name: 'getdown', score: want, make: () => new GetDown(best.side) });
+      } else if (onFor > 45 && c.world.time - this.stuckAsked > 60) {
+        // Too high both ways: he's stuck up here.
+        opts.push({ name: 'stuck', score: want, make: () => { this.stuckAsked = c.world.time; return new Sequence('stuck', [
+          { gesture: 'lookAround' }, { face: 'cursor' }, { say: pick(['uh... help?', 'how do I get down', 'too high...']) }, { sit: rand(6, 12) },
+        ]); } });
+      }
+    }
+    return opts;
   }
 
   // ───────────── where he looks ─────────────
@@ -184,6 +219,15 @@ export class Mind {
         return;
 
       case 'crashed':
+        if (this.skill instanceof GetDown) {
+          // Lesson learned: that jump was too big. Be warier of drops this high.
+          const was = c.lessons.safeDrop;
+          c.lessons.safeDrop = Math.max(120, Math.min(was, (this.skill.drop / ch.scale) * 0.8));
+          m.nudge({ happiness: -0.05, fear: 0.1 });
+          c.say(pick(['ow... too high', 'never again', 'OW. noted.']), 2);
+          this.interrupt(c, this.afterFall(c));
+          return;
+        }
         m.nudge({ happiness: -0.08, fear: 0.12, annoyance: 0.08, trust: -0.01 });
         c.say(e.speed > 1600 ? 'OW' : pick(['ow.', 'oof', 'ouch']), 1.4);
         this.interrupt(c, this.afterFall(c));
@@ -195,7 +239,25 @@ export class Mind {
         this.interrupt(c, this.afterFall(c));
         return;
 
+      case 'fellOff':
+        if (!(this.skill instanceof GetDown) && c.world.time > this.quipAt) {
+          this.quipAt = c.world.time + 3;
+          c.say(pick(['whoa!', 'woah', '!!']), 1);
+        }
+        return;
+
+      case 'carried':
+        if (e.speed > 12 * ch.scale && c.world.time > this.quipAt && chance(0.3)) {
+          this.quipAt = c.world.time + 6;
+          c.say(pick(['whoa', 'wheee', 'hey, steady!']), 1.2);
+        }
+        return;
+
       case 'landed':
+        if (this.skill instanceof GetDown && e.speed > 600) {
+          // Landed a big drop fine: a little braver next time.
+          c.lessons.safeDrop = Math.min(600, Math.max(c.lessons.safeDrop, (this.skill.drop / ch.scale) * 1.05));
+        }
         if (e.speed > 500 && m.label === 'playful') c.say(pick(['!', 'ta-da', 'again!']), 1.2);
         return;
 

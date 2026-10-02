@@ -7,8 +7,14 @@ export interface Point {
   px: number; py: number; // position last step
   r: number;              // collision radius
   invMass: number;        // 1 = normal, 0 = pinned (e.g. held by the mouse)
-  grounded: boolean;      // touching the floor this step
+  grounded: boolean;      // touching the floor or a platform this step
+  on: number;             // what it's touching: a platform id, FLOOR, or NONE
 }
+
+export const FLOOR = -1, NONE = -2;
+
+/** A surface he can stand on: the visible part of a window's top edge. One-way (you can jump up through it). */
+export interface Platform { id: number; x1: number; x2: number; y: number }
 
 export interface Stick { a: Point; b: Point; len: number; minOnly?: boolean }
 
@@ -18,7 +24,7 @@ export interface Bounds { left: number; right: number; top: number; floor: numbe
 export const GRAVITY = 2000; // pixels / second²
 
 export function makePoint(x: number, y: number, r = 2): Point {
-  return { x, y, px: x, py: y, r, invMass: 1, grounded: false };
+  return { x, y, px: x, py: y, r, invMass: 1, grounded: false, on: NONE };
 }
 
 export function integrate(points: Point[], dt: number, airDrag = 0.9995) {
@@ -55,9 +61,34 @@ export function collide(points: Point[], b: Bounds, friction = 0.25, bounce = 0.
       p.py = p.y + vy * bounce;
       p.px += (p.x - p.px) * friction; // floor friction slows sliding
       p.grounded = true;
+      p.on = FLOOR;
     }
     if (p.y - p.r < b.top) { const vy = p.y - p.py; p.y = b.top + p.r; p.py = p.y + vy * bounce; }
     if (p.x - p.r < b.left) { const vx = p.x - p.px; p.x = b.left + p.r; p.px = p.x + vx * bounce; }
     if (p.x + p.r > b.right) { const vx = p.x - p.px; p.x = b.right - p.r; p.px = p.x + vx * bounce; }
+  }
+}
+
+/**
+ * Window tops. A point lands on one only if it was above the edge last step and
+ * is coming down through it now, so he can jump up through a window from below
+ * and land on top — like a platformer.
+ */
+export function collidePlatforms(points: Point[], platforms: Platform[], friction = 0.25, bounce = 0.1) {
+  if (!platforms.length) return;
+  for (const p of points) {
+    if (p.invMass === 0) continue;
+    for (const pl of platforms) {
+      if (p.x < pl.x1 || p.x > pl.x2) continue;
+      const top = pl.y - p.r;
+      if (p.py <= top + 0.5 && p.y > top) {
+        const vy = p.y - p.py;
+        p.y = top;
+        p.py = p.y + vy * bounce;
+        p.px += (p.x - p.px) * friction;
+        p.grounded = true;
+        p.on = pl.id;
+      }
+    }
   }
 }

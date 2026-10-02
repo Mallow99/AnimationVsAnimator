@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('petShell', {
   setClickThrough: (ignore: boolean) => ipcRenderer.send('pet:clickThrough', ignore),
   sendStats: (stats: unknown) => ipcRenderer.send('pet:stats', stats),
   onCommand: on('pet:command'),
+  onWindows: on('world:windows'),
   // shared
   getConfig: () => ipcRenderer.invoke('config:get'),
   onConfig: on('config:changed'),

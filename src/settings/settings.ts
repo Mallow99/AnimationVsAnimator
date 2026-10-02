@@ -42,7 +42,7 @@ for (const [k, label] of MOOD_ROWS) {
 const DOING: Record<string, string> = {
   idle: 'Standing around', wander: 'Wandering', sit: 'Sitting', sulk: 'Sulking', sleep: 'Napping', chase: 'Chasing your cursor',
   hunt: 'Hunting your cursor', avoid: 'Keeping away from you', dance: 'Dancing', hop: 'Hopping', tantrum: 'Throwing a tantrum',
-  explore: 'Exploring', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
+  explore: 'Exploring', climb: 'Climbing onto a window', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
   getup: 'Getting up', ground: 'Standing', lie: 'Lying down',
 };
 shell.onStats((s) => {
@@ -112,6 +112,7 @@ for (const [key, r] of Object.entries(RANGES)) {
 // ── general ──
 $<HTMLInputElement>('color').addEventListener('input', (e) => set({ look: { color: (e.target as HTMLInputElement).value } }));
 $<HTMLInputElement>('name').addEventListener('input', (e) => set({ name: (e.target as HTMLInputElement).value }));
+$<HTMLInputElement>('windows').addEventListener('change', (e) => set({ windows: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking: (e.target as HTMLInputElement).checked }));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
 $('resetAll').addEventListener('click', () => shell.resetConfig());
@@ -125,6 +126,7 @@ function render(c: PetConfig) {
   if (document.activeElement !== name) name.value = c.name;
   $<HTMLInputElement>('color').value = c.look.color;
   $<HTMLInputElement>('smacking').checked = c.smacking;
+  $<HTMLInputElement>('windows').checked = c.windows;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.checked = r.value === c.mind;
   for (const [input, out, key] of sliders) {
     const [a, b] = key.split('.');

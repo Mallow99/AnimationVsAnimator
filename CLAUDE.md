@@ -69,6 +69,20 @@ Then: Android shell.
 - Smacking is a toggle (off by default). Owner later wants weapons/items to hit him with, and him
   hitting back / moving the cursor (items milestone).
 
+- Milestone 3 (window awareness) — built, needs testing on a real Mac/PC:
+  - `src/electron/windows.ts` runs a per-OS helper (`src/electron/native/`): Swift on macOS
+    (compiled once with `xcrun swiftc`, cached in userData/bin), PowerShell+C# on Windows.
+    Each prints window rects as JSON lines; main converts to overlay coords and sends them over IPC.
+    `PET_FAKE_WINDOWS='[...]'` env var injects fake windows for testing.
+  - `src/core/world.ts` turns rects into platforms (visible top edges only; covered parts removed).
+  - Character: one-way platform collision, `support` (what he stands on), carried when a window
+    moves, falls when it vanishes / he walks off. Skills: ClimbOnto, GetDown. Mind: climb/getdown/
+    "stuck" options. Cheap learning: `lessons.safeDrop` shrinks after a painful jump down, grows
+    after a good one; saved with his mood.
+  - Preview mode draws two fake windows to climb.
+  - NOT done yet: following across desktops (Spaces) is just "visible on all workspaces";
+    walking to another desktop on his own is not built.
+
 ## Owner's wishlist (agreed, not built yet)
 - Memories and personality views in settings are placeholders until milestones 4–5.
 - Moods as blended bars where all of them matter (complex emotions), not just the loudest one.

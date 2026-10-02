@@ -8,11 +8,15 @@ import { app, BrowserWindow, ipcMain, Menu, screen, Tray } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_CONFIG, mergeConfig, type PetConfig } from '../core/config';
+import type { WinRect } from '../core/world';
+import { watchWindows, type WindowWatcher } from './windows';
 
 let win: BrowserWindow | null = null;
 let settingsWin: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const preload = path.join(__dirname, 'preload.js');
+let watcher: WindowWatcher | null = null;
+let lastWins: WinRect[] = [];
 
 // ───────────── settings file ─────────────
 
@@ -32,6 +36,33 @@ function setConfig(patch: unknown) {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send('config:changed', config);
   buildTrayMenu();
   settingsWin?.setTitle(`${config.name} — Settings`);
+  updateWatcher();
+}
+
+// ───────────── other windows (platforms) ─────────────
+
+/** Convert screen rectangles to the overlay's coordinates (its top-left is 0,0). */
+function toOverlay(wins: WinRect[]): WinRect[] {
+  const wa = screen.getPrimaryDisplay().workArea;
+  return wins.map((w) => {
+    let r = { x: w.x, y: w.y, width: w.w, height: w.h };
+    if (process.platform === 'win32') r = screen.screenToDipRect(null, r); // real pixels → app units
+    return { id: w.id, x: r.x - wa.x, y: r.y - wa.y, w: r.width, h: r.height };
+  });
+}
+
+function updateWatcher() {
+  if (config.windows && !watcher) {
+    watcher = watchWindows((wins) => {
+      lastWins = toOverlay(wins);
+      win?.webContents.send('world:windows', lastWins);
+    }, (m) => console.log('[windows]', m));
+  } else if (!config.windows && watcher) {
+    watcher.stop();
+    watcher = null;
+    lastWins = [];
+    win?.webContents.send('world:windows', []);
+  }
 }
 
 // ───────────── windows ─────────────
@@ -71,6 +102,7 @@ function createOverlay() {
   win.setIgnoreMouseEvents(true, { forward: true });
   win.loadFile(path.join(__dirname, '../app/index.html'));
   win.on('closed', () => { win = null; });
+  win.webContents.on('did-finish-load', () => win?.webContents.send('world:windows', lastWins));
 
   const fit = () => win?.setBounds(screen.getPrimaryDisplay().workArea);
   screen.on('display-metrics-changed', fit);
@@ -106,6 +138,7 @@ function buildTrayMenu() {
     { label: config.name, enabled: false },
     { label: 'Settings…', click: openSettings },
     { label: 'Smack mode', type: 'checkbox', checked: config.smacking, click: () => setConfig({ smacking: !config.smacking }) },
+    { label: 'Climb on windows', type: 'checkbox', checked: config.windows, click: () => setConfig({ windows: !config.windows }) },
     { type: 'separator' },
     { label: 'Drop him in again', click: () => win?.webContents.send('pet:command', 'respawn') },
     { label: 'Reload', click: () => win?.reload() },
@@ -138,5 +171,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]));
   createOverlay();
   createTray();
+  updateWatcher();
 });
+app.on('will-quit', () => watcher?.stop());
 app.on('window-all-closed', () => app.quit());

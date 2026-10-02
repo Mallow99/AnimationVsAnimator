@@ -12,7 +12,7 @@
 // throws always look slightly different.
 
 import { Body, JOINTS, makeDims, type Dims, type JointName } from './body';
-import { collide, integrate, solveSticks, type Bounds } from './physics';
+import { collide, collidePlatforms, FLOOR, integrate, NONE, solveSticks, type Bounds, type Platform } from './physics';
 import { clamp, dist, distToSegment, lerp, sign, smooth, twoBoneIK, type Vec } from './math';
 
 export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie';
@@ -29,7 +29,9 @@ export type CharEvent =
   | { type: 'jumped' }
   | { type: 'arrived' }
   | { type: 'stomped' }
-  | { type: 'hitWall' };
+  | { type: 'hitWall' }
+  | { type: 'fellOff' }          // walked/was pushed off an edge, or the window vanished
+  | { type: 'carried'; speed: number }; // the window under him moved
 
 /** How he carries himself. Part of his "look"; set from the settings / presets. */
 export interface BodyStyle {
@@ -68,6 +70,10 @@ export class Character {
   stayDown = false;
 
   private events: CharEvent[] = [];
+  /** Window tops he can stand on (set by the pet from the desktop shell). */
+  platforms: Platform[] = [];
+  /** What he's standing on: a platform id, FLOOR, or NONE while airborne. */
+  support = FLOOR;
   private rootX: number;
   private rootVX = 0;
   private goalX: number | null = null;
@@ -110,10 +116,59 @@ export class Character {
   get walking() { return this.mode === 'ground' && this.goalX !== null; }
   get currentGesture() { return this.gesture?.name ?? null; }
 
-  walkTo(x: number, run = false) {
+  /** Walk to x. He stops at the edge of whatever he's standing on, unless `offEdge` (then he walks off and drops). */
+  walkTo(x: number, run = false, offEdge = false) {
     if (this.mode === 'sit') this.standUp();
-    this.goalX = clamp(x, this.bounds.left + 20, this.bounds.right - 20);
+    const r = this.surfaceRange();
+    const pad = 6 * this.scale;
+    this.goalX = offEdge ? clamp(x, this.bounds.left + 20, this.bounds.right - 20) : clamp(x, r.x1 + pad, r.x2 - pad);
     this.running = run;
+  }
+
+  /** Left/right ends of what he's standing on. */
+  surfaceRange() {
+    const p = this.supportPlatform();
+    return p ? { x1: p.x1, x2: p.x2 } : { x1: this.bounds.left + 20, x2: this.bounds.right - 20 };
+  }
+
+  /** The window top he's standing on, if any. */
+  supportPlatform() { return this.support >= 0 ? this.platforms.find((p) => p.id === this.support) ?? null : null; }
+
+  /**
+   * New window positions. If the one he's standing on moved, he moves with it.
+   * If it disappeared (closed, minimized, covered), he falls.
+   */
+  setPlatforms(list: Platform[]) {
+    const before = this.supportPlatform();
+    this.platforms = list;
+    if (this.support < 0 || !before) return;
+    const now = this.supportPlatform();
+    const onIt = this.mode !== 'air' && this.mode !== 'held';
+    if (!now) {
+      this.support = NONE;
+      if (onIt) { this.setMode('air'); this.events.push({ type: 'fellOff' }); }
+      return;
+    }
+    if (!onIt) return;
+    const dy = now.y - before.y;
+    // A window being dragged moves both of its edges together; a top that got
+    // partly covered only changes one end, which shouldn't move him.
+    const dx1 = now.x1 - before.x1, dx2 = now.x2 - before.x2;
+    const dx = Math.abs(dx1 - dx2) < 1 ? dx1 : 0;
+    if (!dx && !dy) return;
+    this.body.translate(dx, dy);
+    this.rootX += dx;
+    for (const f of [this.feet.L, this.feet.R]) { f.x += dx; f.fromX += dx; f.toX += dx; }
+    if (this.getup) {
+      for (const set of [this.getup.from, this.getup.crouch, this.getup.stand] as Record<string, Vec>[]) {
+        for (const v of Object.values(set)) { v.x += dx; v.y += dy; }
+      }
+      this.getup.x += dx;
+    }
+    const jolt = Math.hypot(dx, dy);
+    this.events.push({ type: 'carried', speed: jolt });
+    // A hard yank throws him off balance.
+    if (jolt > 25 * this.scale) this.poke('hip', -dx * 6, -Math.abs(dy) * 3);
   }
 
   stop() { this.goalX = null; }
@@ -268,16 +323,18 @@ export class Character {
       p.x = this.held.x; p.y = this.held.y;
       p.px = p.x - this.held.vx * dt; p.py = p.y - this.held.vy * dt;
     }
-    for (const p of b.points) p.grounded = false;
+    for (const p of b.points) { p.grounded = false; p.on = NONE; }
     const friction = this.mode === 'ragdoll' || this.mode === 'lie' ? 0.4 : 0.25;
     for (let i = 0; i < 8; i++) {
       solveSticks(b.sticks);
       collide(b.points, this.bounds, friction);
+      collidePlatforms(b.points, this.platforms, friction);
     }
     this.afterStep(dt, hipVY);
   }
 
   private setMode(m: Mode) {
+    if (m === 'air' || m === 'held') this.support = NONE;
     this.mode = m;
     this.modeTime = 0;
     this.calm = 0;
@@ -324,6 +381,7 @@ export class Character {
         if (anyFoot && !otherDown && !upsideDown) {
           if (hipVYBefore > 1150) { this.crash(hipVYBefore); break; }
           this.setMode('ground');
+          this.support = j.footL.grounded ? j.footL.on : j.footR.on;
           this.rootX = j.hip.x;
           this.rootVX = clamp((j.hip.x - j.hip.px) / dt, -150, 150) * 0.5;
           this.plantFeet();
@@ -335,6 +393,17 @@ export class Character {
         break;
       }
       case 'ground': {
+        if (this.support >= 0) {
+          const p = this.supportPlatform();
+          const edge = 3 * this.scale;
+          if (!p || this.rootX < p.x1 - edge || this.rootX > p.x2 + edge) {
+            this.support = NONE;
+            this.goalX = null;
+            this.setMode('air');
+            this.events.push({ type: 'fellOff' });
+            break;
+          }
+        }
         const tg = this.hipTarget;
         const headDown = j.head.grounded || j.neck.grounded; // hips on the floor is fine (rising from a sit)
         // Off balance = hips far from where they should be, for more than a moment.
@@ -352,6 +421,9 @@ export class Character {
       }
       case 'ragdoll': {
         const grounded = this.body.points.some((p) => p.grounded);
+        // Keep track of what he's lying on, so a window being dragged carries him.
+        const touching = [j.hip, j.neck, ...this.body.points].find((p) => p.on !== NONE);
+        if (touching) this.support = touching.on;
         if (grounded && this.body.maxSpeed(dt) < 45) this.calm += dt; else this.calm = 0;
         const settled = this.calm > 0.6 || (grounded && this.modeTime > 4);
         if (settled && !this.stayDown) this.startGetup();
@@ -376,7 +448,7 @@ export class Character {
 
   // ───────────────────────── poses ─────────────────────────
 
-  private groundY() { return this.bounds.floor; }
+  private groundY() { return this.supportPlatform()?.y ?? this.bounds.floor; }
 
   /** Hip height when standing still (depends on how straight he keeps his legs). */
   private standHeight() { return (this.d.thigh + this.d.shin) * (0.93 + 0.065 * this.style.stand); }
@@ -666,7 +738,11 @@ export class Character {
 
   private startGetup() {
     const j = this.body.j;
-    const x = clamp(j.hip.x, this.bounds.left + 25, this.bounds.right - 25);
+    // What is he lying on? Prefer what his hips touch, else anything touching.
+    const touching = [j.hip, j.footL, j.footR, j.neck, j.head, ...this.body.points].find((p) => p.on !== NONE);
+    this.support = touching ? touching.on : FLOOR;
+    const r = this.surfaceRange();
+    const x = clamp(j.hip.x, r.x1 + 6, r.x2 - 6);
     // Get up facing whichever way his head ended up.
     if (Math.abs(j.head.x - j.hip.x) > 3) this.facing = sign(j.head.x - j.hip.x);
     const from = {} as Record<JointName, Vec>;

@@ -3,6 +3,8 @@
 import { Character } from '../src/core/character';
 import type { Bounds } from '../src/core/physics';
 import { Pet } from '../src/core/pet';
+import { FLOOR, type Platform } from '../src/core/physics';
+import { windowPlatforms } from '../src/core/world';
 
 const DT = 1 / 120;
 const bounds: Bounds = { left: 0, right: 1400, top: 0, floor: 800 };
@@ -110,6 +112,47 @@ for (const scale of [1, 1.1, 1.5]) { // Sit, lie, get up; every gesture finishes
   check(`all gestures end upright (size ${scale})`, upright(c));
 }
 
+// ───── windows as platforms ─────
+{
+  const plats = windowPlatforms(
+    [{ id: 1, x: 100, y: 300, w: 300, h: 200 }, { id: 2, x: 50, y: 400, w: 600, h: 300 }, { id: 3, x: 900, y: 10, w: 400, h: 600 }],
+    bounds,
+  );
+  // Window 2's top (y=400) is partly behind window 1 (x 100..400): two visible pieces. Window 3 is too high up (maximized-ish).
+  const ok = plats.length === 3 && plats[0].id === 8 && plats.some((p) => p.x1 === 50 && p.x2 === 100) && plats.some((p) => p.x1 === 400 && p.x2 === 650);
+  check('window tops: covered parts removed', ok, JSON.stringify(plats));
+}
+function onWindow(): Character {
+  const c = new Character(bounds, 600);
+  c.setPlatforms([{ id: 8, x1: 450, x2: 750, y: 500 }]);
+  c.grab('neck', c.body.j.neck.x, c.body.j.neck.y);
+  run(c, 0.6, (t) => c.moveHold(600, 700 - 400 * t, 0, -400));
+  c.moveHold(600, 400, 0, 0); run(c, 0.4);
+  c.release();
+  run(c, 3);
+  return c;
+}
+{
+  const c = onWindow();
+  check('dropped onto a window: lands on it', c.support === 8 && upright(c) && c.body.j.footL.y < 501, `support=${c.support} mode=${c.mode} footY=${c.body.j.footL.y.toFixed(0)}`);
+  c.walkTo(1200);
+  run(c, 8);
+  check('walks to the edge and stops', c.support === 8 && upright(c) && c.x > 720 && c.x <= 750, `x=${c.x.toFixed(0)} support=${c.support}`);
+  c.walkTo(1000, false, true);
+  const ev = run(c, 6);
+  check('walks off the edge on purpose, lands on the floor', ev.includes('fellOff') && c.support === FLOOR && upright(c), ev.join(','));
+}
+{
+  const c = onWindow();
+  let p: Platform = { id: 8, x1: 450, x2: 750, y: 500 };
+  for (let i = 0; i < 20; i++) { p = { ...p, x1: p.x1 + 8, x2: p.x2 + 8, y: p.y - 3 }; c.setPlatforms([p]); run(c, 0.1); }
+  run(c, 1);
+  check('window dragged slowly: carried along', c.support === 8 && upright(c) && c.x > 700, `x=${c.x.toFixed(0)} support=${c.support} mode=${c.mode}`);
+  c.setPlatforms([]);
+  const ev = run(c, 4);
+  check('window closed: falls to the floor', ev.includes('fellOff') && c.support === FLOOR && upright(c), ev.join(','));
+}
+
 // ───── mind + mood ─────
 function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   const fps = 1 / 60;
@@ -188,6 +231,39 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   pet.applyConfig({ ...pet.config, scale: 0.7 });
   petFor(4, pet);
   check('resize in settings: still standing', upright(pet.char) && Math.abs(pet.char.scale - 0.7) < 1e-6, `mode=${pet.char.mode}`);
+}
+{ // Life with windows: he climbs up, gets down, never leaves the screen.
+  const pet = new Pet(bounds);
+  pet.setWindows([
+    { id: 1, x: 150, y: 560, w: 380, h: 300 },
+    { id: 2, x: 700, y: 420, w: 450, h: 400 },
+  ]);
+  const seen = new Set<string>();
+  let out = 0, onWin = 0;
+  petFor(900, pet, () => {
+    if (pet.mind.skill) seen.add(pet.mind.skill.name);
+    const j = pet.char.body.j;
+    if (j.hip.x < 0 || j.hip.x > 1400 || j.hip.y > 800) out++;
+    if (pet.char.support >= 0) onWin++;
+  });
+  check('with windows: climbs up and gets down', seen.has('climb') && seen.has('getdown') && out === 0, `${[...seen].join(',')} onWindowFrames=${onWin}`);
+}
+{ // Cheap learning: a jump down that hurts makes him warier of that height.
+  const pet = new Pet(bounds);
+  pet.setWindows([{ id: 1, x: 500, y: 250, w: 400, h: 500 }]); // ~550px drop: will hurt
+  petFor(1, pet);
+  pet.paused = true;
+  const c = pet.char;
+  c.grab('neck', c.body.j.neck.x, c.body.j.neck.y);
+  for (let i = 0; i < 30; i++) { c.moveHold(700, 700 - i * 15, 0, -900); pet.update(1 / 60); }
+  c.moveHold(700, 160, 0, 0); petFor(0.5, pet);
+  c.release(); petFor(3, pet);
+  const onTop = c.support >= 0;
+  pet.ctx.lessons.safeDrop = 600;
+  pet.paused = false;
+  (pet.mind as any).interrupt(pet.ctx, new (await import('../src/core/skills')).GetDown(1));
+  petFor(8, pet);
+  check('jumping off a too-high window teaches him', onTop && pet.ctx.lessons.safeDrop < 500, `onTop=${onTop} safeDrop=${pet.ctx.lessons.safeDrop.toFixed(0)}`);
 }
 function reactionTo(mood: Partial<import('../src/core/mood').MoodState>) {
   const names: string[] = [];

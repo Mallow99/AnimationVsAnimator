@@ -7,7 +7,8 @@ import type { JointName } from './body';
 import type { Bounds } from './physics';
 import { Mood } from './mood';
 import { Mind, type MindEvent } from './mind';
-import type { Ctx } from './skills';
+import { DEFAULT_LESSONS, type Ctx } from './skills';
+import { windowPlatforms, type WinRect } from './world';
 import { drawBubble, drawCharacter, PixelLayer } from './render';
 
 export { DEFAULT_CONFIG, type PetConfig } from './config';
@@ -38,7 +39,8 @@ export class Pet {
     this.ctx = {
       char: this.char,
       mood: this.mood,
-      world: { bounds, cursor: null, cursorMovedAt: -100, time: 0 },
+      world: { bounds, cursor: null, cursorMovedAt: -100, time: 0, platforms: [] },
+      lessons: { ...DEFAULT_LESSONS },
       look: 'default',
       say: (text, secs) => this.say(text, secs),
     };
@@ -81,12 +83,20 @@ export class Pet {
       const old = this.char;
       this.char = new Character(old.bounds, old.x, cfg.scale);
       this.char.facing = old.facing;
+      this.char.setPlatforms(this.ctx.world.platforms);
       this.ctx.char = this.char;
       this.press = null;
       this.mind.reset(this.ctx);
     }
     this.char.style = { ...cfg.body };
     this.char.setHeadSize(cfg.look.headSize);
+  }
+
+  /** Latest window rectangles from the desktop shell (front-most first). */
+  setWindows(wins: WinRect[]) {
+    const plats = windowPlatforms(wins, this.ctx.world.bounds);
+    this.ctx.world.platforms = plats;
+    this.char.setPlatforms(plats);
   }
 
   setBounds(b: Bounds) { this.char.setBounds(b); this.ctx.world.bounds = b; }
@@ -195,9 +205,13 @@ export class Pet {
   }
 
   // ── saving between runs ──
-  save() { return JSON.stringify({ v: 1, mood: this.mood.save() }); }
+  save() { return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons }); }
   load(json: string | null) {
     if (!json) return;
-    try { this.mood.load(JSON.parse(json).mood); } catch { /* corrupt save: start fresh */ }
+    try {
+      const d = JSON.parse(json);
+      this.mood.load(d.mood);
+      if (typeof d.lessons?.safeDrop === 'number') this.ctx.lessons.safeDrop = d.lessons.safeDrop;
+    } catch { /* corrupt save: start fresh */ }
   }
 }

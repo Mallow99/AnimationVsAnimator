@@ -3,6 +3,7 @@
 
 import { Pet, type PetConfig } from '../core/pet';
 import type { Bounds } from '../core/physics';
+import type { WinRect } from '../core/world';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -11,6 +12,7 @@ interface PetShell {
   onConfig(cb: (c: PetConfig) => void): void;
   sendStats(stats: unknown): void;
   onCommand(cb: (cmd: string) => void): void;
+  onWindows(cb: (wins: WinRect[]) => void): void;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
@@ -43,6 +45,7 @@ if (shell) {
   shell.getConfig().then((c) => pet.applyConfig(c));
   shell.onConfig((c) => pet.applyConfig(c));
   shell.onCommand((cmd) => pet.command(cmd));
+  shell.onWindows((wins) => pet.setWindows(wins)); // other apps' windows become platforms
   setInterval(() => shell.sendStats(pet.stats()), 400);
 }
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools
@@ -95,6 +98,23 @@ window.addEventListener('mouseup', (e) => {
 // If the mouse leaves the window mid-drag, let go.
 window.addEventListener('blur', () => pet.pointerUp(last.x, last.y));
 
+// ── preview mode: a couple of fake windows to climb on ──
+const fakeWins: WinRect[] = [];
+if (!shell) {
+  const W = window.innerWidth, H = window.innerHeight;
+  fakeWins.push({ id: 1, x: W * 0.08, y: H - 210, w: Math.min(360, W * 0.3), h: 260 });
+  fakeWins.push({ id: 2, x: W * 0.55, y: H - 330, w: Math.min(420, W * 0.35), h: 380 });
+  pet.setWindows(fakeWins);
+}
+function drawFakeWindows() {
+  for (const w of fakeWins) {
+    ctx.fillStyle = '#f4f5fa'; ctx.strokeStyle = '#0003';
+    ctx.beginPath(); ctx.roundRect(w.x, w.y, w.w, w.h, 8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#dfe2ec'; ctx.beginPath(); ctx.roundRect(w.x, w.y, w.w, 26, [8, 8, 0, 0]); ctx.fill();
+    ['#ff5f57', '#febc2e', '#28c840'].forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(w.x + 14 + i * 16, w.y + 13, 5, 0, 7); ctx.fill(); });
+  }
+}
+
 // ── frame loop ──
 let prev = performance.now();
 function frame(now: number) {
@@ -104,6 +124,7 @@ function frame(now: number) {
   if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; pet.pointerMove(last.x, last.y, vel.x, vel.y, now); }
   pet.update(dt);
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  if (fakeWins.length) drawFakeWindows();
   pet.draw(ctx);
   requestAnimationFrame(frame);
 }

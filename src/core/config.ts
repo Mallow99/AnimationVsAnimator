@@ -16,6 +16,8 @@ export interface PetConfig {
   mind: MindMode;
   /** Swiping the cursor through him fast smacks him. Off by default so it doesn't happen by accident. */
   smacking: boolean;
+  /** Stand on, climb and get carried by the windows on screen. */
+  windows: boolean;
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
@@ -25,6 +27,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   body: { ...DEFAULT_BODY },
   mind: 'offline',
   smacking: false,
+  windows: true,
 };
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }

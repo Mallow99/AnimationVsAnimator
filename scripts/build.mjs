@@ -22,6 +22,7 @@ if (what === 'lab') {
     build({ ...common, entryPoints: ['src/settings/settings.ts'], outfile: 'dist/settings/settings.js', platform: 'browser', format: 'iife' }),
   ]);
   mkdirSync('dist/settings', { recursive: true });
+  cpSync('src/electron/native', 'dist/electron/native', { recursive: true });
   cpSync('src/settings/index.html', 'dist/settings/index.html');
   mkdirSync('dist/app', { recursive: true });
   cpSync('src/app/index.html', 'dist/app/index.html');
