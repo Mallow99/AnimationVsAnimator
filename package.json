@@ -1,0 +1,20 @@
+{
+  "name": "animation-vs-animator",
+  "version": "0.1.0",
+  "description": "A procedural stick-figure desktop pet that lives on your screen.",
+  "private": true,
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && electron .",
+    "preview": "node scripts/build.mjs && node scripts/preview.mjs",
+    "lab": "node scripts/build.mjs lab && node scripts/preview.mjs dist/lab/index.html",
+    "sim": "node scripts/build.mjs sim && node .build/sim.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^6.0.2"
+  }
+}
