@@ -280,7 +280,8 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   // and does monkey bars across the top of the screen.
   const B = { left: 0, right: 1440, top: 0, floor: 860 };
   const wins = [{ id: 1, x: 200, y: 60, w: 700, h: 700 }, { id: 2, x: 950, y: 120, w: 450, h: 740 }];
-  const setup = () => { const p = new Pet(B); p.setWindows(wins); petFor(3, p); return p; };
+  // Mind paused during warm-up so he isn't already mid-climb when the test starts.
+  const setup = () => { const p = new Pet(B); p.setWindows(wins); p.paused = true; petFor(3, p); p.paused = false; return p; };
   let pet = setup();
   pet.mind.command(pet.ctx, 'climb');
   const calm = () => ['ground', 'sit'].includes(pet.char.mode);
@@ -295,18 +296,22 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   check('too high to jump: climbs down instead', up && reachedFloor, `support=${pet.char.support} mode=${pet.char.mode}`);
   pet = setup();
   pet.mind.command(pet.ctx, 'monkeybars');
-  let highest = 0;
-  petFor(75, pet, () => { highest = Math.min(800, Math.max(highest, 860 - pet.char.body.j.hip.y)); });
-  check('monkey bars across the top of the screen', highest > 700 && pet.char.mode !== 'ceiling' && pet.char.mode !== 'climb', `highest=${highest.toFixed(0)} mode=${pet.char.mode}`);
+  let highest = 0, hung = false, backDown = false;
+  petFor(75, pet, () => {
+    highest = Math.min(800, Math.max(highest, 860 - pet.char.body.j.hip.y));
+    if (pet.char.mode === 'ceiling') hung = true;
+    if (hung && ['ground', 'sit'].includes(pet.char.mode)) backDown = true;
+  });
+  check('monkey bars across the top of the screen', highest > 700 && hung && backDown, `highest=${highest.toFixed(0)} hung=${hung} down=${backDown}`);
   check('a window top with no headroom is not a platform', !pet.ctx.world.platforms.some((p) => p.win === 1));
 }
 { // Mischief: he grabs the cursor and drags it; yanking it back frees it. Doodles get drawn.
   const pet = new Pet(bounds);
   const moves: { x: number; y: number }[] = [];
   pet.onMoveCursor = (x, y) => moves.push({ x, y });
-  petFor(3, pet);
+  pet.paused = true; petFor(3, pet); pet.paused = false;
   pet.mind.command(pet.ctx, 'grabcursor');
-  petFor(1, pet);
+  pet.paused = true; petFor(1, pet); pet.paused = false; // (don't let him wander off up a wall meanwhile)
   check('mischief off: no cursor grabbing', moves.length === 0);
   pet.config.mischief = true;
   petFor(0.1, pet);

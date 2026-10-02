@@ -516,7 +516,10 @@ export class GrabCursor extends Skill {
     const armLen = ch.d.upperArm + ch.d.foreArm;
     if (this.phase === 'chase') {
       if (this.t > 10) { c.say(pick(['aw', 'too fast']), 1.2); return true; }
-      const dx = cur.x - ch.x, near = Math.hypot(cur.x - j.neck.x, cur.y - j.neck.y) < armLen * 1.05;
+      // In reach: anywhere his arm can get to, from above his shoulder down to his hips.
+      const dx = cur.x - ch.x;
+      const near = Math.hypot(cur.x - j.neck.x, cur.y - j.neck.y) < armLen * 1.05
+        || (Math.abs(cur.x - j.neck.x) < armLen * 0.9 && cur.y > j.neck.y && cur.y < j.hip.y + 10 * ch.scale);
       if (near && ch.ready) {
         this.phase = 'drag';
         this.until = this.t + rand(1.5, 3);
