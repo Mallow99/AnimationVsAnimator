@@ -3,7 +3,11 @@
 
 import type { Vec } from './math';
 
-export interface Doodle { strokes: Vec[][]; color: string; born: number; done: boolean }
+export interface Doodle {
+  strokes: Vec[][]; color: string; born: number; done: boolean;
+  /** The whole picture (box -0.5..0.5) and what it's of, for his gallery. */
+  shape?: Vec[][]; title?: string;
+}
 
 const arc = (cx: number, cy: number, r: number, a0: number, a1: number, n = 18): Vec[] =>
   Array.from({ length: n + 1 }, (_, i) => { const a = a0 + ((a1 - a0) * i) / n; return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }; });

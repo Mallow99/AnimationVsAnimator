@@ -11,6 +11,7 @@
 // gets a say in the choices and adds real words.
 
 import type { CharEvent, Gesture, Keyframe } from './character';
+import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
@@ -20,6 +21,62 @@ import {
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
 
 interface Option { name: string; score: number; why: string; make: () => Skill }
+
+/** One step of a plan (from his AI brain): done in order. */
+export type PlanStep =
+  | { do: string }
+  | { say: string }
+  | { wait: number }
+  | { walk: 'left' | 'right' | 'cursor' | 'away' }
+  | { move: Keyframe[]; name?: string }
+  | { draw: Vec[][]; title?: string };
+
+/** Runs a plan: each step's skill to the end, then the next. */
+class PlanSkill extends Skill {
+  private i = -1;
+  private sub: Skill | null = null;
+  private waitLeft = 0;
+  private settle = 0;
+  constructor(private mind: Mind, private steps: PlanStep[]) { super(); }
+  /** Shows as whatever step he's on ("hop", "move", ...). */
+  get name() { return this.sub?.name ?? 'plan'; }
+
+  update(c: Ctx, dt: number): boolean {
+    if (this.sub) {
+      this.sub.t += dt;
+      if (!this.sub.update(c, dt)) return false;
+      this.sub.stop(c);
+      this.sub = null;
+    }
+    if (this.waitLeft > 0) { this.waitLeft -= dt; return false; }
+    // Body steps need him on his feet; give him a moment to get there.
+    const next = this.steps[this.i + 1];
+    if (next && !('say' in next) && !('wait' in next) && !(c.char.ready || c.char.mode === 'sit')) {
+      this.settle += dt;
+      return this.settle > 6;
+    }
+    this.settle = 0;
+    if (++this.i >= this.steps.length) return true;
+    const st = this.steps[this.i];
+    if ('say' in st) { c.say(st.say); this.waitLeft = Math.min(3, 0.8 + st.say.length * 0.04); return false; }
+    if ('wait' in st) { this.waitLeft = Math.min(5, Math.max(0, st.wait)); return false; }
+    const sub = 'do' in st ? this.mind.makeSkill(c, st.do)
+      : 'move' in st ? new PuppetMove(st.move)
+        : 'draw' in st ? new DoodleSkill(st.draw, st.title)
+          : new Sequence('walk', [{ walkTo: this.walkTarget(c, st.walk) }]);
+    if (sub) { this.sub = sub; sub.start(c); }
+    return false;
+  }
+
+  private walkTarget(c: Ctx, w: 'left' | 'right' | 'cursor' | 'away') {
+    const x = c.char.x, cur = c.world.cursor;
+    if (w === 'cursor') return cur ? cur.x : x;
+    if (w === 'away') return x - sign((cur?.x ?? x + 1) - x) * rand(200, 350);
+    return x + (w === 'left' ? -1 : 1) * rand(150, 300);
+  }
+
+  stop(c: Ctx) { this.sub?.stop(c); this.sub = null; }
+}
 
 /** What finishing an activity does to his mood. Gives his feelings real causes. */
 const AFTERGLOW: Record<string, Partial<MoodState>> = {
@@ -141,30 +198,41 @@ export class Mind {
   command(c: Ctx, name: string, why = 'you told him to', quiet = false): boolean {
     const ch = c.char, m = c.mood;
     if (name === 'wake') { m.asleep = false; this.end(c); ch.standUp(); return true; }
-    if (name === 'grabcursor' && !c.canGrabCursor) { if (!quiet) c.say('(mischief mode is off)', 2); return false; }
-    const gestures: Gesture[] = ['wave', 'laugh', 'shrug', 'stomp', 'stretch', 'cower'];
-    if ((gestures as string[]).includes(name)) {
-      this.interrupt(c, new Sequence(name, [{ gesture: name as Gesture, atCursor: true }]));
-    } else {
-      const o = this.options(c).find((x) => x.name === name);
-      if (!o) { if (!quiet) c.say('?', 1); return false; }
-      this.interrupt(c, o.make());
+    const s = this.makeSkill(c, name);
+    if (!s) {
+      if (!quiet) c.say(name === 'grabcursor' ? '(mischief mode is off)' : '?', name === 'grabcursor' ? 2 : 1);
+      return false;
     }
+    this.interrupt(c, s);
     m.asleep = false;
     this.why = why;
     if (ch.mode === 'lie' || ch.mode === 'sit') ch.standUp();
     return true;
   }
 
-  /** Play a move his AI brain made up. */
-  perform(c: Ctx, frames: Keyframe[], why: string) {
+  /** Carry out a plan from his AI brain. */
+  perform(c: Ctx, steps: PlanStep[], why: string) {
     const ch = c.char;
-    if (!['ground', 'sit', 'lie'].includes(ch.mode)) return false;
+    if (!steps.length || !['ground', 'sit', 'lie', 'air', 'ragdoll', 'getup'].includes(ch.mode)) return false;
     c.mood.asleep = false;
-    this.interrupt(c, new PuppetMove(frames));
+    this.interrupt(c, new PlanSkill(this, steps));
     this.why = why;
     if (ch.mode === 'lie' || ch.mode === 'sit') ch.standUp();
     return true;
+  }
+
+  /** Build the skill for a command name (null if he can't do it right now). */
+  makeSkill(c: Ctx, name: string): Skill | null {
+    if (name === 'wake') { c.mood.asleep = false; return new Sequence('wake', [{ wait: 0.1 }]); }
+    if (name === 'grabcursor' && !c.canGrabCursor) return null;
+    const gestures: Gesture[] = ['wave', 'laugh', 'shrug', 'stomp', 'stretch', 'cower'];
+    if ((gestures as string[]).includes(name)) return new Sequence(name, [{ gesture: name as Gesture, atCursor: true }]);
+    return this.options(c).find((x) => x.name === name)?.make() ?? null;
+  }
+
+  /** What he's weighing right now and how much he wants each (for the neurons view in settings). */
+  weigh(c: Ctx) {
+    return this.options(c).map((o) => ({ name: o.name, score: Math.round(o.score * 100) / 100, why: o.why }));
   }
 
   /** Forget the current plan (e.g. his body was rebuilt). */

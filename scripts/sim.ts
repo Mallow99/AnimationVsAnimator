@@ -365,11 +365,10 @@ function reactionTo(mood: Partial<import('../src/core/mood').MoodState>) {
   check('long replies split into bubble-sized pieces', parts.length >= 2 && parts.every((p) => p.length <= 70) && parts.join(' ').includes('Forever.'), JSON.stringify(parts));
 }
 type Req = import('../src/core/brain').BrainRequest;
-type Reply = import('../src/core/brain').BrainReply;
-async function brainPet(mode: 'offline' | 'chat' | 'full', answer: (req: Req) => Reply | Error) {
+async function brainPet(mode: 'offline' | 'chat' | 'full', answer: (req: Req) => object | string | Error) {
   const pet = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), mind: mode });
   const asked: Req[] = [];
-  pet.brain.ask = async (req) => { asked.push(req); const r = answer(req); if (r instanceof Error) throw r; return r; };
+  pet.brain.ask = async (req) => { asked.push(req); const r = answer(req); if (r instanceof Error) throw r; return typeof r === 'string' ? r : JSON.stringify(r); };
   pet.paused = true; petFor(3, pet); pet.paused = false;
   return { pet, asked };
 }
@@ -449,7 +448,8 @@ async function live(pet: Pet, seconds: number) {
   run(g, 10);
   check('made-up move: nonsense poses can\'t break him', upright(g) && g.x > 0 && g.x < 1400, `mode=${g.mode}`);
   const r = parseReply('Sure!\n```json\n{"say":"watch","do":"none","move":[{"t":0.5,"hip":[0,90]},{"t":"x","bogus":[1,2]},{"t":9,"neck":["a",3]}]}\n```');
-  check('AI reply parsing: finds the JSON, keeps only valid poses', !!r && r.say === 'watch' && r.move?.length === 1 && r.move[0].pose.hip?.[1] === 90, JSON.stringify(r));
+  const mv = r?.plan[0] && 'move' in r.plan[0] ? r.plan[0].move : null;
+  check('AI reply parsing: finds the JSON, keeps only valid poses', !!r && r.say === 'watch' && mv?.length === 1 && mv[0].pose.hip?.[1] === 90, JSON.stringify(r));
 }
 { // Chat: you ask for something weird, the AI makes up a move, he does it.
   const { pet } = await brainPet('chat', () => ({ say: 'behold', do: 'none', move: [{ t: 1, pose: { hip: [0, 120], neck: [0, 150] } }, { t: 1, pose: { hip: [0, 41], neck: [0, 71] } }] }));
@@ -462,6 +462,40 @@ async function live(pet: Pet, seconds: number) {
   let again = false;
   for (let i = 0; i < 4 * 60; i++) { pet.update(1 / 60); if (pet.char.puppeting) again = true; if (i % 5 === 0) await new Promise((r) => setImmediate(r)); }
   check('body control off: AI moves are ignored', !again);
+}
+
+{ // Plans: several things in a row, in order.
+  const { pet } = await brainPet('chat', () => ({ say: 'easy', feel: { boredom: -0.1 }, plan: [{ do: 'hop' }, { do: 'hop' }, { do: 'hop' }, { say: 'ta-da' }] }));
+  pet.command('hear:hop 3 times');
+  let jumps = 0;
+  const orig = pet.mind.onEvent.bind(pet.mind);
+  pet.mind.onEvent = (c, e) => { if (e.type === 'jumped') jumps++; orig(c, e); };
+  for (let i = 0; i < 12 * 60; i++) { pet.update(1 / 60); if (i % 5 === 0) await new Promise((r) => setImmediate(r)); }
+  const line = pet.brain.log.find((l) => l.who === 'him');
+  check('plan: "hop 3 times" means three hops', jumps === 3, `jumps=${jumps}`);
+  check('plan: chat log says what he did in words', line?.acts === 'hop ×3' && line.text.includes('ta-da'), JSON.stringify(line));
+}
+{ // Being mean to him hurts his feelings; nonsense steps are skipped.
+  const { pet } = await brainPet('chat', () => ({ say: 'RUDE.', feel: { annoyance: 0.4, happiness: -0.2, trust: -0.1 }, plan: [{ do: 'fly away' }, { do: 'stomp' }] }));
+  const before = { ...pet.mood.s };
+  pet.command('hear:you smell');
+  await live(pet, 3);
+  check('feelings: mean words make him annoyed and less trusting', pet.mood.s.annoyance > before.annoyance + 0.2 && pet.mood.s.trust < before.trust, JSON.stringify(pet.mood.s));
+}
+{ // Drawing: the AI draws something, it ends up in his gallery.
+  const { pet } = await brainPet('chat', () => ({ say: 'art', plan: [{ draw: [[[-40, -30], [0, 40], [40, -30], [-40, -30]], [[0, 0], [5, 5]]], title: 'triangle' }] }));
+  const drawn: string[] = [];
+  pet.ctx.onDrawn = (d) => drawn.push(d.title ?? '');
+  pet.command('hear:draw me something');
+  await live(pet, 12);
+  check('drawing: the AI draws a picture of its own', drawn.includes('triangle') && pet.ctx.doodles.some((d) => d.title === 'triangle' && d.done), drawn.join(','));
+}
+{ // The prompt keeps him in character and tells him what he can do.
+  const { pet, asked } = await brainPet('chat', () => ({ say: 'hi', plan: [] }));
+  pet.command('hear:hi');
+  await live(pet, 1);
+  const sys = asked[0]?.system ?? '';
+  check('prompt: in character, plans, moves, drawing, and the 988 exception', ['not an assistant', '"plan"', 'MAKING UP MOVES', 'DRAWING', '988'].every((k) => sys.includes(k)));
 }
 
 console.log(failures ? `\n${failures} failing` : '\nall good');

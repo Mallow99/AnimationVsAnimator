@@ -45,6 +45,8 @@ export interface Ctx {
   cursorEscaped: boolean;
   /** Mischief mode is on and this desktop can move the cursor. */
   canGrabCursor: boolean;
+  /** He finished a drawing (the pet keeps it in his gallery). */
+  onDrawn?: (d: Doodle) => void;
 }
 
 export abstract class Skill {
@@ -472,16 +474,19 @@ export class PuppetMove extends Skill {
 /** He draws a little picture next to himself with his own pen. */
 export class DoodleSkill extends Skill {
   readonly name = 'doodle';
+  /** `shape`: strokes in a box from -0.5 to 0.5 (y down). Left out = one of his usual pictures. */
+  constructor(private shape?: Vec[][], private title = '') { super(); }
   private doodle: Doodle | null = null;
   private plan: Vec[][] = [];
   private si = 0; private pi = 0; private along = 0;
   private finished = 0;
   start(c: Ctx) {
     const ch = c.char, sc = ch.scale, j = ch.body.j;
-    const keys = Object.keys(SHAPES), shape = SHAPES[keys[Math.floor(Math.random() * keys.length)]];
+    const keys = Object.keys(SHAPES), name = keys[Math.floor(Math.random() * keys.length)];
+    const shape = this.shape ?? SHAPES[name];
     const size = 46 * sc, cx = ch.x + ch.facing * 34 * sc, cy = j.neck.y + 6 * sc;
     this.plan = shape.map((st) => st.map((p) => ({ x: cx + p.x * size, y: cy + p.y * size })));
-    this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false };
+    this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false, shape, title: this.title || (this.shape ? 'made up' : name) };
     c.doodles.push(this.doodle);
     if (c.doodles.length > 8) c.doodles.shift();
     c.look = 'none';
@@ -495,7 +500,8 @@ export class DoodleSkill extends Skill {
       d.done = true;
       this.finished = this.t + 1.2;
       ch.handTarget = null;
-      c.say(pick(['ta-da', 'art.', 'nice', '✎']), 1.4);
+      c.onDrawn?.(d);
+      if (!this.shape) c.say(pick(['ta-da', 'art.', 'nice', '✎']), 1.4);
       return false;
     }
     // Move the pen along the stroke at a steady speed.

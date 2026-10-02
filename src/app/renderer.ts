@@ -4,7 +4,7 @@
 import { Pet, type PetConfig } from '../core/pet';
 import type { Bounds } from '../core/physics';
 import type { WinRect } from '../core/world';
-import type { BrainReply, BrainRequest } from '../core/brain';
+import type { BrainRequest } from '../core/brain';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -16,7 +16,7 @@ interface PetShell {
   onWindows(cb: (wins: WinRect[]) => void): void;
   pressed(): void;
   moveCursor(x: number, y: number): void;
-  ask(req: BrainRequest): Promise<{ ok: true; reply: BrainReply } | { ok: false; error: string }>;
+  ask(req: BrainRequest): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
@@ -55,7 +55,7 @@ if (shell) {
   pet.brain.ask = async (req) => {
     const r = await shell.ask(req);
     if (!r.ok) throw new Error(r.error);
-    return r.reply;
+    return r.text;
   };
   setInterval(() => shell.sendStats(pet.stats()), 400);
 }

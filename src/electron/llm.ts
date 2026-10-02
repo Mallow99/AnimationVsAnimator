@@ -10,7 +10,7 @@ import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PROVIDERS, type ProviderId } from '../core/config';
-import { parseReply, type BrainReply, type BrainRequest } from '../core/brain';
+import type { BrainRequest } from '../core/brain';
 
 const keyPath = () => path.join(app.getPath('userData'), 'brain-keys');
 let keys: Partial<Record<ProviderId, string>> | null = null;
@@ -46,7 +46,7 @@ export function keyStatus(provider: ProviderId) {
   return { provider, saved: !!k, hint: k ? `…${k.slice(-4)}` : '' };
 }
 
-export type AskResult = { ok: true; reply: BrainReply } | { ok: false; error: string };
+export type AskResult = { ok: true; text: string } | { ok: false; error: string };
 
 function explain(status: number, body: string, provider: ProviderId, model: string): string {
   const name = PROVIDERS[provider].label;
@@ -82,8 +82,7 @@ export async function ask(provider: ProviderId, model: string, req: BrainRequest
     const body = await res.text();
     if (!res.ok) return { ok: false, error: explain(res.status, body, provider, model) };
     const text: string = JSON.parse(body)?.choices?.[0]?.message?.content ?? '';
-    const reply = parseReply(text);
-    return reply ? { ok: true, reply } : { ok: false, error: 'The AI answered in a form he couldn\'t read.' };
+    return text.trim() ? { ok: true, text } : { ok: false, error: 'The AI sent back an empty answer.' };
   } catch (err) {
     if (err instanceof Error && err.name === 'TimeoutError') return { ok: false, error: `${p.label} took too long to answer.` };
     return { ok: false, error: 'Couldn\'t reach the internet.' };
