@@ -104,6 +104,13 @@ Then: Android shell.
     CGWarpMouseCursorPosition / PowerShell SetCursorPos via stdin "cursor X Y"); moving the
     mouse frees it. Doodles (`src/core/doodles.ts`): he draws small pictures with his own pen;
     they fade after 150 s.
+- Polish round (built, sim-tested): grip system in character.ts (`grip`/`releaseGrip`: a gripped
+  hand is pinned in place, the body hangs from it). Climbing is real hand-over-hand (pull until the
+  top hold is at his chin, other hand reaches 0.75 arm past it and latches); monkey bars the same
+  along the top of the screen; legs bend up toward the wall. `leapAt(wall)`: runs and jumps at a wall,
+  catching it mid-air. Mood gaits (`gait`: normal/pocket/skip/stomp/sulk, set by the mind from his
+  mood) and a dedicated run cycle (`runPose`). Cursor glances instead of constant staring.
+  The grip system is meant to be reused for items later.
 - NEXT (new chat): milestone 4 — AI brain (chat/full modes), talking back, persona.
   Owner also wants more Desktop Goose / Shimeji behaviors and better animations over time.
 

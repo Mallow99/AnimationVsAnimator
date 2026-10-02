@@ -97,8 +97,14 @@ export class Character {
   handTarget: Vec | null = null;
   /** Climbable walls (window sides, screen edges). */
   walls: Wall[] = [];
-  private climb: { wall: Wall; y: number; dir: -1 | 1; phase: number } | null = null;
-  private hang: { x: number; goal: number; phase: number } | null = null;
+  /** Climbing a wall: which hand moves next, and whether it's pulling or reaching. */
+  private climb: { wall: Wall; dir: -1 | 1; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: Vec | null; t: number } | null = null;
+  /** Hanging from the ceiling (monkey bars). */
+  private hang: { goal: number; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: Vec | null; t: number } | null = null;
+  /** Hands latched onto a point in the world. A gripped hand stays put; his body hangs from it. */
+  private grips: Record<'L' | 'R', Vec | null> = { L: null, R: null };
+  /** A wall he's leaping at: he grabs it as soon as a hand gets there. */
+  private leapWall: Wall | null = null;
   get onCeiling() { return this.mode === 'ceiling'; }
   /** At the end of the ceiling, climb down the screen edge instead of dropping. */
   climbDownAfterCeiling = false;
@@ -144,6 +150,22 @@ export class Character {
   get walking() { return this.mode === 'ground' && this.goalX !== null; }
   get climbingWall() { return this.mode === 'climb' ? this.climb!.wall : null; }
 
+  // ───────────── grabbing ─────────────
+
+  /** Latch a hand onto a point. The hand stays exactly there until released. */
+  grip(hand: 'L' | 'R', at: Vec) {
+    this.grips[hand] = { x: at.x, y: at.y };
+    this.body.j[hand === 'L' ? 'handL' : 'handR'].invMass = 0;
+  }
+
+  releaseGrip(hand: 'L' | 'R') {
+    if (!this.grips[hand]) return;
+    this.grips[hand] = null;
+    this.body.j[hand === 'L' ? 'handL' : 'handR'].invMass = 1;
+  }
+
+  releaseGrips() { this.releaseGrip('L'); this.releaseGrip('R'); }
+
   /**
    * Grab a wall and climb it: up (dir -1) or down (dir 1). Works from standing,
    * or mid-jump. At the top of a window side he pulls himself onto the window;
@@ -151,14 +173,35 @@ export class Character {
    */
   grabWall(wall: Wall, dir: -1 | 1) {
     if (this.mode !== 'ground' && this.mode !== 'air' && this.mode !== 'sit') return false;
-    const j = this.body.j;
-    const y = clamp(j.hip.y, wall.y1 + 4, wall.y2 - 4);
-    this.climb = { wall, y, dir, phase: 0 };
-    this.facing = wall.face;
+    const j = this.body.j, armLen = this.d.upperArm + this.d.foreArm;
+    this.leapWall = null;
     this.goalX = null; this.gesture = null; this.jumpPrep = null;
+    this.facing = wall.face;
     this.setMode('climb');
+    // Two handholds on the wall: one up near his reach, one lower.
+    const wx = this.wallX(wall);
+    const upper = clamp(j.neck.y - armLen * 0.6, wall.y1 + 2, wall.y2 - 4);
+    const lower = clamp(upper + armLen * 0.45, wall.y1 + 2, wall.y2 - 2);
+    const upperHand = this.facing > 0 ? 'R' : 'L', lowerHand = upperHand === 'R' ? 'L' : 'R';
+    this.grip(upperHand, { x: wx, y: upper });
+    this.grip(lowerHand, { x: wx, y: lower });
+    this.climb = { wall, dir, phase: 'pull', mover: dir < 0 ? lowerHand : upperHand, reachTo: null, t: 0 };
     return true;
   }
+
+  /** Run-and-jump at a wall, catching it with his hands. */
+  leapAt(wall: Wall, vy = -430) {
+    if (this.mode !== 'ground') return false;
+    const dx = this.wallX(wall) - this.x;
+    this.facing = sign(dx);
+    this.leapWall = wall;
+    this.goalX = null;
+    this.gesture = null;
+    this.jumpPrep = { t: 0.08, vx: clamp(dx * 4, -320, 320), vy }; // a quick spring, no long wind-up
+    return true;
+  }
+
+  private wallX(w: Wall) { return w.x - w.face * 1.5 * this.scale; }
 
   /** While hanging from the ceiling: where to go before letting go. */
   set ceilingGoal(x: number) { if (this.hang) this.hang.goal = clamp(x, this.bounds.left + 20, this.bounds.right - 20); }
@@ -166,18 +209,21 @@ export class Character {
   /** Let go of a wall or the ceiling. */
   letGo() {
     if (this.mode !== 'climb' && this.mode !== 'ceiling') return;
-    this.climb = null; this.hang = null;
     this.setMode('air');
     this.events.push({ type: 'letGo' });
   }
 
-  /** New walls. If he's on one that moved, he moves with it; if it's gone, he falls. */
+  /** New walls. If he's on one that moved, he moves with it (hands and all); if it's gone, he falls. */
   setWalls(list: Wall[]) {
     this.walls = list;
     if (this.mode !== 'climb' || !this.climb) return;
-    const now = list.find((w) => w.id === this.climb!.wall.id);
+    const was = this.climb.wall, now = list.find((w) => w.id === was.id);
     if (!now) { this.letGo(); return; }
-    this.climb.y += now.y1 - this.climb.wall.y1; // ride along if the window moved up/down
+    const dx = now.x - was.x, dy = now.y1 - was.y1;
+    if (dx || dy) {
+      for (const k of ['L', 'R'] as const) { const g = this.grips[k]; if (g) { g.x += dx; g.y += dy; } }
+      if (this.climb.reachTo) { this.climb.reachTo.x += dx; this.climb.reachTo.y += dy; }
+    }
     this.climb.wall = now;
   }
   get currentGesture() { return this.gesture?.name ?? null; }
@@ -308,6 +354,7 @@ export class Character {
   }
 
   grab(joint: JointName, x: number, y: number) {
+    this.releaseGrips();
     this.held = { joint, x, y, vx: 0, vy: 0 };
     this.body.j[joint].invMass = 0;
     this.goalX = null; this.gesture = null; this.jumpPrep = null;
@@ -395,6 +442,12 @@ export class Character {
     const hipVY = (b.j.hip.y - b.j.hip.py) / dt;
     integrate(b.points, dt);
     this.applyMuscles(t, s, internal);
+    for (const k of ['L', 'R'] as const) {
+      const g = this.grips[k];
+      if (!g) continue;
+      const p = b.j[k === 'L' ? 'handL' : 'handR'];
+      p.x = p.px = g.x; p.y = p.py = g.y;
+    }
     if (this.held) {
       const p = b.j[this.held.joint];
       p.x = this.held.x; p.y = this.held.y;
@@ -413,6 +466,8 @@ export class Character {
   private setMode(m: Mode) {
     if (m !== 'climb') this.climb = null;
     if (m !== 'ceiling') this.hang = null;
+    if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
+    if (m !== 'air') this.leapWall = null;
     if (m === 'air' || m === 'held') this.support = NONE;
     this.mode = m;
     this.modeTime = 0;
@@ -455,6 +510,12 @@ export class Character {
 
     switch (this.mode) {
       case 'air': {
+        // Leaping at a wall: catch it as soon as a hand gets there.
+        const lw = this.leapWall;
+        if (lw) {
+          const h = this.frontHand, wx = this.wallX(lw);
+          if (Math.abs(h.x - wx) < 12 * this.scale && h.y > lw.y1 && h.y < lw.y2 - 4) { this.grabWall(lw, -1); break; }
+        }
         if (this.modeTime < 0.05) break;
         const upsideDown = j.head.y > j.hip.y;
         if (anyFoot && !otherDown && !upsideDown) {
@@ -1017,83 +1078,148 @@ export class Character {
       { x: hip.x - f * 4 * sc, y: hip.y + legLen * (1 - tuck) }, { x: hip.x + f * 7 * sc, y: hip.y + legLen * (1 - tuck) },
       f, 1);
     for (const n of JOINTS) s[n] = n === 'hip' ? 0 : k;
+    // Leaping at a wall: both hands reach out for it.
+    if (this.leapWall) {
+      const wx = this.wallX(this.leapWall);
+      t.handL = { x: wx, y: neck.y - 6 * sc }; t.handR = { x: wx, y: neck.y - 12 * sc };
+      s.handL = s.handR = 0.12;
+    }
   }
 
   // ───────────── climbing ─────────────
 
+  /**
+   * Climbing, hand over hand, for real: both hands are latched onto the wall.
+   * 1. Pull: muscles haul his body up until the higher hand is just above his head.
+   * 2. Reach: the other hand lets go, reaches past it, and latches on higher up.
+   * Repeat. (Going down is the same with the roles swapped.) His speed comes from
+   * how fast he can pull and reach, not from a number.
+   */
   private climbPose(dt: number, t: Targets, s: Strengths) {
-    const c = this.climb!, w = c.wall, d = this.d, sc = this.scale, f = w.face;
-    const speed = 95 * sc * (0.7 + this.posture.speed * 0.3);
-    c.y = clamp(c.y + c.dir * speed * dt, w.y1 - 20 * sc, w.y2 + 10 * sc);
-    c.phase += dt * 5;
-    const legLen = d.thigh + d.shin, armLen = d.upperArm + d.foreArm;
-    const hipX = w.x - f * (w.top === 'ceiling' ? 16 : 10) * sc; // screen edges: keep clear of the edge
-    const hip = { x: hipX, y: c.y };
-    const neck = { x: hipX + f * 3 * sc, y: c.y - d.torso };
-    const wx = w.x - f * 2 * sc, a = Math.sin(c.phase);
-    // Hands take turns reaching up the wall; feet push off it.
-    let handL = { x: wx, y: neck.y - armLen * (0.55 + 0.35 * a) };
-    let handR = { x: wx, y: neck.y - armLen * (0.55 - 0.35 * a) };
-    const footL = { x: wx, y: c.y + legLen * (0.6 - 0.2 * a) };
-    const footR = { x: wx, y: c.y + legLen * (0.6 + 0.2 * a) };
-    // Don't grab above the top of the wall.
-    const topY = w.y1 + 2;
-    if (handL.y < topY) handL = { x: handL.x, y: topY };
-    if (handR.y < topY) handR = { x: handR.x, y: topY };
-    this.fillLimbs(t, hip, neck, f * -0.2, handL, handR, footL, footR, f, -1);
-    Object.assign(s, { hip: 0.35, neck: 0.35, head: 0.35, handL: 0.5, handR: 0.5, footL: 0.35, footR: 0.35, kneeL: 0.2, kneeR: 0.2, elbowL: 0.2, elbowR: 0.2 });
+    const c = this.climb!, w = c.wall, d = this.d, sc = this.scale, f = w.face, j = this.body.j;
+    const armLen = d.upperArm + d.foreArm, legLen = d.thigh + d.shin;
+    c.t += dt;
+    const gL = this.grips.L, gR = this.grips.R;
+    const held = [gL, gR].filter((g): g is Vec => !!g);
+    const top = held.length ? Math.min(...held.map((g) => g.y)) : j.neck.y - armLen * 0.5;
+    const bottom = held.length ? Math.max(...held.map((g) => g.y)) : top;
+    const wx = this.wallX(w);
+    // Body hangs just off the wall. Going up he pulls until the top hand is at his
+    // chin; going down he hangs from the bottom hand.
+    const neck = { x: w.x - f * 9 * sc, y: (c.dir < 0 ? top : bottom) + armLen * 0.1 };
+    const hip = { x: neck.x - f * 2 * sc, y: neck.y + d.torso };
+    // Feet on the wall, knees up toward it like a ladder; the foot under the reaching hand steps up.
+    const moverUp = c.phase === 'reach' && c.mover === 'L' ? 1 : c.phase === 'reach' && c.mover === 'R' ? -1 : 0;
+    const footL = { x: wx, y: hip.y + legLen * (0.62 - 0.14 * moverUp) };
+    const footR = { x: wx, y: hip.y + legLen * (0.62 + 0.14 * moverUp) };
+    let handL = gL ?? c.reachTo ?? { x: wx, y: top }, handR = gR ?? c.reachTo ?? { x: wx, y: top };
+    this.fillLimbs(t, hip, neck, -f * 0.1, handL, handR, footL, footR, f, -1);
+    Object.assign(s, { hip: 0.22, neck: 0.3, head: 0.3, kneeL: 0.18, kneeR: 0.18, footL: 0.28, footR: 0.28, elbowL: 0.15, elbowR: 0.15 });
 
-    if (c.dir < 0 && c.y - d.torso - armLen * 0.4 <= w.y1) {
-      // Reached the top.
-      this.climb = null;
-      this.events.push({ type: 'reachedTop' });
-      const plat = w.top === 'platform'
-        ? this.platforms.find((p) => Math.abs(p.y - w.y1) < 3 && w.x + f * 20 * sc >= p.x1 && w.x + f * 20 * sc <= p.x2)
-        : undefined;
-      if (plat) {
-        // Pull himself up and over onto the window (same motion as getting up).
-        this.startGetup(plat.id, w.x + f * 22 * sc);
-      } else if (w.top === 'platform') {
-        this.letGo(); // the top is covered by another window: nothing to pull onto
-      } else {
-        // Top of the screen: swing onto the ceiling, heading away from the wall.
-        this.hang = { x: hipX - f * 10 * sc, goal: hipX - f * 300, phase: 0 };
-        this.setMode('ceiling');
+    if (c.phase === 'pull') {
+      const settled = Math.abs(j.neck.y - neck.y) < 4 * sc || c.t > 0.5;
+      if (settled && c.t > 0.12) {
+        const upperHand = gL && gR ? (gL.y < gR.y ? 'L' : 'R') : gL ? 'L' : 'R';
+        const lowerHand = upperHand === 'L' ? 'R' : 'L';
+        if (c.dir < 0 && top <= w.y1 + 3) { this.climbOver(w); return; }
+        if (c.dir > 0 && hip.y + legLen * 0.9 >= w.y2) { this.letGo(); return; } // at the bottom: drop off
+        c.mover = c.dir < 0 ? lowerHand : upperHand;
+        const other = this.grips[c.mover === 'L' ? 'R' : 'L'];
+        const base = other ? other.y : top;
+        c.reachTo = { x: wx, y: clamp(base + c.dir * armLen * 0.75, w.y1 + 2, w.y2 - 2) };
+        this.releaseGrip(c.mover);
+        c.phase = 'reach'; c.t = 0;
       }
-    } else if (c.dir > 0 && c.y + legLen * 0.8 >= w.y2) {
-      this.letGo(); // bottom of the wall: hop off
+    } else {
+      const handName = c.mover === 'L' ? 'handL' : 'handR';
+      t[handName] = c.reachTo!;
+      s[handName] = 0.55;
+      const h = j[handName];
+      if ((Math.hypot(h.x - c.reachTo!.x, h.y - c.reachTo!.y) < 3 * sc && c.t > 0.1) || c.t > 0.6) {
+        this.grip(c.mover, c.reachTo!);
+        c.reachTo = null; c.phase = 'pull'; c.t = 0;
+      }
     }
   }
 
-  private ceilingPose(dt: number, t: Targets, s: Strengths) {
-    const h = this.hang!, d = this.d, sc = this.scale, top = this.bounds.top;
-    const dir = sign(h.goal - h.x);
-    const speed = 80 * sc * (0.7 + this.posture.speed * 0.3);
-    if (Math.abs(h.goal - h.x) > 3) h.x += dir * Math.min(speed * dt, Math.abs(h.goal - h.x));
-    h.phase += dt * 6;
-    this.facing = dir;
-    const armLen = d.upperArm + d.foreArm, a = Math.sin(h.phase);
-    // Hand over hand along the top of the screen: arms in a wide V above his head, legs dangling.
-    const spreadA = (12 + 7 * a) * sc, spreadB = (12 - 7 * a) * sc;
-    const handL = { x: h.x + dir * spreadA, y: top + 3 };
-    const handR = { x: h.x - dir * spreadB, y: top + 3 };
-    const neck = { x: h.x, y: top + 3 + Math.sqrt(Math.max(armLen * armLen * 0.9 - 144 * sc * sc, 1)) };
-    const hip = { x: h.x - dir * 3 * sc, y: neck.y + d.torso };
-    const legLen = d.thigh + d.shin;
-    const footL = { x: hip.x + Math.sin(h.phase * 0.5) * 6 * sc, y: hip.y + legLen * 0.95 };
-    const footR = { x: hip.x - Math.sin(h.phase * 0.5) * 6 * sc, y: hip.y + legLen * 0.95 };
-    this.fillLimbs(t, hip, neck, 0, handL, handR, footL, footR, dir, 1);
-    Object.assign(s, { handL: 0.6, handR: 0.6, neck: 0.4, head: 0.3, elbowL: 0.2, elbowR: 0.2, hip: 0.08, kneeL: 0.03, kneeR: 0.03, footL: 0.03, footR: 0.03 });
-    if (Math.abs(h.goal - h.x) <= 3 && this.modeTime > 0.5) {
-      const edge = this.walls.find((w) => w.top === 'ceiling' && Math.abs(w.x - h.x) < 40 * sc);
-      if (this.climbDownAfterCeiling && edge) {
-        this.climbDownAfterCeiling = false;
-        this.hang = null;
-        this.climb = { wall: edge, y: top + armLen + d.torso, dir: 1, phase: 0 };
-        this.facing = edge.face;
-        this.setMode('climb');
-      } else this.letGo();
+  /** Reached the top of a wall: onto the window, or onto the ceiling. */
+  private climbOver(w: Wall) {
+    const f = w.face, sc = this.scale, armLen = this.d.upperArm + this.d.foreArm;
+    this.events.push({ type: 'reachedTop' });
+    if (w.top === 'platform') {
+      const x = w.x + f * 20 * sc;
+      const plat = this.platforms.find((p) => Math.abs(p.y - w.y1) < 3 && x >= p.x1 && x <= p.x2);
+      if (!plat) { this.letGo(); return; } // the top is covered by another window
+      this.releaseGrips();
+      this.startGetup(plat.id, w.x + f * 22 * sc); // pull up and over
+      return;
     }
+    // Top of the screen: swap onto the ceiling and head away from the wall, hand over hand.
+    const top = this.bounds.top + 2, wx = this.wallX(w);
+    this.setMode('ceiling');
+    const lead = f > 0 ? 'L' : 'R';
+    this.grip(lead === 'L' ? 'R' : 'L', { x: wx, y: top });
+    this.grip(lead, { x: wx - f * armLen * 0.5, y: top });
+    this.hang = { goal: wx - f * 300, phase: 'pull', mover: lead, reachTo: null, t: 0 };
+  }
+
+  /**
+   * Monkey bars. Both hands hold the top of the screen; his body swings under the
+   * front hand, then the back hand lets go, reaches past it and grabs on. Legs dangle.
+   */
+  private ceilingPose(dt: number, t: Targets, s: Strengths) {
+    const h = this.hang!, d = this.d, sc = this.scale, j = this.body.j, top = this.bounds.top + 2;
+    const armLen = d.upperArm + d.foreArm, legLen = d.thigh + d.shin;
+    h.t += dt;
+    const gL = this.grips.L, gR = this.grips.R;
+    const xs = [gL, gR].filter((g): g is Vec => !!g).map((g) => g.x);
+    const dir = sign(h.goal - (xs.length ? xs.reduce((a, b) => a + b) / xs.length : j.neck.x));
+    this.facing = dir;
+    const lead = xs.length ? (dir > 0 ? Math.max(...xs) : Math.min(...xs)) : j.neck.x;
+    // Swing the body under the front hand.
+    const neck = { x: lead - dir * 3 * sc, y: top + armLen * 0.6 };
+    const hip = { x: neck.x - dir * 2 * sc, y: neck.y + d.torso };
+    const footL = { x: hip.x + 2 * sc, y: hip.y + legLen }, footR = { x: hip.x - 2 * sc, y: hip.y + legLen };
+    const handL = gL ?? h.reachTo ?? { x: lead, y: top }, handR = gR ?? h.reachTo ?? { x: lead, y: top };
+    this.fillLimbs(t, hip, neck, 0, handL, handR, footL, footR, dir, 1);
+    Object.assign(s, { neck: 0.18, head: 0.25, elbowL: 0.12, elbowR: 0.12, hip: 0.04, kneeL: 0.02, kneeR: 0.02, footL: 0.02, footR: 0.02 });
+
+    if (h.phase === 'pull') {
+      const under = Math.abs(j.neck.x - neck.x) < 4 * sc || h.t > 0.6;
+      if (under && h.t > 0.15) {
+        if (Math.abs(h.goal - lead) < armLen * 0.4) { this.endCeiling(); return; }
+        const back = gL && gR ? ((gL.x - gR.x) * dir < 0 ? 'L' : 'R') : gL ? 'R' : 'L';
+        h.mover = back;
+        h.reachTo = { x: clamp(lead + dir * armLen * 0.7, this.bounds.left + 4, this.bounds.right - 4), y: top };
+        this.releaseGrip(back);
+        h.phase = 'reach'; h.t = 0;
+      }
+    } else {
+      const handName = h.mover === 'L' ? 'handL' : 'handR';
+      t[handName] = h.reachTo!;
+      s[handName] = 0.5;
+      const hp = j[handName];
+      if ((Math.hypot(hp.x - h.reachTo!.x, hp.y - h.reachTo!.y) < 3 * sc && h.t > 0.1) || h.t > 0.6) {
+        this.grip(h.mover, h.reachTo!);
+        h.reachTo = null; h.phase = 'pull'; h.t = 0;
+      }
+    }
+  }
+
+  /** Done with the ceiling: drop, or climb down the screen edge if that's the plan. */
+  private endCeiling() {
+    const sc = this.scale, armLen = this.d.upperArm + this.d.foreArm, top = this.bounds.top + 2;
+    const edge = this.walls.find((w) => w.top === 'ceiling' && Math.abs(w.x - this.body.j.neck.x) < 60 * sc);
+    if (this.climbDownAfterCeiling && edge) {
+      this.climbDownAfterCeiling = false;
+      this.releaseGrips();
+      this.facing = edge.face;
+      this.setMode('climb');
+      const wx = this.wallX(edge);
+      this.grip('L', { x: wx, y: top + armLen * 0.2 });
+      this.grip('R', { x: wx, y: top + armLen * 0.6 });
+      this.climb = { wall: edge, dir: 1, phase: 'pull', mover: 'L', reachTo: null, t: 0 };
+    } else this.letGo();
   }
 
   private flailOverlay(t: Targets, s: Strengths) {

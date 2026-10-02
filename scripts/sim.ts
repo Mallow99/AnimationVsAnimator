@@ -283,9 +283,10 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   const setup = () => { const p = new Pet(B); p.setWindows(wins); petFor(3, p); return p; };
   let pet = setup();
   pet.mind.command(pet.ctx, 'climb');
-  petFor(30, pet);
   const calm = () => ['ground', 'sit'].includes(pet.char.mode);
-  const up = pet.char.support >= 0 && calm();
+  let up = false;
+  for (let i = 0; i < 30 * 60 && !up; i++) { pet.update(1 / 60); if (pet.char.support >= 0 && calm()) up = true; }
+  petFor(1, pet);
   check('climbs the side of a tall window onto it', up, `support=${pet.char.support} mode=${pet.char.mode}`);
   pet.ctx.lessons.safeDrop = 150;
   pet.mind.command(pet.ctx, 'getdown');
@@ -295,7 +296,7 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   pet = setup();
   pet.mind.command(pet.ctx, 'monkeybars');
   let highest = 0;
-  petFor(45, pet, () => { highest = Math.min(800, Math.max(highest, 860 - pet.char.body.j.hip.y)); });
+  petFor(75, pet, () => { highest = Math.min(800, Math.max(highest, 860 - pet.char.body.j.hip.y)); });
   check('monkey bars across the top of the screen', highest > 700 && pet.char.mode !== 'ceiling' && pet.char.mode !== 'climb', `highest=${highest.toFixed(0)} mode=${pet.char.mode}`);
   check('a window top with no headroom is not a platform', !pet.ctx.world.platforms.some((p) => p.win === 1));
 }

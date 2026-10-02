@@ -322,7 +322,12 @@ export class ClimbOnto extends Skill {
 
   private walkToLaunch(c: Ctx) {
     const ch = c.char, t = this.target, r = ch.surfaceRange(), m = 16 * ch.scale;
-    if (this.route.kind === 'wall') { ch.walkTo(this.route.wall.x - this.route.wall.face * m); }
+    if (this.route.kind === 'wall') {
+      // Run up to the wall and leap onto it (or, after a miss, walk right up and grab it).
+      const w = this.route.wall, gap = this.tries > 0 ? m : 55 * ch.scale;
+      const x = w.x - w.face * gap;
+      ch.walkTo(x, Math.abs(x - ch.x) > 150);
+    }
     else {
       // Stand right under the window if we can and jump straight up through it; otherwise from the nearest end.
       const lo = Math.max(r.x1 + m, t.x1 + m), hi = Math.min(r.x2 - m, t.x2 - m);
@@ -345,8 +350,9 @@ export class ClimbOnto extends Skill {
     if (this.phase === 'walk' && ch.ready && !ch.walking) {
       if (this.route.kind === 'wall') {
         ch.facing = this.route.wall.face;
-        if (this.route.jump) ch.jump(0, -Math.sqrt(2 * GRAVITY * jumpReach(ch) * 1.1));
-        else ch.grabWall(this.route.wall, -1);
+        const vy = -Math.sqrt(2 * GRAVITY * jumpReach(ch) * (this.route.jump ? 1.1 : 0.45));
+        if (this.tries > 0 && !this.route.jump) ch.grabWall(this.route.wall, -1);
+        else ch.leapAt(this.route.wall, vy);
       } else {
         const h = ch.body.j.footL.y - t.y + 28 * ch.scale;
         const vy = Math.sqrt(2 * GRAVITY * Math.max(h, 10));
@@ -382,13 +388,23 @@ export class MonkeyBars extends Skill {
   readonly name = 'monkeybars';
   private phase: 'walk' | 'climb' = 'walk';
   constructor(private edge: Wall, private goalX: number, private climbDown: boolean) { super(); }
-  start(c: Ctx) { c.char.walkTo(this.edge.x - this.edge.face * 16 * c.char.scale); c.look = 'none'; }
+  private missed = false;
+  start(c: Ctx) {
+    const ch = c.char, x = this.edge.x - this.edge.face * 55 * ch.scale;
+    ch.walkTo(x, Math.abs(x - ch.x) > 150); // run at the wall...
+    c.look = 'none';
+  }
   update(c: Ctx) {
     const ch = c.char;
     if (this.phase === 'walk' && ch.ready && !ch.walking) {
-      if (!ch.grabWall(this.edge, -1)) return true;
+      // ...and leap onto it. If that misses, walk up and grab it.
+      if (this.missed) { if (!ch.grabWall(this.edge, -1)) return true; }
+      else ch.leapAt(this.edge);
       this.phase = 'climb';
       this.t = 0;
+    } else if (this.phase === 'climb' && !this.missed && this.t > 0.6 && ch.ready && !ch.climbingWall && !ch.onCeiling && ch.support < 0 && this.t < 1.5) {
+      this.missed = true; this.phase = 'walk';
+      ch.walkTo(this.edge.x - this.edge.face * 16 * ch.scale);
     } else if (this.phase === 'climb') {
       if (ch.onCeiling) { ch.ceilingGoal = this.goalX; ch.climbDownAfterCeiling = this.climbDown; }
       if (this.t > 1 && ch.ready) return true;
