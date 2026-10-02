@@ -6,6 +6,7 @@ import type { Character, Gesture } from './character';
 import type { Mood } from './mood';
 import { GRAVITY, type Bounds, type Platform } from './physics';
 import { surfaceBelow, type Wall } from './world';
+import { SHAPES, type Doodle } from './doodles';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none';
@@ -34,6 +35,16 @@ export interface Ctx {
   look: LookMode;
   lessons: Lessons;
   say(text: string, secs?: number): void;
+  /** Drawings on screen (shared with the renderer). */
+  doodles: Doodle[];
+  /** Ink color for his pen. */
+  inkColor: string;
+  /** Move the real mouse cursor (only in mischief mode on a desktop). Returns false if not allowed. */
+  moveCursor(x: number, y: number): boolean;
+  /** Set when you yank the cursor back while he's holding it. */
+  cursorEscaped: boolean;
+  /** Mischief mode is on and this desktop can move the cursor. */
+  canGrabCursor: boolean;
 }
 
 export abstract class Skill {
@@ -423,6 +434,110 @@ export class GetDown extends Skill {
     return this.t > 30;
   }
   stop(c: Ctx) { c.char.stop(); }
+}
+
+// ───────────── mischief ─────────────
+
+/** He draws a little picture next to himself with his own pen. */
+export class DoodleSkill extends Skill {
+  readonly name = 'doodle';
+  private doodle: Doodle | null = null;
+  private plan: Vec[][] = [];
+  private si = 0; private pi = 0; private along = 0;
+  private finished = 0;
+  start(c: Ctx) {
+    const ch = c.char, sc = ch.scale, j = ch.body.j;
+    const keys = Object.keys(SHAPES), shape = SHAPES[keys[Math.floor(Math.random() * keys.length)]];
+    const size = 46 * sc, cx = ch.x + ch.facing * 34 * sc, cy = j.neck.y + 6 * sc;
+    this.plan = shape.map((st) => st.map((p) => ({ x: cx + p.x * size, y: cy + p.y * size })));
+    this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false };
+    c.doodles.push(this.doodle);
+    if (c.doodles.length > 8) c.doodles.shift();
+    c.look = 'none';
+  }
+  update(c: Ctx, dt: number) {
+    const ch = c.char, d = this.doodle!;
+    if (this.finished) { ch.handTarget = null; return this.t > this.finished; }
+    if (!ch.ready) return this.t > 20;
+    const stroke = this.plan[this.si];
+    if (!stroke) { // all done: admire it
+      d.done = true;
+      this.finished = this.t + 1.2;
+      ch.handTarget = null;
+      c.say(pick(['ta-da', 'art.', 'nice', '✎']), 1.4);
+      return false;
+    }
+    // Move the pen along the stroke at a steady speed.
+    this.along += 120 * ch.scale * dt;
+    while (this.pi < stroke.length - 1) {
+      const a = stroke[this.pi], b = stroke[this.pi + 1], seg = Math.hypot(b.x - a.x, b.y - a.y);
+      if (this.along < seg) break;
+      this.along -= seg; this.pi++;
+    }
+    const a = stroke[this.pi], b = stroke[Math.min(this.pi + 1, stroke.length - 1)];
+    const seg = Math.hypot(b.x - a.x, b.y - a.y) || 1, k = Math.min(1, this.along / seg);
+    const tip = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+    ch.handTarget = tip;
+    // What's drawn so far of this stroke: the corners passed, plus wherever the pen is now.
+    d.strokes[this.si] = [...stroke.slice(0, this.pi + 1), tip];
+    if (this.pi >= stroke.length - 1) { this.si++; this.pi = 0; this.along = 0; }
+    return this.t > 25;
+  }
+  stop(c: Ctx) { c.char.handTarget = null; if (this.doodle) this.doodle.done = true; }
+}
+
+/** Desktop Goose move: run at your cursor, grab it, and drag it around for a moment. */
+export class GrabCursor extends Skill {
+  readonly name = 'grabcursor';
+  private phase: 'chase' | 'drag' | 'done' = 'chase';
+  private next = 0;
+  private until = 0;
+  private dragTo = 0;
+  start(c: Ctx) { c.cursorEscaped = false; c.look = 'cursor'; c.say(pick(['!', 'ooh', 'mine']), 1); }
+  update(c: Ctx) {
+    const ch = c.char, cur = c.world.cursor, j = ch.body.j;
+    if (!cur) return true;
+    const armLen = ch.d.upperArm + ch.d.foreArm;
+    if (this.phase === 'chase') {
+      if (this.t > 10) { c.say(pick(['aw', 'too fast']), 1.2); return true; }
+      const dx = cur.x - ch.x, near = Math.hypot(cur.x - j.neck.x, cur.y - j.neck.y) < armLen * 1.05;
+      if (near && ch.ready) {
+        this.phase = 'drag';
+        this.until = this.t + rand(1.5, 3);
+        const r = ch.surfaceRange();
+        this.dragTo = clamp(ch.x + (Math.random() < 0.5 ? -1 : 1) * rand(150, 350), r.x1 + 20, r.x2 - 20);
+        c.say(pick(['gotcha!', 'hehe', 'mine now']), 1.2);
+        c.cursorEscaped = false;
+        return false;
+      }
+      if (this.t > this.next && ch.ready) {
+        this.next = this.t + 0.25;
+        const above = j.head.y - cur.y;
+        if (Math.abs(dx) < 40 && above > 0 && above < 170 * ch.scale) ch.jump(clamp(dx * 2, -120, 120), -(450 + above * 3));
+        else ch.walkTo(cur.x - sign(dx) * 18 * ch.scale, true);
+      }
+      return false;
+    }
+    if (this.phase === 'drag') {
+      if (c.cursorEscaped) { ch.handTarget = null; c.say(pick(['hey!', 'aw', 'no fair']), 1.2); return true; }
+      if (ch.ready && !ch.walking) ch.walkTo(this.dragTo, true);
+      // Hold the cursor up in front of him and drag it along.
+      const hand = { x: j.neck.x + ch.facing * armLen * 0.8, y: j.neck.y - armLen * 0.45 };
+      ch.handTarget = hand;
+      const h = ch.frontHand;
+      if (!c.moveCursor(h.x, h.y - 4)) { ch.handTarget = null; return true; }
+      if (this.t > this.until) {
+        ch.handTarget = null;
+        ch.stop();
+        this.phase = 'done';
+        c.say(pick(['hehe', 'heh. here.', 'you can have it back']), 1.4);
+        this.until = this.t + 0.8;
+      }
+      return false;
+    }
+    return this.t > this.until;
+  }
+  stop(c: Ctx) { c.char.handTarget = null; c.char.stop(); }
 }
 
 // ───────────── preset sequences ─────────────

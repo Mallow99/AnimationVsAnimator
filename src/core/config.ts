@@ -18,6 +18,8 @@ export interface PetConfig {
   smacking: boolean;
   /** Stand on, climb and get carried by the windows on screen. */
   windows: boolean;
+  /** Desktop Goose mode: he may grab your cursor and drag it around for a moment. */
+  mischief: boolean;
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
@@ -28,6 +30,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   mind: 'offline',
   smacking: false,
   windows: true,
+  mischief: false,
 };
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }

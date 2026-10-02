@@ -71,7 +71,7 @@ $('sayForm').addEventListener('submit', (e) => {
 const DOING: Record<string, string> = {
   idle: 'Standing around', wander: 'Wandering', sit: 'Sitting', sulk: 'Sulking', sleep: 'Napping', chase: 'Chasing your cursor',
   hunt: 'Hunting your cursor', avoid: 'Keeping away from you', dance: 'Dancing', hop: 'Hopping', tantrum: 'Throwing a tantrum',
-  greet: 'Saying hi', enjoy: 'Enjoying the pets', retaliate: 'Getting you back', glare: 'Glaring at you', flinch: 'Flinching', giggle: 'Giggling',
+  greet: 'Saying hi', doodle: 'Doodling', grabcursor: 'Messing with your cursor', enjoy: 'Enjoying the pets', retaliate: 'Getting you back', glare: 'Glaring at you', flinch: 'Flinching', giggle: 'Giggling',
   tag: 'Playing tag', boing: 'Bouncing', 'poke-back': 'Poking you back', huh: 'Confused', shrug: 'Shrugging', woken: 'Woken up',
   again: 'Wants to go again', mope: 'Moping', 'shake-off': 'Shaking it off', wave: 'Waving', laugh: 'Laughing', stomp: 'Stomping',
   cower: 'Cowering', explore: 'Exploring', climb: 'Climbing onto a window', monkeybars: 'Monkey bars', climbwall: 'Climbing', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
@@ -90,6 +90,7 @@ shell.onStats((s) => {
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
 });
 $('resetMood').addEventListener('click', () => shell.command('resetMood'));
+$('clearDoodles').addEventListener('click', () => shell.command('clearDoodles'));
 $('respawn').addEventListener('click', () => shell.command('respawn'));
 
 // ── presets ──
@@ -146,6 +147,7 @@ for (const [key, r] of Object.entries(RANGES)) {
 // ── general ──
 $<HTMLInputElement>('color').addEventListener('input', (e) => set({ look: { color: (e.target as HTMLInputElement).value } }));
 $<HTMLInputElement>('name').addEventListener('input', (e) => set({ name: (e.target as HTMLInputElement).value }));
+$<HTMLInputElement>('mischief').addEventListener('change', (e) => set({ mischief: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('windows').addEventListener('change', (e) => set({ windows: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking: (e.target as HTMLInputElement).checked }));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
@@ -161,6 +163,7 @@ function render(c: PetConfig) {
   $<HTMLInputElement>('color').value = c.look.color;
   $<HTMLInputElement>('smacking').checked = c.smacking;
   $<HTMLInputElement>('windows').checked = c.windows;
+  $<HTMLInputElement>('mischief').checked = c.mischief;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.checked = r.value === c.mind;
   for (const [input, out, key] of sliders) {
     const [a, b] = key.split('.');

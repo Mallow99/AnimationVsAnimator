@@ -14,7 +14,7 @@ import type { CharEvent, Gesture } from './character';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  AvoidCursor, ChaseCursor, ClimbOnto, climbDownOption, dropFrom, GetDown, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
+  AvoidCursor, ChaseCursor, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
@@ -28,6 +28,8 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   chase: { boredom: -0.35, happiness: 0.05, energy: -0.05 },
   explore: { boredom: -0.25 },
   monkeybars: { boredom: -0.4, happiness: 0.06, energy: -0.06 },
+  doodle: { boredom: -0.3, happiness: 0.05 },
+  grabcursor: { boredom: -0.4, happiness: 0.08, annoyance: -0.1 },
   wander: { boredom: -0.1 },
   climb: { boredom: -0.25, happiness: 0.05 },
   getdown: { boredom: -0.05 },
@@ -44,7 +46,8 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'wander', label: 'Wander' }, { name: 'explore', label: 'Explore' }, { name: 'sit', label: 'Sit' },
   { name: 'sleep', label: 'Nap' }, { name: 'wake', label: 'Wake up' }, { name: 'dance', label: 'Dance' },
   { name: 'hop', label: 'Hop' }, { name: 'chase', label: 'Chase cursor' }, { name: 'climb', label: 'Climb a window' },
-  { name: 'getdown', label: 'Get down' }, { name: 'monkeybars', label: 'Monkey bars' }, { name: 'tantrum', label: 'Tantrum' }, { name: 'sulk', label: 'Sulk' },
+  { name: 'getdown', label: 'Get down' }, { name: 'monkeybars', label: 'Monkey bars' },
+  { name: 'doodle', label: 'Doodle' }, { name: 'grabcursor', label: 'Grab cursor (mischief)' }, { name: 'tantrum', label: 'Tantrum' }, { name: 'sulk', label: 'Sulk' },
   { name: 'wave', label: 'Wave' }, { name: 'laugh', label: 'Laugh' }, { name: 'shrug', label: 'Shrug' },
   { name: 'stomp', label: 'Stomp' }, { name: 'stretch', label: 'Stretch' }, { name: 'cower', label: 'Cower' },
 ];
@@ -61,7 +64,9 @@ export class Mind {
   private lastSupport = -1;
   private quipAt = 0;           // rate-limits little remarks
   private stuckAsked = 0;
-  private restUntil = 0;        // short breather between activities
+  private restUntil = 0;
+  private lastDoodle = -60;
+  private lastGrab = -60;        // short breather between activities
   private lastCursorSeen = 0;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
@@ -118,6 +123,7 @@ export class Mind {
   command(c: Ctx, name: string) {
     const ch = c.char, m = c.mood;
     if (name === 'wake') { m.asleep = false; this.end(c); ch.standUp(); return; }
+    if (name === 'grabcursor' && !c.canGrabCursor) { c.say('(mischief mode is off)', 2); return; }
     const gestures: Gesture[] = ['wave', 'laugh', 'shrug', 'stomp', 'stretch', 'cower'];
     if ((gestures as string[]).includes(name)) {
       this.interrupt(c, new Sequence(name, [{ gesture: name as Gesture, atCursor: true }]));
@@ -197,6 +203,10 @@ export class Mind {
       { name: 'stretch', score: 0.08 + (1 - s.energy) * 0.3, why: 'stiff', make: presets.stretch },
       { name: 'sigh', score: L === 'bored' ? 0.6 : 0, why: 'bored', make: presets.sigh },
       ...this.windowOptions(c),
+      { name: 'doodle', score: c.world.time - this.lastDoodle > 90 && L !== 'sad' && L !== 'sleepy' ? 0.08 + s.boredom * 0.35 + (L === 'playful' ? 0.15 : 0) : 0,
+        why: 'feeling creative', make: () => { this.lastDoodle = c.world.time; return new DoodleSkill(); } },
+      { name: 'grabcursor', score: c.canGrabCursor && cursorActive && near && c.world.time - this.lastGrab > 60 && (L === 'playful' || L === 'bored' || L === 'angry') ? 0.7 : 0,
+        why: L === 'angry' ? 'getting back at you' : 'feeling mischievous', make: () => { this.lastGrab = c.world.time; return new GrabCursor(); } },
     ];
     return opts;
   }

@@ -138,6 +138,7 @@ function buildTrayMenu() {
     { label: config.name, enabled: false },
     { label: 'Settings…', click: openSettings },
     { label: 'Smack mode', type: 'checkbox', checked: config.smacking, click: () => setConfig({ smacking: !config.smacking }) },
+    { label: 'Mischief mode', type: 'checkbox', checked: config.mischief, click: () => setConfig({ mischief: !config.mischief }) },
     { label: 'Climb on windows', type: 'checkbox', checked: config.windows, click: () => setConfig({ windows: !config.windows }) },
     { type: 'separator' },
     { label: 'Drop him in again', click: () => win?.webContents.send('pet:command', 'respawn') },
@@ -164,6 +165,14 @@ ipcMain.on('pet:command', (_e, cmd: string) => win?.webContents.send('pet:comman
 ipcMain.on('settings:open', openSettings);
 // You pressed on him. On macOS that (wrongly) activates our app, so hand focus right back.
 ipcMain.on('pet:pressed', () => watcher?.refocus());
+// Mischief mode: he grabbed your cursor. Overlay coordinates → screen coordinates.
+ipcMain.on('pet:moveCursor', (_e, x: number, y: number) => {
+  if (!config.mischief || !watcher) return;
+  const wa = screen.getPrimaryDisplay().workArea;
+  let p = { x: x + wa.x, y: y + wa.y };
+  if (process.platform === 'win32') p = screen.dipToScreenPoint(p); // app units → real pixels
+  watcher.moveCursor(p.x, p.y);
+});
 
 app.whenReady().then(() => {
   loadConfig();

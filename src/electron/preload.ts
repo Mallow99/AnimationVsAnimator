@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('petShell', {
   onCommand: on('pet:command'),
   onWindows: on('world:windows'),
   pressed: () => ipcRenderer.send('pet:pressed'),
+  moveCursor: (x: number, y: number) => ipcRenderer.send('pet:moveCursor', x, y),
   // shared
   getConfig: () => ipcRenderer.invoke('config:get'),
   onConfig: on('config:changed'),

@@ -24,6 +24,10 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
 - **Windows are platforms**: he climbs onto your open windows, stands on title bars, gets carried
   when you drag a window, and falls when you close or minimize it. He learns which drops are too high.
   (First run on a Mac compiles a tiny helper, which takes a few seconds.)
+- **Climbing**: he climbs window sides and the screen edges, and does monkey bars across the top.
+- **Mischief mode** (Settings → General, off by default): Desktop Goose style, he grabs your cursor
+  and drags it around for a moment. Move your mouse to take it back. He also doodles on your screen.
+- **Control tab** in Settings: make him do anything on command, drag his mood bars, make him talk.
 - **Leave him alone**: he wanders, sits, explores, gets bored, and eventually naps.
   Poke him while he's asleep at your own risk.
 

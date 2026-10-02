@@ -289,14 +289,44 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   check('climbs the side of a tall window onto it', up, `support=${pet.char.support} mode=${pet.char.mode}`);
   pet.ctx.lessons.safeDrop = 150;
   pet.mind.command(pet.ctx, 'getdown');
-  petFor(25, pet);
-  check('too high to jump: climbs down instead', up && pet.char.support === FLOOR && calm(), `support=${pet.char.support} mode=${pet.char.mode}`);
+  let reachedFloor = false;
+  petFor(25, pet, () => { if (pet.char.support === FLOOR && calm()) reachedFloor = true; });
+  check('too high to jump: climbs down instead', up && reachedFloor, `support=${pet.char.support} mode=${pet.char.mode}`);
   pet = setup();
   pet.mind.command(pet.ctx, 'monkeybars');
   let highest = 0;
   petFor(45, pet, () => { highest = Math.min(800, Math.max(highest, 860 - pet.char.body.j.hip.y)); });
   check('monkey bars across the top of the screen', highest > 700 && pet.char.mode !== 'ceiling' && pet.char.mode !== 'climb', `highest=${highest.toFixed(0)} mode=${pet.char.mode}`);
   check('a window top with no headroom is not a platform', !pet.ctx.world.platforms.some((p) => p.win === 1));
+}
+{ // Mischief: he grabs the cursor and drags it; yanking it back frees it. Doodles get drawn.
+  const pet = new Pet(bounds);
+  const moves: { x: number; y: number }[] = [];
+  pet.onMoveCursor = (x, y) => moves.push({ x, y });
+  petFor(3, pet);
+  pet.mind.command(pet.ctx, 'grabcursor');
+  petFor(1, pet);
+  check('mischief off: no cursor grabbing', moves.length === 0);
+  pet.config.mischief = true;
+  petFor(0.1, pet);
+  const j = pet.char.body.j;
+  pet.cursor(pet.char.x + 120, j.neck.y, 0, 0);
+  pet.mind.command(pet.ctx, 'grabcursor');
+  petFor(4, pet);
+  const dragged = moves.length > 20 && Math.abs(moves[moves.length - 1].x - moves[0].x) > 40;
+  check('mischief on: grabs and drags the cursor', dragged, `moves=${moves.length}`);
+  pet.mind.command(pet.ctx, 'grabcursor');
+  petFor(2, pet);
+  const last = moves[moves.length - 1];
+  if (last) pet.cursor(last.x + 200, last.y + 100, 3000, 0);
+  petFor(0.5, pet);
+  check('yank the cursor back: he lets go', pet.mind.skill?.name !== 'grabcursor' || pet.ctx.cursorEscaped);
+  const p2 = new Pet(bounds);
+  petFor(3, p2);
+  p2.mind.command(p2.ctx, 'doodle');
+  petFor(12, p2);
+  const d = p2.ctx.doodles[0];
+  check('doodles a picture', !!d && d.done && d.strokes.flat().length > 8, `strokes=${d?.strokes.length}`);
 }
 function reactionTo(mood: Partial<import('../src/core/mood').MoodState>) {
   const names: string[] = [];

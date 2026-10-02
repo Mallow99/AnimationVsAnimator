@@ -91,6 +91,22 @@ Then: Android shell.
   greeting/loneliness); short rest between activities; `why` shown in settings.
   Owner says: AvA-style = legs straight when standing. Offered to share reference images.
 
+- Last session before the AI milestone (built, sim-tested; Mac/PC test pending):
+  - Climbing (`climb`/`ceiling` modes in character.ts, walls from `windowWalls` in world.ts):
+    window sides + screen edges, monkey bars across the top of the screen, pull-up onto
+    windows, climb-down. Route planner `routeTo` in skills.ts (jump → side → over the ceiling).
+    Window tops without headroom for him aren't platforms (most Mac windows sit under the menu bar).
+  - Diagnostics: Terminal prints `[windows] window helper compiled` / `helper running: sees N window(s)`;
+    settings → General shows how many windows he sees. Owner's first Mac run only showed
+    "compiling…" — next run should tell us whether the Swift helper works.
+  - Animations: stretch, laugh, continuous dance, AvA-style run. Petting: easier + hearts + 'nuzzle'.
+  - Mischief mode (off by default): GrabCursor skill drags the real cursor (Swift helper
+    CGWarpMouseCursorPosition / PowerShell SetCursorPos via stdin "cursor X Y"); moving the
+    mouse frees it. Doodles (`src/core/doodles.ts`): he draws small pictures with his own pen;
+    they fade after 150 s.
+- NEXT (new chat): milestone 4 — AI brain (chat/full modes), talking back, persona.
+  Owner also wants more Desktop Goose / Shimeji behaviors and better animations over time.
+
 ## Ideas from research (not agreed yet — offer as options)
 - Shimeji-style: climb screen/window sides and ceilings, dangle from window edges, sit on a
   window edge with legs hanging, peek from behind a window.

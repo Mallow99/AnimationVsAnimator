@@ -2,6 +2,7 @@
 // Also remembers which app you're using, and when the pet app sends "refocus" on
 // stdin, hands focus straight back to it (clicking the pet briefly steals focus
 // because of an Electron bug on recent macOS; this undoes it).
+// Mischief mode: "cursor X Y" on stdin moves the mouse pointer there (he grabbed it).
 // Compiled once on first run by the app (needs Xcode Command Line Tools, which come with git).
 // Only positions and sizes are read: no window titles, no screen contents.
 import Foundation
@@ -20,7 +21,16 @@ var refocusWanted = false
 FileHandle.standardInput.readabilityHandler = { h in
   let data = h.availableData
   if data.isEmpty { exit(0) } // the pet app quit
-  if String(decoding: data, as: UTF8.self).contains("refocus") { lock.lock(); refocusWanted = true; lock.unlock() }
+  let text = String(decoding: data, as: UTF8.self)
+  if text.contains("refocus") { lock.lock(); refocusWanted = true; lock.unlock() }
+  // Only the newest cursor position matters.
+  if let line = text.split(separator: "\n").last(where: { $0.hasPrefix("cursor ") }) {
+    let parts = line.split(separator: " ")
+    if parts.count == 3, let x = Double(parts[1]), let y = Double(parts[2]) {
+      CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
+      CGAssociateMouseAndMouseCursorPosition(1) // keep the mouse responsive right after the move
+    }
+  }
 }
 
 while true {

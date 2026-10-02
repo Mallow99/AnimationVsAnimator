@@ -78,6 +78,8 @@ export class Character {
   platforms: Platform[] = [];
   /** What he's standing on: a platform id, FLOOR, or NONE while airborne. */
   support = FLOOR;
+  /** Set by skills to steer his front hand (drawing, grabbing); null = normal arm swing. */
+  handTarget: Vec | null = null;
   /** Climbable walls (window sides, screen edges). */
   walls: Wall[] = [];
   private climb: { wall: Wall; y: number; dir: -1 | 1; phase: number } | null = null;
@@ -810,6 +812,15 @@ export class Character {
       if (g.t >= dur) this.gesture = null;
     }
 
+    // A skill is steering his front hand (drawing, grabbing the cursor).
+    const reachFor = this.handTarget && !g ? this.handTarget : null;
+    if (reachFor) {
+      const armLen2 = (d.upperArm + d.foreArm) * 0.97;
+      const dx = reachFor.x - neckT.x, dy = reachFor.y - neckT.y, dd = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, armLen2 / dd);
+      const hand = { x: neckT.x + dx * k, y: neckT.y + dy * k };
+      if (f > 0) handR = hand; else handL = hand;
+    }
     this.fillLimbs(t, hipT, neckT, tilt, handL, handR, footL, footR, f, 1);
     const plant = (k: 'L' | 'R') => (this.feet[k].swinging ? 0.35 : 0.6);
     Object.assign(s, {
@@ -817,7 +828,11 @@ export class Character {
       elbowL: 0.1, elbowR: 0.1, handL: 0.09, handR: 0.09,
     });
     if (g && g.name !== 'lookAround') Object.assign(s, { handL: 0.2, handR: 0.2, elbowL: 0.15, elbowR: 0.15 });
+    if (reachFor) Object.assign(s, f > 0 ? { handR: 0.45, elbowR: 0.2 } : { handL: 0.45, elbowL: 0.2 });
   }
+
+  /** The hand that's in front (the one he draws and grabs with). */
+  get frontHand() { return this.facing > 0 ? this.body.j.handR : this.body.j.handL; }
 
   /** Given hip, neck, hands and feet, place head, elbows and knees (IK). */
   private fillLimbs(t: Targets, hip: Vec, neck: Vec, tilt: number, handL: Vec, handR: Vec, footL: Vec, footR: Vec, f: number, kneeBend: number) {

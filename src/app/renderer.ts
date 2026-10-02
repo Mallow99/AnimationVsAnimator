@@ -14,6 +14,7 @@ interface PetShell {
   onCommand(cb: (cmd: string) => void): void;
   onWindows(cb: (wins: WinRect[]) => void): void;
   pressed(): void;
+  moveCursor(x: number, y: number): void;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
@@ -47,6 +48,7 @@ if (shell) {
   shell.onConfig((c) => pet.applyConfig(c));
   shell.onCommand((cmd) => pet.command(cmd));
   shell.onWindows((wins) => pet.setWindows(wins)); // other apps' windows become platforms
+  pet.onMoveCursor = (x, y) => shell.moveCursor(x, y); // mischief mode
   setInterval(() => shell.sendStats(pet.stats()), 400);
 }
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools

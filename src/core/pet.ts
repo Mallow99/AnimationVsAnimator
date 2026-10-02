@@ -9,7 +9,8 @@ import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowWalls, type WinRect } from './world';
-import { drawBubble, drawCharacter, PixelLayer } from './render';
+import { drawBubble, drawCharacter, PixelLayer, shade } from './render';
+import { DOODLE_LIFE, drawDoodles } from './doodles';
 
 export { DEFAULT_CONFIG, type PetConfig } from './config';
 
@@ -27,6 +28,9 @@ export class Pet {
   private press: { joint: JointName; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
   private bubble: { text: string; t: number; ttl: number } | null = null;
   private smackCooldown = 0;
+  /** Set by the app: moves the real mouse cursor (desktop only). */
+  onMoveCursor: ((x: number, y: number) => void) | null = null;
+  private cursorCmd: { x: number; y: number; t: number } | null = null;
   private hearts: { x: number; y: number; t: number; drift: number }[] = [];
   private winTarget: WinRect[] | null = null;
   private winShown: WinRect[] = [];
@@ -46,6 +50,11 @@ export class Pet {
       lessons: { ...DEFAULT_LESSONS },
       look: 'default',
       say: (text, secs) => this.say(text, secs),
+      doodles: [],
+      inkColor: shade(this.config.look.color, -0.35),
+      moveCursor: (x, y) => this.moveCursor(x, y),
+      cursorEscaped: false,
+      canGrabCursor: false,
     };
   }
 
@@ -53,6 +62,7 @@ export class Pet {
   update(dt: number) {
     dt = Math.min(dt, 0.1); // after a stall (laptop asleep), don't try to catch up forever
     this.ctx.world.time += dt;
+    this.ctx.canGrabCursor = this.config.mischief && !!this.onMoveCursor;
     this.acc += dt;
     this.smoothWindows(dt);
     while (this.acc >= STEP) {
@@ -64,6 +74,7 @@ export class Pet {
     if (this.bubble && (this.bubble.t += dt) > this.bubble.ttl) this.bubble = null;
     for (const h of this.hearts) { h.t += dt; h.y -= 40 * dt; h.x += h.drift * dt; }
     this.hearts = this.hearts.filter((h) => h.t < 1.4);
+    this.ctx.doodles = this.ctx.doodles.filter((d) => this.ctx.world.time - d.born < DOODLE_LIFE);
   }
 
   say(text: string, secs?: number) {
@@ -74,6 +85,13 @@ export class Pet {
     const look = this.config.look;
     if (look.pixel > 1) this.pixels.draw(ctx, this.char, look);
     else drawCharacter(ctx, this.char, look);
+    drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
+    // His pen, while he's drawing.
+    if (this.mind.skill?.name === 'doodle' && this.char.handTarget) {
+      const h = this.char.frontHand, tip = this.char.handTarget;
+      ctx.save(); ctx.strokeStyle = this.ctx.inkColor; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(tip.x, tip.y); ctx.stroke(); ctx.restore();
+    }
     for (const h of this.hearts) {
       ctx.save();
       ctx.globalAlpha = Math.max(0, 1 - h.t / 1.4);
@@ -105,7 +123,17 @@ export class Pet {
       this.mind.reset(this.ctx);
     }
     this.char.style = { ...cfg.body };
+    if (this.ctx) this.ctx.inkColor = shade(cfg.look.color, -0.35);
     this.char.setHeadSize(cfg.look.headSize);
+  }
+
+  /** Mischief: move the real cursor to (x, y). Only when mischief mode is on and the desktop supports it. */
+  private moveCursor(x: number, y: number) {
+    if (!this.config.mischief || !this.onMoveCursor) return false;
+    this.onMoveCursor(x, y);
+    this.cursorCmd = { x, y, t: this.ctx.world.time };
+    this.ctx.world.cursor = { x, y };
+    return true;
   }
 
   /** His standing height plus a little: window tops closer than this to the top of the screen are no use. */
@@ -164,6 +192,9 @@ export class Pet {
   cursor(x: number, y: number, vx = 0, vy = 0) {
     const w = this.ctx.world, r = this.rub;
     const speed = Math.hypot(vx, vy);
+    // He's holding the cursor and you pulled it away: you win.
+    const held = this.cursorCmd;
+    if (held && w.time - held.t < 0.5 && Math.hypot(x - held.x, y - held.y) > 30) { this.ctx.cursorEscaped = true; this.cursorCmd = null; }
     if (this.config.smacking && !this.press && speed > SMACK_SPEED && w.time > this.smackCooldown) {
       // Check along the path the cursor just travelled, so a fast swipe can't skip over him.
       const steps = Math.ceil(Math.hypot(x - r.lastX, y - r.lastY) / 6);
@@ -260,6 +291,7 @@ export class Pet {
       } catch { /* ignore bad input */ }
       return;
     }
+    if (cmd === 'clearDoodles') { this.ctx.doodles = []; return; }
     if (cmd === 'resetMood') {
       this.mood.s = new Mood().s;
       this.mood.asleep = false;

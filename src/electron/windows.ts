@@ -16,6 +16,8 @@ export interface WindowWatcher {
   stop(): void;
   /** macOS: give focus back to the app the user was using. */
   refocus(): void;
+  /** Mischief: move the mouse cursor to (x, y) in screen coordinates. */
+  moveCursor(x: number, y: number): void;
 }
 
 const nativeDir = path.join(__dirname, 'native');
@@ -57,7 +59,7 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
       child = spawn(bin, [String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'] });
     } else if (process.platform === 'win32') {
       child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
-        path.join(nativeDir, 'windows-win.ps1'), '-SelfPid', String(process.pid)], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+        path.join(nativeDir, 'windows-win.ps1'), '-SelfPid', String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     } else {
       log('window awareness is only available on macOS and Windows');
       return;
@@ -93,5 +95,6 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
   return {
     stop() { stopped = true; child?.kill(); },
     refocus() { if (process.platform === 'darwin') child?.stdin?.write('refocus\n'); },
+    moveCursor(x, y) { child?.stdin?.write(`cursor ${Math.round(x)} ${Math.round(y)}\n`); },
   };
 }

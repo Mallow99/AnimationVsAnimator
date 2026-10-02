@@ -1,12 +1,27 @@
 # Prints the visible top-level windows (front-most first) as one JSON line whenever they change.
 # Only positions and sizes are read: no window titles, no screen contents.
+# Mischief mode: "cursor X Y" on stdin moves the mouse pointer there (he grabbed it).
 param([int]$SelfPid = -1)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 public static class PetWindows {
+  [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+  public static void ListenForCursor() {
+    var t = new Thread(() => {
+      string line;
+      while ((line = Console.In.ReadLine()) != null) {
+        var p = line.Split(' ');
+        int x, y;
+        if (p.Length == 3 && p[0] == "cursor" && int.TryParse(p[1], out x) && int.TryParse(p[2], out y)) SetCursorPos(x, y);
+      }
+    });
+    t.IsBackground = true;
+    t.Start();
+  }
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
@@ -41,6 +56,7 @@ public static class PetWindows {
 }
 "@
 [PetWindows]::SetProcessDPIAware() | Out-Null   # report real pixels; the app converts them
+[PetWindows]::ListenForCursor()
 $last = ''
 $lastChange = [DateTime]::Now
 while ($true) {
