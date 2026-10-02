@@ -28,8 +28,10 @@ scripts/       Build (esbuild), headless physics sim tests, browser preview.
 ```
 
 Layers inside core:
-1. **Body** — Verlet physics (joints = points, bones = fixed-length sticks). "Muscles" pull
-   joints toward a target pose; strength 0 = ragdoll. IK places feet and bends knees/elbows.
+1. **Body** — 3D Verlet physics (joints = points with depth z, bones = fixed-length sticks) in a thin
+   depth band in front of the screen. "Muscles" pull joints toward a target pose; strength 0 = ragdoll.
+   Poses are built in his own frame (forward/up/left, `off()`, `basis()`), 3D two-bone IK with pole
+   directions bends knees/elbows. Drawing is flat (x, y); z only sorts what's in front and shades.
 2. **Skills** — small controllers: walk_to, jump, sit, sleep, stomp, chase/avoid cursor, say...
 3. **Mood** — needs/emotion dials (energy, happiness, boredom, annoyance, trust).
    Events move dials; dials shape posture, speed, and reactions (e.g. ignores pokes when sad).
@@ -46,7 +48,7 @@ Layers inside core:
 3. Window awareness (windows are platforms), cursor awareness, follow across desktops
    and optionally walk to another desktop on his own (fakes the desktop-switch shortcut).
 4. LLM modes 1 & 2, speech bubbles, `pet.json` persona (name, persona, color, model).
-5. Memory file, periodically summarized.
+5. Memory file, periodically summarized. ✅
 6. Interacting with other apps, incl. drawing with his OWN pen (not the user's cursor),
    e.g. hosting JS Paint (jspaint.app) inside our app.
 7. Learned movement (experimental; physics runs headless for training).
@@ -152,9 +154,49 @@ Then: Android shell.
     Look: `outline` option.
 - Owner's later ideas (agreed, not built): a belt with tools (pen, wooden sword) he grabs and uses (hit the
   cursor, draw); interactable drawings; ripping limbs off — all with the items + physics overhaul.
-- NEXT: owner tests this round on the Mac. Options offered, not chosen yet: talk to him right on the
-  desktop (double-click him → a little text field) instead of the settings window; a local/free model (Ollama).
+- (Earlier NEXT, now done: talking to him on the desktop. Still offered: a local/free model via Ollama.)
   Owner also wants more Desktop Goose / Shimeji behaviors and better animations over time.
+
+- The big overhaul round (owner asked for everything in the plan except the visitor; built while the owner
+  was away, all sim-tested and checked in headless Chromium; Electron launches under Xvfb; NOT yet tried on a real Mac/PC):
+  - Milestone 5 memories (`memory.ts`): notes {text, kind you/event/opinion, by him/ai/you, weight}, a lifetime tally
+    (thrown, poked, petted, smacked, ripped...), firsts/repeats become notes offline (MILESTONES), `recall()` lines
+    offline. AI reply field `remember` (≤3); prompt has a WHAT YOU REMEMBER section; every 18 new notes the AI tidies
+    them (`tidyRequest`/`applyTidy`, separate request), rules-based `tidyOffline` otherwise. memory.json in userData
+    (main `memory:load/save`), localStorage in preview. Mind tab: summary, notes (edit in place, delete, add), tidy, forget.
+  - 3D body: Point has z; `collide` keeps |z| ≤ depth (default 40*scale); `twoBoneIK3` with poles (knees forward,
+    elbows back/out); `fillLimbs(t, hip, neck, nod, cock, ...)`; gestures "present" (turn toward you) via
+    GESTURE_PRESENT. Puppet keyframes take [x, y, z] and `turn`/`flip`/`roll`. render.ts depth-sorts limbs.
+  - Destructible (`limbs.ts`, config `destructible`, on by default): `detach(limb)` breaks the limb's sticks
+    (`Stick.off`) and ghosts its joints (`body.ghost`, parked at the stump); a `LooseLimb` carries on with physics.
+    Triggers: yanking a hand/foot >2700 px/s, smacks >3400, limb ends hitting the ground >1700 (`checkImpacts`).
+    `Reattach` skill: stare (ch.stare) → walk/hop/crawl → stoop + pick up (`holdLimb`) → hold to stump (snaps on
+    within 9px) → try it out; can't reach / you hold it → redraws it (`regrow`). One leg: `hopPose`; none: `crawlPose`.
+    Reaching low anywhere uses `stoop()`.
+  - Items (`items.ts`, definitions are JSON in `src/core/items/`; user files in userData/items, copied examples +
+    README on first run; main `items:defs/reload/openFolder`): belt with 3 slots (0 left hip, 1 right hip, 2 back),
+    drawn as a 3D ring (`beltParts`). Item places: belt/hand/world/cursor. `Tool` helper fetches/stows. Pen: DoodleSkill
+    draws with the pen tip (no pen → can't draw). Sword: `SwordSwing` (wind-up/slash/follow), 'slash' at the cursor
+    (`hitCursor`: sparks, knocks cursor in mischief mode). `FetchItem`, `AskBack` (after 20 s he asks, snatches back).
+    You: right-click menu (`contextMenu`, drawn in core: Talk / Take x / Give back / Fix him up / Settings);
+    carried items dangle from the cursor (`followCursor`) and hit him (`itemHits`); click him = give back,
+    elsewhere = drop. Items tab in settings.
+  - Parkour: landing rolls (850–1400 px/s feet-first while whole → 'roll' mode, `tuck()`), `flipJump`, `wallJump`
+    (+ `WallJump` skill), `vault()` (scripted puppet frames; routeTo 'vault' route for 40–85 px ledges).
+  - Talk on the desktop: double-click him (a click waits 0.25 s to rule out a double-click before it pokes) or Talk in
+    the menu → DOM text box over his head (app/index.html #talk); main `pet:typing` makes the overlay focusable while
+    open. Offline he understands simple words (`offlineAnswer` in brain.ts: dance, sit, draw, my name is...).
+  - Drawings come to life (`props.ts`, `LIVE_SHAPES`): `becomes` ball (kick it: 'kick' gesture + `KickBall`; you can
+    throw it; it bonks him), box (floor; platform top; he vaults on), platform (ledge in the air), item (drawn sword →
+    `itemFromDrawing`). Prop platforms merged with window platforms (`refreshPlatforms`).
+  - Sound effects: `src/app/sfx.ts` (Web Audio, no files); Pet emits names via `onSound`; config `sfx`, `volume`.
+  - Animation principles: run wind-up, jump arms-back anticipation, follow-through spring on arms (`sway`), head
+    bob after landing (`nodSpring`), squash & stretch (`squashSpring`, drawing only, `Pet.squashFor`).
+  - Mind tab neurons → a 3D head (settings.ts `neurons()`): drag to rotate; drag a feeling to set it; click a choice
+    to do it; drag/scroll a choice to change his preference (config `biases`, multiplied into instinct scores).
+- Untested on real hardware this round: the desktop talk box getting keyboard focus (macOS panel window / Windows
+  focusable toggle), right-click on the overlay, sounds through real speakers, opening the items folder.
+- NEXT: owner tests the overhaul on the Mac (talk box focus is the riskiest bit), then picks what's next.
 
 ## Ideas from research (not agreed yet — offer as options)
 - Shimeji-style: climb screen/window sides and ceilings, dangle from window edges, sit on a
@@ -165,13 +207,15 @@ Then: Android shell.
   PowerShell window probe on Windows only, screenshot-based LLM brain, wall/ceiling climbing).
 
 ## Owner's wishlist (agreed, not built yet)
-- Memories view in settings is a placeholder until milestone 5.
+- A visitor (a second stick figure: rival, friend, or the "virus") — offered, owner passed on it for now.
 - Moods as blended bars where all of them matter (complex emotions), not just the loudest one.
   (The dials already exist in mood.ts; reactions mostly use the dominant label today.)
 
 ## Key files
-- `src/core/character.ts` body controller (modes, stepping, gestures). Tune feel here.
+- `src/core/character.ts` body controller (modes, stepping, gestures, limbs, parkour). Tune feel here.
 - `src/core/mood.ts` dials + posture. `src/core/mind.ts` choices + reactions. `src/core/skills.ts` skills.
+- `src/core/memory.ts` memories. `src/core/limbs.ts` loose limbs. `src/core/items.ts` + `src/core/items/*.json` items.
+- `src/core/props.ts` drawings that came to life. `src/app/sfx.ts` sound effects.
 - `src/core/pet.ts` glue + input. `src/app/renderer.ts` page + click-through. `src/electron/main.ts` window.
 - Debug in DevTools: `pet.paused = true`, `pet.mood.s`, `pet.char.walkTo(x)`, `pet.char.doGesture('wave')`.
 

@@ -27,14 +27,32 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
 - **Climbing**: he climbs window sides and the screen edges, and does monkey bars across the top.
 - **Mischief mode** (Settings → General, off by default): Desktop Goose style, he grabs your cursor
   and drags it around for a moment. Move your mouse to take it back. He also doodles on your screen.
-- **Settings tabs**: Chat (talk to him), Mood (his feelings + make him do things), Mind (watch his neurons decide,
-  edit his personality, keep moves he made up, see everything he's drawn), Look, Movement, General.
+- **Settings tabs**: Chat (talk to him), Mood (his feelings + make him do things), Mind (his neurons, personality, moves
+  he made up, drawings, memories), Items (his belt), Look, Movement, General.
 - **Talk to him** (AI brain, free): Settings → General → Brain. Pick a service (Google Gemini is the default), click
   "Get a free key", make the key on their site (no credit card), paste it, and pick **Chat** (AI only when you talk
   to him) or **Full** (he also decides what to do and comments on things). Type to him in Settings → Control →
   Talk to him, or pick "Talk to Blurp…" from the tray icon. Ask him for weird stuff ("do a handstand", "float"):
   with "Let the AI move his body" on, the AI makes up the move itself. Edit who he is under Mood → Personality.
   Free services have daily limits; Offline mode needs no internet and no key.
+- **Talk to him right on the desktop**: double-click him, or right-click → Talk. A little text box pops up over his
+  head. Even with his brain Offline he understands simple things ("dance", "sit down", "draw something", "my name is ...").
+- **Right-click him**: talk, take his things (his pen, his wooden sword), give them back, fix him up, settings.
+- **His belt**: his pen lives on his hip (he draws with it, so no pen = no drawing) and his wooden sword on his back.
+  Take the sword and it dangles from your cursor: swing it at him. Click him to give it back, anywhere else to drop it.
+  He'll ask for his things back, and pick them up when they're lying around. Make your own items: Settings → Items.
+- **He's 3D now**: he really turns, spins and flips, and his arms and legs pass in front of and behind each other.
+- **Breakable** (Settings → General, on by default): yank a hand or foot hard, smack him really hard, or slam him into
+  the ground, and a limb can come off. No gore, just sparks. He stares at the stump, goes and gets it (hopping on one leg,
+  or dragging himself along if both legs are gone), and sticks it back on. Hold a limb up to his stump to help.
+- **Parkour**: he rolls out of big landings, does flips and wall jumps, and vaults onto low ledges.
+- **His drawings come to life**: he draws a ball and kicks it around (you can throw it too, even at him), draws a box and
+  vaults onto it, draws a ledge and jumps up on it, and if you took his sword he draws himself a new one.
+- **Memories**: he remembers what you do to him (and, with an AI brain, what you tell him). See and edit them in
+  Settings → Mind → Memories. Saved in memory.json next to his settings.
+- **Inside his head** (Settings → Mind): his neurons in a 3D model of his head. Drag to turn it, drag a feeling to
+  change it, click a choice to make him do it, drag a choice up or down to make him like it more or less.
+- **Sounds**: footsteps, thuds, an "oof" when he crashes, snaps, whooshes. Volume and toggles in Settings → General.
 - **Leave him alone**: he wanders, sits, explores, gets bored, and eventually naps.
   Poke him while he's asleep at your own risk.
 
