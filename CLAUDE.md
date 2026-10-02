@@ -128,7 +128,7 @@ Then: Android shell.
     so he can levitate; physics still applies; ends in 'air' so he lands/crashes normally. `PuppetMove` skill,
     `mind.perform()`. Config `puppet` (on by default).
   - `src/electron/llm.ts`: plain fetch to OpenAI-compatible chat completions (no SDK, no new dependency).
-    Providers in config.ts `PROVIDERS`: Google Gemini (default, model `gemini-flash-latest`), Groq, OpenRouter
+    Providers in config.ts `PROVIDERS`: Google Gemini (default, model `gemini-flash-latest`), Groq (default model `openai/gpt-oss-120b`), OpenRouter
     `:free` models. JSON mode, retried without it on a 400. "Find models" lists what the key can use (model names
     change often). Keys per provider in userData/brain-keys, encrypted with safeStorage.
   - The Claude SDK version was dropped (owner can't pay); it's in git history if ever wanted.

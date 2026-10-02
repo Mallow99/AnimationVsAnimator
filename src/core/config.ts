@@ -11,7 +11,7 @@ export type MindMode = 'offline' | 'chat' | 'full';
 export type ProviderId = 'gemini' | 'groq' | 'openrouter';
 export const PROVIDERS: Record<ProviderId, { label: string; free: boolean; model: string; keyUrl: string; base: string }> = {
   gemini: { label: 'Google Gemini', free: true, model: 'gemini-flash-latest', keyUrl: 'https://aistudio.google.com/apikey', base: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-  groq: { label: 'Groq', free: true, model: 'llama-3.3-70b-versatile', keyUrl: 'https://console.groq.com/keys', base: 'https://api.groq.com/openai/v1' },
+  groq: { label: 'Groq', free: true, model: 'openai/gpt-oss-120b', keyUrl: 'https://console.groq.com/keys', base: 'https://api.groq.com/openai/v1' },
   openrouter: { label: 'OpenRouter (free models)', free: true, model: 'meta-llama/llama-3.3-70b-instruct:free', keyUrl: 'https://openrouter.ai/keys', base: 'https://openrouter.ai/api/v1' },
 };
 
