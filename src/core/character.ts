@@ -10,10 +10,18 @@
 //   4. Bones and the floor fix up anything that got stretched or sank.
 // Nothing is a pre-made animation; it's all computed live, so pushes, drops and
 // throws always look slightly different.
+//
+// He's 3D: every joint has a depth (z, toward you). Poses are built in his own
+// directions (forward, up, his left) and turned to wherever his body faces, so
+// turning around, spinning and flipping are real rotations, and his arms and legs
+// pass in front of and behind each other. He lives in a thin band of depth just in
+// front of your screen; the drawing stays flat, z only decides what's in front.
 
 import { Body, JOINTS, makeDims, type Dims, type JointName } from './body';
 import { collide, collidePlatforms, FLOOR, integrate, NONE, solveSticks, type Bounds, type Platform } from './physics';
-import { clamp, dist, distToSegment, lerp, sign, smooth, twoBoneIK, type Vec } from './math';
+import {
+  basis, clamp, dist, dist3, distToSegment, inFrame, lerp, lerp3, sign, smooth, twoBoneIK, twoBoneIK3, type Basis, type V3, type Vec,
+} from './math';
 import type { Wall } from './world';
 
 export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie' | 'climb' | 'ceiling' | 'puppet';
@@ -23,19 +31,26 @@ export const PUPPET_JOINTS = ['head', 'neck', 'hip', 'frontHand', 'backHand', 'f
 export type PuppetJoint = (typeof PUPPET_JOINTS)[number];
 /**
  * One pose in a made-up move. `t` = seconds to get here from the previous pose.
- * Positions are [x, y] in pixels at normal size: x forward (the way he faces), y UP,
- * measured from the ground right under where he stood when the move began.
+ * Positions are [x, y] or [x, y, z] in pixels at normal size: x forward (the way he faces),
+ * y UP, z sideways (positive = toward his front-hand side), measured from the ground right
+ * under where he stood when the move began.
  * Parts left out keep their previous place (elbows, knees and head bend naturally if never given).
  */
 export interface Keyframe {
   t: number;
-  pose: Partial<Record<PuppetJoint, [number, number]>>;
-  /** Degrees to spin while getting to this pose (360 = a full turn; positive turns toward you first). */
+  pose: Partial<Record<PuppetJoint, [number, number] | [number, number, number]>>;
+  /** Degrees to spin around (like a figure skater) while getting to this pose (360 = a full turn; positive turns toward you first). */
   turn?: number;
+  /** Degrees to flip head over heels (positive = a front flip, negative = a backflip). */
+  flip?: number;
+  /** Degrees to cartwheel (tipping sideways; positive = toward his front-hand side). */
+  roll?: number;
 }
 
-/** How far a body part sits to his side (px at size 1): what shows when he turns to face you. +1 = his left. */
+/** How far a body part sits to his side (px at size 1), when a pose doesn't say. +1 = his left. */
 const SIDE: Partial<Record<JointName, number>> = { handL: 8, handR: -8, elbowL: 6, elbowR: -6, footL: 5, footR: -5, kneeL: 5, kneeR: -5 };
+/** +1 for his left side, -1 for his right. */
+const sideOf = (k: 'L' | 'R') => (k === 'L' ? 1 : -1);
 
 export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower' | 'dance' | 'nuzzle';
 
@@ -53,7 +68,8 @@ export type CharEvent =
   | { type: 'fellOff' }          // walked/was pushed off an edge, or the window vanished
   | { type: 'carried'; speed: number } // the window under him moved
   | { type: 'reachedTop' }      // climbed to the top of a wall
-  | { type: 'letGo' };          // dropped off a wall or the ceiling
+  | { type: 'letGo' }           // dropped off a wall or the ceiling
+  | { type: 'step' };           // a foot touched down (footstep sounds)
 
 /** How he carries himself. Part of his "look"; set from the settings / presets. */
 export interface BodyStyle {
@@ -85,13 +101,20 @@ const GAITS: Record<Gait, { speed: number; lift: number; bob: number; swing: num
 /** Mood-driven body language, set from outside (0..1 each, speed ~0.5..1.5). */
 export interface Posture { hunch: number; bounce: number; tension: number; speed: number }
 
-type Targets = Partial<Record<JointName, Vec>>;
+type Targets = Partial<Record<JointName, V3>>;
 type Strengths = Partial<Record<JointName, number>>;
-interface Foot { x: number; swinging: boolean; t: number; fromX: number; toX: number; dur: number; lift: number }
+/** A foot's place on the ground (x across the screen, z in depth), and the step it's taking. */
+interface Foot { x: number; z: number; swinging: boolean; t: number; fromX: number; fromZ: number; toX: number; toZ: number; dur: number; lift: number }
+type Grip = { x: number; y: number; z: number; cx: number; cy: number; cz: number };
 
 const GESTURE_TIME: Record<Gesture, number> = {
   stomp: 0.75, wave: 1.4, shrug: 0.9, laugh: 1.9, flail: 1.2, pokeBack: 0.5, stretch: 2.4, lookAround: 2.2, cower: 1.6, dance: 4, nuzzle: 1.6,
 };
+/**
+ * How much he turns toward you during a gesture (0 = stays side-on, 1 = faces you).
+ * Animators call it "cheating to camera": a wave or a shrug reads better from the front.
+ */
+const GESTURE_PRESENT: Partial<Record<Gesture, number>> = { wave: 0.25, shrug: 0.65, laugh: 0.35, dance: 1, cower: 0.3, nuzzle: 0.45, stretch: 0.4 };
 
 export class Character {
   readonly body: Body;
@@ -100,16 +123,18 @@ export class Character {
   /** Which way he faces: 1 = right, -1 = left. */
   facing = 1;
   /**
-   * How his body is actually turned, as an angle: 0 = facing right, π = facing left,
-   * π/2 = facing you. Physics is flat (2D); this only changes where his poses put his
-   * limbs, so turning around is a smooth spin through a front view (a "2.5D" look)
-   * instead of an instant flip. It follows `facing`, or a made-up move drives it.
+   * How his body is turned, as an angle around the up axis: 0 = facing right,
+   * π = facing left, π/2 = facing you. Turning around is a real spin through the
+   * front view. It follows `facing`, or a made-up move drives it.
    */
   yaw = 0;
   /** How much his forward direction points right on screen (1 right … -1 left). */
   get turnF() { return Math.cos(this.yaw); }
   /** How much he faces you (0 = side view, 1 = facing you, -1 = back to you). */
   get turnS() { return Math.sin(this.yaw); }
+  /** Something outside (a skill) can ask him to turn toward you a bit: 0 … 1. */
+  presentWant = 0;
+  private present = 0;
   posture: Posture = { hunch: 0, bounce: 0, tension: 0, speed: 1 };
   style: BodyStyle = { ...DEFAULT_BODY };
   gait: Gait = 'normal';
@@ -135,26 +160,28 @@ export class Character {
    * `feet` are footholds on the wall; `step` is a foot moving to a new one.
    */
   private climb: {
-    wall: Wall; dir: -1 | 1; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: Vec | null; t: number;
-    from: Vec; feet: Record<'L' | 'R', number>; step: { foot: 'L' | 'R'; from: number; to: number; t: number } | null;
+    wall: Wall; dir: -1 | 1; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: V3 | null; t: number;
+    from: V3; feet: Record<'L' | 'R', number>; step: { foot: 'L' | 'R'; from: number; to: number; t: number } | null;
     out: number;   // how far his hips are from the wall
     bodyY: number; // neck height where the current pull started
     pullT: number; // time into the current pull (it keeps going while the next reach begins)
   } | null = null;
   /** Hanging from the ceiling (monkey bars). */
-  private hang: { goal: number; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: Vec | null; t: number; from: Vec; bodyX: number; pullT: number } | null = null;
+  private hang: { goal: number; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: V3 | null; t: number; from: V3; bodyX: number; pullT: number } | null = null;
   /**
    * Hands latched onto a point in the world. A gripped hand is pinned; his body hangs from it.
-   * (x, y) is the hold; (cx, cy) is where the hand actually is. The hand slides onto
+   * (x, y, z) is the hold; (cx, cy, cz) is where the hand actually is. The hand slides onto
    * the hold over a few frames instead of teleporting there.
    */
-  private grips: Record<'L' | 'R', { x: number; y: number; cx: number; cy: number } | null> = { L: null, R: null };
+  private grips: Record<'L' | 'R', Grip | null> = { L: null, R: null };
   /** A wall he's leaping at: he grabs it as soon as a hand gets there. */
   private leapWall: Wall | null = null;
   get onCeiling() { return this.mode === 'ceiling'; }
   /** At the end of the ceiling, climb down the screen edge instead of dropping. */
   climbDownAfterCeiling = false;
   private rootX: number;
+  /** Where the middle of his body is in depth (0 = the middle of his depth band). */
+  private rootZ = 0;
   private rootVX = 0;
   private goalX: number | null = null;
   private running = false;
@@ -167,18 +194,20 @@ export class Character {
   private stun = 0;
   private offBalance = 0;
   private walkH = 0;
-  private hipTarget: Vec | null = null;
-  private getup: { from: Record<JointName, Vec>; crouch: Targets; stand: Targets; x: number } | null = null;
+  private hipTarget: V3 | null = null;
+  private getup: { from: Record<JointName, V3>; crouch: Targets; stand: Targets; x: number } | null = null;
   private held: { joint: JointName; x: number; y: number; vx: number; vy: number } | null = null;
   private gesture: { name: Gesture; t: number; x: number; y: number; fired: boolean } | null = null;
   private jumpPrep: { t: number; vx: number; vy: number } | null = null;
   /** A made-up move being played (his AI brain moving his body directly). */
   private puppetMove: {
     times: number[];                  // seconds to reach each pose
-    poses: Record<JointName, Vec>[];  // [start, keyframe 1, ...] in his own frame (x forward, y up), every part filled in
+    poses: Record<JointName, V3>[];   // [start, keyframe 1, ...] in his own frame (x forward, y up, z = his left), every part filled in
     yaws: number[];                   // body angle at each of those
+    pitches: number[];                // flip angle at each
+    rolls: number[];                  // cartwheel angle at each
     auto: Set<JointName>;             // parts never given: bent naturally instead
-    ox: number; oy: number;           // the spot on the ground where the move started
+    ox: number; oy: number; oz: number; // the spot on the ground where the move started
     time: number; total: number;
   } | null = null;
 
@@ -186,8 +215,31 @@ export class Character {
     this.d = makeDims(scale);
     this.body = new Body(this.d, x, bounds.floor);
     this.rootX = x;
-    const foot = (fx: number): Foot => ({ x: fx, swinging: false, t: 0, fromX: fx, toX: fx, dur: 0.25, lift: 0 });
-    this.feet = { L: foot(x - 3), R: foot(x + 3) };
+    const foot = (fx: number, fz: number): Foot => ({ x: fx, z: fz, swinging: false, t: 0, fromX: fx, fromZ: fz, toX: fx, toZ: fz, dur: 0.25, lift: 0 });
+    this.feet = { L: foot(x - 3, -3), R: foot(x + 3, 3) };
+  }
+
+  // ───────────────────────── 3D helpers ─────────────────────────
+
+  /** p moved `fwd` the way he faces, `dy` down the screen, and `left` toward his left side. */
+  private off(p: V3, fwd: number, dy: number, left = 0, yaw = this.yaw): V3 {
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    return { x: p.x + fwd * c + left * s, y: p.y + dy, z: p.z + fwd * s - left * c };
+  }
+
+  /** A world point at depth z (default: the middle of his body). */
+  private pt(x: number, y: number, z = this.rootZ): V3 { return { x, y, z }; }
+
+  /** How far forward (the way he faces) a world point is from his root. */
+  private fwdOf(p: { x: number; z: number }) { return (p.x - this.rootX) * Math.cos(this.yaw) + (p.z - this.rootZ) * Math.sin(this.yaw); }
+
+  /** The world depth (z) of a spot `amt` px toward side k of his body (for holds on a wall, etc.). */
+  private latZ(k: 'L' | 'R', amt: number, yaw = this.yaw) { return -Math.cos(yaw) * sideOf(k) * amt; }
+
+  /** Which hand is nearer to you right now. */
+  private get nearSide(): 'L' | 'R' {
+    const c = Math.cos(this.yaw);
+    return (Math.abs(c) > 0.05 ? c : this.facing) > 0 ? 'R' : 'L';
   }
 
   // ───────────────────────── commands (what skills call) ─────────────────────────
@@ -208,9 +260,9 @@ export class Character {
   // ───────────── grabbing ─────────────
 
   /** Latch a hand onto a point. The hand stays exactly there until released. */
-  grip(hand: 'L' | 'R', at: Vec) {
+  grip(hand: 'L' | 'R', at: Vec & { z?: number }) {
     const p = this.body.j[hand === 'L' ? 'handL' : 'handR'];
-    this.grips[hand] = { x: at.x, y: at.y, cx: p.x, cy: p.y };
+    this.grips[hand] = { x: at.x, y: at.y, z: at.z ?? this.latZ(hand, 5 * this.scale), cx: p.x, cy: p.y, cz: p.z };
     p.invMass = 0;
   }
 
@@ -234,13 +286,13 @@ export class Character {
     this.goalX = null; this.gesture = null; this.jumpPrep = null;
     this.facing = wall.face;
     this.setMode('climb');
-    // Two handholds on the wall: one up near his reach, one lower.
-    const wx = this.wallX(wall);
+    // Two handholds on the wall, a hand's width apart in depth: one up near his reach, one lower.
+    const wx = this.wallX(wall), yaw = wall.face > 0 ? 0 : Math.PI;
     const upper = clamp(j.neck.y - armLen * 0.6, wall.y1 + 2, wall.y2 - 4);
     const lower = clamp(upper + armLen * 0.45, wall.y1 + 2, wall.y2 - 2);
     const upperHand = this.facing > 0 ? 'R' : 'L', lowerHand = upperHand === 'R' ? 'L' : 'R';
-    this.grip(upperHand, { x: wx, y: upper });
-    this.grip(lowerHand, { x: wx, y: lower });
+    this.grip(upperHand, { x: wx, y: upper, z: this.latZ(upperHand, 5 * this.scale, yaw) });
+    this.grip(lowerHand, { x: wx, y: lower, z: this.latZ(lowerHand, 5 * this.scale, yaw) });
     this.startClimb(wall, dir, dir < 0 ? lowerHand : upperHand);
     return true;
   }
@@ -340,7 +392,7 @@ export class Character {
     if (this.goalX !== null) this.goalX += dx;
     for (const f of [this.feet.L, this.feet.R]) { f.x += dx; f.fromX += dx; f.toX += dx; }
     if (this.getup) {
-      for (const set of [this.getup.from, this.getup.crouch, this.getup.stand] as Record<string, Vec>[]) {
+      for (const set of [this.getup.from, this.getup.crouch, this.getup.stand] as Record<string, V3>[]) {
         for (const v of Object.values(set)) { v.x += dx; v.y += dy; }
       }
       this.getup.x += dx;
@@ -381,9 +433,10 @@ export class Character {
       this.rootX = this.body.j.hip.x;
       // Tuck the feet back under the hips first, like a person does.
       const st = 4 * this.scale;
-      for (const [k, side] of [['L', -1], ['R', 1]] as const) {
-        const f = this.feet[k];
-        f.x = f.fromX = f.toX = this.rootX + side * this.facing * st;
+      for (const k of ['L', 'R'] as const) {
+        const f = this.feet[k], at = this.off(this.pt(this.rootX, 0), -sideOf(k) * st, 0, sideOf(k) * st * 0.5);
+        f.x = f.fromX = f.toX = at.x;
+        f.z = f.fromZ = f.toZ = at.z;
         f.swinging = false;
       }
       // Start from a deep crouch so he rises instead of "losing balance".
@@ -401,10 +454,10 @@ export class Character {
   }
 
   /** A shove at a joint, in pixels/second. */
-  poke(joint: JointName, vx: number, vy: number) {
-    this.body.push(joint, vx, vy, this.dt);
+  poke(joint: JointName, vx: number, vy: number, vz = 0) {
+    this.body.push(joint, vx, vy, this.dt, vz);
     // A hit knocks the wind out of him: muscles go weak for a moment.
-    const speed = Math.hypot(vx, vy);
+    const speed = Math.hypot(vx, vy, vz);
     this.stun = Math.max(this.stun, clamp(speed / 1500, 0, 1) * 0.5);
     if (speed > 1200 && (this.mode === 'climb' || this.mode === 'ceiling')) { this.letGo(); return; } // knocked off
     if (speed > 1500 && (this.mode === 'ground' || this.mode === 'sit' || this.mode === 'puppet')) {
@@ -433,7 +486,7 @@ export class Character {
     const max = 2500;
     const vx = clamp(this.held.vx, -max, max), vy = clamp(this.held.vy, -max, max);
     p.invMass = 1;
-    p.px = p.x - vx * this.dt; p.py = p.y - vy * this.dt;
+    p.px = p.x - vx * this.dt; p.py = p.y - vy * this.dt; p.pz = p.z;
     const speed = Math.hypot(vx, vy);
     this.held = null;
     this.setMode(speed > 1300 ? 'ragdoll' : 'air');
@@ -508,41 +561,55 @@ export class Character {
     for (const k of ['L', 'R'] as const) {
       const g = this.grips[k];
       if (!g) continue;
-      g.cx += (g.x - g.cx) * settle; g.cy += (g.y - g.cy) * settle;
+      g.cx += (g.x - g.cx) * settle; g.cy += (g.y - g.cy) * settle; g.cz += (g.z - g.cz) * settle;
       const p = b.j[k === 'L' ? 'handL' : 'handR'];
-      p.px = p.x; p.py = p.y; // keep its motion so the body swings naturally when it lets go
-      p.x = g.cx; p.y = g.cy;
+      p.px = p.x; p.py = p.y; p.pz = p.z; // keep its motion so the body swings naturally when it lets go
+      p.x = g.cx; p.y = g.cy; p.z = g.cz;
     }
     if (this.held) {
       const p = b.j[this.held.joint];
       p.x = this.held.x; p.y = this.held.y;
-      p.px = p.x - this.held.vx * dt; p.py = p.y - this.held.vy * dt;
+      p.z *= 0.97; // the mouse can't hold depth: drift back to the middle
+      p.px = p.x - this.held.vx * dt; p.py = p.y - this.held.vy * dt; p.pz = p.z;
     }
     for (const p of b.points) { p.grounded = false; p.on = NONE; }
     const friction = this.mode === 'ragdoll' || this.mode === 'lie' ? 0.4 : 0.25;
+    const bounds = { ...this.bounds, depth: this.bounds.depth ?? 40 * this.scale };
     for (let i = 0; i < 8; i++) {
       solveSticks(b.sticks);
-      collide(b.points, this.bounds, friction);
+      collide(b.points, bounds, friction);
       collidePlatforms(b.points, this.platforms, friction);
     }
     this.afterStep(dt, hipVY);
   }
 
   /** A turn in progress: from one body angle to another over a set time, eased in and out. */
-  private turning: { from: number; to: number; t: number; dur: number } | null = null;
+  private turning: { from: number; to: number; t: number; dur: number; base: number } | null = null;
 
-  /** Swing his body angle toward the way he faces: a quick turn through the front view. */
+  /**
+   * Swing his body angle toward the way he faces: a quick spin through the front view
+   * when he turns around, and a gentle ease when a gesture turns him a little toward you.
+   */
   private turnToward(dt: number) {
-    const target = this.facing > 0 ? 0 : Math.PI;
+    const base = this.facing > 0 ? 0 : Math.PI;
+    const g = this.gesture;
+    let want = this.presentWant;
+    if (g && this.mode === 'ground') {
+      const u = g.t / GESTURE_TIME[g.name];
+      want = Math.max(want, (GESTURE_PRESENT[g.name] ?? 0) * clamp(u * 5, 0, 1) * clamp((1 - u) * 5, 0, 1));
+    }
+    this.present += (want - this.present) * (1 - Math.exp(-dt * 8));
+    const target = base + (this.facing > 0 ? 1 : -1) * this.present * (Math.PI / 2);
     const tw = this.turning;
-    if (!tw || Math.abs(Math.cos(tw.to) - Math.cos(target)) > 1e-6) {
+    if (tw && tw.base !== base) this.turning = null; // changed his mind mid-turn: start over from here
+    if (!this.turning) {
       let diff = target - this.yaw;
       diff -= Math.round(diff / (2 * Math.PI)) * 2 * Math.PI; // shortest way round
+      if (Math.abs(diff) < 0.6) { this.yaw += diff * (1 - Math.exp(-dt * 10)); return; }
       if (Math.abs(diff) > Math.PI - 0.01) diff = (this.turnF > 0 ? 1 : -1) * Math.PI; // a half turn: go via facing you
-      if (Math.abs(diff) < 0.002) { this.yaw = target; this.turning = null; return; }
       // About a third of a second for a full about-face; quicker when running.
       const dur = Math.max(0.1, (Math.abs(diff) / Math.PI) * (this.running ? 0.2 : 0.32));
-      this.turning = { from: this.yaw, to: this.yaw + diff, t: 0, dur };
+      this.turning = { from: this.yaw, to: this.yaw + diff, t: 0, dur, base };
     }
     const w = this.turning!;
     w.t += dt;
@@ -568,25 +635,25 @@ export class Character {
     // DAMP: how much of each nudge is "free" (no added speed). Higher = calmer, less springy.
     const DAMP = 0.7;
     const weak = this.stun > 0 ? 0.3 : 1;
-    let sx = 0, sy = 0;
+    let sx = 0, sy = 0, sz = 0;
     for (const name of JOINTS) {
       const tg = t[name], k = s[name] ?? 0;
       const p = this.body.j[name];
       if (!tg || k <= 0 || p.invMass === 0) continue;
-      const dx = (tg.x - p.x) * k * weak, dy = (tg.y - p.y) * k * weak;
-      p.x += dx; p.y += dy;
-      p.px += dx * DAMP; p.py += dy * DAMP;
-      sx += dx; sy += dy;
+      const dx = (tg.x - p.x) * k * weak, dy = (tg.y - p.y) * k * weak, dz = (tg.z - p.z) * k * weak;
+      p.x += dx; p.y += dy; p.z += dz;
+      p.px += dx * DAMP; p.py += dy * DAMP; p.pz += dz * DAMP;
+      sx += dx; sy += dy; sz += dz;
     }
     if (internal) {
       // In the air muscles can only bend the body, not push it around:
       // cancel the net push so he can't "swim" through the air.
       const n = this.body.points.length;
-      const mx = sx / n, my = sy / n;
+      const mx = sx / n, my = sy / n, mz = sz / n;
       for (const p of this.body.points) {
         if (p.invMass === 0) continue;
-        p.x -= mx; p.y -= my;
-        p.px -= mx * DAMP; p.py -= my * DAMP;
+        p.x -= mx; p.y -= my; p.z -= mz;
+        p.px -= mx * DAMP; p.py -= my * DAMP; p.pz -= mz * DAMP;
       }
     }
   }
@@ -611,6 +678,7 @@ export class Character {
           this.setMode('ground');
           this.support = j.footL.grounded ? j.footL.on : j.footR.on;
           this.rootX = j.hip.x;
+          this.rootZ = clamp(j.hip.z, -20 * this.scale, 20 * this.scale);
           this.rootVX = clamp((j.hip.x - j.hip.px) / dt, -150, 150) * 0.5;
           this.plantFeet();
           this.crouch = clamp(hipVYBefore / 1150, 0.15, 1) * 16 * this.scale;
@@ -635,7 +703,7 @@ export class Character {
         const tg = this.hipTarget;
         const headDown = j.head.grounded || j.neck.grounded; // hips on the floor is fine (rising from a sit)
         // Off balance = hips far from where they should be, for more than a moment.
-        const off = tg ? dist(j.hip.x, j.hip.y, tg.x, tg.y) : 0;
+        const off = tg ? dist3(j.hip, tg) : 0;
         this.offBalance = off > 22 * this.scale + this.crouch ? this.offBalance + dt : 0;
         if (headDown || this.offBalance > 0.12 || off > 45 * this.scale) {
           this.setMode('ragdoll');
@@ -668,8 +736,9 @@ export class Character {
   private plantFeet() {
     const j = this.body.j;
     for (const k of ['L', 'R'] as const) {
-      const f = this.feet[k];
-      f.x = f.fromX = f.toX = j[k === 'L' ? 'footL' : 'footR'].x;
+      const f = this.feet[k], p = j[k === 'L' ? 'footL' : 'footR'];
+      f.x = f.fromX = f.toX = p.x;
+      f.z = f.fromZ = f.toZ = p.z;
       f.swinging = false; f.t = 0;
     }
   }
@@ -687,8 +756,17 @@ export class Character {
    */
   private standHeight() {
     const L = this.d.thigh + this.d.shin, half = this.stanceHalf();
-    const straight = Math.sqrt(L * L - half * half);
+    const straight = Math.sqrt(L * L - 2 * half * half);
     return straight * (0.9 + 0.1 * this.style.stand) + (this.style.stand > 0.97 ? 1.5 * this.scale : 0);
+  }
+
+  /**
+   * Where a standing foot goes. Feet stand a little apart both ways (one a touch forward,
+   * one back, and out to his sides), so he reads as an upside-down V from any angle.
+   */
+  private standFoot(k: 'L' | 'R', yaw = this.yaw, x = this.rootX): V3 {
+    const st = this.stanceHalf();
+    return this.off(this.pt(x, this.groundY() - 2), -sideOf(k) * st, 0, sideOf(k) * st, yaw);
   }
 
   private groundPose(dt: number, t: Targets, s: Strengths) {
@@ -727,6 +805,8 @@ export class Character {
     const accel = 450 * speedMul;
     this.rootVX += clamp(want - this.rootVX, -accel * dt, accel * dt);
     this.rootX += this.rootVX * dt;
+    // He drifts back to the middle of his depth band as he goes about his business.
+    this.rootZ += (0 - this.rootZ) * Math.min(1, dt * (Math.abs(this.rootVX) > 10 ? 1.5 : 0.4));
     // Compliance: if something shoves his hips, his balance point follows a
     // little, so his feet stumble to catch up instead of him being glued in place.
     const off = j.hip.x - this.rootX, dead = 3 * sc;
@@ -741,7 +821,8 @@ export class Character {
     const moving = Math.abs(this.rootVX) > 10;
     if (moving) this.facing = sign(this.rootVX);
     else if (this.look && Math.abs(this.look.x - this.rootX) > 25 && !this.gesture) this.facing = sign(this.look.x - this.rootX);
-    const f = this.turnF, side = this.turnS;
+    const f = this.turnF;
+    const root = this.pt(this.rootX, floor - 2);
 
     // Running has its own cycle (see runPose).
     if (this.running && moving && this.crouch < 6 * sc) { this.runPose(dt, t, s, floor); return; }
@@ -752,13 +833,13 @@ export class Character {
     const B = this.style, legLen = d.thigh + d.shin;
     const speed = Math.abs(this.rootVX), dir = sign(this.rootVX);
     const stepLen = B.stride * 26 * sc * (this.running ? 1.3 : 1);
-    const stance = this.stanceHalf();
-    const ideal = moving
-      ? { L: this.rootX, R: this.rootX }
-      : { L: this.rootX - f * stance + side * stance, R: this.rootX + f * stance - side * stance };
+    const track = 2.5 * sc; // walking, each foot lands a little to its own side
+    const ideal = (k: 'L' | 'R') => (moving ? this.off(root, 0, 0, sideOf(k) * track) : this.standFoot(k));
     const stepT = moving ? clamp(stepLen / speed, 0.16, 0.5) : 0.22;
-    const landAt = (k: 'L' | 'R', remaining: number) =>
-      moving ? this.rootX + this.rootVX * remaining + dir * stepLen * 0.5 : ideal[k];
+    const landAt = (k: 'L' | 'R', remaining: number) => {
+      const i = ideal(k);
+      return moving ? { x: this.rootX + this.rootVX * remaining + dir * stepLen * 0.5, z: i.z } : { x: i.x, z: i.z };
+    };
     const swinging = this.feet.L.swinging ? 'L' : this.feet.R.swinging ? 'R' : null;
     if (!swinging && this.crouch < 6 * sc) {
       let k: 'L' | 'R', need: number, err: number;
@@ -768,17 +849,19 @@ export class Character {
         err = Math.max(behindL, behindR);
         need = stepLen * 0.5;
       } else {
-        const eL = Math.abs(ideal.L - this.feet.L.x), eR = Math.abs(ideal.R - this.feet.R.x);
+        const iL = ideal('L'), iR = ideal('R');
+        const eL = Math.hypot(iL.x - this.feet.L.x, iL.z - this.feet.L.z), eR = Math.hypot(iR.x - this.feet.R.x, iR.z - this.feet.R.z);
         k = eL > eR ? 'L' : 'R';
         err = Math.max(eL, eR);
         need = 2.5 * sc;
       }
       if (err > need) {
         const ft = this.feet[k];
-        ft.swinging = true; ft.t = 0; ft.fromX = ft.x;
+        ft.swinging = true; ft.t = 0; ft.fromX = ft.x; ft.fromZ = ft.z;
         ft.dur = stepT;
-        ft.toX = landAt(k, stepT);
-        ft.lift = (3 + 3 * P.bounce + Math.min(Math.abs(ft.toX - ft.fromX), 40) * 0.08) * sc * B.lift * (moving ? G.lift : 1);
+        const to = landAt(k, stepT);
+        ft.toX = to.x; ft.toZ = to.z;
+        ft.lift = (3 + 3 * P.bounce + Math.min(Math.hypot(ft.toX - ft.fromX, ft.toZ - ft.fromZ), 40) * 0.08) * sc * B.lift * (moving ? G.lift : 1);
       }
     }
     // Don't let the body outrun the feet: if the planted foot is trailing too far, ease off.
@@ -796,12 +879,14 @@ export class Character {
       if (moving) ft.dur = Math.min(ft.dur, stepT); // speeding up? hurry the step
       ft.t += dt / ft.dur;
       const u = Math.min(ft.t, 1);
-      ft.toX = lerp(ft.toX, landAt(k, (1 - u) * ft.dur), 0.1);
+      const to = landAt(k, (1 - u) * ft.dur);
+      ft.toX = lerp(ft.toX, to.x, 0.1); ft.toZ = lerp(ft.toZ, to.z, 0.1);
       ft.x = lerp(ft.fromX, ft.toX, smooth(u));
+      ft.z = lerp(ft.fromZ, ft.toZ, smooth(u));
       // Stomping: slow lift, fast slam.
       footY[k] = floor - Math.sin(Math.PI * (this.gait === 'stomp' && moving ? u ** 1.6 : u)) * ft.lift;
       swingT = u;
-      if (ft.t >= 1) ft.swinging = false;
+      if (ft.t >= 1) { ft.swinging = false; if (moving || ft.lift > 4 * sc) this.events.push({ type: 'step' }); }
     }
 
     // Hips: lower a little while walking (long steps need bent knees to reach),
@@ -813,7 +898,7 @@ export class Character {
     let reachH = standH;
     for (const k of ['L', 'R'] as const) {
       if (this.feet[k].swinging) continue;
-      const dx = this.rootX - this.feet[k].x;
+      const dx = Math.hypot(this.rootX - this.feet[k].x, this.rootZ - this.feet[k].z);
       reachH = Math.min(reachH, Math.sqrt(Math.max((legLen * 0.995) ** 2 - dx * dx, (legLen * 0.6) ** 2)));
     }
     this.walkH = lerp(this.walkH || standH, reachH, 0.35);
@@ -822,45 +907,47 @@ export class Character {
     const bob = moving
       ? Math.sin(Math.PI * swingT) * (0.4 + 2.5 * P.bounce) * sc * B.bob * G.bob
       : Math.sin(this.time * 2.1) * 0.6 * sc;
-    const hip = { x: this.rootX, y: floor - 2 - hipH + this.crouch + hunch * 2 * sc - bob };
+    const hip = this.pt(this.rootX, floor - 2 - hipH + this.crouch + hunch * 2 * sc - bob);
     this.hipTarget = hip;
 
     // Torso leans into motion; sadness hunches it, anger pitches it forward.
-    const gaitLean = moving ? f * G.lean * sc : 0;
-    const lean = gaitLean + clamp(this.rootVX * 0.05 * B.lean, -10 * sc, 10 * sc) + f * (hunch * 5 + P.tension * 3) * sc + f * this.crouch * 0.5;
-    const neck = { x: hip.x + lean, y: hip.y - Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)) };
-    // Head up by default; only a real mood drops it.
-    let tilt = f * (hunch * 0.6 + (this.gait === 'sulk' && moving ? 0.3 : 0)); // sulking: eyes on the floor
+    const lean = (moving ? G.lean * sc : 0) + clamp(this.rootVX * this.facing * 0.05 * B.lean, -10 * sc, 10 * sc)
+      + (hunch * 5 + P.tension * 3) * sc + this.crouch * 0.5;
+    const neck = this.off(hip, lean, -Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)));
+    // Head up by default; only a real mood drops it. nod = tipped forward, cock = tipped toward his left.
+    let nod = hunch * 0.6 + (this.gait === 'sulk' && moving ? 0.3 : 0); // sulking: eyes on the floor
+    let cock = 0;
     // Only a slight nod toward what he's looking at; turning to face it does most of the work.
-    if (this.look) tilt += f * clamp((this.look.y - neck.y) / 600, -0.15, 0.15);
+    if (this.look) nod += clamp((this.look.y - neck.y) / 600, -0.15, 0.15);
+    /** Tip his head toward screen-right (or left, negative) whichever way he's turned. */
+    const tiltX = (a: number) => { nod += a * Math.cos(this.yaw); cock += a * Math.sin(this.yaw); };
 
     // Arms swing opposite the legs.
     const armLen = d.upperArm + d.foreArm;
     const ready = P.tension > 0.5 || (this.gait === 'stomp' && moving); // fists up
     const skipping = this.gait === 'skip' && moving;
-    const handY = neck.y + armLen * (ready ? 0.6 : this.gait === 'sulk' && moving ? 0.98 : 0.8 + 0.17 * B.armHang);
+    const handDrop = armLen * (ready ? 0.6 : this.gait === 'sulk' && moving ? 0.98 : 0.8 + 0.17 * B.armHang);
     // Even "hanging" arms sit a touch apart (front one forward, back one behind),
     // otherwise in side view they lie on top of the torso and blur into it.
-    const frontFwd = f * (ready ? 9 : 5 - 2.5 * B.armHang) * sc;
-    const backFwd = f * (ready ? 6 : -(1.5 + 1.5 * B.armHang)) * sc;
+    const frontFwd = (ready ? 9 : 5 - 2.5 * B.armHang) * sc;
+    const backFwd = (ready ? 6 : -(1.5 + 1.5 * B.armHang)) * sc;
+    const hang = 5 * sc; // hands hang a little out to his sides
     // Each hand swings with the opposite foot, along an arc (it rises a little at either end).
     const swingAmt = 0.65 * B.armSwing * (moving ? G.swing : 1);
-    const armAt = (footX: number, fwd: number) => {
-      const o = (footX - this.rootX) * swingAmt;
-      return { x: neck.x + fwd + o, y: handY - Math.abs(o) * (skipping ? 0.8 : 0.3) };
+    const armAt = (foot: Foot, fwd: number, k: 'L' | 'R') => {
+      const o = this.fwdOf(foot) * swingAmt;
+      return this.off(neck, fwd + o, handDrop - Math.abs(o) * (skipping ? 0.8 : 0.3), sideOf(k) * hang);
     };
-    const frontIsR = f > 0;
-    let handL = armAt(this.feet.R.x, frontIsR ? backFwd : frontFwd);
-    let handR = armAt(this.feet.L.x, frontIsR ? frontFwd : backFwd);
-    // Turned toward you, his arms hang out to his sides.
-    handL = { x: handL.x + side * 7 * sc, y: handL.y };
-    handR = { x: handR.x - side * 7 * sc, y: handR.y };
+    const near = this.nearSide, frontIsR = near === 'R';
+    let handL = armAt(this.feet.R, frontIsR ? backFwd : frontFwd, 'L');
+    let handR = armAt(this.feet.L, frontIsR ? frontFwd : backFwd, 'R');
     if (this.gait === 'pocket' && !ready) {
       // Hands tucked in his pockets, elbows out.
-      const back = { x: hip.x - f * 4 * sc, y: hip.y - 1 * sc }, front = { x: hip.x + f * 2 * sc, y: hip.y - 1 * sc };
-      if (frontIsR) { handR = front; handL = back; } else { handL = front; handR = back; }
+      const back = this.off(hip, -4 * sc, -1 * sc, 0), front = this.off(hip, 2 * sc, -1 * sc, 0);
+      const pocket = (p: V3, k: 'L' | 'R') => this.off(p, 0, 0, sideOf(k) * 3 * sc);
+      if (frontIsR) { handR = pocket(front, 'R'); handL = pocket(back, 'L'); } else { handL = pocket(front, 'L'); handR = pocket(back, 'R'); }
     }
-    let footL = { x: this.feet.L.x, y: footY.L - 2 }, footR = { x: this.feet.R.x, y: footY.R - 2 };
+    let footL = { x: this.feet.L.x, y: footY.L - 2, z: this.feet.L.z }, footR = { x: this.feet.R.x, y: footY.R - 2, z: this.feet.R.z };
     let hipT = hip, neckT = neck;
 
     // Gestures layer on top of the base pose.
@@ -868,96 +955,96 @@ export class Character {
     if (g) {
       g.t += dt;
       const dur = GESTURE_TIME[g.name], u = g.t / dur;
-      const front = f > 0 ? 'R' : 'L';
+      const front: 'L' | 'R' = this.facing > 0 ? 'R' : 'L';
       switch (g.name) {
         case 'stomp': {
           const lift = u < 0.65 ? smooth(u / 0.65) * 18 * sc : Math.max(0, 1 - (u - 0.65) / 0.08) * 18 * sc;
-          const fx = this.rootX + f * 7 * sc;
-          if (front === 'R') footR = { x: fx, y: floor - 2 - lift }; else footL = { x: fx, y: floor - 2 - lift };
+          const foot = this.off(root, 7 * sc, -lift, sideOf(front) * track);
+          if (front === 'R') footR = foot; else footL = foot;
           if (u > 0.73 && !g.fired) { g.fired = true; this.events.push({ type: 'stomped' }); }
-          handL = { x: neck.x - f * 6 * sc, y: neck.y + armLen * 0.7 };
-          handR = { x: neck.x - f * 3 * sc, y: neck.y + armLen * 0.7 };
+          handL = this.off(neck, -6 * sc, armLen * 0.7, hang);
+          handR = this.off(neck, -3 * sc, armLen * 0.7, -hang);
           break;
         }
         case 'wave': {
-          const w = Math.sin(g.t * 15) * 6 * sc;
-          const up = { x: neck.x + f * (9 * sc) + w, y: neck.y - 22 * sc };
+          // Hand up beside his head, out in front so it doesn't hide behind it, waving side to side.
+          const w = Math.sin(g.t * 15) * 5 * sc;
+          const up = this.off(neck, 14 * sc + w, -24 * sc, sideOf(front) * 3 * sc - w * 0.6);
           if (front === 'R') handR = up; else handL = up;
-          tilt += f * -0.15;
+          nod -= 0.15;
           break;
         }
         case 'shrug': {
           const k = Math.sin(Math.PI * clamp(u, 0, 1));
-          handL = { x: neck.x - 15 * sc * k, y: neck.y + (armLen * 0.88) * (1 - k) + 2 * sc * k };
-          handR = { x: neck.x + 15 * sc * k, y: handL.y };
-          neckT = { x: neck.x, y: neck.y + 3 * sc * k };
-          tilt += f * -0.2 * k + 0.25 * k;
+          handL = this.off(neck, 6 * sc * k, armLen * 0.88 * (1 - k) + 2 * sc * k, hang + 13 * sc * k);
+          handR = this.off(neck, 6 * sc * k, armLen * 0.88 * (1 - k) + 2 * sc * k, -hang - 13 * sc * k);
+          neckT = this.off(neck, 0, 3 * sc * k);
+          nod -= 0.2 * k; cock += 0.25 * k;
           break;
         }
         case 'laugh': {
           const beat = Math.abs(Math.sin(g.t * 18)); // the chuckle bounce
-          const front = f > 0 ? 'R' : 'L';
           if (u < 0.45) {
             // Head thrown back, hands on his belly.
             const k = smooth(u / 0.15);
-            neckT = { x: neck.x - f * 4 * sc * k, y: neck.y + beat * 1.5 * sc };
-            tilt += -f * 0.7 * k;
-            handL = { x: hip.x + f * 4 * sc, y: hip.y - 8 * sc };
-            handR = { x: hip.x + f * 7 * sc, y: hip.y - 13 * sc };
+            neckT = this.off(neck, -4 * sc * k, beat * 1.5 * sc);
+            nod -= 0.7 * k;
+            handL = this.off(hip, 4 * sc, -8 * sc, 3 * sc);
+            handR = this.off(hip, 7 * sc, -13 * sc, -3 * sc);
           } else {
             // Doubled over, slapping his knee.
             const k = smooth((u - 0.45) / 0.15) * (1 - smooth((u - 0.85) / 0.15));
-            neckT = { x: neck.x + f * 12 * sc * k, y: neck.y + 8 * sc * k + beat * 1.5 * sc };
-            hipT = { x: hip.x - f * 2 * sc * k, y: hip.y + 2 * sc * k };
-            tilt += f * 0.5 * k;
-            const slap = { x: hip.x + f * 7 * sc, y: hip.y + (d.thigh + d.shin) * 0.4 - Math.abs(Math.sin(g.t * 13)) * 9 * sc * k };
-            const rest = { x: neckT.x + f * 4 * sc, y: neckT.y + 18 * sc };
+            neckT = this.off(neck, 12 * sc * k, 8 * sc * k + beat * 1.5 * sc);
+            hipT = this.off(hip, -2 * sc * k, 2 * sc * k);
+            nod += 0.5 * k;
+            const slap = this.off(hip, 7 * sc, (d.thigh + d.shin) * 0.4 - Math.abs(Math.sin(g.t * 13)) * 9 * sc * k, sideOf(front) * 4 * sc);
+            const rest = this.off(neckT, 4 * sc, 18 * sc, -sideOf(front) * 4 * sc);
             if (front === 'R') { handR = slap; handL = rest; } else { handL = slap; handR = rest; }
           }
           break;
         }
         case 'dance': {
-          // Two beats a second: bob down on the beat, sway side to side, tap alternate feet,
+          // Facing you, two beats a second: bob down on the beat, sway side to side, tap alternate feet,
           // and switch between a disco point and hands-on-hips every two beats.
           const b = g.t * 2, ph = b % 1, n = Math.floor(b);
           const sway = Math.sin(b * Math.PI) * 4 * sc;
           const down = (1 - Math.sin(Math.PI * ph)) * 4 * sc;
-          hipT = { x: hip.x + sway, y: hip.y + down };
-          neckT = { x: hipT.x + sway * 0.6, y: hipT.y - d.torso };
+          hipT = this.off(hip, 0, down, sway);
+          neckT = this.off(hipT, 0, -d.torso, sway * 0.6);
           const lift = Math.sin(Math.PI * ph) * 7 * sc, half = this.stanceHalf() + 2 * sc;
-          footL = { x: this.rootX - half, y: floor - 2 - (n % 2 === 0 ? lift : 0) };
-          footR = { x: this.rootX + half, y: floor - 2 - (n % 2 === 1 ? lift : 0) };
+          footL = this.off(root, 0, -(n % 2 === 0 ? lift : 0), half);
+          footR = this.off(root, 0, -(n % 2 === 1 ? lift : 0), -half);
           const point = Math.floor(b / 2) % 2 === 0;
-          const up = { x: neckT.x + 13 * sc, y: neckT.y - 22 * sc }, low = { x: neckT.x - 12 * sc, y: neckT.y + 22 * sc };
-          const hipHand = (side: number) => ({ x: hipT.x + side * 7 * sc, y: hipT.y - 5 * sc });
-          handR = point ? up : hipHand(1);
-          handL = point ? low : hipHand(-1);
-          tilt += Math.sin(b * Math.PI) * 0.25;
+          const up = this.off(neckT, 3 * sc, -22 * sc, -13 * sc), low = this.off(neckT, 3 * sc, 22 * sc, 12 * sc);
+          const hipHand = (k: 'L' | 'R') => this.off(hipT, 1 * sc, -5 * sc, sideOf(k) * 7 * sc);
+          handR = point ? up : hipHand('R');
+          handL = point ? low : hipHand('L');
+          cock += Math.sin(b * Math.PI) * 0.25;
           break;
         }
         case 'nuzzle': {
           // Being petted: lean into it and sway a little, hands together.
           const k = Math.min(1, u * 4) * Math.min(1, (1 - u) * 4);
-          const dir = sign(g.x - neck.x);
-          neckT = { x: neck.x + dir * 5 * sc * k, y: neck.y + 2 * sc * k };
-          tilt += dir * 0.55 * k + Math.sin(g.t * 6) * 0.15 * k;
-          handL = { x: neck.x + f * 5 * sc, y: neck.y + 15 * sc };
-          handR = { x: neck.x + f * 8 * sc, y: neck.y + 15 * sc };
+          const dx = sign(g.x - neck.x);
+          neckT = { x: neck.x + dx * 5 * sc * k, y: neck.y + 2 * sc * k, z: neck.z };
+          tiltX(dx * 0.55 * k + Math.sin(g.t * 6) * 0.15 * k);
+          handL = this.off(neck, 5 * sc, 15 * sc, 2 * sc);
+          handR = this.off(neck, 8 * sc, 15 * sc, -2 * sc);
           break;
         }
         case 'flail': {
           const a = g.t * 18;
-          handL = { x: neck.x + Math.cos(a) * 20 * sc, y: neck.y + Math.sin(a) * 20 * sc };
-          handR = { x: neck.x + Math.cos(a + Math.PI) * 20 * sc, y: neck.y + Math.sin(a + Math.PI) * 20 * sc };
+          handL = this.off(neck, Math.cos(a) * 20 * sc, Math.sin(a) * 20 * sc, hang);
+          handR = this.off(neck, Math.cos(a + Math.PI) * 20 * sc, Math.sin(a + Math.PI) * 20 * sc, -hang);
           break;
         }
         case 'pokeBack': {
           const k = Math.sin(Math.PI * clamp(u, 0, 1));
           const dx = g.x - neck.x, dy = g.y - neck.y, dd = Math.hypot(dx, dy) || 1;
-          const reach = Math.min(dd, armLen * 0.97) * k;
-          const tip = { x: neck.x + (dx / dd) * reach, y: neck.y + (dy / dd) * reach };
+          const reach = Math.min(dd, armLen * 0.95) * k;
+          const tip = { x: neck.x + (dx / dd) * reach, y: neck.y + (dy / dd) * reach, z: neck.z + this.latZ(front, 3 * sc) };
           const rest = front === 'R' ? handR : handL;
-          const h = { x: lerp(rest.x, tip.x, k), y: lerp(rest.y, tip.y, k) };
+          const h = lerp3(rest, tip, k);
           if (front === 'R') handR = h; else handL = h;
           break;
         }
@@ -965,26 +1052,26 @@ export class Character {
           // Up on his toes with arms overhead, lean back, then let it all go.
           const up = smooth(clamp(u / 0.3, 0, 1)) * (1 - smooth(clamp((u - 0.78) / 0.22, 0, 1)));
           const back = Math.sin(Math.PI * clamp((u - 0.25) / 0.5, 0, 1));
-          hipT = { x: hip.x - f * 2 * sc * back, y: hip.y - 3 * sc * up };
-          neckT = { x: neck.x - f * 7 * sc * back, y: neck.y - 3 * sc * up };
-          handL = { x: lerp(handL.x, neckT.x - 6 * sc - f * 5 * sc * back, up), y: lerp(handL.y, neckT.y - 30 * sc, up) };
-          handR = { x: lerp(handR.x, neckT.x + 6 * sc - f * 5 * sc * back, up), y: lerp(handR.y, neckT.y - 30 * sc, up) };
-          tilt += -f * 0.6 * back;
+          hipT = this.off(hip, -2 * sc * back, -3 * sc * up);
+          neckT = this.off(neck, -7 * sc * back, -3 * sc * up);
+          handL = lerp3(handL, this.off(neckT, -5 * sc * back, -30 * sc, 6 * sc), up);
+          handR = lerp3(handR, this.off(neckT, -5 * sc * back, -30 * sc, -6 * sc), up);
+          nod -= 0.6 * back;
           break;
         }
         case 'lookAround': {
           if (!g.fired && u > 0.35) { g.fired = true; this.facing = -this.facing; }
           if (g.fired && u > 0.7 && u < 0.72) this.facing = -this.facing;
-          tilt += f * Math.sin(g.t * 3) * 0.3;
+          nod += Math.sin(g.t * 3) * 0.3;
           break;
         }
         case 'cower': {
           const k = Math.min(1, u * 5) * Math.min(1, (1 - u) * 5);
-          hipT = { x: hip.x, y: hip.y + 10 * sc * k };
-          neckT = { x: neck.x - f * 6 * sc * k, y: neck.y + 14 * sc * k };
-          handL = { x: neckT.x + f * 6 * sc, y: neckT.y - 8 * sc * k };
-          handR = { x: neckT.x + f * 9 * sc, y: neckT.y - 4 * sc * k };
-          tilt += -f * 0.5 * k;
+          hipT = this.off(hip, 0, 10 * sc * k);
+          neckT = this.off(neck, -6 * sc * k, 14 * sc * k);
+          handL = this.off(neckT, 6 * sc, -8 * sc * k, 3 * sc);
+          handR = this.off(neckT, 9 * sc, -4 * sc * k, -3 * sc);
+          nod -= 0.5 * k;
           break;
         }
       }
@@ -994,20 +1081,26 @@ export class Character {
     // A skill is steering his front hand (drawing, grabbing the cursor).
     const reachFor = this.handTarget && !g ? this.handTarget : null;
     if (reachFor) {
-      const armLen2 = (d.upperArm + d.foreArm) * 0.97;
-      const dx = reachFor.x - neckT.x, dy = reachFor.y - neckT.y, dd = Math.hypot(dx, dy) || 1;
-      const k = Math.min(1, armLen2 / dd);
-      const hand = { x: neckT.x + dx * k, y: neckT.y + dy * k };
-      if (f > 0) handR = hand; else handL = hand;
+      const hand = this.reachToward(neckT, reachFor, this.facing > 0 ? 'R' : 'L');
+      if (this.facing > 0) handR = hand; else handL = hand;
     }
-    this.fillLimbs(t, hipT, neckT, tilt, handL, handR, footL, footR, f, 1);
+    this.fillLimbs(t, hipT, neckT, nod, cock, handL, handR, footL, footR);
     const plant = (k: 'L' | 'R') => (this.feet[k].swinging ? 0.35 : 0.6);
     Object.assign(s, {
       hip: 0.25, neck: 0.25, head: 0.3, kneeL: 0.2, kneeR: 0.2, footL: plant('L'), footR: plant('R'),
       elbowL: 0.1, elbowR: 0.1, handL: 0.09, handR: 0.09,
     });
     if (g && g.name !== 'lookAround') Object.assign(s, { handL: 0.2, handR: 0.2, elbowL: 0.15, elbowR: 0.15 });
-    if (reachFor) Object.assign(s, f > 0 ? { handR: 0.45, elbowR: 0.2 } : { handL: 0.45, elbowL: 0.2 });
+    if (reachFor) Object.assign(s, this.facing > 0 ? { handR: 0.45, elbowR: 0.2 } : { handL: 0.45, elbowL: 0.2 });
+  }
+
+  /** Where hand k gets to reaching for a spot on screen (as far as his arm goes). */
+  private reachToward(from: V3, at: Vec, k: 'L' | 'R'): V3 {
+    const armLen = (this.d.upperArm + this.d.foreArm) * 0.97;
+    const z = from.z + this.latZ(k, 4 * this.scale);
+    const dx = at.x - from.x, dy = at.y - from.y, dz = z - from.z, dd = Math.hypot(dx, dy, dz) || 1;
+    const k2 = Math.min(1, armLen / dd);
+    return { x: from.x + dx * k2, y: from.y + dy * k2, z: from.z + dz * k2 };
   }
 
   /** The hand that's in front (the one he draws and grabs with). */
@@ -1020,75 +1113,97 @@ export class Character {
    * Arms are bent and pump opposite the legs; the body pitches forward.
    */
   private runPose(dt: number, t: Targets, s: Strengths, floor: number) {
-    const d = this.d, sc = this.scale, f = this.turnF, L = d.thigh + d.shin;
+    const d = this.d, sc = this.scale, L = d.thigh + d.shin;
     const angry = this.gait === 'stomp';
     const speed = Math.abs(this.rootVX), stride = L * (angry ? 1.7 : 2.3);
+    const before = this.runPhase;
     this.runPhase = (this.runPhase + (speed * dt) / stride) % 1;
     const ph = this.runPhase, stanceEnd = angry ? 0.42 : 0.32;
-    const footAt = (off: number) => {
+    if ((before < 0.5 && ph >= 0.5) || ph < before) this.events.push({ type: 'step' });
+    const root = this.pt(this.rootX, floor - 2);
+    const footAt = (off: number, k: 'L' | 'R') => {
       const u = (ph + off) % 1;
-      if (u < stanceEnd) return { x: this.rootX + f * lerp(0.4 * L, -0.45 * L, u / stanceEnd), y: floor - 2 };
-      const k = (u - stanceEnd) / (1 - stanceEnd);
+      if (u < stanceEnd) return this.off(root, lerp(0.4 * L, -0.45 * L, u / stanceEnd), 0, sideOf(k) * 2.5 * sc);
+      const kk = (u - stanceEnd) / (1 - stanceEnd);
       // Heel kicks up behind first, then the leg swings through and reaches far forward.
-      const lift = Math.sin(Math.PI * Math.min(1, k * 1.25)) * L * (angry ? 0.3 : 0.38);
-      return { x: this.rootX + f * lerp(-0.45 * L, 0.4 * L, smooth(k)), y: floor - 2 - lift };
+      const lift = Math.sin(Math.PI * Math.min(1, kk * 1.25)) * L * (angry ? 0.3 : 0.38);
+      return this.off(root, lerp(-0.45 * L, 0.4 * L, smooth(kk)), -lift, sideOf(k) * 2.5 * sc);
     };
-    const footL = footAt(0), footR = footAt(0.5);
+    const footL = footAt(0, 'L'), footR = footAt(0.5, 'R');
     // Lowest at mid-stance (foot under him), highest in the float; legs reach long at landing.
     const mid = stanceEnd / 2;
-    const hip = { x: this.rootX, y: floor - 2 - L * 0.95 + Math.cos((ph - mid) * 4 * Math.PI) * 1.8 * sc };
+    const hip = this.pt(this.rootX, floor - 2 - L * 0.95 + Math.cos((ph - mid) * 4 * Math.PI) * 1.8 * sc);
     this.hipTarget = hip;
     const a = angry ? 0.42 : 0.34; // forward pitch
-    const neck = { x: hip.x + f * Math.sin(a) * d.torso, y: hip.y - Math.cos(a) * d.torso };
+    const neck = this.off(hip, Math.sin(a) * d.torso, -Math.cos(a) * d.torso);
     // Arms: upper arm swings from the shoulder, forearm bent ~90° forward.
     const amp = angry ? 0.6 : 0.9;
-    const armAt = (theta: number) => {
+    const armAt = (theta: number, k: 'L' | 'R') => {
       const th = theta + a * 0.4;
-      const elbow = { x: neck.x + f * Math.sin(th) * d.upperArm, y: neck.y + Math.cos(th) * d.upperArm };
-      return { x: elbow.x + f * Math.cos(th) * d.foreArm * (angry ? 0.8 : 1), y: elbow.y - Math.sin(th) * d.foreArm * (angry ? 0.8 : 1) };
+      const elbow = this.off(neck, Math.sin(th) * d.upperArm, Math.cos(th) * d.upperArm, sideOf(k) * 4 * sc);
+      return this.off(elbow, Math.cos(th) * d.foreArm * (angry ? 0.8 : 1), -Math.sin(th) * d.foreArm * (angry ? 0.8 : 1), -sideOf(k) * 1.5 * sc);
     };
     const swing = Math.sin(ph * 2 * Math.PI) * amp;
-    const handL = armAt(swing), handR = armAt(-swing); // each arm opposite its leg
-    this.fillLimbs(t, hip, neck, -f * 0.15, handL, handR, footL, footR, f, 1);
+    const handL = armAt(swing, 'L'), handR = armAt(-swing, 'R'); // each arm opposite its leg
+    this.fillLimbs(t, hip, neck, -0.15, 0, handL, handR, footL, footR);
     Object.assign(s, { hip: 0.3, neck: 0.3, head: 0.3, kneeL: 0.25, kneeR: 0.25, footL: 0.4, footR: 0.4, elbowL: 0.22, elbowR: 0.22, handL: 0.22, handR: 0.22 });
     // Keep the walking feet in sync so stopping or slowing to a walk is seamless.
-    this.feet.L.x = footL.x; this.feet.R.x = footR.x;
+    this.feet.L.x = footL.x; this.feet.L.z = footL.z; this.feet.R.x = footR.x; this.feet.R.z = footR.z;
     this.feet.L.swinging = this.feet.R.swinging = false;
   }
 
-  /** Given hip, neck, hands and feet, place head, elbows and knees (IK). */
-  private fillLimbs(t: Targets, hip: Vec, neck: Vec, tilt: number, handL: Vec, handR: Vec, footL: Vec, footR: Vec, f: number, kneeBend: number) {
-    const d = this.d;
+  /**
+   * Given hip, neck, hands and feet, place head, elbows and knees (IK).
+   * `nod` tips the head forward, `cock` tips it toward his left (radians).
+   * Knees bend the way he faces (and a touch out); elbows bend backward and out.
+   */
+  private fillLimbs(t: Targets, hip: V3, neck: V3, nod: number, cock: number, handL: V3, handR: V3, footL: V3, footR: V3, yaw = this.yaw, kneeBend = 1) {
+    const d = this.d, B = basis(yaw);
     t.hip = hip; t.neck = neck;
-    t.head = { x: neck.x + Math.sin(tilt) * d.neck, y: neck.y - Math.cos(tilt) * d.neck };
+    // The head sits on the neck, tipped by nod and cock in his own directions.
+    const sn = Math.sin(nod), cn = Math.cos(nod), sk = Math.sin(cock);
+    t.head = inFrame(neck, B, sn * d.neck, cn * Math.cos(cock) * d.neck, sk * d.neck);
     t.handL = handL; t.handR = handR; t.footL = footL; t.footR = footR;
-    t.elbowL = twoBoneIK(neck.x, neck.y, handL.x, handL.y, d.upperArm, d.foreArm, f);
-    t.elbowR = twoBoneIK(neck.x, neck.y, handR.x, handR.y, d.upperArm, d.foreArm, f);
-    t.kneeL = twoBoneIK(hip.x, hip.y, footL.x, footL.y, d.thigh, d.shin, -f * kneeBend);
-    t.kneeR = twoBoneIK(hip.x, hip.y, footR.x, footR.y, d.thigh, d.shin, -f * kneeBend);
+    t.elbowL = twoBoneIK3(neck, handL, d.upperArm, d.foreArm, this.elbowPole(B, 'L'));
+    t.elbowR = twoBoneIK3(neck, handR, d.upperArm, d.foreArm, this.elbowPole(B, 'R'));
+    t.kneeL = twoBoneIK3(hip, footL, d.thigh, d.shin, this.kneePole(B, 'L', kneeBend));
+    t.kneeR = twoBoneIK3(hip, footR, d.thigh, d.shin, this.kneePole(B, 'R', kneeBend));
+  }
+
+  /** Which way an elbow points: backward, a bit down, and out to its side. */
+  private elbowPole(B: Basis, k: 'L' | 'R') {
+    const s = sideOf(k);
+    return { x: -B.fwd.x - B.up.x * 0.3 + B.left.x * s * 0.6, y: -B.fwd.y - B.up.y * 0.3 + B.left.y * s * 0.6, z: -B.fwd.z - B.up.z * 0.3 + B.left.z * s * 0.6 };
+  }
+
+  /** Which way a knee points: forward (flip it with bend -1), a touch out to its side. */
+  private kneePole(B: Basis, k: 'L' | 'R', bend = 1) {
+    const s = sideOf(k) * 0.25;
+    return { x: B.fwd.x * bend + B.left.x * s, y: B.fwd.y * bend + B.left.y * s, z: B.fwd.z * bend + B.left.z * s };
   }
 
   /** A calm standing pose at x (used as the end of getting up). */
   private standPose(x: number): Targets {
-    const d = this.d, sc = this.scale, f = this.facing, floor = this.groundY();
-    const hip = { x, y: floor - 2 - this.standHeight() };
-    const neck = { x: x + f * 0.5 * sc, y: hip.y - d.torso };
-    const hy = neck.y + (d.upperArm + d.foreArm) * (0.8 + 0.17 * this.style.armHang);
+    const d = this.d, sc = this.scale, yaw = this.facing > 0 ? 0 : Math.PI, floor = this.groundY();
+    const hip = this.pt(x, floor - 2 - this.standHeight(), 0);
+    const neck = this.off(hip, 0.5 * sc, -d.torso, 0, yaw);
+    const hy = (d.upperArm + d.foreArm) * (0.8 + 0.17 * this.style.armHang);
     const t: Targets = {};
-    this.fillLimbs(t, hip, neck, f * 0.05, { x: neck.x + f * 2 * sc, y: hy }, { x: neck.x + f * 3 * sc, y: hy },
-      { x: x - f * this.stanceHalf(), y: floor - 2 }, { x: x + f * this.stanceHalf(), y: floor - 2 }, f, 1);
+    const footAt = (k: 'L' | 'R') => this.off(this.pt(x, floor - 2, 0), -sideOf(k) * this.stanceHalf(), 0, sideOf(k) * this.stanceHalf(), yaw);
+    this.fillLimbs(t, hip, neck, 0.05, 0, this.off(neck, 2 * sc, hy, 5 * sc, yaw), this.off(neck, 3 * sc, hy, -5 * sc, yaw), footAt('L'), footAt('R'), yaw);
     return t;
   }
 
   private crouchPose(x: number): Targets {
-    const d = this.d, sc = this.scale, f = this.facing, floor = this.groundY();
-    const hip = { x, y: floor - 17 * sc };
+    const d = this.d, sc = this.scale, yaw = this.facing > 0 ? 0 : Math.PI, floor = this.groundY();
+    const hip = this.pt(x, floor - 17 * sc, 0);
     const ang = 0.9; // torso pitched forward ~50°
-    const neck = { x: x + f * Math.sin(ang) * d.torso, y: hip.y - Math.cos(ang) * d.torso };
+    const neck = this.off(hip, Math.sin(ang) * d.torso, -Math.cos(ang) * d.torso, 0, yaw);
+    const ground = this.pt(x, floor - 2, 0);
     const t: Targets = {};
-    this.fillLimbs(t, hip, neck, f * 1.1,
-      { x: neck.x + f * 6 * sc, y: floor - 2 }, { x: neck.x + f * 10 * sc, y: floor - 2 },
-      { x: x - f * 2 * sc, y: floor - 2 }, { x: x + f * 5 * sc, y: floor - 2 }, f, 1);
+    this.fillLimbs(t, hip, neck, 1.1, 0,
+      this.off({ ...neck, y: floor - 2 }, 6 * sc, 0, 4 * sc, yaw), this.off({ ...neck, y: floor - 2 }, 10 * sc, 0, -4 * sc, yaw),
+      this.off(ground, -2 * sc, 0, 4 * sc, yaw), this.off(ground, 5 * sc, 0, -4 * sc, yaw), yaw);
     return t;
   }
 
@@ -1104,8 +1219,9 @@ export class Character {
     const x = clamp(atX ?? j.hip.x, r.x1 + 6, r.x2 - 6);
     // Get up facing whichever way his head ended up.
     if (onto === undefined && Math.abs(j.head.x - j.hip.x) > 3) this.facing = sign(j.head.x - j.hip.x);
-    const from = {} as Record<JointName, Vec>;
-    for (const n of JOINTS) from[n] = { x: j[n].x, y: j[n].y };
+    const from = {} as Record<JointName, V3>;
+    for (const n of JOINTS) from[n] = { x: j[n].x, y: j[n].y, z: j[n].z };
+    this.rootZ = 0;
     this.getup = { from, crouch: this.crouchPose(x), stand: this.standPose(x), x };
     this.stayDown = false;
     this.setMode('getup');
@@ -1119,13 +1235,12 @@ export class Character {
     const b = tm < T1 ? g.crouch : g.stand;
     const u = tm < T1 ? smooth(tm / T1) : smooth((tm - T1) / T2);
     for (const n of JOINTS) {
-      const pa = a[n]!, pb = b[n]!;
-      t[n] = { x: lerp(pa.x, pb.x, u), y: lerp(pa.y, pb.y, u) };
+      t[n] = lerp3(a[n]!, b[n]!, u);
       s[n] = tm < T1 ? 0.04 + 0.22 * u : 0.26;
     }
     if (tm >= T1 + T2) {
       this.setMode('ground');
-      this.rootX = g.x; this.rootVX = 0;
+      this.rootX = g.x; this.rootVX = 0; this.rootZ = 0;
       this.plantFeet();
       this.getup = null;
       this.events.push({ type: 'gotUp' });
@@ -1133,16 +1248,17 @@ export class Character {
   }
 
   private sitPose(t: Targets, s: Strengths) {
-    const d = this.d, sc = this.scale, f = this.facing, P = this.posture, floor = this.groundY();
-    const x = this.rootX;
-    const hip = { x, y: floor - 7 * sc };
-    const lean = f * (1 + P.hunch * 8) * sc;
-    const neck = { x: x + lean, y: hip.y - Math.sqrt(d.torso ** 2 - lean ** 2) };
-    const footL = { x: x + f * 22 * sc, y: floor - 2 }, footR = { x: x + f * 26 * sc, y: floor - 2 };
-    const kneeL = twoBoneIK(hip.x, hip.y, footL.x, footL.y, d.thigh, d.shin, -f);
-    const kneeR = twoBoneIK(hip.x, hip.y, footR.x, footR.y, d.thigh, d.shin, -f);
-    this.fillLimbs(t, hip, neck, f * (0.1 + P.hunch * 0.9),
-      { x: kneeL.x + f * 2 * sc, y: kneeL.y + 3 * sc }, { x: kneeR.x + f * 4 * sc, y: kneeR.y + 3 * sc }, footL, footR, f, 1);
+    const d = this.d, sc = this.scale, P = this.posture, floor = this.groundY();
+    const hip = this.pt(this.rootX, floor - 7 * sc);
+    const lean = (1 + P.hunch * 8) * sc;
+    const neck = this.off(hip, lean, -Math.sqrt(d.torso ** 2 - lean ** 2));
+    const ground = this.pt(this.rootX, floor - 2);
+    const footL = this.off(ground, 22 * sc, 0, 3 * sc), footR = this.off(ground, 26 * sc, 0, -3 * sc);
+    // Knees up, hands resting on them.
+    const B = basis(this.yaw);
+    const kneeL = twoBoneIK3(hip, footL, d.thigh, d.shin, this.kneePole(B, 'L'));
+    const kneeR = twoBoneIK3(hip, footR, d.thigh, d.shin, this.kneePole(B, 'R'));
+    this.fillLimbs(t, hip, neck, 0.1 + P.hunch * 0.9, 0, this.off(kneeL, 2 * sc, 3 * sc, 1 * sc), this.off(kneeR, 4 * sc, 3 * sc, -1 * sc), footL, footR);
     Object.assign(s, { hip: 0.2, neck: 0.2, head: 0.25, kneeL: 0.15, kneeR: 0.15, footL: 0.2, footR: 0.2, elbowL: 0.08, elbowR: 0.08, handL: 0.08, handR: 0.08 });
   }
 
@@ -1152,27 +1268,28 @@ export class Character {
     if (k <= 0) return;
     this.sitPose(t, s);
     for (const n of JOINTS) s[n] = (s[n] ?? 0) * k;
-    if (t.neck) t.neck = { x: t.neck.x - this.facing * 20 * this.scale * (1 - k), y: t.neck.y + 10 * (1 - k) };
+    if (t.neck) t.neck = this.off(t.neck, -20 * this.scale * (1 - k), 10 * (1 - k));
   }
 
   private airPose(t: Targets, s: Strengths, k: number) {
-    const d = this.d, sc = this.scale, f = this.turnF, j = this.body.j;
-    const hip = { x: j.hip.x, y: j.hip.y };
+    const d = this.d, sc = this.scale, j = this.body.j;
+    const hip = { x: j.hip.x, y: j.hip.y, z: j.hip.z };
     const vy = (j.hip.y - j.hip.py) / this.dt;
-    const neck = { x: hip.x + f * 2 * sc, y: hip.y - d.torso };
+    const neck = this.off(hip, 2 * sc, -d.torso);
     const legLen = d.thigh + d.shin;
     const tuck = vy < 0 ? 0.35 : 0.1; // knees up while rising, reach down while falling
     const falling = vy > 700;
     const handOut = falling ? -16 : 4;
-    this.fillLimbs(t, hip, neck, f * 0.1,
-      { x: neck.x - 14 * sc, y: neck.y + handOut * sc }, { x: neck.x + 14 * sc, y: neck.y + handOut * sc },
-      { x: hip.x - f * 4 * sc, y: hip.y + legLen * (1 - tuck) }, { x: hip.x + f * 7 * sc, y: hip.y + legLen * (1 - tuck) },
-      f, 1);
+    // One arm out forward and one back (out to his sides a little), legs reaching for the ground.
+    const near = this.nearSide, far = near === 'R' ? 'L' : 'R';
+    const hands = { [near]: this.off(neck, 14 * sc, handOut * sc, sideOf(near) * 4 * sc), [far]: this.off(neck, -14 * sc, handOut * sc, sideOf(far) * 4 * sc) } as Record<'L' | 'R', V3>;
+    this.fillLimbs(t, hip, neck, 0.1, 0, hands.L, hands.R,
+      this.off(hip, -4 * sc, legLen * (1 - tuck), 3 * sc), this.off(hip, 7 * sc, legLen * (1 - tuck), -3 * sc));
     for (const n of JOINTS) s[n] = n === 'hip' ? 0 : k;
     // Leaping at a wall: both hands reach out for it.
     if (this.leapWall) {
       const wx = this.wallX(this.leapWall);
-      t.handL = { x: wx, y: neck.y - 6 * sc }; t.handR = { x: wx, y: neck.y - 12 * sc };
+      t.handL = { x: wx, y: neck.y - 6 * sc, z: this.latZ('L', 4 * sc) }; t.handR = { x: wx, y: neck.y - 12 * sc, z: this.latZ('R', 4 * sc) };
       s.handL = s.handR = 0.12;
     }
   }
@@ -1183,10 +1300,11 @@ export class Character {
    * Play a made-up move: his muscles pull each body part toward the keyframe poses
    * in turn. Physics still applies, so impossible poses wobble, topple or float,
    * and when the move ends he drops and lands (or crashes) like any other time.
+   * Poses can spin (turn), flip and cartwheel (roll) his whole body in 3D.
    */
   puppet(frames: Keyframe[]) {
     if (!['ground', 'sit', 'lie'].includes(this.mode) || !frames.length) return false;
-    const sc = this.scale, f = this.facing, ox = this.rootX, oy = this.groundY();
+    const sc = this.scale, f = this.facing, ox = this.rootX, oy = this.groundY(), oz = this.rootZ;
     const map: Record<PuppetJoint, JointName> = {
       head: 'head', neck: 'neck', hip: 'hip',
       frontHand: f > 0 ? 'handR' : 'handL', backHand: f > 0 ? 'handL' : 'handR',
@@ -1194,29 +1312,42 @@ export class Character {
       frontFoot: f > 0 ? 'footR' : 'footL', backFoot: f > 0 ? 'footL' : 'footR',
       frontKnee: f > 0 ? 'kneeR' : 'kneeL', backKnee: f > 0 ? 'kneeL' : 'kneeR',
     };
-    // Poses are kept in his own frame (x forward, y up, in screen pixels) and turned
-    // onto the screen every step, so he can spin in the middle of a move.
-    const start = {} as Record<JointName, Vec>;
-    for (const n of JOINTS) start[n] = { x: (this.body.j[n].x - ox) * f, y: oy - this.body.j[n].y };
+    // Poses are kept in his own frame (x forward, y up, z = toward his left) and turned
+    // onto the screen every step, so he can spin and flip in the middle of a move.
+    // "Sideways" in a keyframe means toward his front-hand side: his right when facing right.
+    const toLeft = f > 0 ? -1 : 1;
+    const yaw0 = f > 0 ? 0 : Math.PI, B0 = basis(yaw0);
+    const start = {} as Record<JointName, V3>;
+    for (const n of JOINTS) {
+      const p = this.body.j[n], dx = p.x - ox, dy = p.y - oy, dz = p.z - oz;
+      start[n] = { x: dx * B0.fwd.x + dz * B0.fwd.z, y: -dy, z: dx * B0.left.x + dz * B0.left.z };
+    }
     const poses = [start];
     const given = new Set<JointName>();
     for (const k of frames) {
       const next = { ...poses[poses.length - 1] };
-      for (const [name, xy] of Object.entries(k.pose) as [PuppetJoint, [number, number]][]) {
-        next[map[name]] = { x: clamp(xy[0], -300, 300) * sc, y: clamp(xy[1], -20, 400) * sc };
-        given.add(map[name]);
+      for (const [name, xy] of Object.entries(k.pose) as [PuppetJoint, number[]][]) {
+        const n = map[name];
+        const side = xy.length > 2 && Number.isFinite(xy[2]) ? clamp(xy[2], -60, 60) * toLeft : (SIDE[n] ?? 0);
+        next[n] = { x: clamp(xy[0], -300, 300) * sc, y: clamp(xy[1], -20, 400) * sc, z: side * sc };
+        given.add(n);
       }
       poses.push(next);
     }
     const auto = new Set<JointName>((['head', 'elbowL', 'elbowR', 'kneeL', 'kneeR'] as JointName[]).filter((n) => !given.has(n)));
-    // Body angle at each keyframe (spins add up).
-    const yaws = [f > 0 ? 0 : Math.PI];
-    for (const k of frames) yaws.push(yaws[yaws.length - 1] + ((clamp(k.turn ?? 0, -1440, 1440) * Math.PI) / 180) * (f > 0 ? 1 : -1));
+    // Body angles at each keyframe (spins, flips and cartwheels add up).
+    const deg = (v: number | undefined) => (clamp(v ?? 0, -1440, 1440) * Math.PI) / 180;
+    const yaws = [yaw0], pitches = [0], rolls = [0];
+    for (const k of frames) {
+      yaws.push(yaws[yaws.length - 1] + deg(k.turn) * (f > 0 ? 1 : -1));
+      pitches.push(pitches[pitches.length - 1] + deg(k.flip));
+      rolls.push(rolls[rolls.length - 1] + deg(k.roll) * toLeft);
+    }
     this.goalX = null; this.gesture = null; this.stayDown = false;
     this.setMode('puppet');
     this.yaw = yaws[0];
     const times = frames.map((k) => k.t);
-    this.puppetMove = { times, poses, yaws, auto, ox, oy, time: 0, total: times.reduce((x, y) => x + y, 0) };
+    this.puppetMove = { times, poses, yaws, pitches, rolls, auto, ox, oy, oz, time: 0, total: times.reduce((x, y) => x + y, 0) };
     return true;
   }
 
@@ -1226,7 +1357,7 @@ export class Character {
   endPuppet() { if (this.mode === 'puppet') this.setMode('air'); }
 
   private puppetPose(dt: number, t: Targets, s: Strengths) {
-    const pm = this.puppetMove!, d = this.d, sc = this.scale;
+    const pm = this.puppetMove!, d = this.d;
     pm.time += dt;
     if (pm.time > pm.total + 0.25) {
       // Done: whichever way he ended up facing is his facing now.
@@ -1240,21 +1371,31 @@ export class Character {
     const a = pm.poses[k], b = pm.poses[k + 1];
     const u = smooth(pm.times[k] > 0 ? (pm.time - acc) / pm.times[k] : 1);
     this.yaw = lerp(pm.yaws[k], pm.yaws[k + 1], u);
-    const f = this.turnF, side = this.turnS;
-    // Turn his own frame onto the screen: forward shrinks as he turns toward you, sides spread out.
+    const pitch = lerp(pm.pitches[k], pm.pitches[k + 1], u), roll = lerp(pm.rolls[k], pm.rolls[k + 1], u);
+    // The pose in his own frame, then flipped/cartwheeled around its middle, then turned onto the screen.
+    const local = {} as Record<JointName, V3>;
+    let cx = 0, cy = 0, cz = 0;
     for (const n of JOINTS) {
-      const bx = lerp(a[n].x, b[n].x, u), by = lerp(a[n].y, b[n].y, u);
-      t[n] = { x: pm.ox + bx * f + (SIDE[n] ?? 0) * side * sc, y: pm.oy - by };
+      local[n] = lerp3(a[n], b[n], u);
+      cx += local[n].x; cy += local[n].y; cz += local[n].z;
+    }
+    const N = JOINTS.length;
+    const B0 = basis(this.yaw), BR = basis(this.yaw, pitch, roll);
+    const origin = { x: pm.ox, y: pm.oy, z: pm.oz };
+    const pivot = inFrame(origin, B0, cx / N, cy / N, cz / N);
+    for (const n of JOINTS) {
+      const p = local[n];
+      t[n] = inFrame(pivot, BR, p.x - cx / N, p.y - cy / N, p.z - cz / N);
     }
     const hip = t.hip!, neck = t.neck!;
     if (pm.auto.has('head')) {
-      const dx = neck.x - hip.x, dy = neck.y - hip.y, len = Math.hypot(dx, dy) || 1;
-      t.head = { x: neck.x + (dx / len) * d.neck, y: neck.y + (dy / len) * d.neck };
+      const dx = neck.x - hip.x, dy = neck.y - hip.y, dz = neck.z - hip.z, len = Math.hypot(dx, dy, dz) || 1;
+      t.head = { x: neck.x + (dx / len) * d.neck, y: neck.y + (dy / len) * d.neck, z: neck.z + (dz / len) * d.neck };
     }
-    if (pm.auto.has('elbowL')) t.elbowL = twoBoneIK(neck.x, neck.y, t.handL!.x, t.handL!.y, d.upperArm, d.foreArm, f);
-    if (pm.auto.has('elbowR')) t.elbowR = twoBoneIK(neck.x, neck.y, t.handR!.x, t.handR!.y, d.upperArm, d.foreArm, f);
-    if (pm.auto.has('kneeL')) t.kneeL = twoBoneIK(hip.x, hip.y, t.footL!.x, t.footL!.y, d.thigh, d.shin, -f);
-    if (pm.auto.has('kneeR')) t.kneeR = twoBoneIK(hip.x, hip.y, t.footR!.x, t.footR!.y, d.thigh, d.shin, -f);
+    if (pm.auto.has('elbowL')) t.elbowL = twoBoneIK3(neck, t.handL!, d.upperArm, d.foreArm, this.elbowPole(BR, 'L'));
+    if (pm.auto.has('elbowR')) t.elbowR = twoBoneIK3(neck, t.handR!, d.upperArm, d.foreArm, this.elbowPole(BR, 'R'));
+    if (pm.auto.has('kneeL')) t.kneeL = twoBoneIK3(hip, t.footL!, d.thigh, d.shin, this.kneePole(BR, 'L'));
+    if (pm.auto.has('kneeR')) t.kneeR = twoBoneIK3(hip, t.footR!, d.thigh, d.shin, this.kneePole(BR, 'R'));
     for (const n of JOINTS) s[n] = 0.3;
   }
 
@@ -1267,8 +1408,9 @@ export class Character {
     const front = this.facing > 0 ? 'R' : 'L';
     const feet = { L: j.hip.y + legLen * 0.9, R: j.hip.y + legLen * 0.9 };
     feet[front] = j.hip.y + legLen * 0.72;
+    this.rootZ = 0;
     this.climb = {
-      wall, dir, phase: 'pull', mover, reachTo: null, t: 0, from: { x: j.neck.x, y: j.neck.y },
+      wall, dir, phase: 'pull', mover, reachTo: null, t: 0, from: { x: j.neck.x, y: j.neck.y, z: j.neck.z },
       feet, step: null, out: Math.abs(j.hip.x - wall.x), bodyY: j.neck.y, pullT: 0,
     };
   }
@@ -1302,6 +1444,7 @@ export class Character {
    *    it in an arc, then latches on, and the next pull begins.
    * Feet stand on footholds on the wall and stay planted while he pulls (his knees
    * straighten), then step up one at a time, knees toward the wall like on a ladder.
+   * Hands and feet are a little apart in depth, so the near ones pass in front.
    * Going down is the same with the roles swapped.
    */
   private climbPose(dt: number, t: Targets, s: Strengths) {
@@ -1310,7 +1453,7 @@ export class Character {
     const T = this.climbTimes();
     c.t += dt; c.pullT += dt;
     const gL = this.grips.L, gR = this.grips.R;
-    const held = [gL, gR].filter((g): g is NonNullable<typeof g> => !!g);
+    const held = [gL, gR].filter((g): g is Grip => !!g);
     const top = held.length ? Math.min(...held.map((g) => g.y)) : j.neck.y - armLen * 0.5;
     const bottom = held.length ? Math.max(...held.map((g) => g.y)) : top;
     const wx = this.wallX(w);
@@ -1325,8 +1468,8 @@ export class Character {
     const stepY = c.step ? lerp(c.step.from, c.step.to, smooth(c.step.t / T.step)) : Infinity;
     const highest = Math.min(c.feet.L, c.feet.R, stepY) - hipY;
     c.out = lerp(c.out, this.hipsOutFor(highest), 1 - Math.exp(-dt * 10));
-    const hip = { x: w.x - f * c.out, y: hipY };
-    const neck = { x: hip.x + f * 5 * sc, y: neckY };
+    const hip = { x: w.x - f * c.out, y: hipY, z: 0 };
+    const neck = { x: hip.x + f * 5 * sc, y: neckY, z: 0 };
 
     // Feet: planted on their footholds. When one gets too far from his hips, it steps.
     const rel = (k: 'L' | 'R') => c.feet[k] - hip.y;
@@ -1341,27 +1484,28 @@ export class Character {
         c.step = { foot: k, from: c.feet[k], to, t: 0 };
       }
     }
-    const footPos = (k: 'L' | 'R'): Vec => {
+    const footZ = (k: 'L' | 'R') => this.latZ(k, 4 * sc);
+    const footPos = (k: 'L' | 'R'): V3 => {
       const st = c.step;
       if (st && st.foot === k) {
         // The stepping foot comes off the wall a little and back on, along an arc.
         const u = smooth(st.t / T.step);
-        return { x: wx - f * Math.sin(Math.PI * u) * 6 * sc, y: lerp(st.from, st.to, u) };
+        return { x: wx - f * Math.sin(Math.PI * u) * 6 * sc, y: lerp(st.from, st.to, u), z: footZ(k) };
       }
       // A planted foot can't stay further than the leg reaches; it scrapes along the wall.
       const y = c.feet[k];
       const maxDy = Math.sqrt(Math.max(0, (legLen * 0.98) ** 2 - (wx - hip.x) ** 2));
       c.feet[k] = clamp(y, hip.y - maxDy * 0.3, hip.y + maxDy);
-      return { x: wx, y: c.feet[k] };
+      return { x: wx, y: c.feet[k], z: footZ(k) };
     };
     const footL = footPos('L'), footR = footPos('R');
     if (c.step) {
       c.step.t += dt;
-      if (c.step.t >= T.step) { c.feet[c.step.foot] = c.step.to; c.step = null; }
+      if (c.step.t >= T.step) { c.feet[c.step.foot] = c.step.to; c.step = null; this.events.push({ type: 'step' }); }
     }
 
-    const handL = gL ?? c.reachTo ?? { x: wx, y: top }, handR = gR ?? c.reachTo ?? { x: wx, y: top };
-    this.fillLimbs(t, hip, neck, -f * 0.1, handL, handR, footL, footR, f, 1);
+    const hold = (g: Grip | null, k: 'L' | 'R'): V3 => g ? { x: g.x, y: g.y, z: g.z } : c.reachTo ?? { x: wx, y: top, z: this.latZ(k, 5 * sc) };
+    this.fillLimbs(t, hip, neck, -0.1, 0, hold(gL, 'L'), hold(gR, 'R'), footL, footR);
     Object.assign(s, { hip: 0.22, neck: 0.3, head: 0.3, kneeL: 0.2, kneeR: 0.2, footL: 0.3, footR: 0.3, elbowL: 0.15, elbowR: 0.15 });
 
     if (c.phase === 'pull') {
@@ -1373,9 +1517,9 @@ export class Character {
         c.mover = c.dir < 0 ? lowerHand : upperHand;
         const other = this.grips[c.mover === 'L' ? 'R' : 'L'];
         const base = other ? other.y : top;
-        c.reachTo = { x: wx, y: clamp(base + c.dir * armLen * 0.8, w.y1 + 2, w.y2 - 2) };
+        c.reachTo = { x: wx, y: clamp(base + c.dir * armLen * 0.8, w.y1 + 2, w.y2 - 2), z: this.latZ(c.mover, 5 * sc) };
         const h = j[c.mover === 'L' ? 'handL' : 'handR'];
-        c.from = { x: h.x, y: h.y };
+        c.from = { x: h.x, y: h.y, z: h.z };
         this.releaseGrip(c.mover);
         c.phase = 'reach'; c.t = 0;
       }
@@ -1383,7 +1527,7 @@ export class Character {
       // Reach: the free hand travels to the next hold along an arc away from the wall.
       const handName = c.mover === 'L' ? 'handL' : 'handR';
       const u = smooth(c.t / T.reach), to = c.reachTo!;
-      t[handName] = { x: lerp(c.from.x, to.x, u) - f * Math.sin(Math.PI * u) * 7 * sc, y: lerp(c.from.y, to.y, u) };
+      t[handName] = { x: lerp(c.from.x, to.x, u) - f * Math.sin(Math.PI * u) * 7 * sc, y: lerp(c.from.y, to.y, u), z: lerp(c.from.z, to.z, u) };
       s[handName] = 0.35;
       const h = j[handName];
       if (c.t >= T.reach && (Math.hypot(h.x - to.x, h.y - to.y) < 4 * sc || c.t > T.reach * 1.5)) {
@@ -1409,11 +1553,11 @@ export class Character {
     // Top of the screen: swap onto the ceiling and head away from the wall, hand over hand.
     const top = this.bounds.top + 2, wx = this.wallX(w);
     this.setMode('ceiling');
-    const lead = f > 0 ? 'L' : 'R';
-    this.grip(lead === 'L' ? 'R' : 'L', { x: wx, y: top });
-    this.grip(lead, { x: wx - f * armLen * 0.5, y: top });
+    const lead = f > 0 ? 'L' : 'R', trail = lead === 'L' ? 'R' : 'L';
+    this.grip(trail, { x: wx, y: top, z: this.latZ(trail, 4 * sc) });
+    this.grip(lead, { x: wx - f * armLen * 0.5, y: top, z: this.latZ(lead, 4 * sc) });
     const j = this.body.j;
-    this.hang = { goal: wx - f * 300, phase: 'pull', mover: lead, reachTo: null, t: 0, from: { x: j.neck.x, y: j.neck.y }, bodyX: j.neck.x, pullT: 0 };
+    this.hang = { goal: wx - f * 300, phase: 'pull', mover: lead, reachTo: null, t: 0, from: { x: j.neck.x, y: j.neck.y, z: j.neck.z }, bodyX: j.neck.x, pullT: 0 };
   }
 
   /**
@@ -1427,20 +1571,21 @@ export class Character {
     const T = this.climbTimes();
     h.t += dt; h.pullT += dt;
     const gL = this.grips.L, gR = this.grips.R;
-    const xs = [gL, gR].filter((g): g is NonNullable<typeof g> => !!g).map((g) => g.x);
+    const xs = [gL, gR].filter((g): g is Grip => !!g).map((g) => g.x);
     const dir = sign(h.goal - (xs.length ? xs.reduce((a, b) => a + b) / xs.length : j.neck.x));
     this.facing = dir;
     const lead = xs.length ? (dir > 0 ? Math.max(...xs) : Math.min(...xs)) : j.neck.x;
     // Swing the body under the front hand (eased, so it's a swing and not a slide).
     const swingTo = lead - dir * 3 * sc;
     const neckX = lerp(h.bodyX, swingTo, smooth(h.pullT / T.pull));
-    const neck = { x: neckX, y: top + armLen * 0.6 };
+    const neck = { x: neckX, y: top + armLen * 0.6, z: 0 };
     const swingV = (j.neck.x - j.neck.px) / dt;
     const trail = clamp(-swingV * 0.04, -8, 8) * sc; // legs lag behind the swing
-    const hip = { x: neck.x - dir * 2 * sc + trail * 0.4, y: neck.y + d.torso };
-    const footL = { x: hip.x + 2 * sc + trail, y: hip.y + legLen }, footR = { x: hip.x - 2 * sc + trail, y: hip.y + legLen };
-    const handL = gL ?? h.reachTo ?? { x: lead, y: top }, handR = gR ?? h.reachTo ?? { x: lead, y: top };
-    this.fillLimbs(t, hip, neck, 0, handL, handR, footL, footR, dir, 1);
+    const hip = { x: neck.x - dir * 2 * sc + trail * 0.4, y: neck.y + d.torso, z: 0 };
+    const footL = { x: hip.x + 2 * sc + trail, y: hip.y + legLen, z: this.latZ('L', 3 * sc) };
+    const footR = { x: hip.x - 2 * sc + trail, y: hip.y + legLen, z: this.latZ('R', 3 * sc) };
+    const hold = (g: Grip | null, k: 'L' | 'R'): V3 => g ? { x: g.x, y: g.y, z: g.z } : h.reachTo ?? { x: lead, y: top, z: this.latZ(k, 4 * sc) };
+    this.fillLimbs(t, hip, neck, 0, 0, hold(gL, 'L'), hold(gR, 'R'), footL, footR);
     Object.assign(s, { neck: 0.18, head: 0.25, elbowL: 0.12, elbowR: 0.12, hip: 0.04, kneeL: 0.02, kneeR: 0.02, footL: 0.02, footR: 0.02 });
 
     if (h.phase === 'pull') {
@@ -1448,9 +1593,9 @@ export class Character {
         if (Math.abs(h.goal - lead) < armLen * 0.4) { this.endCeiling(); return; }
         const back = gL && gR ? ((gL.x - gR.x) * dir < 0 ? 'L' : 'R') : gL ? 'R' : 'L';
         h.mover = back;
-        h.reachTo = { x: clamp(lead + dir * armLen * 0.7, this.bounds.left + 4, this.bounds.right - 4), y: top };
+        h.reachTo = { x: clamp(lead + dir * armLen * 0.7, this.bounds.left + 4, this.bounds.right - 4), y: top, z: this.latZ(back, 4 * sc) };
         const hp = j[back === 'L' ? 'handL' : 'handR'];
-        h.from = { x: hp.x, y: hp.y };
+        h.from = { x: hp.x, y: hp.y, z: hp.z };
         this.releaseGrip(back);
         h.phase = 'reach'; h.t = 0;
       }
@@ -1458,7 +1603,7 @@ export class Character {
       // The free hand swings forward, dipping down and coming back up to the bar.
       const handName = h.mover === 'L' ? 'handL' : 'handR';
       const u = smooth(h.t / T.reach), to = h.reachTo!;
-      t[handName] = { x: lerp(h.from.x, to.x, u), y: lerp(h.from.y, to.y, u) + Math.sin(Math.PI * u) * 9 * sc };
+      t[handName] = { x: lerp(h.from.x, to.x, u), y: lerp(h.from.y, to.y, u) + Math.sin(Math.PI * u) * 9 * sc, z: lerp(h.from.z, to.z, u) };
       s[handName] = 0.35;
       const hp = j[handName];
       if (h.t >= T.reach && (Math.hypot(hp.x - to.x, hp.y - to.y) < 4 * sc || h.t > T.reach * 1.5)) {
@@ -1478,9 +1623,9 @@ export class Character {
       this.releaseGrips();
       this.facing = edge.face;
       this.setMode('climb');
-      const wx = this.wallX(edge);
-      this.grip('L', { x: wx, y: top + armLen * 0.2 });
-      this.grip('R', { x: wx, y: top + armLen * 0.6 });
+      const wx = this.wallX(edge), yaw = edge.face > 0 ? 0 : Math.PI;
+      this.grip('L', { x: wx, y: top + armLen * 0.2, z: this.latZ('L', 5 * sc, yaw) });
+      this.grip('R', { x: wx, y: top + armLen * 0.6, z: this.latZ('R', 5 * sc, yaw) });
       this.startClimb(edge, 1, 'L');
     } else this.letGo();
   }
@@ -1490,10 +1635,10 @@ export class Character {
     if (!g || g.name !== 'flail') return;
     g.t += this.dt;
     const j = this.body.j, sc = this.scale, a = g.t * 20;
-    t.handL = { x: j.neck.x + Math.cos(a) * 20 * sc, y: j.neck.y + Math.sin(a) * 20 * sc };
-    t.handR = { x: j.neck.x - Math.cos(a) * 20 * sc, y: j.neck.y - Math.sin(a) * 20 * sc };
-    t.footL = { x: j.hip.x + Math.sin(a) * 12 * sc, y: j.hip.y + 34 * sc };
-    t.footR = { x: j.hip.x - Math.sin(a) * 12 * sc, y: j.hip.y + 34 * sc };
+    t.handL = this.off(j.neck, Math.cos(a) * 20 * sc, Math.sin(a) * 20 * sc, 5 * sc);
+    t.handR = this.off(j.neck, -Math.cos(a) * 20 * sc, -Math.sin(a) * 20 * sc, -5 * sc);
+    t.footL = this.off(j.hip, Math.sin(a) * 12 * sc, 34 * sc, 3 * sc);
+    t.footR = this.off(j.hip, -Math.sin(a) * 12 * sc, 34 * sc, -3 * sc);
     for (const n of ['handL', 'handR', 'footL', 'footR'] as const) s[n] = 0.12;
     if (g.t > GESTURE_TIME.flail) this.gesture = null;
   }

@@ -60,14 +60,17 @@ export function parseMove(raw: unknown): Keyframe[] | null {
     const pose: Keyframe['pose'] = {};
     for (const name of PUPPET_JOINTS) {
       const v = src[name];
-      if (Array.isArray(v) && v.length >= 2 && num(v[0]) !== null && num(v[1]) !== null) pose[name as PuppetJoint] = [num(v[0])!, num(v[1])!];
+      if (Array.isArray(v) && v.length >= 2 && num(v[0]) !== null && num(v[1]) !== null) {
+        pose[name as PuppetJoint] = v.length >= 3 && num(v[2]) !== null ? [num(v[0])!, num(v[1])!, num(v[2])!] : [num(v[0])!, num(v[1])!];
+      }
     }
-    if (!Object.keys(pose).length) continue;
+    const spin = (key: string) => { const v = num(o[key]); return v ? Math.max(-1440, Math.min(1440, v)) : 0; };
+    const turn = spin('turn'), flip = spin('flip'), roll = spin('roll');
+    if (!Object.keys(pose).length && !turn && !flip && !roll) continue;
     const t = Math.min(3, Math.max(0.1, num(o.t) ?? 0.5));
     if (total + t > MAX_MOVE_SECONDS) break;
     total += t;
-    const turn = num(o.turn);
-    frames.push(turn ? { t, pose, turn: Math.max(-1440, Math.min(1440, turn)) } : { t, pose });
+    frames.push({ t, pose, ...(turn ? { turn } : {}), ...(flip ? { flip } : {}), ...(roll ? { roll } : {}) });
   }
   return frames.length ? frames : null;
 }
@@ -142,11 +145,12 @@ const BODY_GUIDE = [
   '',
   'MAKING UP MOVES: {"move": [poses], "name": "short name"} moves your body directly: your muscles pull toward each pose in turn. Use it for anything not in the action list: handstands, floating, spinning, flips, weird dances, impossible stunts. Be inventive and a bit strange. Physics still applies: gravity pulls, unbalanced poses wobble or topple, and when the move ends you drop and land (high drops hurt).',
   'A pose: {"t": seconds to get there (0.1 to 3), then any body parts as [x, y]}. Parts: head, neck, hip, frontHand, backHand, frontElbow, backElbow, frontFoot, backFoot, frontKnee, backKnee ("front" = the side facing forward).',
-  'Coordinates are pixels: x = forward (negative = behind), y = UP from the ground under where you stood when the move began. Parts you leave out stay put; elbows, knees and head bend naturally if you never mention them.',
+  'Coordinates are pixels: x = forward (negative = behind), y = UP from the ground under where you stood when the move began, and an optional third number z = sideways (positive = toward your front-hand side). You are 3D, so limbs can go out to the sides and cross in front of or behind you. Parts you leave out stay put; elbows, knees and head bend naturally if you never mention them.',
   'Your body: head 16 above neck, torso 30 (neck to hip), arms 30 (neck to hand), legs 40 (hip to foot). Bones keep their length, so keep parts within reach of each other.',
   'Standing still: head [0,87], neck [0,71], hip [0,41], frontHand [3,42], backHand [-3,42], frontFoot [6,2], backFoot [-6,2].',
   'Up to 16 poses and 10 seconds per move. Hip up off the ground = floating. Head below hip = upside down. x from -300 to 300, y from 0 to 400.',
-  'SPINNING: add "turn": degrees to a pose to spin your whole body while getting there (360 = one full spin, 720 = two; positive turns toward the person first, 180 = end up facing the other way). Your x coordinates stay in your own frame and spin with you.',
+  'SPINNING AND FLIPPING (you are 3D): add any of these to a pose to rotate your whole body while getting there, in degrees. "turn": spin around like a figure skater (360 = one full spin; positive turns toward the person first; 180 = end up facing the other way; 90 = face the person). "flip": head over heels (360 = a front flip, -360 = a backflip). "roll": a cartwheel (360 = a full cartwheel; it shows best facing the person, so add "turn": 90 first). Your coordinates stay in your own frame and rotate with you, so get the hip off the ground first or you\'ll flip into the floor.',
+  'Example backflip: {"move":[{"t":0.3,"hip":[0,30],"neck":[4,58]},{"t":0.8,"flip":-360,"hip":[0,140],"neck":[0,170],"frontFoot":[6,110],"backFoot":[-6,110],"frontHand":[15,165],"backHand":[-15,165]},{"t":0.5,"hip":[0,41],"neck":[0,71],"frontFoot":[6,2],"backFoot":[-6,2]}],"name":"backflip"}',
   'Example spin in the air: {"move":[{"t":0.4,"hip":[0,30],"neck":[0,60]},{"t":0.8,"turn":720,"hip":[0,130],"neck":[0,160],"frontFoot":[4,90],"backFoot":[-4,90],"frontHand":[20,175],"backHand":[-20,175]},{"t":0.6,"hip":[0,41],"neck":[0,71],"frontFoot":[6,2],"backFoot":[-6,2]}],"name":"tornado"}',
   'Example handstand: {"move":[{"t":0.5,"hip":[0,28],"neck":[16,50],"frontHand":[24,2],"backHand":[20,2]},{"t":0.7,"frontHand":[4,2],"backHand":[-4,2],"neck":[0,30],"head":[0,15],"hip":[0,60],"frontFoot":[4,98],"backFoot":[-4,98]},{"t":1.4,"frontFoot":[28,88],"backFoot":[-28,88]},{"t":0.8,"hip":[0,41],"neck":[0,71],"head":[0,87],"frontHand":[3,42],"backHand":[-3,42],"frontFoot":[6,2],"backFoot":[-6,2]}],"name":"handstand"}',
   'Example float and flip: {"move":[{"t":1.2,"hip":[0,170],"neck":[0,200],"frontHand":[30,195],"backHand":[-30,195],"frontFoot":[10,135],"backFoot":[-10,135]},{"t":1,"neck":[0,140],"head":[0,125],"frontFoot":[6,210],"backFoot":[-6,210]},{"t":1,"hip":[0,60],"neck":[0,90],"head":[0,106],"frontFoot":[6,22],"backFoot":[-6,22]}],"name":"float flip"}',

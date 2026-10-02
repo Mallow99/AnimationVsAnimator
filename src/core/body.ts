@@ -37,14 +37,15 @@ export class Body {
     const hipY = floor - (d.thigh + d.shin);
     const neckY = hipY - d.torso;
     const P = makePoint;
+    // Left limbs start a little behind (z < 0), right ones a little in front: he starts out facing right.
     this.j = {
       head: P(x, neckY - d.neck, d.headR),
       neck: P(x, neckY),
       hip: P(x, hipY),
-      elbowL: P(x, neckY + d.upperArm), handL: P(x, neckY + d.upperArm + d.foreArm),
-      elbowR: P(x, neckY + d.upperArm), handR: P(x, neckY + d.upperArm + d.foreArm),
-      kneeL: P(x - 2, hipY + d.thigh), footL: P(x - 2, floor - 2),
-      kneeR: P(x + 2, hipY + d.thigh), footR: P(x + 2, floor - 2),
+      elbowL: P(x, neckY + d.upperArm, 2, -3), handL: P(x, neckY + d.upperArm + d.foreArm, 2, -4),
+      elbowR: P(x, neckY + d.upperArm, 2, 3), handR: P(x, neckY + d.upperArm + d.foreArm, 2, 4),
+      kneeL: P(x - 2, hipY + d.thigh, 2, -2), footL: P(x - 2, floor - 2, 2, -3),
+      kneeR: P(x + 2, hipY + d.thigh, 2, 2), footR: P(x + 2, floor - 2, 2, 3),
     };
     this.points = JOINTS.map((n) => this.j[n]);
     const j = this.j;
@@ -74,29 +75,29 @@ export class Body {
   }
 
   /** Shove one joint with a velocity (pixels/second). */
-  push(name: JointName, vx: number, vy: number, dt: number) {
+  push(name: JointName, vx: number, vy: number, dt: number, vz = 0) {
     const p = this.j[name];
-    p.px -= vx * dt; p.py -= vy * dt;
+    p.px -= vx * dt; p.py -= vy * dt; p.pz -= vz * dt;
   }
 
   /** Give the whole body a velocity (used for jumps). */
-  launch(vx: number, vy: number, dt: number) {
-    for (const p of this.points) { p.px = p.x - vx * dt; p.py = p.y - vy * dt; }
+  launch(vx: number, vy: number, dt: number, vz = 0) {
+    for (const p of this.points) { p.px = p.x - vx * dt; p.py = p.y - vy * dt; p.pz = p.z - vz * dt; }
   }
 
   velocity(name: JointName, dt: number) {
     const p = this.j[name];
-    return { x: (p.x - p.px) / dt, y: (p.y - p.py) / dt };
+    return { x: (p.x - p.px) / dt, y: (p.y - p.py) / dt, z: (p.z - p.pz) / dt };
   }
 
   maxSpeed(dt: number) {
     let m = 0;
-    for (const p of this.points) m = Math.max(m, Math.hypot(p.x - p.px, p.y - p.py) / dt);
+    for (const p of this.points) m = Math.max(m, Math.hypot(p.x - p.px, p.y - p.py, p.z - p.pz) / dt);
     return m;
   }
 
   /** Move the whole body by an offset without changing its velocity. */
-  translate(dx: number, dy: number) {
-    for (const p of this.points) { p.x += dx; p.px += dx; p.y += dy; p.py += dy; }
+  translate(dx: number, dy: number, dz = 0) {
+    for (const p of this.points) { p.x += dx; p.px += dx; p.y += dy; p.py += dy; p.z += dz; p.pz += dz; }
   }
 }

@@ -36,26 +36,34 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look) {
   ctx.lineJoin = 'round';
   ctx.lineWidth = look.lineWidth * sc;
 
-  const path = (...pts: { x: number; y: number }[]) => {
+  const path = (pts: { x: number; y: number }[]) => {
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
     ctx.stroke();
   };
-  // Back limbs first, a shade darker, so the figure reads with depth.
-  const back = c.turnF > 0 ? 'L' : 'R', front = c.turnF > 0 ? 'R' : 'L';
-  ctx.strokeStyle = shade(look.color, -0.22);
-  path(j.hip, j[`knee${back}`], j[`foot${back}`]);
-  path(j.neck, j[`elbow${back}`], j[`hand${back}`]);
-  ctx.strokeStyle = look.color;
-  ctx.fillStyle = look.color;
-  path(j.head, j.neck, j.hip);
-  path(j.hip, j[`knee${front}`], j[`foot${front}`]);
-  path(j.neck, j[`elbow${front}`], j[`hand${front}`]);
-
-  ctx.beginPath();
-  ctx.arc(j.head.x, j.head.y, c.d.headR, 0, Math.PI * 2);
-  ctx.fill();
+  // He's 3D: draw the parts furthest from you first, so nearer limbs pass in front.
+  // Parts behind his body get a shade darker, so he reads with depth from any angle.
+  const torsoZ = (j.neck.z + j.hip.z) / 2, depthRange = 5 * sc;
+  const colorAt = (z: number) => shade(look.color, -0.22 * Math.min(1, Math.max(0, (torsoZ - z) / depthRange)));
+  const parts: { z: number; draw: () => void }[] = [];
+  const limb = (pts: { x: number; y: number; z: number }[]) => {
+    const z = pts.slice(1).reduce((a, p) => a + p.z, 0) / (pts.length - 1);
+    parts.push({ z, draw: () => { ctx.strokeStyle = colorAt(z); path(pts); } });
+  };
+  limb([j.hip, j.kneeL, j.footL]);
+  limb([j.hip, j.kneeR, j.footR]);
+  limb([j.neck, j.elbowL, j.handL]);
+  limb([j.neck, j.elbowR, j.handR]);
+  parts.push({ z: torsoZ, draw: () => { ctx.strokeStyle = look.color; path([j.head, j.neck, j.hip]); } });
+  parts.push({ z: j.head.z + 0.01, draw: () => {
+    ctx.fillStyle = colorAt(j.head.z);
+    ctx.beginPath();
+    ctx.arc(j.head.x, j.head.y, c.d.headR, 0, Math.PI * 2);
+    ctx.fill();
+  } });
+  parts.sort((a, b) => a.z - b.z);
+  for (const p of parts) p.draw();
 
   if (look.showJoints) {
     ctx.fillStyle = '#fff';

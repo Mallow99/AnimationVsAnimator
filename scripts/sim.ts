@@ -499,6 +499,48 @@ async function live(pet: Pet, seconds: number) {
   check('prompt: in character, plans, moves, drawing, and the 988 exception', ['not an assistant', '"plan"', 'MAKING UP MOVES', 'DRAWING', '988'].every((k) => sys.includes(k)));
 }
 
+// ───── 3D body ─────
+{ // Limbs have depth: the hand on your side is in front.
+  const c = new Character(bounds, 600);
+  run(c, 2);
+  const j = c.body.j;
+  const rightNear = j.handR.z > j.handL.z + 2 && j.footR.z > j.footL.z;
+  c.facing = -1; c.walkTo(560);
+  run(c, 2);
+  const leftNear = j.handL.z > j.handR.z + 2;
+  check('3D: the near hand and foot are in front, and swap when he turns', rightNear && leftNear, `R ${j.handR.z.toFixed(1)} L ${j.handL.z.toFixed(1)}`);
+}
+{ // Turning around is a real spin through facing you.
+  const c = new Character(bounds, 600);
+  run(c, 1);
+  let faced = 0;
+  c.facing = -1;
+  run(c, 0.6, () => { faced = Math.max(faced, c.turnS); });
+  check('3D: turning around spins through facing you', faced > 0.9 && Math.abs(c.turnF + 1) < 0.01, `max facing-you ${faced.toFixed(2)}`);
+}
+{ // A made-up backflip turns him upside down for real, and he lands it (or at least gets up after).
+  const c = new Character(bounds, 600);
+  run(c, 1);
+  c.puppet([{ t: 0.3, pose: { hip: [0, 30], neck: [4, 58] } }, { t: 0.8, flip: -360, pose: { hip: [0, 140], neck: [0, 170], frontFoot: [6, 110], backFoot: [-6, 110] } }, { t: 0.5, pose: { hip: [0, 41], neck: [0, 71], frontFoot: [6, 2], backFoot: [-6, 2] } }]);
+  let flipped = false;
+  run(c, 1.6, () => { if (c.body.j.head.y > c.body.j.hip.y + 10) flipped = true; });
+  run(c, 5);
+  check('3D: a backflip goes upside down and ends standing', flipped && upright(c), `mode=${c.mode}`);
+}
+{ // Knocked sideways in depth: he stays inside his thin band and gets back up.
+  const c = new Character(bounds, 600);
+  run(c, 1);
+  c.poke('neck', 300, -200, 3000); c.poke('hip', -200, 0, -3000);
+  let deepest = 0;
+  run(c, 6, () => { for (const p of c.body.points) deepest = Math.max(deepest, Math.abs(p.z)); });
+  check('3D: shoved in depth, stays in his depth band, gets up', deepest <= 40.01 && upright(c), `deepest z ${deepest.toFixed(1)} mode=${c.mode}`);
+}
+{
+  const { parseMove } = await import('../src/core/brain');
+  const m = parseMove([{ t: 0.5, hip: [0, 50, 10] }, { t: 1, flip: 360 }, { t: 1, roll: 'x', turn: 90 }]);
+  check('3D moves: side coordinates, flips and turns are read', m?.length === 3 && m[0].pose.hip?.[2] === 10 && m[1].flip === 360 && m[2].turn === 90 && !m[2].roll, JSON.stringify(m));
+}
+
 // ───── memories (milestone 5) ─────
 function throwHim(pet: Pet) {
   const c = pet.char, n = c.body.j.neck;
