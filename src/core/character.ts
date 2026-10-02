@@ -97,12 +97,27 @@ export class Character {
   handTarget: Vec | null = null;
   /** Climbable walls (window sides, screen edges). */
   walls: Wall[] = [];
-  /** Climbing a wall: which hand moves next, and whether it's pulling or reaching. */
-  private climb: { wall: Wall; dir: -1 | 1; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: Vec | null; t: number } | null = null;
+  /**
+   * Climbing a wall: which hand moves next, and whether it's pulling or reaching.
+   * `from` is where the move started (neck height for a pull, the hand for a reach),
+   * so every move is a smooth, timed motion instead of a jump to the end.
+   * `feet` are footholds on the wall; `step` is a foot moving to a new one.
+   */
+  private climb: {
+    wall: Wall; dir: -1 | 1; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: Vec | null; t: number;
+    from: Vec; feet: Record<'L' | 'R', number>; step: { foot: 'L' | 'R'; from: number; to: number; t: number } | null;
+    out: number;   // how far his hips are from the wall
+    bodyY: number; // neck height where the current pull started
+    pullT: number; // time into the current pull (it keeps going while the next reach begins)
+  } | null = null;
   /** Hanging from the ceiling (monkey bars). */
-  private hang: { goal: number; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: Vec | null; t: number } | null = null;
-  /** Hands latched onto a point in the world. A gripped hand stays put; his body hangs from it. */
-  private grips: Record<'L' | 'R', Vec | null> = { L: null, R: null };
+  private hang: { goal: number; phase: 'pull' | 'reach'; mover: 'L' | 'R'; reachTo: Vec | null; t: number; from: Vec; bodyX: number; pullT: number } | null = null;
+  /**
+   * Hands latched onto a point in the world. A gripped hand is pinned; his body hangs from it.
+   * (x, y) is the hold; (cx, cy) is where the hand actually is. The hand slides onto
+   * the hold over a few frames instead of teleporting there.
+   */
+  private grips: Record<'L' | 'R', { x: number; y: number; cx: number; cy: number } | null> = { L: null, R: null };
   /** A wall he's leaping at: he grabs it as soon as a hand gets there. */
   private leapWall: Wall | null = null;
   get onCeiling() { return this.mode === 'ceiling'; }
@@ -154,8 +169,9 @@ export class Character {
 
   /** Latch a hand onto a point. The hand stays exactly there until released. */
   grip(hand: 'L' | 'R', at: Vec) {
-    this.grips[hand] = { x: at.x, y: at.y };
-    this.body.j[hand === 'L' ? 'handL' : 'handR'].invMass = 0;
+    const p = this.body.j[hand === 'L' ? 'handL' : 'handR'];
+    this.grips[hand] = { x: at.x, y: at.y, cx: p.x, cy: p.y };
+    p.invMass = 0;
   }
 
   releaseGrip(hand: 'L' | 'R') {
@@ -185,7 +201,7 @@ export class Character {
     const upperHand = this.facing > 0 ? 'R' : 'L', lowerHand = upperHand === 'R' ? 'L' : 'R';
     this.grip(upperHand, { x: wx, y: upper });
     this.grip(lowerHand, { x: wx, y: lower });
-    this.climb = { wall, dir, phase: 'pull', mover: dir < 0 ? lowerHand : upperHand, reachTo: null, t: 0 };
+    this.startClimb(wall, dir, dir < 0 ? lowerHand : upperHand);
     return true;
   }
 
@@ -221,8 +237,12 @@ export class Character {
     if (!now) { this.letGo(); return; }
     const dx = now.x - was.x, dy = now.y1 - was.y1;
     if (dx || dy) {
-      for (const k of ['L', 'R'] as const) { const g = this.grips[k]; if (g) { g.x += dx; g.y += dy; } }
-      if (this.climb.reachTo) { this.climb.reachTo.x += dx; this.climb.reachTo.y += dy; }
+      for (const k of ['L', 'R'] as const) { const g = this.grips[k]; if (g) { g.x += dx; g.y += dy; g.cx += dx; g.cy += dy; } }
+      const c = this.climb;
+      if (c.reachTo) { c.reachTo.x += dx; c.reachTo.y += dy; }
+      c.from.x += dx; c.from.y += dy; c.bodyY += dy;
+      c.feet.L += dy; c.feet.R += dy;
+      if (c.step) { c.step.from += dy; c.step.to += dy; }
     }
     this.climb.wall = now;
   }
@@ -442,11 +462,14 @@ export class Character {
     const hipVY = (b.j.hip.y - b.j.hip.py) / dt;
     integrate(b.points, dt);
     this.applyMuscles(t, s, internal);
+    const settle = 1 - Math.exp(-dt * 30); // how fast a gripping hand slides onto its hold
     for (const k of ['L', 'R'] as const) {
       const g = this.grips[k];
       if (!g) continue;
+      g.cx += (g.x - g.cx) * settle; g.cy += (g.y - g.cy) * settle;
       const p = b.j[k === 'L' ? 'handL' : 'handR'];
-      p.x = p.px = g.x; p.y = p.py = g.y;
+      p.px = p.x; p.py = p.y; // keep its motion so the body swings naturally when it lets go
+      p.x = g.cx; p.y = g.cy;
     }
     if (this.held) {
       const p = b.j[this.held.joint];
@@ -1088,37 +1111,112 @@ export class Character {
 
   // ───────────── climbing ─────────────
 
+  /** Start a climb from wherever his body is now: footholds where his feet are. */
+  private startClimb(wall: Wall, dir: -1 | 1, mover: 'L' | 'R') {
+    const j = this.body.j, legLen = this.d.thigh + this.d.shin;
+    // One foot a little higher than the other, so they step in turn.
+    const front = this.facing > 0 ? 'R' : 'L';
+    const feet = { L: j.hip.y + legLen * 0.9, R: j.hip.y + legLen * 0.9 };
+    feet[front] = j.hip.y + legLen * 0.72;
+    this.climb = {
+      wall, dir, phase: 'pull', mover, reachTo: null, t: 0, from: { x: j.neck.x, y: j.neck.y },
+      feet, step: null, out: Math.abs(j.hip.x - wall.x), bodyY: j.neck.y, pullT: 0,
+    };
+  }
+
+  /**
+   * How far from the wall his hips must be so that a foot on the wall at `footDy`
+   * below them can bend its knee toward the wall without the knee going through it.
+   * (Climbers push their hips out to get a foot up high.)
+   */
+  private hipsOutFor(footDy: number) {
+    const d = this.d, sc = this.scale;
+    for (let out = 13 * sc; out < 26 * sc; out += sc) {
+      const knee = twoBoneIK(0, 0, out - 1.5 * sc, footDy, d.thigh, d.shin, -1);
+      if (knee.x <= out - 2 * sc) return out;
+    }
+    return 26 * sc;
+  }
+
+  /** Seconds per pull / reach / foot step. Faster when he's lively. */
+  private climbTimes() {
+    const k = clamp(this.posture.speed, 0.6, 1.5);
+    // The next reach starts before the pull is quite done (overlap), so it flows.
+    return { pull: 0.34 / k, reach: 0.24 / k, step: 0.2 / k, overlap: 0.65 };
+  }
+
   /**
    * Climbing, hand over hand, for real: both hands are latched onto the wall.
-   * 1. Pull: muscles haul his body up until the higher hand is just above his head.
-   * 2. Reach: the other hand lets go, reaches past it, and latches on higher up.
-   * Repeat. (Going down is the same with the roles swapped.) His speed comes from
-   * how fast he can pull and reach, not from a number.
+   * 1. Pull: he hauls his body up (an eased motion, not a jump) until the higher
+   *    hand is about level with his head.
+   * 2. Reach: near the end of the pull, the other hand lets go and travels up past
+   *    it in an arc, then latches on, and the next pull begins.
+   * Feet stand on footholds on the wall and stay planted while he pulls (his knees
+   * straighten), then step up one at a time, knees toward the wall like on a ladder.
+   * Going down is the same with the roles swapped.
    */
   private climbPose(dt: number, t: Targets, s: Strengths) {
     const c = this.climb!, w = c.wall, d = this.d, sc = this.scale, f = w.face, j = this.body.j;
     const armLen = d.upperArm + d.foreArm, legLen = d.thigh + d.shin;
-    c.t += dt;
+    const T = this.climbTimes();
+    c.t += dt; c.pullT += dt;
     const gL = this.grips.L, gR = this.grips.R;
-    const held = [gL, gR].filter((g): g is Vec => !!g);
+    const held = [gL, gR].filter((g): g is NonNullable<typeof g> => !!g);
     const top = held.length ? Math.min(...held.map((g) => g.y)) : j.neck.y - armLen * 0.5;
     const bottom = held.length ? Math.max(...held.map((g) => g.y)) : top;
     const wx = this.wallX(w);
-    // Body hangs just off the wall. Going up he pulls until the top hand is at his
-    // chin; going down he hangs from the bottom hand.
-    const neck = { x: w.x - f * 9 * sc, y: (c.dir < 0 ? top : bottom) + armLen * 0.1 };
-    const hip = { x: neck.x - f * 2 * sc, y: neck.y + d.torso };
-    // Feet on the wall, knees up toward it like a ladder; the foot under the reaching hand steps up.
-    const moverUp = c.phase === 'reach' && c.mover === 'L' ? 1 : c.phase === 'reach' && c.mover === 'R' ? -1 : 0;
-    const footL = { x: wx, y: hip.y + legLen * (0.62 - 0.14 * moverUp) };
-    const footR = { x: wx, y: hip.y + legLen * (0.62 + 0.14 * moverUp) };
-    let handL = gL ?? c.reachTo ?? { x: wx, y: top }, handR = gR ?? c.reachTo ?? { x: wx, y: top };
-    this.fillLimbs(t, hip, neck, -f * 0.1, handL, handR, footL, footR, f, -1);
-    Object.assign(s, { hip: 0.22, neck: 0.3, head: 0.3, kneeL: 0.18, kneeR: 0.18, footL: 0.28, footR: 0.28, elbowL: 0.15, elbowR: 0.15 });
+    // Where the pull ends: going up, the top hand is just above his head;
+    // going down, he hangs from the bottom hand with that arm bent a little.
+    // (The hand that stays put during a reach is the one that sets this, so it doesn't change mid-reach.)
+    const pullEnd = c.dir < 0 ? top + armLen * 0.05 : bottom + armLen * 0.55;
+    const neckY = lerp(c.bodyY, pullEnd, smooth(c.pullT / T.pull));
+    // Body leans back on his arms, hips a bit further out than his chest. The hips
+    // move out when a foot is up high (room for the knee) and back in as the legs straighten.
+    const hipY = neckY + Math.sqrt(d.torso ** 2 - (5 * sc) ** 2);
+    const stepY = c.step ? lerp(c.step.from, c.step.to, smooth(c.step.t / T.step)) : Infinity;
+    const highest = Math.min(c.feet.L, c.feet.R, stepY) - hipY;
+    c.out = lerp(c.out, this.hipsOutFor(highest), 1 - Math.exp(-dt * 10));
+    const hip = { x: w.x - f * c.out, y: hipY };
+    const neck = { x: hip.x + f * 5 * sc, y: neckY };
+
+    // Feet: planted on their footholds. When one gets too far from his hips, it steps.
+    const rel = (k: 'L' | 'R') => c.feet[k] - hip.y;
+    if (!c.step) {
+      const tooLow = (k: 'L' | 'R') => (c.dir < 0 ? rel(k) > legLen * 0.88 : rel(k) < legLen * 0.5);
+      const order: ('L' | 'R')[] = (c.dir < 0 ? rel('L') > rel('R') : rel('L') < rel('R')) ? ['L', 'R'] : ['R', 'L'];
+      const k = order.find(tooLow);
+      if (k) {
+        // Step to a hold that will still be comfortable once this pull is done.
+        const ahead = c.phase === 'pull' ? (pullEnd - neckY) * 0.4 : 0;
+        const to = clamp(hip.y + legLen * (c.dir < 0 ? 0.5 : 0.9) + ahead, w.y1 + 2, w.y2 - 2);
+        c.step = { foot: k, from: c.feet[k], to, t: 0 };
+      }
+    }
+    const footPos = (k: 'L' | 'R'): Vec => {
+      const st = c.step;
+      if (st && st.foot === k) {
+        // The stepping foot comes off the wall a little and back on, along an arc.
+        const u = smooth(st.t / T.step);
+        return { x: wx - f * Math.sin(Math.PI * u) * 6 * sc, y: lerp(st.from, st.to, u) };
+      }
+      // A planted foot can't stay further than the leg reaches; it scrapes along the wall.
+      const y = c.feet[k];
+      const maxDy = Math.sqrt(Math.max(0, (legLen * 0.98) ** 2 - (wx - hip.x) ** 2));
+      c.feet[k] = clamp(y, hip.y - maxDy * 0.3, hip.y + maxDy);
+      return { x: wx, y: c.feet[k] };
+    };
+    const footL = footPos('L'), footR = footPos('R');
+    if (c.step) {
+      c.step.t += dt;
+      if (c.step.t >= T.step) { c.feet[c.step.foot] = c.step.to; c.step = null; }
+    }
+
+    const handL = gL ?? c.reachTo ?? { x: wx, y: top }, handR = gR ?? c.reachTo ?? { x: wx, y: top };
+    this.fillLimbs(t, hip, neck, -f * 0.1, handL, handR, footL, footR, f, 1);
+    Object.assign(s, { hip: 0.22, neck: 0.3, head: 0.3, kneeL: 0.2, kneeR: 0.2, footL: 0.3, footR: 0.3, elbowL: 0.15, elbowR: 0.15 });
 
     if (c.phase === 'pull') {
-      const settled = Math.abs(j.neck.y - neck.y) < 4 * sc || c.t > 0.5;
-      if (settled && c.t > 0.12) {
+      if (c.pullT >= T.pull * T.overlap) {
         const upperHand = gL && gR ? (gL.y < gR.y ? 'L' : 'R') : gL ? 'L' : 'R';
         const lowerHand = upperHand === 'L' ? 'R' : 'L';
         if (c.dir < 0 && top <= w.y1 + 3) { this.climbOver(w); return; }
@@ -1126,18 +1224,23 @@ export class Character {
         c.mover = c.dir < 0 ? lowerHand : upperHand;
         const other = this.grips[c.mover === 'L' ? 'R' : 'L'];
         const base = other ? other.y : top;
-        c.reachTo = { x: wx, y: clamp(base + c.dir * armLen * 0.75, w.y1 + 2, w.y2 - 2) };
+        c.reachTo = { x: wx, y: clamp(base + c.dir * armLen * 0.8, w.y1 + 2, w.y2 - 2) };
+        const h = j[c.mover === 'L' ? 'handL' : 'handR'];
+        c.from = { x: h.x, y: h.y };
         this.releaseGrip(c.mover);
         c.phase = 'reach'; c.t = 0;
       }
     } else {
+      // Reach: the free hand travels to the next hold along an arc away from the wall.
       const handName = c.mover === 'L' ? 'handL' : 'handR';
-      t[handName] = c.reachTo!;
-      s[handName] = 0.55;
+      const u = smooth(c.t / T.reach), to = c.reachTo!;
+      t[handName] = { x: lerp(c.from.x, to.x, u) - f * Math.sin(Math.PI * u) * 7 * sc, y: lerp(c.from.y, to.y, u) };
+      s[handName] = 0.35;
       const h = j[handName];
-      if ((Math.hypot(h.x - c.reachTo!.x, h.y - c.reachTo!.y) < 3 * sc && c.t > 0.1) || c.t > 0.6) {
-        this.grip(c.mover, c.reachTo!);
+      if (c.t >= T.reach && (Math.hypot(h.x - to.x, h.y - to.y) < 4 * sc || c.t > T.reach * 1.5)) {
+        this.grip(c.mover, to);
         c.reachTo = null; c.phase = 'pull'; c.t = 0;
+        c.bodyY = neckY; c.pullT = 0;
       }
     }
   }
@@ -1160,48 +1263,59 @@ export class Character {
     const lead = f > 0 ? 'L' : 'R';
     this.grip(lead === 'L' ? 'R' : 'L', { x: wx, y: top });
     this.grip(lead, { x: wx - f * armLen * 0.5, y: top });
-    this.hang = { goal: wx - f * 300, phase: 'pull', mover: lead, reachTo: null, t: 0 };
+    const j = this.body.j;
+    this.hang = { goal: wx - f * 300, phase: 'pull', mover: lead, reachTo: null, t: 0, from: { x: j.neck.x, y: j.neck.y }, bodyX: j.neck.x, pullT: 0 };
   }
 
   /**
-   * Monkey bars. Both hands hold the top of the screen; his body swings under the
-   * front hand, then the back hand lets go, reaches past it and grabs on. Legs dangle.
+   * Monkey bars. Both hands hold the top of the screen; his body swings forward
+   * under the front hand, then the back hand lets go, swings past it in an arc and
+   * grabs on. Legs dangle and trail behind the swing.
    */
   private ceilingPose(dt: number, t: Targets, s: Strengths) {
     const h = this.hang!, d = this.d, sc = this.scale, j = this.body.j, top = this.bounds.top + 2;
     const armLen = d.upperArm + d.foreArm, legLen = d.thigh + d.shin;
-    h.t += dt;
+    const T = this.climbTimes();
+    h.t += dt; h.pullT += dt;
     const gL = this.grips.L, gR = this.grips.R;
-    const xs = [gL, gR].filter((g): g is Vec => !!g).map((g) => g.x);
+    const xs = [gL, gR].filter((g): g is NonNullable<typeof g> => !!g).map((g) => g.x);
     const dir = sign(h.goal - (xs.length ? xs.reduce((a, b) => a + b) / xs.length : j.neck.x));
     this.facing = dir;
     const lead = xs.length ? (dir > 0 ? Math.max(...xs) : Math.min(...xs)) : j.neck.x;
-    // Swing the body under the front hand.
-    const neck = { x: lead - dir * 3 * sc, y: top + armLen * 0.6 };
-    const hip = { x: neck.x - dir * 2 * sc, y: neck.y + d.torso };
-    const footL = { x: hip.x + 2 * sc, y: hip.y + legLen }, footR = { x: hip.x - 2 * sc, y: hip.y + legLen };
+    // Swing the body under the front hand (eased, so it's a swing and not a slide).
+    const swingTo = lead - dir * 3 * sc;
+    const neckX = lerp(h.bodyX, swingTo, smooth(h.pullT / T.pull));
+    const neck = { x: neckX, y: top + armLen * 0.6 };
+    const swingV = (j.neck.x - j.neck.px) / dt;
+    const trail = clamp(-swingV * 0.04, -8, 8) * sc; // legs lag behind the swing
+    const hip = { x: neck.x - dir * 2 * sc + trail * 0.4, y: neck.y + d.torso };
+    const footL = { x: hip.x + 2 * sc + trail, y: hip.y + legLen }, footR = { x: hip.x - 2 * sc + trail, y: hip.y + legLen };
     const handL = gL ?? h.reachTo ?? { x: lead, y: top }, handR = gR ?? h.reachTo ?? { x: lead, y: top };
     this.fillLimbs(t, hip, neck, 0, handL, handR, footL, footR, dir, 1);
     Object.assign(s, { neck: 0.18, head: 0.25, elbowL: 0.12, elbowR: 0.12, hip: 0.04, kneeL: 0.02, kneeR: 0.02, footL: 0.02, footR: 0.02 });
 
     if (h.phase === 'pull') {
-      const under = Math.abs(j.neck.x - neck.x) < 4 * sc || h.t > 0.6;
-      if (under && h.t > 0.15) {
+      if (h.pullT >= T.pull * T.overlap) {
         if (Math.abs(h.goal - lead) < armLen * 0.4) { this.endCeiling(); return; }
         const back = gL && gR ? ((gL.x - gR.x) * dir < 0 ? 'L' : 'R') : gL ? 'R' : 'L';
         h.mover = back;
         h.reachTo = { x: clamp(lead + dir * armLen * 0.7, this.bounds.left + 4, this.bounds.right - 4), y: top };
+        const hp = j[back === 'L' ? 'handL' : 'handR'];
+        h.from = { x: hp.x, y: hp.y };
         this.releaseGrip(back);
         h.phase = 'reach'; h.t = 0;
       }
     } else {
+      // The free hand swings forward, dipping down and coming back up to the bar.
       const handName = h.mover === 'L' ? 'handL' : 'handR';
-      t[handName] = h.reachTo!;
-      s[handName] = 0.5;
+      const u = smooth(h.t / T.reach), to = h.reachTo!;
+      t[handName] = { x: lerp(h.from.x, to.x, u), y: lerp(h.from.y, to.y, u) + Math.sin(Math.PI * u) * 9 * sc };
+      s[handName] = 0.35;
       const hp = j[handName];
-      if ((Math.hypot(hp.x - h.reachTo!.x, hp.y - h.reachTo!.y) < 3 * sc && h.t > 0.1) || h.t > 0.6) {
-        this.grip(h.mover, h.reachTo!);
+      if (h.t >= T.reach && (Math.hypot(hp.x - to.x, hp.y - to.y) < 4 * sc || h.t > T.reach * 1.5)) {
+        this.grip(h.mover, to);
         h.reachTo = null; h.phase = 'pull'; h.t = 0;
+        h.bodyX = neckX; h.pullT = 0;
       }
     }
   }
@@ -1218,7 +1332,7 @@ export class Character {
       const wx = this.wallX(edge);
       this.grip('L', { x: wx, y: top + armLen * 0.2 });
       this.grip('R', { x: wx, y: top + armLen * 0.6 });
-      this.climb = { wall: edge, dir: 1, phase: 'pull', mover: 'L', reachTo: null, t: 0 };
+      this.startClimb(edge, 1, 'L');
     } else this.letGo();
   }
 

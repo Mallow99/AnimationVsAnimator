@@ -111,6 +111,10 @@ Then: Android shell.
   catching it mid-air. Mood gaits (`gait`: normal/pocket/skip/stomp/sulk, set by the mind from his
   mood) and a dedicated run cycle (`runPose`). Cursor glances instead of constant staring.
   The grip system is meant to be reused for items later.
+- Climbing smoothness fix: grips slide onto holds (no teleport); pulls and reaches are timed, eased
+  motions that overlap a little (reach starts at 65% of the pull); the reaching hand travels in an arc.
+  Feet stand on footholds and step one at a time; knees bend TOWARD the wall (was flipped = "spider legs");
+  hips move out from the wall when a foot is high so the knee has room. ~56 px/s up a wall.
 - NEXT (new chat): milestone 4 — AI brain (chat/full modes), talking back, persona.
   Owner also wants more Desktop Goose / Shimeji behaviors and better animations over time.
 
