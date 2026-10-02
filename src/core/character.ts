@@ -60,7 +60,10 @@ function spring(s: { x: number; v: number }, target: number, dt: number, k: numb
 const sideOf = (k: 'L' | 'R') => (k === 'L' ? 1 : -1);
 
 export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower' | 'dance' | 'nuzzle' | 'kick'
-  | 'punch' | 'swat' | 'highkick' | 'knock';
+  | 'punch' | 'swat' | 'highkick' | 'knock' | 'scratch';
+
+/** How he holds his arms when he's just standing there (body language for his emotion). */
+export type IdleStyle = 'none' | 'crossed' | 'hips' | 'behind' | 'hug';
 
 export type CharEvent =
   | { type: 'landed'; speed: number }
@@ -105,13 +108,14 @@ export const DEFAULT_BODY: BodyStyle = { spread: 0.6, stand: 1, armHang: 1, armS
  * Walking style, picked from his mood:
  * normal; pocket (nonchalant, hands in pockets); skip (happy); stomp (angry); sulk (sad, head down).
  */
-export type Gait = 'normal' | 'pocket' | 'skip' | 'stomp' | 'sulk';
+export type Gait = 'normal' | 'pocket' | 'skip' | 'stomp' | 'sulk' | 'creep';
 const GAITS: Record<Gait, { speed: number; lift: number; bob: number; swing: number; lean: number }> = {
   normal: { speed: 1, lift: 1, bob: 1, swing: 1, lean: 0 },
   pocket: { speed: 0.85, lift: 0.8, bob: 0.7, swing: 0, lean: -2 },
   skip: { speed: 1.1, lift: 2.2, bob: 3.5, swing: 1.8, lean: 1 },
   stomp: { speed: 1.15, lift: 2, bob: 1.5, swing: 0.5, lean: 4 },
   sulk: { speed: 0.75, lift: 0.45, bob: 0.5, swing: 0.25, lean: 0 },
+  creep: { speed: 0.7, lift: 0.55, bob: 0.3, swing: 0.2, lean: 1.5 }, // nervous: small careful steps
 };
 
 /** Mood-driven body language, set from outside (0..1 each, speed ~0.5..1.5). */
@@ -125,13 +129,13 @@ type Grip = { x: number; y: number; z: number; cx: number; cy: number; cz: numbe
 
 const GESTURE_TIME: Record<Gesture, number> = {
   stomp: 0.75, wave: 1.4, shrug: 0.9, laugh: 1.9, flail: 1.2, pokeBack: 0.5, stretch: 2.4, lookAround: 2.2, cower: 1.6, dance: 4, nuzzle: 1.6, kick: 0.65,
-  punch: 0.42, swat: 0.5, highkick: 0.72, knock: 1.2,
+  punch: 0.42, swat: 0.5, highkick: 0.72, knock: 1.2, scratch: 1.5,
 };
 /**
  * How much he turns toward you during a gesture (0 = stays side-on, 1 = faces you).
  * Animators call it "cheating to camera": a wave or a shrug reads better from the front.
  */
-const GESTURE_PRESENT: Partial<Record<Gesture, number>> = { wave: 0.25, shrug: 0.65, laugh: 0.35, dance: 1, cower: 0.3, nuzzle: 0.45, stretch: 0.4 };
+const GESTURE_PRESENT: Partial<Record<Gesture, number>> = { wave: 0.25, shrug: 0.65, laugh: 0.35, dance: 1, cower: 0.3, nuzzle: 0.45, stretch: 0.4, scratch: 0.5 };
 
 export class Character {
   readonly body: Body;
@@ -197,6 +201,10 @@ export class Character {
   pushY: number | null = null;
   /** Riding a window across the screen: knees bent, arms out. */
   surf = false;
+  /** Standing still: how he holds his arms (crossed when annoyed, hands on hips when proud...). */
+  idleStyle: IdleStyle = 'none';
+  /** Standing still: tapping his front foot (impatient). */
+  tapFoot = false;
   /** Sitting on the edge of something with his legs hanging over: where the edge is, and which way it drops. */
   private ledge: { x: number; dir: number } | null = null;
   /** Climbable walls (window sides, screen edges). */
@@ -890,6 +898,10 @@ export class Character {
     const base = this.facing > 0 ? 0 : Math.PI;
     const g = this.gesture;
     let want = this.presentWant;
+    // Standing still with his arms crossed (or on his hips...): turned three-quarters to you, so it reads.
+    if (this.idleStyle !== 'none' && this.mode === 'ground' && !this.walking && !this.gesture && Math.abs(this.rootVX) < 10 && !this.handTarget) {
+      want = Math.max(want, { none: 0, crossed: 0.85, hips: 0.95, hug: 0.75, behind: 0.35 }[this.idleStyle]);
+    }
     if (g && this.mode === 'ground') {
       const u = g.t / GESTURE_TIME[g.name];
       want = Math.max(want, (GESTURE_PRESENT[g.name] ?? 0) * clamp(u * 5, 0, 1) * clamp((1 - u) * 5, 0, 1));
@@ -1493,6 +1505,16 @@ export class Character {
           cock += 0.2 * k;
           break;
         }
+        case 'scratch': {
+          // Embarrassed: scratching the back of his head, looking down a bit.
+          const k = smooth(clamp(u / 0.2, 0, 1)) * (1 - smooth(clamp((u - 0.8) / 0.2, 0, 1)));
+          const head = this.off(neck, -3 * sc, -d.neck - d.headR * 0.6, sideOf(front) * 2 * sc);
+          const sc2 = Math.sin(g.t * 24) * 2 * sc;
+          const at = { x: head.x + sc2 * this.facing, y: head.y + Math.abs(sc2) * 0.5, z: head.z };
+          if (front === 'R') handR = lerp3(handR, at, k); else handL = lerp3(handL, at, k);
+          nod += 0.3 * k; cock -= 0.15 * k;
+          break;
+        }
         case 'cower': {
           const k = Math.min(1, u * 5) * Math.min(1, (1 - u) * 5);
           hipT = this.off(hip, 0, 10 * sc * k);
@@ -1506,6 +1528,37 @@ export class Character {
       if (g.t >= dur) this.gesture = null;
     }
 
+    // Body language when he's just standing there.
+    if (!moving && !g && !this.handTarget && this.pushAt === null && !this.surf && !this.guard && this.idleStyle !== 'none') {
+      const front = frontIsR ? 'R' : 'L', back = frontIsR ? 'L' : 'R';
+      const set = (k: 'L' | 'R', p: V3) => { if (k === 'L') handL = p; else handR = p; };
+      switch (this.idleStyle) {
+        case 'crossed': // arms folded across his chest, each hand tucked by the other elbow
+          set(front, this.off(neck, 6 * sc, 10 * sc, -sideOf(front) * 9 * sc));
+          set(back, this.off(neck, 7 * sc, 8 * sc, -sideOf(back) * 9 * sc));
+          break;
+        case 'hips': // fists on his hips, elbows out: proud
+          set('L', this.off(hip, 1 * sc, -12 * sc, 10 * sc));
+          set('R', this.off(hip, 1 * sc, -12 * sc, -10 * sc));
+          neckT = this.off(neck, -1.5 * sc, -1 * sc);
+          nod -= 0.12;
+          break;
+        case 'behind': // hands clasped behind his back, rocking a little: happy, humming
+          set('L', this.off(hip, -6 * sc, -4 * sc, 2 * sc));
+          set('R', this.off(hip, -6 * sc, -4 * sc, -2 * sc));
+          cock += Math.sin(this.time * 2.2) * 0.12;
+          break;
+        case 'hug': // arms wrapped around himself: nervous, lonely
+          set(front, this.off(neck, 5 * sc, 11 * sc, -sideOf(front) * 5 * sc));
+          set(back, this.off(neck, 4 * sc, 13 * sc, -sideOf(back) * 5 * sc));
+          nod += 0.15;
+          break;
+      }
+    }
+    if (this.tapFoot && !moving && !g && this.legCount === 2) {
+      const tap = Math.max(0, Math.sin(this.time * 9)) * 2.5 * sc * (Math.sin(this.time * 0.9) > -0.3 ? 1 : 0);
+      if (frontIsR) footR = { ...footR, y: footR.y - tap }; else footL = { ...footL, y: footL.y - tap };
+    }
     // Surfing a window: arms out wide for balance, swaying a little.
     if (this.surf && !g) {
       const wob = Math.sin(this.time * 7) * 3 * sc;

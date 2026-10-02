@@ -1093,7 +1093,7 @@ export class Pet {
     return {
       name: this.config.name,
       mood: { ...this.mood.s },
-      label: this.mood.label,
+      label: this.mood.emotion,
       asleep: this.mood.asleep,
       doing: this.mind.skill?.name ?? this.char.mode,
       missing: [...this.char.missing.keys()],

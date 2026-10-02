@@ -341,7 +341,8 @@ export class Brain {
     else if (has('go away', 'leave')) { say = 'fine.'; plan = [{ walk: 'away' }]; m.nudge({ happiness: -0.05 }); }
     else if (has('hi', 'hello', 'hey', 'yo', 'sup')) { say = c.memory.recall('greet') ?? 'hi!'; plan = [{ do: 'wave' }]; }
     else if (has('how are you', 'how do you feel', "how's it going", 'you ok')) {
-      say = { sleepy: 'tired...', sad: 'not great', angry: 'annoyed. at you.', scared: 'a little scared', playful: 'GREAT', bored: 'bored', content: 'pretty good' }[m.label];
+      say = { sleepy: 'tired...', sad: 'not great', lonely: 'lonely. where were you', angry: 'mad. at you.', annoyed: 'kinda annoyed tbh', scared: 'a little scared', nervous: 'bit jumpy',
+        playful: 'GREAT', excited: 'AMAZING', happy: 'happy :)', bored: 'bored', content: 'pretty good', proud: 'awesome. did you see that?', embarrassed: "don't ask" }[m.emotion];
     } else if (has('love', 'good boy', 'cute', 'awesome', 'cool')) { say = pickOne([':)', 'aw', 'I know']); m.nudge({ happiness: 0.08, trust: 0.02 }); plan = [{ do: 'laugh' }]; }
     else if (has('stupid', 'dumb', 'hate', 'ugly', 'useless')) { say = pickOne(['rude.', 'wow.', 'hmph']); m.nudge({ happiness: -0.1, annoyance: 0.2, trust: -0.03 }); plan = [{ do: 'stomp' }]; }
     else { say = pickOne(['?', 'huh?', '...what?']); plan = [{ do: 'shrug' }]; }
@@ -462,7 +463,7 @@ export class Brain {
     return [
       '[state]',
       `time: ${d.toLocaleDateString('en-US', { weekday: 'long' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
-      `mood: ${m.asleep ? 'asleep' : m.label} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)})`,
+      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)})`,
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,

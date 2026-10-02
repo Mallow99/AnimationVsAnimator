@@ -223,9 +223,13 @@ export class Mind {
     const m = c.mood, w = c.world, ch = c.char;
     // How he walks says how he feels.
     if (w.time > this.chillUntil) { this.chill = chance(0.5); this.chillUntil = w.time + rand(90, 240); }
-    const L = m.label;
-    ch.gait = L === 'angry' ? 'stomp' : L === 'playful' ? 'skip' : L === 'sad' || L === 'sleepy' ? 'sulk'
-      : L === 'bored' || (L === 'content' && this.chill) ? 'pocket' : 'normal';
+    const L = m.label, E = m.emotion;
+    ch.gait = L === 'angry' ? 'stomp' : E === 'nervous' ? 'creep' : L === 'playful' || E === 'proud' ? 'skip' : L === 'sad' || L === 'sleepy' ? 'sulk'
+      : L === 'bored' || ((E === 'content' || E === 'annoyed') && this.chill) ? 'pocket' : 'normal';
+    // Body language standing still, from the finer emotion.
+    ch.idleStyle = E === 'annoyed' ? 'crossed' : E === 'proud' ? 'hips' : E === 'happy' ? 'behind' : E === 'nervous' || E === 'lonely' ? 'hug' : 'none';
+    ch.tapFoot = E === 'annoyed' || (E === 'bored' && this.chill);
+    this.mutter(c);
     // Moving around tires him out (running more), on top of the slow drain over time.
     if (ch.walking) m.s.energy -= dt / (ch.posture.speed > 1.2 ? 900 : 1800);
     // You coming back after a while: he's glad to see you.
@@ -266,6 +270,26 @@ export class Mind {
     const away = w.time - w.cursorMovedAt;
     if (away > 300) { m.s.boredom += dt / 300; m.s.happiness -= dt / 1200; } // ignored for 5+ min: lonely
     else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.s.happiness += dt / 600; // company
+  }
+
+  private mutterAt = 30;
+  /** Now and then, a little line that says how he feels (when he isn't doing much). */
+  private mutter(c: Ctx) {
+    const w = c.world, m = c.mood, ch = c.char;
+    if (w.time < this.mutterAt || m.asleep || !ch.ready || (this.skill && !['idle', 'wander', 'sit', 'ledgesit'].includes(this.skill.name))) return;
+    this.mutterAt = w.time + rand(25, 60);
+    const lines: Partial<Record<string, string[]>> = {
+      annoyed: ['hmph.', 'ugh.', '*sigh*', 'whatever.'],
+      happy: ['♪', '♪ la la ♪', 'hm hm hmm ♪'],
+      excited: ['!!!', "let's GO", 'woo!'],
+      lonely: ['hello?', 'anyone?', '...miss you', 'where did you go'],
+      nervous: ['...', 'what was that', 'uh', 'hm?'],
+      content: ['', '', 'nice.'],
+    };
+    const opts = lines[m.emotion];
+    const line = opts ? pick(opts) : '';
+    if (line) c.say(line, 1.6);
+    if (m.emotion === 'lonely' && chance(0.5)) ch.doGesture('lookAround');
   }
 
   /** Is he free to start something new (not busy, not mid-air)? */
@@ -358,7 +382,10 @@ export class Mind {
   // ───────────── choosing what to do ─────────────
 
   private choose(c: Ctx): Option {
-    const opts = this.options(c).map((o) => ({ ...o, score: o.score * (this.biases[o.name] ?? 1) }));
+    // Annoyed isn't angry, but he's not in the mood for fun and games either.
+    const grumpy = c.mood.emotion === 'annoyed', FUN = ['dance', 'chase', 'spar', 'hop', 'hang', 'bounce', 'backflip', 'frontflip', 'showoff', 'drawball', 'surf'];
+    const excited = c.mood.emotion === 'excited';
+    const opts = this.options(c).map((o) => ({ ...o, score: o.score * (this.biases[o.name] ?? 1) * (grumpy && FUN.includes(o.name) ? 0.25 : excited && FUN.includes(o.name) ? 1.4 : 1) }));
     // Square the scores so strong urges win more often; avoid repeating himself.
     let total = 0;
     const weights = opts.map((o) => {
@@ -761,9 +788,11 @@ export class Mind {
         if (chance(0.3)) c.say(pick(['parkour!', 'nailed it', 'tuck and roll']), 1.2);
         return;
       case 'flipped':
+        m.feel('proud', 5);
         if (chance(0.5)) c.say(pick(['ta-da!', 'stuck it', '10/10']), 1.2);
         return;
       case 'vaulted':
+        m.feel('proud', 3);
         if (chance(0.3)) c.say(pick(['hup!', 'parkour', 'easy']), 1);
         return;
       case 'landed':
@@ -780,6 +809,7 @@ export class Mind {
 
       case 'hitCursor': {
         m.nudge({ annoyance: -0.06, happiness: 0.03, boredom: -0.1 });
+        if (e.power > 0.8) m.feel('proud', 4);
         if (this.skill instanceof Brawl) this.skill.landed();
         if (c.world.time > this.quipAt && chance(e.power > 0.6 ? 0.6 : 0.3)) {
           this.quipAt = c.world.time + 2.5;
@@ -855,8 +885,16 @@ export class Mind {
           () => new ChaseCursor(4, false),
         ])();
         break;
-      default: { // content / bored
+      default: { // content / bored (and annoyed: grumbles, doesn't fight yet)
         const annoyed = m.s.annoyance > 0.35;
+        if (m.emotion === 'annoyed') {
+          react = pick([
+            () => new Sequence('grumble', [{ face: 'cursor' }, { say: pick(['hmph.', 'quit it.', 'do you MIND', 'stop.']) }]),
+            () => new Sequence('grumble', [{ face: 'cursor' }, { gesture: 'stomp' }, { say: 'ugh.' }]),
+            () => new Sequence('swat', [{ face: 'cursor' }, { gesture: 'swat', atCursor: true }, { say: 'shoo.' }]),
+          ])();
+          break;
+        }
         react = pick([
           () => new Sequence('huh', [{ face: 'cursor' }, { say: annoyed ? 'hey.' : '?' }]),
           () => new Sequence('poke-back', [{ face: 'cursor' }, { gesture: 'pokeBack', atCursor: true }, { say: annoyed ? 'stop.' : 'hi' }]),
@@ -877,7 +915,10 @@ export class Mind {
       case 'scared': return new AvoidCursor(3);
       case 'playful': return new Sequence('again', [{ say: 'again!' }, { jump: 420 }]);
       case 'sad': return new Sequence('mope', [{ say: '...' }, { sit: rand(4, 8) }]);
-      default: return chance(0.5) ? new Sequence('shake-off', [{ gesture: 'shrug' }, { say: pick(['...okay', 'fine', 'whoa']) }]) : undefined;
+      default:
+        // In front of you, too: a bit embarrassing.
+        if (chance(0.5)) { c.mood.feel('embarrassed', 5); return new Sequence('oops', [{ gesture: 'scratch' }, { say: pick(['...you didn\'t see that', 'meant to do that', 'heh. oops']) }]); }
+        return chance(0.5) ? new Sequence('shake-off', [{ gesture: 'shrug' }, { say: pick(['...okay', 'fine', 'whoa']) }]) : undefined;
     }
   }
 }

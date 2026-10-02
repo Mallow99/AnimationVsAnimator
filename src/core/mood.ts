@@ -17,6 +17,10 @@ export interface MoodState {
 /** One-click moods for testing (settings → Mood). */
 export const MOOD_PRESETS: Record<string, Partial<MoodState>> = {
   happy: { happiness: 0.9, energy: 0.85, annoyance: 0, fear: 0, boredom: 0.1 },
+  cheerful: { happiness: 0.72, energy: 0.35, annoyance: 0, fear: 0, boredom: 0.2 },
+  annoyed: { annoyance: 0.45, fear: 0 },
+  lonely: { happiness: 0.15, boredom: 0.85, annoyance: 0, fear: 0, energy: 0.6 },
+  nervous: { fear: 0.35, annoyance: 0, happiness: 0.55, boredom: 0.2, energy: 0.7 },
   sad: { happiness: 0.1, annoyance: 0, fear: 0, energy: 0.6 },
   angry: { annoyance: 0.9, happiness: 0.4, fear: 0 },
   sleepy: { energy: 0.08, annoyance: 0, fear: 0 },
@@ -25,11 +29,23 @@ export const MOOD_PRESETS: Record<string, Partial<MoodState>> = {
   calm: { happiness: 0.6, energy: 0.7, boredom: 0.2, annoyance: 0, fear: 0 },
 };
 
+/** The broad mood family: what his instincts go by when picking what to do. */
 export type MoodLabel = 'sleepy' | 'sad' | 'angry' | 'scared' | 'playful' | 'bored' | 'content';
+
+/**
+ * The finer emotion inside that family: what his body language, voice and lines show.
+ * Annoyed isn't angry yet (crossed arms, foot tapping, "hmph"); happy isn't playful (humming,
+ * hands behind his back); excited is playful turned up; lonely is sad because you're gone;
+ * nervous is scared turned down. Proud and embarrassed are flashes that last a few seconds.
+ */
+export type Emotion = 'sleepy' | 'sad' | 'lonely' | 'angry' | 'annoyed' | 'scared' | 'nervous' | 'excited' | 'playful' | 'happy'
+  | 'bored' | 'content' | 'proud' | 'embarrassed';
 
 export class Mood {
   s: MoodState = { energy: 0.85, happiness: 0.6, boredom: 0.2, annoyance: 0, fear: 0, trust: 0.5 };
   asleep = false;
+  /** A short burst of feeling (proud after nailing something, embarrassed after a faceplant), and how long it lasts. */
+  flash: { kind: 'proud' | 'embarrassed'; left: number } | null = null;
 
   tick(dt: number) {
     const s = this.s;
@@ -40,6 +56,7 @@ export class Mood {
       s.energy -= dt / (40 * 60); // ~40 minutes awake to run flat
       s.boredom += dt / 150;      // ~2.5 minutes of nothing to get fully bored
     }
+    if (this.flash && (this.flash.left -= dt) <= 0) this.flash = null;
     s.annoyance -= dt / 45;
     s.fear -= dt / 6;
     // Happiness drifts toward a resting point that depends on how much he trusts you.
@@ -56,13 +73,29 @@ export class Mood {
   get label(): MoodLabel {
     const s = this.s;
     if (s.fear > 0.5) return 'scared';
-    if (s.annoyance > 0.55) return 'angry';
+    if (s.annoyance > 0.6) return 'angry';
     if (s.energy < 0.2) return 'sleepy';
     if (s.happiness < 0.3) return 'sad';
     if (s.boredom > 0.7) return 'bored';
-    if (s.happiness > 0.65 && s.energy > 0.45) return 'playful';
+    if (s.happiness > 0.65 && s.energy > 0.45 && s.annoyance < 0.3) return 'playful';
     return 'content';
   }
+
+  /** The finer emotion (see `Emotion`). Always inside the family `label` gives. */
+  get emotion(): Emotion {
+    const s = this.s, L = this.label;
+    if (L === 'scared' || L === 'angry' || L === 'sleepy') return L;
+    if (this.flash) return this.flash.kind;
+    if (L === 'sad') return s.boredom > 0.6 ? 'lonely' : 'sad';
+    if (s.annoyance > 0.3) return 'annoyed';
+    if (s.fear > 0.22) return 'nervous';
+    if (L === 'bored') return 'bored';
+    if (L === 'playful') return s.happiness > 0.8 && s.energy > 0.72 && s.boredom < 0.35 ? 'excited' : 'playful';
+    return s.happiness > 0.62 ? 'happy' : 'content';
+  }
+
+  /** A quick flash of pride or embarrassment (a few seconds). */
+  feel(kind: 'proud' | 'embarrassed', secs = 5) { if (!this.asleep) this.flash = { kind, left: secs }; }
 
   /** Body language for the current mood. */
   posture(): Posture {

@@ -1101,6 +1101,29 @@ function events(pet: Pet) {
   step(4);
   check('hangs off your cursor, gets carried, shaken off he flies', hung && carried > 60 && got.includes('released') && ['landed', 'crashed', 'rolled'].some((e) => got.includes(e)) && !pet.char.hangingOn, `hung=${hung} carried=${carried.toFixed(0)} ${got.join(',')} mode=${pet.char.mode}`);
 }
+{ // Finer emotions: annoyed isn't angry, happy isn't playful. Each looks different standing still.
+  const pet = calmPet();
+  const seen: Record<string, string> = {};
+  for (const [preset, want] of [['annoyed', 'annoyed'], ['angry', 'angry'], ['cheerful', 'happy'], ['happy', 'excited'], ['lonely', 'lonely'], ['nervous', 'nervous']] as const) {
+    pet.command(`mood:${preset}`); pet.mood.s.annoyance = preset === 'annoyed' ? 0.45 : preset === 'angry' ? 0.9 : 0;
+    petFor(0.1, pet);
+    seen[preset] = `${pet.mood.emotion}/${pet.char.idleStyle}`;
+    if (pet.mood.emotion !== want) seen[preset] += ' (WRONG)';
+  }
+  pet.mood.feel('proud', 3); petFor(0.1, pet);
+  const proud = `${pet.mood.emotion}/${pet.char.idleStyle}`;
+  check('emotions: annoyed, angry, happy, excited, lonely, nervous, proud', !JSON.stringify(seen).includes('WRONG') && seen.annoyed.endsWith('crossed') && seen.cheerful.endsWith('behind') && proud === 'proud/hips', JSON.stringify(seen) + ' ' + proud);
+  // Poked (once in a while) while annoyed: he grumbles; he doesn't go after you like when he's angry.
+  // (Keep poking fast and annoyed turns into angry: that's on purpose.)
+  const names: string[] = [];
+  for (let i = 0; i < 14; i++) {
+    pet.command('mood:annoyed'); pet.mood.s.annoyance = 0.42;
+    pet.mind.reset(pet.ctx); petFor(6.5, pet);
+    (pet as unknown as { poke(j: string, x: number): void }).poke('neck', pet.char.x + 10); petFor(0.1, pet);
+    names.push(pet.mind.skill?.name ?? '-');
+  }
+  check('annoyed: grumbles and swats, never chases or brawls', names.filter((n) => n === 'grumble' || n === 'swat').length >= 8 && !names.some((n) => n === 'hunt' || n === 'brawl' || n === 'retaliate'), names.join(','));
+}
 
 // ───── his ball ─────
 { // He throws his bouncy ball at your cursor (it hits), then fetches it back to his pocket.
