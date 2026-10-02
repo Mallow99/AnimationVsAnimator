@@ -250,6 +250,12 @@ export class Character {
   /** The world depth (z) of a spot `amt` px toward side k of his body (for holds on a wall, etc.). */
   private latZ(k: 'L' | 'R', amt: number, yaw = this.yaw) { return -Math.cos(yaw) * sideOf(k) * amt; }
 
+  /** A direction given in his own terms (forward, up, toward his left), in the world. */
+  dirToWorld(fwd: number, up: number, left = 0): V3 {
+    const B = basis(this.yaw);
+    return { x: B.fwd.x * fwd + B.up.x * up + B.left.x * left, y: B.fwd.y * fwd + B.up.y * up + B.left.y * left, z: B.fwd.z * fwd + B.up.z * up + B.left.z * left };
+  }
+
   /** Which hand is nearer to you right now. */
   private get nearSide(): 'L' | 'R' {
     const c = Math.cos(this.yaw);
@@ -476,6 +482,8 @@ export class Character {
     this.climb.wall = now;
   }
   get currentGesture() { return this.gesture?.name ?? null; }
+  /** Stop whatever gesture he's in the middle of (something more important came up). */
+  cancelGesture() { if (this.mode === 'ground') this.gesture = null; }
 
   /** Walk to x. He stops at the edge of whatever he's standing on, unless `offEdge` (then he walks off and drops). */
   walkTo(x: number, run = false, offEdge = false) {

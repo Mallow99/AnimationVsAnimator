@@ -23,6 +23,14 @@ import type { Vec } from './math';
 import type { Ctx } from './skills';
 import type { Memory, NoteKind } from './memory';
 
+const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+
+/** What he has and where, in words: "pen (on your belt), wooden sword (the person took it)". */
+function itemsText(c: Ctx) {
+  const where = { belt: 'on your belt', hand: 'in your hand', world: 'lying on the ground', cursor: 'the person took it' } as const;
+  return c.items.list.map((it) => `${it.def.name.toLowerCase()} (${where[it.where]})`).join(', ') || 'nothing';
+}
+
 /** Guess what kind of note the AI wrote. */
 function noteKind(text: string): NoteKind {
   if (/\b(I (like|love|hate|think|feel)|favorite|best|worst)\b/i.test(text)) return 'opinion';
@@ -191,11 +199,14 @@ function describe(e: MindEvent): string | null {
     case 'landed': return e.speed > 600 ? 'he landed a big jump' : null;
     case 'limbOff': return `${e.yanked ? 'you yanked his' : 'his'} ${e.limb.startsWith('arm') ? 'arm' : 'leg'} ${e.yanked ? 'clean off' : 'came off'}`;
     case 'limbOn': return `he got his ${e.limb.startsWith('arm') ? 'arm' : 'leg'} back on`;
+    case 'itemTaken': return `you took his ${e.name}`;
+    case 'itemGiven': return `you gave him back his ${e.name}`;
+    case 'itemDropped': return `you dropped his ${e.name} on the ground`;
     default: return null;
   }
 }
 /** Events worth a spoken reaction in full mode. */
-const REACT_TO = new Set(['smacked', 'crashed', 'released', 'petted', 'reachedTop', 'limbOff']);
+const REACT_TO = new Set(['smacked', 'crashed', 'released', 'petted', 'reachedTop', 'limbOff', 'itemTaken', 'itemGiven']);
 
 /** Break a long reply into bubble-sized pieces at sentence or word boundaries. */
 export function splitSpeech(text: string, max = 70): string[] {
@@ -282,13 +293,52 @@ export class Brain {
     text = text.trim().slice(0, 300);
     if (!text) return;
     this.addLog('you', text, c);
-    if (!this.active) {
-      this.addLog('note', this.mode === 'offline' ? 'His brain is set to Offline, so he can\'t understand words yet (Settings → General → Brain).' : 'No AI connected (add an API key in Settings → General → Brain).', c);
-      c.say('?', 1.2);
-      return;
-    }
+    if (!this.active) { this.heardOffline.push(text); return; }
     this.heard.push(text);
   }
+  private heardOffline: string[] = [];
+
+  /**
+   * No AI: he still understands a few simple things (do this, how are you, my name is...),
+   * like a dog that knows some words. Anything else gets a confused look.
+   */
+  private offlineAnswer(c: Ctx, mind: Mind, text: string) {
+    const t = text.toLowerCase(), m = c.mood;
+    const has = (...w: string[]) => w.some((x) => new RegExp(`\\b${x}`).test(t));
+    let say = '', plan: PlanStep[] = [];
+    const name = /my name is ([a-z][a-z'-]{0,20})/i.exec(text)?.[1];
+    if (name) {
+      const n = name[0].toUpperCase() + name.slice(1);
+      c.memory.add(`the person's name is ${n}`, 'you', 'him', 3);
+      say = `${n}. got it.`; plan = [{ do: 'wave' }];
+    } else if (has('dance', 'boogie')) { say = m.label === 'sad' ? 'not really feeling it' : 'ok!'; if (m.label !== 'sad') plan = [{ do: 'dance' }]; }
+    else if (has('jump', 'hop')) { say = 'hup!'; plan = [{ do: 'hop' }]; }
+    else if (has('sit')) { say = 'ok'; plan = [{ do: 'sit' }]; }
+    else if (has('sleep', 'nap', 'rest')) { say = 'zzz'; plan = [{ do: 'sleep' }]; }
+    else if (has('wake')) { say = '!'; plan = [{ do: 'wake' }]; }
+    else if (has('draw', 'doodle', 'paint')) { say = 'one sec'; plan = [{ do: 'doodle' }]; }
+    else if (has('climb')) { say = 'on it'; plan = [{ do: 'climb' }]; }
+    else if (has('sword', 'fight', 'swing', 'attack')) { say = m.label === 'angry' ? 'oh it is ON' : 'en garde!'; plan = [{ do: m.label === 'angry' ? 'slash' : 'swing' }]; }
+    else if (has('wave', 'bye')) { say = has('bye') ? 'bye!' : 'hi!'; plan = [{ do: 'wave' }]; }
+    else if (has('stretch')) { say = 'mmm'; plan = [{ do: 'stretch' }]; }
+    else if (has('laugh', 'funny', 'joke', 'lol', 'haha')) { say = 'haha'; plan = [{ do: 'laugh' }]; }
+    else if (has('come', 'here')) { say = 'coming'; plan = [{ walk: 'cursor' }]; }
+    else if (has('go away', 'leave')) { say = 'fine.'; plan = [{ walk: 'away' }]; m.nudge({ happiness: -0.05 }); }
+    else if (has('hi', 'hello', 'hey', 'yo', 'sup')) { say = c.memory.recall('greet') ?? 'hi!'; plan = [{ do: 'wave' }]; }
+    else if (has('how are you', 'how do you feel', "how's it going", 'you ok')) {
+      say = { sleepy: 'tired...', sad: 'not great', angry: 'annoyed. at you.', scared: 'a little scared', playful: 'GREAT', bored: 'bored', content: 'pretty good' }[m.label];
+    } else if (has('love', 'good boy', 'cute', 'awesome', 'cool')) { say = pickOne([':)', 'aw', 'I know']); m.nudge({ happiness: 0.08, trust: 0.02 }); plan = [{ do: 'laugh' }]; }
+    else if (has('stupid', 'dumb', 'hate', 'ugly', 'useless')) { say = pickOne(['rude.', 'wow.', 'hmph']); m.nudge({ happiness: -0.1, annoyance: 0.2, trust: -0.03 }); plan = [{ do: 'stomp' }]; }
+    else { say = pickOne(['?', 'huh?', '...what?']); plan = [{ do: 'shrug' }]; }
+    if (plan.length) mind.perform(c, plan, 'you asked');
+    this.onSpeak(say);
+    this.addLog('him', say, c, plan.length ? describePlan(plan) : '');
+    if (!this.notedOffline) {
+      this.notedOffline = true;
+      this.addLog('note', 'His brain is Offline, so he only knows a few simple words. Turn on Chat or Full under General → Brain for real conversation.', c);
+    }
+  }
+  private notedOffline = false;
 
   /** Something happened to him. Remembered as context; in full mode he may comment on it. */
   noteEvent(c: Ctx, e: MindEvent) {
@@ -300,7 +350,11 @@ export class Brain {
   }
 
   update(c: Ctx, mind: Mind) {
-    if (!this.active) { if (c.memory.needsTidy) c.memory.tidyOffline(); return; }
+    if (!this.active) {
+      if (this.heardOffline.length) this.offlineAnswer(c, mind, this.heardOffline.splice(0).join(' '));
+      if (c.memory.needsTidy) c.memory.tidyOffline();
+      return;
+    }
     if (this.busy) return;
     const now = c.world.time;
     if (c.memory.needsTidy && !this.heard.length && now >= this.nextTidy) { this.tidy(c); return; }
@@ -346,7 +400,8 @@ export class Brain {
       '- {"walk": "left" | "right" | "cursor" | "away"}',
       ...(this.puppet ? ['- {"move": [poses], "name": "..."} a move you make up (see MAKING UP MOVES)'] : []),
       ...(this.puppet && saved ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`] : []),
-      '- {"draw": [strokes], "title": "..."} draw something (see DRAWING)',
+      '- {"draw": [strokes], "title": "..."} draw something with your pen (see DRAWING). Only works if you have your pen.',
+      'YOUR BELT: you wear a belt with three slots (left hip, right hip, back) where you keep your things: your pen (you draw with it) and a wooden sword ("swing" practices, "slash" goes after the cursor). [state] says what you have and where. If the person took something, you can ask for it back.',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
       ...(this.puppet ? BODY_GUIDE : []),
       ...DRAW_GUIDE,
@@ -393,6 +448,7 @@ export class Brain {
       `mood: ${m.asleep ? 'asleep' : m.label} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)})`,
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
+      `your things: ${itemsText(c)}`,
       ...(ch.whole ? [] : [`body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`]),
       `cursor: ${cursor}`,
       `recently: ${recent || 'nothing much'}`,

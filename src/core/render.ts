@@ -26,9 +26,12 @@ export function shade(hex: string, amount: number) {
   return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 
-type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
-export function drawCharacter(ctx: Ctx2D, c: Character, look: Look) {
+/** Something drawn as part of him, in depth order with his limbs (his belt, things in his hands). */
+export interface DepthPart { z: number; draw: (g: Ctx2D) => void; pts?: { x: number; y: number }[] }
+
+export function drawCharacter(ctx: Ctx2D, c: Character, look: Look, extras: DepthPart[] = []) {
   // Smooth style with an outline: draw him once fatter and darker underneath.
   if (look.outline && look.pixel <= 1) drawCharacter(ctx, c, { ...look, outline: false, color: shade(look.color, -0.7), lineWidth: look.lineWidth + 3 });
   const j = c.body.j, sc = c.scale;
@@ -65,6 +68,7 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look) {
     ctx.arc(j.head.x, j.head.y, c.d.headR, 0, Math.PI * 2);
     ctx.fill();
   } });
+  for (const e of extras) parts.push({ z: e.z, draw: () => e.draw(ctx) });
   parts.sort((a, b) => a.z - b.z);
   for (const p of parts) p.draw();
 
@@ -100,11 +104,12 @@ export function drawLooseLimb(ctx: Ctx2D, piece: LooseLimb, look: Look, scale: n
 export class PixelLayer {
   private cv: OffscreenCanvas | null = null;
 
-  /** Draw him (and any limbs he's lost) as pixel art. */
-  draw(ctx: CanvasRenderingContext2D, c: Character, look: Look) {
+  /** Draw him (with his belt and anything in his hands, and any limbs he's lost) as pixel art. */
+  draw(ctx: CanvasRenderingContext2D, c: Character, look: Look, extras: DepthPart[] = []) {
     const p = Math.max(2, Math.round(look.pixel));
     const thick = { ...look, lineWidth: Math.max(look.lineWidth, (1.5 * p) / c.scale) };
-    this.paint(ctx, c.body.points, c.d.headR + look.lineWidth * c.scale + p * 3, look, (g) => drawCharacter(g, c, thick));
+    const pts = [...c.body.points, ...extras.flatMap((e) => e.pts ?? [])];
+    this.paint(ctx, pts, c.d.headR + look.lineWidth * c.scale + p * 3, look, (g) => drawCharacter(g, c, thick, extras));
     for (const piece of c.loosePieces) this.paint(ctx, piece.points, look.lineWidth * c.scale + p * 3, look, (g) => drawLooseLimb(g, piece, thick, c.scale));
   }
 
@@ -149,6 +154,34 @@ export class PixelLayer {
     ctx.drawImage(this.cv, 0, 0, w, h, x0, y0, w * p, h * p);
     ctx.restore();
   }
+}
+
+/**
+ * His belt: a band around his hips, square to his torso. Split into short pieces so the
+ * part behind him is drawn behind his body and the front part in front.
+ */
+export function beltParts(c: Character, color: string): DepthPart[] {
+  const j = c.body.j, sc = c.scale, r = 4.6 * sc;
+  const ux = j.neck.x - j.hip.x, uy = j.neck.y - j.hip.y, uz = j.neck.z - j.hip.z, ul = Math.hypot(ux, uy, uz) || 1;
+  const up = { x: ux / ul, y: uy / ul, z: uz / ul };
+  const L = c.dirToWorld(0, 0, 1), k = L.x * up.x + L.y * up.y + L.z * up.z;
+  let lx = L.x - up.x * k, ly = L.y - up.y * k, lz = L.z - up.z * k;
+  const ll = Math.hypot(lx, ly, lz) || 1; lx /= ll; ly /= ll; lz /= ll;
+  // forward = left × up (so the ring is square to his torso)
+  const fx = ly * up.z - lz * up.y, fy = lz * up.x - lx * up.z, fz = lx * up.y - ly * up.x;
+  const N = 10, pts = Array.from({ length: N + 1 }, (_, i) => {
+    const a = (i / N) * Math.PI * 2, ca = Math.cos(a) * r, sa = Math.sin(a) * r;
+    return { x: j.hip.x + lx * ca + fx * sa - up.x * 1.5 * sc, y: j.hip.y + ly * ca + fy * sa - up.y * 1.5 * sc, z: j.hip.z + lz * ca + fz * sa - up.z * 1.5 * sc };
+  });
+  const out: DepthPart[] = [];
+  for (let i = 0; i < N; i++) {
+    const a = pts[i], b = pts[i + 1];
+    out.push({ z: (a.z + b.z) / 2, pts: [a, b], draw: (g) => {
+      g.save(); g.strokeStyle = color; g.lineWidth = 2.4 * sc; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.restore();
+    } });
+  }
+  return out;
 }
 
 /** A speech bubble above his head, kept on screen. */
@@ -260,5 +293,37 @@ export function drawPuffs(ctx: CanvasRenderingContext2D, puffs: Puff[], p: numbe
     const s = Math.max(p, Math.round((f.size * (1 - f.t / f.life * 0.5)) / p) * p);
     ctx.fillRect(Math.round(f.x / p) * p - s / 2, Math.round(f.y / p) * p - s / 2, s, s);
   }
+  ctx.restore();
+}
+
+/** The right-click menu: a pixel box with one row per choice. Returns nothing; layout comes from `menuLayout`. */
+export interface MenuLayout { x: number; y: number; w: number; rowH: number; rows: string[]; p: number }
+
+export function menuLayout(rows: string[], at: { x: number; y: number }, b: { left: number; right: number; top: number; floor: number }, p: number): MenuLayout {
+  const wText = Math.max(...rows.map(textWidth), 20);
+  const w = (wText + 10) * p, rowH = (FONT_HEIGHT + 6) * p, h = rows.length * rowH + 4 * p;
+  const x = Math.min(Math.max(at.x + 10, b.left + 4), b.right - w - 4);
+  const y = Math.min(Math.max(at.y - h / 2, b.top + 4), b.floor - h - 4);
+  return { x: Math.round(x / p) * p, y: Math.round(y / p) * p, w, rowH, rows, p };
+}
+
+export function drawMenu(ctx: CanvasRenderingContext2D, m: MenuLayout, hover: number, ink: string) {
+  const { x, y, w, rowH, rows, p } = m, h = rows.length * rowH + 4 * p;
+  ctx.save();
+  // Stepped corners, like his speech bubble.
+  const box = (inset: number, color: string) => {
+    ctx.fillStyle = color;
+    const i = inset * p;
+    ctx.fillRect(x + i + p, y + i, w - 2 * i - 2 * p, h - 2 * i);
+    ctx.fillRect(x + i, y + i + p, w - 2 * i, h - 2 * i - 2 * p);
+  };
+  box(0, ink);
+  box(1, '#ffffff');
+  rows.forEach((label, i) => {
+    const ry = y + 2 * p + i * rowH;
+    if (i === hover) { ctx.fillStyle = ink; ctx.fillRect(x + 2 * p, ry, w - 4 * p, rowH); }
+    ctx.fillStyle = i === hover ? '#ffffff' : '#1b1d2e';
+    drawPixelText(ctx, label, x + 5 * p, ry + 3 * p, p);
+  });
   ctx.restore();
 }

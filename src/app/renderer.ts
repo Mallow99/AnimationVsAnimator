@@ -20,6 +20,10 @@ interface PetShell {
   ask(req: BrainRequest): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
   loadMemory(): Promise<string | null>;
   saveMemory(json: string): void;
+  openSettings(): void;
+  getItemDefs(): Promise<unknown[]>;
+  onItemDefs(cb: (defs: unknown[]) => void): void;
+  setTyping(on: boolean): void;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
@@ -73,6 +77,10 @@ if (shell) {
     return r.text;
   };
   setInterval(() => shell.sendStats(pet.stats()), 400);
+  // Item definition files (yours, from the items folder) on top of the ones he comes with.
+  shell.getItemDefs().then((d) => pet.items.addDefs(d), () => {});
+  shell.onItemDefs((d) => pet.items.addDefs(d));
+  pet.onOpenSettings = () => shell.openSettings();
   pet.onCollections = () => { shell.sendCollections(pet.collections()); save(); };
 }
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools
@@ -105,12 +113,58 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+// ── talking to him right on the desktop ──
+// Double-click him (or pick "Talk" from his right-click menu): a little text box pops up over his head.
+const talk = document.getElementById('talk') as HTMLFormElement;
+const talkText = document.getElementById('talkText') as HTMLInputElement;
+let talkOpen = false, talkIdle = 0;
+function openTalk() {
+  talkOpen = true;
+  talk.classList.add('open');
+  talk.style.setProperty('--ink', pet.config.look.color);
+  shell?.setTyping(true); // the desktop window has to accept typing for a moment
+  pet.listening = true;
+  talkIdle = performance.now();
+  placeTalk();
+  setTimeout(() => talkText.focus(), 30);
+}
+function closeTalk() {
+  if (!talkOpen) return;
+  talkOpen = false;
+  talk.classList.remove('open');
+  talkText.blur();
+  pet.listening = false;
+  shell?.setTyping(false);
+}
+function placeTalk() {
+  const a = pet.talkAnchor();
+  talk.style.left = `${Math.min(Math.max(a.x, 160), window.innerWidth - 160)}px`;
+  talk.style.top = `${Math.max(a.y - 14, 50)}px`;
+}
+pet.onTalk = openTalk;
+talk.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = talkText.value.trim();
+  if (text) pet.command(`hear:${text}`);
+  talkText.value = '';
+  talkIdle = performance.now();
+});
+talkText.addEventListener('input', () => { talkIdle = performance.now(); });
+talkText.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTalk(); });
+document.getElementById('talkClose')!.addEventListener('click', closeTalk);
+const overTalk = (x: number, y: number) => {
+  if (!talkOpen) return false;
+  const r = talk.getBoundingClientRect();
+  return x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 12;
+};
+
 // ── click-through ──
 // The window ignores the mouse (clicks fall through to your desktop) except
-// while the cursor is over him or you're dragging him.
+// while the cursor is over him, his menu or his talk box, you're dragging him,
+// or you're carrying one of his things (then a click anywhere drops it).
 let ignoring = true;
 function updateClickThrough(x: number, y: number) {
-  const want = !(pet.dragging || pet.hit(x, y));
+  const want = !(pet.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);
@@ -132,8 +186,15 @@ window.addEventListener('mousemove', (e) => {
   pet.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now);
   updateClickThrough(e.clientX, e.clientY);
 });
+window.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (pet.contextMenu(e.clientX, e.clientY)) shell?.pressed();
+  updateClickThrough(e.clientX, e.clientY);
+});
 window.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
+  if (overTalk(e.clientX, e.clientY)) return; // typing to him
+  if (talkOpen && !pet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
   if (pet.pointerDown(e.clientX, e.clientY, performance.now())) {
     canvas.style.cursor = 'grabbing';
     shell?.pressed();
@@ -172,6 +233,7 @@ function frame(now: number) {
   // The mouse may sit still while held; decay its velocity so he isn't "thrown" on release.
   if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; pet.pointerMove(last.x, last.y, vel.x, vel.y, now); }
   pet.update(dt);
+  if (talkOpen) { placeTalk(); if (now - talkIdle > 45000 && document.activeElement !== talkText) closeTalk(); }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   if (fakeWins.length) drawFakeWindows();
   pet.draw(ctx);

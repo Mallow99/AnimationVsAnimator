@@ -52,6 +52,28 @@ function saveMemory(json: string) {
   fs.writeFile(tmp, json, (err) => { if (!err) fs.rename(tmp, memoryPath(), () => {}); });
 }
 
+// ───────────── item definition files ─────────────
+// userData/items/*.json: your own items (see the README.md there). The ones he comes
+// with are copied in on first run as examples to copy and change.
+
+const itemsDir = () => path.join(app.getPath('userData'), 'items');
+function readItemDefs(): unknown[] {
+  const dir = itemsDir(), out: unknown[] = [];
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const examples = path.join(__dirname, '../items');
+    if (!fs.readdirSync(dir).length && fs.existsSync(examples)) {
+      for (const f of fs.readdirSync(examples)) fs.copyFileSync(path.join(examples, f), path.join(dir, f));
+    }
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith('.json')) continue;
+      try { out.push(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); }
+      catch (e) { console.log(`[items] couldn't read ${f}: ${(e as Error).message}`); }
+    }
+  } catch { /* no items folder: he just has his own things */ }
+  return out;
+}
+
 // ───────────── other windows (platforms) ─────────────
 
 /** Convert screen rectangles to the overlay's coordinates (its top-left is 0,0). */
@@ -158,6 +180,7 @@ function buildTrayMenu() {
     { label: config.name, enabled: false },
     { label: 'Settings…', click: () => openSettings() },
     { label: `Talk to ${config.name}…`, click: () => openSettings('chat') },
+    { label: 'Items…', click: () => openSettings('items') },
     { label: 'Smack mode', type: 'checkbox', checked: config.smacking, click: () => setConfig({ smacking: !config.smacking }) },
     { label: 'Mischief mode', type: 'checkbox', checked: config.mischief, click: () => setConfig({ mischief: !config.mischief }) },
     { label: 'Climb on windows', type: 'checkbox', checked: config.windows, click: () => setConfig({ windows: !config.windows }) },
@@ -187,6 +210,21 @@ ipcMain.on('pet:collections', (_e, data: unknown) => settingsWin?.webContents.se
 ipcMain.on('pet:command', (_e, cmd: string) => win?.webContents.send('pet:command', cmd));
 ipcMain.on('settings:open', () => openSettings());
 ipcMain.handle('memory:load', () => { try { return fs.readFileSync(memoryPath(), 'utf8'); } catch { return null; } });
+ipcMain.handle('items:defs', () => readItemDefs());
+ipcMain.on('items:reload', () => win?.webContents.send('items:defs', readItemDefs()));
+ipcMain.on('items:openFolder', () => { readItemDefs(); shell.openPath(itemsDir()); });
+// The talk box on the desktop needs keyboard focus for a moment, then gives it back.
+ipcMain.on('pet:typing', (_e, on: boolean) => {
+  if (!win) return;
+  if (on) {
+    if (process.platform !== 'darwin') win.setFocusable(true);
+    win.focus();
+    if (process.platform === 'darwin') win.focusOnWebView();
+  } else {
+    if (process.platform !== 'darwin') { win.setFocusable(false); win.blur(); }
+    else watcher?.refocus();
+  }
+});
 ipcMain.on('memory:save', (_e, json: string) => saveMemory(json));
 // The AI brain: the overlay asks, main calls the AI service with the saved key.
 ipcMain.handle('brain:ask', (_e, req: BrainRequest) => llm.ask(config.provider, config.model, req));

@@ -222,7 +222,7 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   const orig = pet.mind.onEvent.bind(pet.mind);
   pet.mind.onEvent = (c, e) => { got.push(e.type); orig(c, e); };
   const hx = pet.char.x, hy = pet.char.body.j.hip.y - 10;
-  for (let i = 0; i < 60; i++) { pet.cursor(hx + Math.sin(i / 3) * 12, hy, Math.cos(i / 3) * 240, 0); pet.update(1 / 60); }
+  for (let i = 0; i < 120; i++) { pet.cursor(hx + Math.sin(i / 3) * 12, hy, Math.cos(i / 3) * 240, 0); pet.update(1 / 60); }
   check('slow rub pets him (no smack)', got.includes('petted') && !got.includes('smacked'), got.join(','));
 }
 { // Changing his size mid-life rebuilds his body without breaking anything.
@@ -640,6 +640,113 @@ function yankHand(pet: Pet, speed = 3200) {
     run(c, 4);
   }
   check('a huge crash can snap a limb off', off > 0);
+}
+
+// ───── items and his belt ─────
+function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, pet); pet.paused = false; return pet; }
+{ // He starts with his pen and his sword on his belt; drawing takes the pen out and puts it back.
+  const pet = calmPet();
+  const pen = pet.items.find('draw')!, sword = pet.items.find('swing')!;
+  check('belt: pen on his hip, sword on his back', pen.where === 'belt' && pen.slot === 1 && sword.where === 'belt' && sword.slot === 2, `${pen.where}/${pen.slot} ${sword.where}/${sword.slot}`);
+  pet.mind.command(pet.ctx, 'doodle');
+  let inHand = false, tipOnPaper = Infinity;
+  petFor(14, pet, () => {
+    if (pen.where === 'hand') {
+      inHand = true;
+      const d = pet.ctx.doodles[pet.ctx.doodles.length - 1], st = d?.strokes[d.strokes.length - 1];
+      if (st?.length) { const p = st[st.length - 1], tip = pen.tip; tipOnPaper = Math.min(tipOnPaper, Math.hypot(tip.x - p.x, tip.y - p.y)); }
+    }
+  });
+  const d = pet.ctx.doodles[0];
+  check('doodling: pen out of the belt, its tip does the drawing, back on the belt after', inHand && tipOnPaper < 6 && !!d?.done && pen.where === 'belt', `inHand=${inHand} tipGap=${tipOnPaper.toFixed(1)} done=${d?.done} pen=${pen.where}`);
+}
+{ // Right-click him: a menu with "Take pen". Take it, and he can't draw; he asks for it back and snatches it.
+  const pet = calmPet();
+  const n = pet.char.body.j.neck;
+  pet.cursor(n.x, n.y + 5, 0, 0);
+  const opened = pet.contextMenu(n.x, n.y + 5);
+  const rows = (pet as any).menu?.rows.map((r: { label: string }) => r.label) as string[];
+  const pen = pet.items.find('draw')!;
+  (pet as any).menu.rows.find((r: { label: string }) => r.label === 'Take pen').act();
+  (pet as any).menu = null;
+  check('right-click menu: talk, take his things', opened && rows[0].startsWith('Talk') && rows.includes('Take pen') && rows.includes('Take wooden sword') && pen.where === 'cursor', rows?.join(' | '));
+  const said: string[] = [];
+  const origSay = pet.ctx.say; pet.ctx.say = (t, x) => { said.push(t); origSay(t, x); };
+  petFor(1, pet);
+  pet.mind.command(pet.ctx, 'doodle');
+  petFor(2, pet);
+  check('pen taken: he can\'t draw, and says so', pet.ctx.doodles.length === 0 && said.some((t) => /pen/.test(t)), said.join(' | '));
+  // Wait for him to ask for it back, holding it near him.
+  let snatched = false;
+  petFor(40, pet, () => {
+    const h = pet.char.frontHand, cur = pet.ctx.world.cursor!;
+    if (pen.where === 'cursor') pet.cursor(cur.x + (h.x - cur.x) * 0.02, cur.y + (h.y - cur.y) * 0.02, 0, 0);
+    if (pen.where !== 'cursor') snatched = true;
+  });
+  check('he asks for his pen back and grabs it', snatched && (pen.where === 'belt' || pen.where === 'hand'), `pen=${pen.where} said=${said.slice(-3).join(' | ')}`);
+}
+{ // Drop his sword on the floor: he picks it up and puts it back on his belt.
+  const pet = calmPet();
+  const sword = pet.items.find('swing')!;
+  pet.items.toCursor(sword, { x: pet.char.x + 150, y: 700 });
+  petFor(0.2, pet);
+  pet.pointerDown(pet.char.x + 150, 700, 0);
+  petFor(1, pet);
+  const dropped = sword.where === 'world';
+  petFor(20, pet);
+  check('dropped sword: he picks it up and puts it back on', dropped && sword.where === 'belt', `dropped=${dropped} now=${sword.where} skill=${pet.mind.skill?.name}`);
+}
+{ // Take his sword and swing it at him: it hits like a smack.
+  const pet = calmPet();
+  pet.paused = true;
+  const sword = pet.items.find('swing')!;
+  const got: string[] = [];
+  const orig = pet.mind.onEvent.bind(pet.mind);
+  pet.mind.onEvent = (c, e) => { got.push(e.type); orig(c, e); };
+  const y = pet.char.body.j.neck.y - 40, x0 = pet.char.x - 200;
+  pet.cursor(x0, y, 0, 0);
+  pet.items.toCursor(sword, { x: x0, y });
+  petFor(1, pet, () => pet.cursor(x0, y, 0, 0));
+  for (let i = 0; i < 30; i++) { pet.cursor(x0 + i * 16, y, 960, 0); pet.update(1 / 60); }
+  check('swing his sword at him: it hits', got.includes('smacked'), got.join(','));
+}
+{ // Angry, cursor close: he draws his sword and slashes at it.
+  const pet = calmPet();
+  let hits = 0;
+  const orig = pet.ctx.hitCursor!;
+  pet.ctx.hitCursor = (x, y, d) => { hits++; orig(x, y, d); };
+  const j = pet.char.body.j;
+  pet.cursor(pet.char.x + 45, j.neck.y - 5, 0, 0);
+  pet.mind.command(pet.ctx, 'slash');
+  let swordOut = false;
+  petFor(5, pet, () => { pet.cursor(pet.char.x + pet.char.facing * 45, j.neck.y - 5, 0, 0); if (pet.items.find('swing')!.where === 'hand') swordOut = true; });
+  check('slash: draws his sword and hits the cursor', swordOut && hits > 0 && pet.items.find('swing')!.where === 'belt', `out=${swordOut} hits=${hits}`);
+}
+{ // Double-click: talk box (no poke). Offline, he still understands simple words.
+  const pet = calmPet();
+  let talked = 0;
+  pet.onTalk = () => talked++;
+  const got: string[] = [];
+  const orig = pet.mind.onEvent.bind(pet.mind);
+  pet.mind.onEvent = (c, e) => { got.push(e.type); orig(c, e); };
+  const n = pet.char.body.j.neck;
+  pet.pointerDown(n.x, n.y + 3, 0); pet.pointerUp(n.x, n.y + 3); pet.update(0.1);
+  pet.pointerDown(n.x, n.y + 3, 100); pet.pointerUp(n.x, n.y + 3);
+  petFor(0.6, pet);
+  check('double-click: opens the talk box, no poke', talked === 1 && !got.includes('poked'), `talked=${talked} ${got.join(',')}`);
+  pet.command('hear:can you dance?');
+  petFor(0.5, pet);
+  check('offline: he understands "dance"', pet.mind.skill?.name === 'dance' || pet.mind.skill?.name === 'plan', `skill=${pet.mind.skill?.name}`);
+  pet.command('hear:my name is Robin');
+  petFor(0.5, pet);
+  check('offline: he remembers your name', pet.memory.notes.some((x) => x.text.includes('Robin')));
+}
+{ // His things are saved: what he has and where.
+  const pet = calmPet();
+  pet.items.give('pen', pet.char);
+  const copy = new Pet(bounds);
+  copy.load(pet.save());
+  check('items are saved', copy.items.list.length === 3 && copy.items.list.filter((x) => x.def.id === 'pen').length === 2, copy.items.list.map((x) => x.def.id + '@' + x.where).join(','));
 }
 
 // ───── memories (milestone 5) ─────

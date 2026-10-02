@@ -17,6 +17,11 @@ contextBridge.exposeInMainWorld('petShell', {
   moveCursor: (x: number, y: number) => ipcRenderer.send('pet:moveCursor', x, y),
   ask: (req: unknown) => ipcRenderer.invoke('brain:ask', req),
   loadMemory: () => ipcRenderer.invoke('memory:load'),
+  getItemDefs: () => ipcRenderer.invoke('items:defs'),
+  onItemDefs: on('items:defs'),
+  setTyping: (on: boolean) => ipcRenderer.send('pet:typing', on),
+  openItemsFolder: () => ipcRenderer.send('items:openFolder'),
+  reloadItems: () => ipcRenderer.send('items:reload'),
   saveMemory: (json: string) => ipcRenderer.send('memory:save', json),
   // shared
   getConfig: () => ipcRenderer.invoke('config:get'),

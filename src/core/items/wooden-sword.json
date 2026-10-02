@@ -1,0 +1,15 @@
+{
+  "id": "sword",
+  "name": "Wooden sword",
+  "about": "A practice sword. He swings it at your cursor when he's mad, or just to show off.",
+  "use": "swing",
+  "length": 30,
+  "grip": 7,
+  "belt": "back",
+  "hit": 1,
+  "shape": [
+    { "pts": [[-7, 0], [0, 0]], "color": "#6b4426", "width": 3 },
+    { "pts": [[0, -4.5], [0, 4.5]], "color": "#4a2e1a", "width": 2.4 },
+    { "pts": [[0, 0], [27, 0], [30, 0]], "color": "#c8955c", "width": 3.4 }
+  ]
+}

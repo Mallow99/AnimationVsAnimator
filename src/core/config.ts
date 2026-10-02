@@ -39,6 +39,10 @@ export interface PetConfig {
   sound: boolean;
   /** Limbs can come off: big crashes, hard smacks, or yanking a hand or foot. He puts them back on. */
   destructible: boolean;
+  /** Sound effects: footsteps, thuds, snaps, whooshes (made in code, like his voice). */
+  sfx: boolean;
+  /** How loud his sounds are (voice and effects), 0..1. */
+  volume: number;
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
@@ -56,6 +60,8 @@ export const DEFAULT_CONFIG: PetConfig = {
   mischief: false,
   sound: true,
   destructible: true,
+  sfx: true,
+  volume: 0.6,
 };
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }
@@ -66,6 +72,7 @@ const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 80, provider
 /** Every adjustable number: its limits, and how the settings window labels it. */
 export const RANGES: Record<string, Range> = {
   'scale': { min: 0.6, max: 2.5, step: 0.05, label: 'Size', hint: 'How big he is on screen' },
+  'volume': { min: 0, max: 1, step: 0.05, label: 'Volume', hint: 'His voice and sound effects' },
   'look.lineWidth': { min: 2, max: 10, step: 0.5, label: 'Line thickness', hint: 'Limb thickness' },
   'look.headSize': { min: 0.6, max: 1.8, step: 0.05, label: 'Head size', hint: '1 = normal' },
   'look.pixel': { min: 1, max: 6, step: 1, label: 'Pixel size', hint: '1 = smooth, higher = chunkier pixel art' },

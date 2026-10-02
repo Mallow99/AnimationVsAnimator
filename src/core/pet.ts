@@ -9,7 +9,8 @@ import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowWalls, type WinRect } from './world';
-import { drawBubble, drawCharacter, drawLooseLimb, drawPixelBubble, drawPuffs, drawSparks, PixelLayer, shade, type Puff, type Spark } from './render';
+import { beltParts, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
+import { drawItem, Items, type Item } from './items';
 import type { LooseLimb } from './limbs';
 import { limbOf } from './body';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
@@ -65,6 +66,23 @@ export class Pet {
   gallery: Drawing[] = [];
   /** Called when his gallery or his moves change (the app tells the settings window). */
   onCollections: (() => void) | null = null;
+  /** His belt and what's on it (milestone: items). */
+  readonly items = new Items();
+  /** Called when you want to talk to him (double-click, or "Talk" in his menu): the app opens a text box. */
+  onTalk: (() => void) | null = null;
+  /** "Settings" in his menu. */
+  onOpenSettings: (() => void) | null = null;
+  /** Sound effects (the app plays them): footsteps, thuds, snaps, whooshes... */
+  onSound: ((name: string, strength: number) => void) | null = null;
+  /** The menu you get by right-clicking him. */
+  private menu: { at: Vec; rows: { label: string; act: () => void }[]; hover: number } | null = null;
+  /** A click on him becomes a poke only once it's clear it wasn't the first half of a double-click. */
+  private pendingPoke: { joint: JointName; x: number; at: number } | null = null;
+  private lastClickAt = -10;
+  private cursorVel = { x: 0, y: 0 };
+  private itemHitCooldown = 0;
+  /** You're typing to him (the desktop text box is open): he turns to you and listens. */
+  listening = false;
 
   constructor(bounds: Bounds, readonly config: PetConfig = structuredClone(DEFAULT_CONFIG)) {
     this.char = new Character(bounds, (bounds.left + bounds.right) / 2, config.scale);
@@ -85,7 +103,13 @@ export class Pet {
       cursorEscaped: false,
       canGrabCursor: false,
       memory: this.memory,
+      items: this.items,
+      sound: (name, strength) => this.sound(name, strength ?? 1),
+      hitCursor: (x, y, dir) => this.swordHitsCursor(x, y, dir),
     };
+    this.items.give('pen', this.char);
+    this.items.give('sword', this.char);
+    this.items.onChange = () => this.onCollections?.();
     this.memory.onChange = () => { this.onCollections?.(); this.onMemorySave?.(this.memory.save()); };
     this.brain.onSpeak = (text) => this.speak(text);
     this.ctx.savedMoves = this.brain.savedMoves;
@@ -110,7 +134,14 @@ export class Pet {
       this.char.step(STEP);
       this.acc -= STEP;
     }
+    this.items.update(this.char, dt, this.ctx.world.bounds, this.ctx.world.platforms, this.ctx.world.cursor);
+    this.itemHits();
     for (const e of this.char.drainEvents()) { this.effects(e); this.emit(e); }
+    // A single click on him turns into a poke once it's clearly not a double-click.
+    const pp = this.pendingPoke;
+    if (pp && this.ctx.world.time - pp.at > 0.25) { this.pendingPoke = null; this.poke(pp.joint, pp.x); }
+    if (this.listening) { this.char.presentWant = 0.6; this.mind.holdUntil = this.ctx.world.time + 1; if (this.char.walking) this.char.stop(); }
+    else this.char.presentWant = 0;
     if (!this.paused) { this.mind.update(this.ctx, dt); this.brain.update(this.ctx, this.mind); }
     if (this.bubble) this.typeOut(this.bubble, dt);
     if (this.bubble && this.bubble.t > this.bubble.ttl) this.bubble = null;
@@ -180,20 +211,19 @@ export class Pet {
 
   draw(ctx: CanvasRenderingContext2D) {
     const look = this.config.look;
-    if (look.pixel > 1) this.pixels.draw(ctx, this.char, look);
-    else {
-      drawCharacter(ctx, this.char, look);
+    // His belt and what's on him are drawn as part of him, in depth order with his limbs.
+    const extras: DepthPart[] = [...beltParts(this.char, '#3a2a22'), ...this.items.onHim.map((it) => this.itemPart(it))];
+    if (look.pixel > 1) {
+      this.pixels.draw(ctx, this.char, look, extras);
+      for (const it of this.items.list) if (it.where === 'world' || it.where === 'cursor') this.pixels.paint(ctx, [it.butt, it.tip], 6 * this.char.scale, { ...look, outline: false }, (g) => drawItem(g, it));
+    } else {
+      drawCharacter(ctx, this.char, look, extras);
       for (const piece of this.char.loosePieces) drawLooseLimb(ctx, piece, look, this.char.scale);
+      for (const it of this.items.list) if (it.where === 'world' || it.where === 'cursor') drawItem(ctx, it);
     }
     if (this.sparks.length) drawSparks(ctx, this.sparks, Math.max(1, Math.round(look.pixel)));
     if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
-    // His pen, while he's drawing.
-    if (this.mind.skill?.name === 'doodle' && this.char.handTarget) {
-      const h = this.char.frontHand, tip = this.char.handTarget;
-      ctx.save(); ctx.strokeStyle = this.ctx.inkColor; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(tip.x, tip.y); ctx.stroke(); ctx.restore();
-    }
     for (const h of this.hearts) {
       ctx.save();
       ctx.globalAlpha = Math.max(0, 1 - h.t / 1.4);
@@ -202,6 +232,10 @@ export class Pet {
       ctx.textAlign = 'center';
       ctx.fillText('♥', h.x, h.y);
       ctx.restore();
+    }
+    if (this.menu) {
+      const m = this.menuLayout();
+      drawMenu(ctx, m, this.menu.hover, shade(look.color, -0.45));
     }
     if (this.bubble) {
       const b = this.bubble;
@@ -283,8 +317,8 @@ export class Pet {
     this.char.setWalls(this.ctx.world.walls);
   }
 
-  /** Is the cursor over him, or one of his loose limbs? (decides whether clicks reach us or the desktop) */
-  hit(x: number, y: number) { return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null; }
+  /** Is the cursor over him, one of his loose limbs, or one of his things? (decides whether clicks reach us or the desktop) */
+  hit(x: number, y: number) { return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null || this.items.hitWorld(x, y) !== null; }
 
   private emit(e: MindEvent) {
     this.remember(e);
@@ -339,11 +373,14 @@ export class Pet {
     }
     w.cursor = { x, y };
     w.cursorMovedAt = w.time;
+    this.cursorVel = { x: vx, y: vy };
+    if (this.menu) this.menu.hover = this.menuRow(x, y);
     if (Date.now() - this.memory.lastSeen > 60_000) this.memory.sawYou();
     const over = !this.press && speed < 1200 && this.char.hitTest(x, y, 20) !== null;
     if (over) {
+      // Count how far the cursor rubs back and forth over him (not the jump onto him).
       if (!r.over || w.time - r.since > 2.5) { r.dist = 0; r.since = w.time; }
-      r.dist += Math.hypot(x - r.lastX, y - r.lastY);
+      else r.dist += Math.hypot(x - r.lastX, y - r.lastY);
       if (r.dist > 180) {
         r.dist = 0; r.since = w.time;
         this.emit({ type: 'petted' });
@@ -353,15 +390,44 @@ export class Pet {
     r.over = over; r.lastX = x; r.lastY = y;
   }
 
-  // Press on him: nothing yet. Drag (or hold a moment) = pick up. Quick click = poke.
+  /**
+   * Press on him: nothing yet. Drag (or hold a moment) = pick up. Quick click = poke.
+   * Double-click = talk to him. While his menu is open, a click picks from it (or closes it).
+   * While you're carrying one of his things: click him to give it back, click anywhere else to drop it.
+   */
   pointerDown(x: number, y: number, now: number) {
-    const joint = this.char.hitTest(x, y);
-    if (!joint) {
-      // Not him: maybe one of his limbs lying around.
-      const limb = this.char.hitLimb(x, y);
-      if (!limb) return false;
-      this.press = { joint: 'hip', limb, x, y, t: now, moved: false, grabbed: false };
+    const w = this.ctx.world;
+    if (this.menu) {
+      const i = this.menuRow(x, y), rows = this.menu.rows;
+      this.menu = null;
+      if (i >= 0) rows[i].act();
       return true;
+    }
+    const joint = this.char.hitTest(x, y);
+    const carried = this.items.carried;
+    if (carried) {
+      if (joint) this.giveBack(carried);
+      else {
+        this.items.drop(carried, this.cursorVel.x * 0.6, this.cursorVel.y * 0.6);
+        this.sound('drop', 0.6);
+        this.emit({ type: 'itemDropped', name: carried.def.name.toLowerCase(), uid: carried.uid });
+      }
+      return true;
+    }
+    if (joint && w.time - this.lastClickAt < 0.3) {
+      // Second click of a double-click: no poke, he listens instead.
+      this.pendingPoke = null;
+      this.lastClickAt = -10;
+      this.onTalk?.();
+      return true;
+    }
+    if (!joint) {
+      // Not him: maybe one of his limbs lying around, or one of his things.
+      const limb = this.char.hitLimb(x, y);
+      if (limb) { this.press = { joint: 'hip', limb, x, y, t: now, moved: false, grabbed: false }; return true; }
+      const it = this.items.hitWorld(x, y);
+      if (it) { this.items.toCursor(it, { x, y }); this.sound('pickup', 0.6); return true; }
+      return false;
     }
     this.press = { joint, x, y, t: now, moved: false, grabbed: false };
     return true;
@@ -373,6 +439,7 @@ export class Pet {
     if (Math.hypot(x - p.x, y - p.y) > 5) p.moved = true;
     if (!p.grabbed && (p.moved || now - p.t > 180)) {
       p.grabbed = true;
+      this.pendingPoke = null;
       if (p.limb) this.char.grabLimb(p.limb.piece, p.limb.idx, x, y);
       else this.char.grab(p.joint, x, y);
     }
@@ -385,11 +452,124 @@ export class Pet {
     this.press = null;
     if (p.grabbed) { this.char.release(); return; }
     if (p.limb) { const q = p.limb.piece.points[p.limb.idx]; q.px = q.x + Math.sign(q.x - x || 1) * -3; q.py = q.y + 4; return; } // flick it
-    // A poke: push away from where you clicked.
+    // A quick click: a poke, as soon as it's clear this wasn't a double-click.
+    this.lastClickAt = this.ctx.world.time;
+    this.pendingPoke = { joint: p.joint, x, at: this.ctx.world.time };
+  }
+
+  /** A poke: push away from where you clicked. */
+  private poke(joint: JointName, x: number) {
     const hip = this.char.body.j.hip;
     const dir = Math.abs(x - hip.x) > 2 ? Math.sign(hip.x - x) : -this.char.facing;
-    this.char.poke(p.joint, dir * 500, -80);
+    this.char.poke(joint, dir * 500, -80);
+    this.sound('poke', 0.6);
     this.emit({ type: 'poked' });
+  }
+
+  /** Right-click on him: his menu. Returns true if it opened. */
+  contextMenu(x: number, y: number) {
+    if (!this.char.hitTest(x, y, 10)) { this.menu = null; return false; }
+    this.pendingPoke = null;
+    const rows: { label: string; act: () => void }[] = [];
+    rows.push({ label: `Talk to ${this.config.name}`, act: () => this.onTalk?.() });
+    const carried = this.items.carried;
+    if (carried) rows.push({ label: `Give back ${carried.def.name.toLowerCase()}`, act: () => this.giveBack(carried) });
+    for (const it of this.items.onHim) rows.push({ label: `Take ${it.def.name.toLowerCase()}`, act: () => this.takeItem(it) });
+    if (!this.char.whole) rows.push({ label: 'Fix him up', act: () => { for (const l of [...this.char.missing.keys()]) this.char.regrow(l); } });
+    if (this.onOpenSettings) rows.push({ label: 'Settings', act: () => this.onOpenSettings?.() });
+    this.menu = { at: { x, y }, rows, hover: -1 };
+    this.sound('pickup', 0.3);
+    return true;
+  }
+
+  get menuOpen() { return !!this.menu; }
+  /** Just above his head (where the talk box goes). */
+  talkAnchor() { const h = this.char.body.j.head; return { x: h.x, y: h.y - this.char.d.headR }; }
+  closeMenu() { this.menu = null; }
+
+  private menuLayout() {
+    const p = Math.max(2, Math.round(this.config.look.pixel));
+    return menuLayout(this.menu!.rows.map((r) => r.label), this.menu!.at, this.ctx.world.bounds, p);
+  }
+
+  /** Which menu row is under (x, y) (-1 = none). */
+  private menuRow(x: number, y: number) {
+    if (!this.menu) return -1;
+    const m = this.menuLayout();
+    if (x < m.x || x > m.x + m.w || y < m.y + 2 * m.p) return -1;
+    const i = Math.floor((y - m.y - 2 * m.p) / m.rowH);
+    return i < m.rows.length ? i : -1;
+  }
+
+  /** Is the cursor over his menu (so clicks should come to us, not the desktop)? */
+  uiHit(x: number, y: number) {
+    if (!this.menu) return false;
+    const m = this.menuLayout(), h = m.rows.length * m.rowH + 4 * m.p;
+    return x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + h;
+  }
+
+  /** Is your cursor carrying one of his things? (Then clicks anywhere come to us: one drops it.) */
+  get carrying() { return !!this.items.carried; }
+
+  /** You take one of his things: it dangles from your cursor. */
+  takeItem(it: Item) {
+    const cur = this.ctx.world.cursor ?? { x: it.at.x, y: it.at.y };
+    this.items.toCursor(it, cur);
+    this.sound('pickup', 0.8);
+    this.emit({ type: 'itemTaken', name: it.def.name.toLowerCase() });
+  }
+
+  /** You give it back: onto his belt (or into his hand if the belt's full). */
+  giveBack(it: Item) {
+    if (!this.items.stow(it)) {
+      const hand = this.char.useHand;
+      if (hand) this.items.toHand(it, hand); else { this.items.drop(it, 0, 0); return; }
+    }
+    this.sound('pickup', 0.8);
+    this.emit({ type: 'itemGiven', name: it.def.name.toLowerCase() });
+  }
+
+  /** Swinging one of his things at him (you took his sword): hits him like a smack, only harder. */
+  private itemHits() {
+    const it = this.items.carried, w = this.ctx.world;
+    if (!it || it.def.hit <= 0 || it.tipSpeed < 450 || w.time < this.itemHitCooldown) return;
+    const a = it.butt, b = it.tip;
+    for (let i = 0; i <= 6; i++) {
+      const px = a.x + ((b.x - a.x) * i) / 6, py = a.y + ((b.y - a.y) * i) / 6;
+      const joint = this.char.hitTest(px, py, 3);
+      if (!joint) continue;
+      const speed = Math.min(it.tipSpeed, 3500) * it.def.hit;
+      const v = this.cursorVel, vl = Math.hypot(v.x, v.y) || 1;
+      const k = speed * 0.5 / vl;
+      const limb = limbOf(joint);
+      if (limb && speed > 2600 && this.char.destructible) this.char.detach(limb, { x: v.x * k, y: v.y * k - 150, z: (Math.random() - 0.5) * 400 });
+      this.char.poke(joint, v.x * k, v.y * k - 120);
+      this.itemHitCooldown = w.time + 0.4;
+      this.freeze = 0.07;
+      this.sound('thwack', Math.min(1, speed / 2000));
+      this.emit({ type: 'smacked', speed });
+      return;
+    }
+  }
+
+  /** His sword hit your cursor: a clang and sparks, and in mischief mode it knocks your cursor away. */
+  private swordHitsCursor(x: number, y: number, dir: number) {
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * 200;
+      this.sparks.push({ x, y, vx: Math.cos(a) * v + dir * 120, vy: Math.sin(a) * v - 80, t: 0, life: 0.3 + Math.random() * 0.3, color: i % 2 ? '#ffffff' : '#ffe66d' });
+    }
+    this.freeze = 0.05;
+    this.sound('clang', 1);
+    if (this.config.mischief && this.onMoveCursor) this.moveCursor(x + dir * 70, y - 25);
+  }
+
+  /** Play a sound effect (if sounds are on). */
+  sound(name: string, strength = 1) { if (this.config.sfx) this.onSound?.(name, strength); }
+
+  /** How one of the things on him is drawn, in depth order with his limbs. */
+  private itemPart(it: Item): DepthPart {
+    const a = it.butt, b = it.tip;
+    return { z: (a.z + b.z) / 2 + (it.where === 'hand' ? 0.5 : -0.3), pts: [a, b], draw: (g) => drawItem(g, it) };
   }
 
   get dragging() { return this.press !== null; }
@@ -421,6 +601,10 @@ export class Pet {
       gallery: this.gallery,
       recentMoves: this.brain.recentMoves.map((m) => ({ name: m.name, poses: m.frames.length })),
       savedMoves: this.brain.savedMoves.map((m) => ({ name: m.name, poses: m.frames.length })),
+      items: {
+        kinds: [...this.items.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about, use: d.use, drawn: !!d.drawn })),
+        list: this.items.list.map((it) => ({ uid: it.uid, id: it.def.id, name: it.def.name, where: it.where, slot: it.slot, drawn: !!it.def.drawn })),
+      },
       memory: { summary: this.memory.summary, notes: this.memory.notes, tally: this.memory.tally, firstMet: this.memory.firstMet, summarizedAt: this.memory.summarizedAt },
     };
   }
@@ -436,6 +620,8 @@ export class Pet {
     if (verb === 'say') { if (arg.trim()) this.say(arg.trim().slice(0, 80)); return; }
     if (verb === 'hear') { if (arg.trim()) this.memory.count('talks'); this.brain.hear(this.ctx, arg); return; }
     if (this.memoryCommand(verb, arg)) return;
+    if (verb === 'item') { this.itemCommand(arg); this.onCollections?.(); return; }
+    if (verb === 'menuAt') { const [x, y] = arg.split(',').map(Number); this.contextMenu(x, y); return; }
     if (this.collectionCommand(verb, arg)) { this.onCollections?.(); return; }
     if (verb === 'mood') { const p = MOOD_PRESETS[arg]; if (p) { this.mood.asleep = false; Object.assign(this.mood.s, p); } return; }
     if (verb === 'setMood') {
@@ -489,6 +675,22 @@ export class Pet {
   }
 
   /**
+   * His things, from the Items tab:
+   *   item:give:<kind>  item:take:<uid>  item:return:<uid>  item:drop:<uid>  item:remove:<uid>
+   */
+  private itemCommand(arg: string) {
+    const [verb, id] = arg.split(':');
+    const it = this.items.list.find((x) => x.uid === Number(id));
+    switch (verb) {
+      case 'give': this.items.give(id, this.char); this.sound('pickup', 0.6); break;
+      case 'take': if (it && (it.where === 'belt' || it.where === 'hand')) this.takeItem(it); break;
+      case 'return': if (it) this.giveBack(it); break;
+      case 'drop': if (it) this.items.drop(it, 0, 0); break;
+      case 'remove': if (it) this.items.remove(it); break;
+    }
+  }
+
+  /**
    * His memories, from the Mind tab:
    *   memAdd:<text>  memEdit:<id>:<text>  memDel:<id>  memSummary:<text>  memTidy  memClear
    */
@@ -508,7 +710,7 @@ export class Pet {
 
   // ── saving between runs ──
   save() {
-    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves });
+    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save() });
   }
   load(json: string | null) {
     if (!json) return;
@@ -519,6 +721,7 @@ export class Pet {
       if (Array.isArray(d.gallery)) this.gallery = d.gallery.slice(-40);
       // Same array object the brain and mind already hold: fill it in place.
       if (Array.isArray(d.moves)) this.brain.savedMoves.splice(0, Infinity, ...d.moves.slice(-30));
+      if (Array.isArray(d.items)) this.items.load(d.items, this.char);
     } catch { /* corrupt save: start fresh */ }
   }
 }

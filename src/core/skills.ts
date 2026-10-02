@@ -10,6 +10,7 @@ import { SHAPES, type Doodle } from './doodles';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 import type { Memory } from './memory';
 import type { LimbId } from './body';
+import type { Item, Items, ItemUse } from './items';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none' | 'target';
 
@@ -55,6 +56,12 @@ export interface Ctx {
   memory: Memory;
   /** What he looks at when `look` is 'target'. */
   lookTarget?: Vec | null;
+  /** His belt and everything on it (and anything you took). */
+  items: Items;
+  /** A sound effect (the app plays it). */
+  sound?: (name: string, strength?: number) => void;
+  /** His sword hit your cursor. */
+  hitCursor?: (x: number, y: number, dir: number) => void;
 }
 
 export abstract class Skill {
@@ -481,7 +488,73 @@ export class PuppetMove extends Skill {
 
 // ───────────── mischief ─────────────
 
-/** He draws a little picture next to himself with his own pen. */
+/**
+ * Getting a tool (his pen, his sword) out of his belt and putting it back, shared by the
+ * skills that use one. Call `fetch` every frame until it says 'ready' or 'none'.
+ */
+export class Tool {
+  item: Item | null = null;
+  /** Why he couldn't get it: you have it, it's lying around, he has no hands, he doesn't own one. */
+  why: 'gone' | 'lying' | 'nohands' | 'none' | '' = '';
+  private t = 0;
+  constructor(private use: ItemUse) {}
+
+  fetch(c: Ctx, dt: number): 'working' | 'ready' | 'none' {
+    const ch = c.char, hand = ch.useHand;
+    this.t += dt;
+    if (!hand) { this.why = 'nohands'; return 'none'; }
+    const it = this.item ??= c.items.find(this.use);
+    if (!it) { this.why = 'none'; return 'none'; }
+    if (it.where === 'cursor') { this.why = 'gone'; return 'none'; }
+    if (it.where === 'world') { this.why = 'lying'; return 'none'; }
+    if (it.where === 'hand') { ch.handTarget = null; return 'ready'; }
+    // On his belt: reach down to it and pull it out.
+    const slot = c.items.slotPose(ch, it.slot).at;
+    ch.handTarget = { x: slot.x, y: slot.y };
+    const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
+    if (Math.hypot(h.x - slot.x, h.y - slot.y) < 6 * ch.scale || this.t > 0.7) {
+      c.items.toHand(it, hand);
+      ch.handTarget = null;
+      c.sound?.('pickup');
+      return 'ready';
+    }
+    return 'working';
+  }
+
+  private stowT = 0;
+  /** Put it back on his belt. Returns true when done. */
+  stow(c: Ctx, dt: number): boolean {
+    const it = this.item, ch = c.char;
+    if (!it || it.where !== 'hand') { ch.handTarget = null; return true; }
+    this.stowT += dt;
+    it.aim = null;
+    const prefer = it.def.belt === 'back' ? [2, 1, 0] : [1, 0, 2];
+    const slot = prefer.find((s) => !c.items.belt[s]);
+    if (slot === undefined) { ch.handTarget = null; return true; } // belt's full: he just keeps holding it
+    const at = c.items.slotPose(ch, slot).at;
+    ch.handTarget = { x: at.x, y: at.y };
+    const h = ch.body.j[it.hand === 'L' ? 'handL' : 'handR'];
+    if (Math.hypot(h.x - at.x, h.y - at.y) < 6 * ch.scale || this.stowT > 0.7) {
+      c.items.stow(it);
+      ch.handTarget = null;
+      c.sound?.('pickup');
+      return true;
+    }
+    return false;
+  }
+}
+
+/** What he says when his tool isn't on him. */
+function missingTool(c: Ctx, tool: Tool, what: string) {
+  if (tool.why === 'gone') c.say(pick([`hey. you have my ${what}`, `my ${what}! give it back`, `can't. YOU have my ${what}`]), 2);
+  else if (tool.why === 'nohands') c.say(pick(['with what hands?', 'no hands. can\'t.']), 1.6);
+  else if (tool.why === 'none') c.say(pick([`I don't have a ${what}`, `no ${what}...`]), 1.6);
+}
+
+/**
+ * He draws a little picture next to himself with his own pen: takes it out of his belt,
+ * draws (the pen's tip is what touches the screen), and puts it back.
+ */
 export class DoodleSkill extends Skill {
   readonly name = 'doodle';
   /** `shape`: strokes in a box from -0.5 to 0.5 (y down). Left out = one of his usual pictures. */
@@ -490,28 +563,61 @@ export class DoodleSkill extends Skill {
   private plan: Vec[][] = [];
   private si = 0; private pi = 0; private along = 0;
   private finished = 0;
-  start(c: Ctx) {
+  private phase: 'tool' | 'fetch' | 'draw' | 'stow' | 'admire' = 'tool';
+  private tool = new Tool('draw');
+  private sub: Skill | null = null;
+  start(c: Ctx) { c.look = 'none'; }
+
+  /** Where the drawing goes: in front of him, about chest height. */
+  private begin(c: Ctx) {
     const ch = c.char, sc = ch.scale, j = ch.body.j;
     const keys = Object.keys(SHAPES), name = keys[Math.floor(Math.random() * keys.length)];
     const shape = this.shape ?? SHAPES[name];
-    const size = 46 * sc, cx = ch.x + ch.facing * 34 * sc, cy = j.neck.y + 6 * sc;
+    const size = 46 * sc, cx = ch.x + ch.facing * 40 * sc, cy = j.neck.y + 8 * sc;
     this.plan = shape.map((st) => st.map((p) => ({ x: cx + p.x * size, y: cy + p.y * size })));
     this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false, shape, title: this.title || (this.shape ? 'made up' : name) };
     c.doodles.push(this.doodle);
     if (c.doodles.length > 8) c.doodles.shift();
-    c.look = 'none';
   }
+
   update(c: Ctx, dt: number) {
-    const ch = c.char, d = this.doodle!;
-    if (this.finished) { ch.handTarget = null; return this.t > this.finished; }
-    if (!ch.ready) return this.t > 20;
+    const ch = c.char;
+    if (this.sub) {
+      this.sub.t += dt;
+      if (!this.sub.update(c, dt)) return this.t > 40;
+      this.sub.stop(c); this.sub = null;
+      this.tool = new Tool('draw');
+      this.phase = 'tool';
+    }
+    if (this.phase === 'tool') {
+      if (!ch.ready && ch.mode !== 'ground') return this.t > 20;
+      const r = this.tool.fetch(c, dt);
+      if (r === 'none') {
+        // It's lying around somewhere: go get it first. Otherwise, no drawing today.
+        const pen = c.items.find('draw');
+        if (this.tool.why === 'lying' && pen && this.t < 20) { this.sub = new FetchItem(pen, false); this.sub.start(c); this.phase = 'fetch'; return false; }
+        missingTool(c, this.tool, 'pen');
+        return true;
+      }
+      if (r === 'ready') { this.begin(c); this.phase = 'draw'; }
+      return false;
+    }
+    if (this.phase === 'stow') {
+      if (this.tool.stow(c, dt)) { this.phase = 'admire'; this.finished = this.t + 0.8; }
+      return false;
+    }
+    if (this.phase === 'admire') return this.t > this.finished;
+    if (this.phase !== 'draw') return false;
+    const d = this.doodle!, pen = this.tool.item!;
+    if (pen.where !== 'hand') { c.say(pick(['hey!', 'my pen!']), 1.2); ch.handTarget = null; d.done = true; return true; } // it got taken mid-drawing
     const stroke = this.plan[this.si];
-    if (!stroke) { // all done: admire it
+    if (!stroke) { // all done: admire it, put the pen away
       d.done = true;
-      this.finished = this.t + 1.2;
       ch.handTarget = null;
+      pen.aim = null;
       c.onDrawn?.(d);
       if (!this.shape) c.say(pick(['ta-da', 'art.', 'nice', '✎']), 1.4);
+      this.phase = 'stow';
       return false;
     }
     // Move the pen along the stroke at a steady speed.
@@ -524,13 +630,190 @@ export class DoodleSkill extends Skill {
     const a = stroke[this.pi], b = stroke[Math.min(this.pi + 1, stroke.length - 1)];
     const seg = Math.hypot(b.x - a.x, b.y - a.y) || 1, k = Math.min(1, this.along / seg);
     const tip = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
-    ch.handTarget = tip;
+    // He holds the pen pointing forward and down; his hand goes where that puts the tip on the drawing.
+    const aim = ch.dirToWorld(0.45, -0.89);
+    pen.aim = aim;
+    const len = pen.def.length * ch.scale;
+    ch.handTarget = { x: tip.x - aim.x * len, y: tip.y - aim.y * len };
+    if (Math.random() < dt * 6) c.sound?.('scribble');
     // What's drawn so far of this stroke: the corners passed, plus wherever the pen is now.
     d.strokes[this.si] = [...stroke.slice(0, this.pi + 1), tip];
     if (this.pi >= stroke.length - 1) { this.si++; this.pi = 0; this.along = 0; }
-    return this.t > 25;
+    return this.t > 40;
   }
-  stop(c: Ctx) { c.char.handTarget = null; if (this.doodle) this.doodle.done = true; }
+  stop(c: Ctx) {
+    c.char.handTarget = null;
+    if (this.doodle) this.doodle.done = true;
+    this.sub?.stop(c);
+    // Interrupted: the pen goes back on the belt (no animation).
+    const pen = this.tool.item;
+    if (pen?.where === 'hand') { pen.aim = null; c.items.stow(pen); }
+  }
+}
+
+/**
+ * Swinging his wooden sword: draw it from his back, wind up (big and slow — that's the
+ * anticipation), slash (fast), follow through, then put it away. At your cursor if it's
+ * close (when he's mad), or just practicing.
+ */
+export class SwordSwing extends Skill {
+  readonly name = 'swing';
+  private phase: 'tool' | 'approach' | 'windup' | 'slash' | 'follow' | 'stow' = 'tool';
+  private tool = new Tool('swing');
+  private pt = 0;
+  private swings = 0;
+  private hit = false;
+  private from = -70;
+  constructor(private times = 2, private atCursor = true) { super(); }
+  start(c: Ctx) { c.look = this.atCursor ? 'cursor' : 'none'; }
+
+  /** Arm and sword at angle phi (degrees: 0 = straight ahead, 90 = straight up, negative = down). */
+  private pose(c: Ctx, phi: number) {
+    const ch = c.char, it = this.tool.item!, j = ch.body.j, armLen = (ch.d.upperArm + ch.d.foreArm) * 0.85;
+    const r = (phi * Math.PI) / 180, lead = r + 0.45;
+    const arm = ch.dirToWorld(Math.cos(r), Math.sin(r));
+    ch.handTarget = { x: j.neck.x + arm.x * armLen, y: j.neck.y + arm.y * armLen };
+    it.aim = ch.dirToWorld(Math.cos(lead), Math.sin(lead));
+  }
+
+  update(c: Ctx, dt: number) {
+    const ch = c.char, cur = c.world.cursor;
+    this.pt += dt;
+    switch (this.phase) {
+      case 'tool': {
+        if (!ch.ready) return this.t > 20;
+        const r = this.tool.fetch(c, dt);
+        if (r === 'none') { missingTool(c, this.tool, 'sword'); return true; }
+        if (r === 'ready') { this.phase = 'approach'; this.pt = 0; }
+        return false;
+      }
+      case 'approach': {
+        const reach = (ch.d.upperArm + ch.d.foreArm + this.tool.item!.def.length) * ch.scale * 0.85;
+        if (this.atCursor && cur && Math.abs(cur.x - ch.x) > reach && this.pt < 3) {
+          if (ch.ready && !ch.walking) ch.walkTo(cur.x - Math.sign(cur.x - ch.x) * reach * 0.7, true);
+          return false;
+        }
+        ch.stop();
+        if (this.atCursor && cur) ch.facing = Math.sign(cur.x - ch.x) || ch.facing;
+        this.phase = 'windup'; this.pt = 0; this.from = -70;
+        return false;
+      }
+      case 'windup': {
+        // Anticipation: pull way back and up, slowing into the top.
+        const u = Math.min(1, this.pt / 0.38);
+        this.pose(c, lerpN(this.from, 128, 1 - (1 - u) ** 3));
+        if (u >= 1) { this.phase = 'slash'; this.pt = 0; this.hit = false; c.sound?.('whoosh'); }
+        return false;
+      }
+      case 'slash': {
+        // Fast, accelerating into the cut.
+        const u = Math.min(1, this.pt / 0.13);
+        this.pose(c, lerpN(128, -48, u * u));
+        const it = this.tool.item!;
+        if (!this.hit && cur && it.distTo(cur.x, cur.y) < 9 * ch.scale) {
+          this.hit = true;
+          c.hitCursor?.(cur.x, cur.y, ch.facing);
+        }
+        if (u >= 1) { this.phase = 'follow'; this.pt = 0; }
+        return false;
+      }
+      case 'follow': {
+        // Follow-through: carries on a little past the cut, then settles.
+        const u = Math.min(1, this.pt / 0.3);
+        this.pose(c, -48 - Math.sin(Math.PI * u) * 14);
+        if (u >= 1) {
+          this.swings++;
+          this.from = -48;
+          if (this.swings < this.times) { this.phase = 'windup'; this.pt = 0; }
+          else { this.phase = 'stow'; this.pt = 0; if (!this.atCursor) c.say(pick(['hyah!', 'ha!', 'en garde']), 1.2); }
+        }
+        return false;
+      }
+      case 'stow': return this.tool.stow(c, dt) || this.pt > 2;
+    }
+  }
+  stop(c: Ctx) {
+    c.char.handTarget = null;
+    const it = this.tool.item;
+    if (it?.where === 'hand') { it.aim = null; c.items.stow(it); }
+  }
+}
+
+const lerpN = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/** Something of his is lying around: walk over, bend down, pick it up, and put it on his belt. */
+export class FetchItem extends Skill {
+  readonly name = 'pickup';
+  private phase: 'go' | 'grab' | 'stow' = 'go';
+  private tool: Tool;
+  private next = 0;
+  constructor(private item: Item, private comment = true) { super(); this.tool = new Tool(item.def.use); this.tool.item = item; }
+  start(c: Ctx) { c.look = 'target'; }
+  update(c: Ctx, dt: number) {
+    const ch = c.char, it = this.item, hand = ch.useHand;
+    c.lookTarget = { x: it.at.x, y: it.at.y };
+    if (it.where === 'belt') return true;
+    if (it.where === 'cursor' || !hand) return true;
+    if (this.phase === 'stow') return this.tool.stow(c, dt) || this.t > 15;
+    if (it.where === 'hand') { this.phase = 'stow'; return false; }
+    const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
+    if (it.at.y < feet - 70 * ch.scale || this.t > 15) { if (this.comment) c.say(pick(['can\'t reach it', 'ugh. too high']), 1.4); return true; }
+    if (this.phase === 'go') {
+      if (this.t < this.next || !ch.ready) return false;
+      this.next = this.t + 0.3;
+      const dx = it.at.x - ch.x;
+      if (Math.abs(dx) > 14 * ch.scale) ch.walkTo(it.at.x - Math.sign(dx) * 9 * ch.scale);
+      else { ch.stop(); ch.facing = Math.sign(dx) || ch.facing; this.phase = 'grab'; this.next = this.t; }
+      return false;
+    }
+    // Bend down and grab it by the handle.
+    ch.handTarget = { x: it.at.x, y: it.at.y };
+    const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
+    if (Math.hypot(h.x - it.at.x, h.y - it.at.y) < 7 * ch.scale) {
+      c.items.toHand(it, hand);
+      ch.handTarget = null;
+      c.sound?.('pickup');
+      if (this.comment && chance(0.5)) c.say(pick(['mine.', 'got it', 'there you are']), 1.2);
+      this.phase = 'stow';
+    } else if (this.t - this.next > 3) { ch.handTarget = null; this.phase = 'go'; }
+    return false;
+  }
+  stop(c: Ctx) { c.char.handTarget = null; }
+}
+
+/** You've had one of his things for a while: he comes over and asks for it back (and snatches it if he can). */
+export class AskBack extends Skill {
+  readonly name = 'askback';
+  private next = 0;
+  constructor(private item: Item) { super(); }
+  start(c: Ctx) { c.look = 'cursor'; c.say(pick([`can I have my ${this.item.def.name.toLowerCase()} back?`, `hey. my ${this.item.def.name.toLowerCase()}.`, 'give it.']), 2); }
+  update(c: Ctx) {
+    const ch = c.char, cur = c.world.cursor, it = this.item;
+    if (it.where !== 'cursor' || !cur) return true;
+    if (this.t > 10) { c.say(pick(['fine. keep it.', 'hmph.', 'whatever']), 1.4); return true; }
+    if (ch.ready && this.t > this.next) {
+      this.next = this.t + 0.4;
+      if (Math.abs(cur.x - ch.x) > 30 * ch.scale) ch.walkTo(cur.x - Math.sign(cur.x - ch.x) * 20 * ch.scale);
+    }
+    // Hand held out toward it. Bring it close and he grabs it.
+    const hand = ch.useHand;
+    if (!hand) return this.t > 3;
+    ch.handTarget = { x: cur.x, y: cur.y };
+    const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
+    if (Math.hypot(h.x - it.at.x, h.y - it.at.y) < 10 * ch.scale) {
+      c.items.toHand(it, hand);
+      c.sound?.('pickup');
+      c.say(pick(['ha! mine.', 'thank you.', 'gotcha']), 1.4);
+      c.mood.nudge({ happiness: 0.05 });
+      ch.handTarget = null;
+      return true;
+    }
+    return false;
+  }
+  stop(c: Ctx) {
+    c.char.handTarget = null;
+    if (this.item.where === 'hand') c.items.stow(this.item);
+  }
 }
 
 /** Desktop Goose move: run at your cursor, grab it, and drag it around for a moment. */

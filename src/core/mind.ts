@@ -15,10 +15,11 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  AvoidCursor, ChaseCursor, PuppetMove, Reattach, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
+  AskBack, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
-export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
+export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number }
+  | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number };
 
 interface Option { name: string; score: number; why: string; make: () => Skill }
 
@@ -97,6 +98,8 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   hunt: { annoyance: -0.15, energy: -0.04 },
   sleep: { happiness: 0.06 },
   reattach: { happiness: 0.08, fear: -0.1 },
+  swing: { boredom: -0.25, annoyance: -0.2, happiness: 0.03 },
+  pickup: { boredom: -0.05 },
 };
 
 /** Things you can tell him to do from the settings window. */
@@ -108,6 +111,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'doodle', label: 'Doodle' }, { name: 'grabcursor', label: 'Grab cursor (mischief)' }, { name: 'tantrum', label: 'Tantrum' }, { name: 'sulk', label: 'Sulk' },
   { name: 'wave', label: 'Wave' }, { name: 'laugh', label: 'Laugh' }, { name: 'shrug', label: 'Shrug' },
   { name: 'stomp', label: 'Stomp' }, { name: 'stretch', label: 'Stretch' }, { name: 'cower', label: 'Cower' },
+  { name: 'swing', label: 'Swing his sword' }, { name: 'slash', label: 'Attack the cursor' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
@@ -131,6 +135,8 @@ export class Mind {
   private chillUntil = 0;
   private boredOfCursor = 0;        // short breather between activities
   private lastCursorSeen = 0;
+  /** When you last took one of his things. */
+  private takenAt = -100;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
   /** While the AI brain is deciding what he does next, instinct waits until this time. */
@@ -266,9 +272,10 @@ export class Mind {
     c.look = 'default';
   }
 
-  /** Drop whatever he's doing and (optionally) do this next. */
+  /** Drop whatever he's doing (gestures too) and (optionally) do this next. */
   private interrupt(c: Ctx, next?: Skill) {
     this.end(c);
+    c.char.cancelGesture();
     this.queued = next ?? null;
   }
 
@@ -318,6 +325,7 @@ export class Mind {
       { name: 'stretch', score: 0.08 + (1 - s.energy) * 0.3, why: 'stiff', make: presets.stretch },
       { name: 'sigh', score: L === 'bored' ? 0.6 : 0, why: 'bored', make: presets.sigh },
       ...this.windowOptions(c),
+      ...this.itemOptions(c),
       { name: 'showoff', score: c.savedMoves?.length && (L === 'playful' || L === 'bored') && s.energy > 0.4 ? 0.3 : 0,
         why: 'showing off a move he learned', make: () => { const m = pick(c.savedMoves!); return new PlanSkill(this, [{ say: `${m.name}!` }, { move: m.frames, name: m.name }]); } },
       { name: 'doodle', score: c.world.time - this.lastDoodle > 90 && L !== 'sad' && L !== 'sleepy' ? 0.08 + s.boredom * 0.35 + (L === 'playful' ? 0.15 : 0) : 0,
@@ -325,6 +333,27 @@ export class Mind {
       { name: 'grabcursor', score: c.canGrabCursor && cursorActive && near && c.world.time - this.lastGrab > 60 && (L === 'playful' || L === 'bored' || L === 'angry') ? 0.7 : 0,
         why: L === 'angry' ? 'getting back at you' : 'feeling mischievous', make: () => { this.lastGrab = c.world.time; return new GrabCursor(); } },
     ];
+    return opts;
+  }
+
+  /** Using his things: swinging his sword, tidying up what's lying around, asking for what you took. */
+  private itemOptions(c: Ctx): Option[] {
+    const s = c.mood.s, L = c.mood.label, ch = c.char, w = c.world, opts: Option[] = [];
+    const sword = c.items.find('swing'), cur = w.cursor;
+    const near = !!cur && w.time - w.cursorMovedAt < 6 && Math.abs(cur.x - ch.x) < 220;
+    if (sword && (sword.where === 'belt' || sword.where === 'hand') && ch.useHand) {
+      opts.push({ name: 'swing', why: 'practicing his sword moves', score: L === 'playful' ? 0.35 : L === 'bored' ? 0.25 + s.boredom * 0.2 : 0.05, make: () => new SwordSwing(2, false) });
+      opts.push({ name: 'slash', why: 'going after your cursor with his sword', score: L === 'angry' && near ? 1.3 : 0, make: () => new SwordSwing(2, true) });
+    }
+    // His things lying around (you dropped them, or he did): pick them up and put them back on his belt.
+    const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
+    const lying = c.items.list.find((it) => it.where === 'world' && it.def.belt !== 'none' && it.at.y > feet - 60 * ch.scale && Math.abs(it.at.y - feet) < 120 * ch.scale);
+    if (lying && ch.useHand) opts.push({ name: 'pickup', why: `his ${lying.def.name.toLowerCase()} is on the floor`, score: L === 'sleepy' ? 0.3 : 1.6, make: () => new FetchItem(lying) });
+    // You've had one of his things for a while.
+    const taken = c.items.carried;
+    if (taken && w.time - this.takenAt > 15 && ch.useHand) {
+      opts.push({ name: 'askback', why: `wants his ${taken.def.name.toLowerCase()} back`, score: L === 'sad' || L === 'scared' ? 0.3 : 2.2 + s.boredom * 0.5, make: () => { this.takenAt = w.time; return new AskBack(taken); } });
+    }
     return opts;
   }
 
@@ -415,6 +444,30 @@ export class Mind {
       }
       case 'limbOn':
         if (!(this.skill instanceof Reattach)) c.say(pick(['oh. thanks.', 'click.', 'better']), 1.2);
+        return;
+      case 'itemTaken': {
+        m.nudge({ annoyance: 0.1, boredom: -0.2, trust: -0.01 });
+        this.why = `you took his ${e.name}`;
+        c.memory.count('itemsTaken');
+        c.say(pick([`hey! my ${e.name}`, 'HEY', `that's my ${e.name}!`, 'rude.']), 1.6);
+        this.takenAt = c.world.time;
+        if (ch.mode === 'ground' && !(this.skill instanceof Reattach)) this.interrupt(c, new Sequence('hey', [{ face: 'cursor' }, { gesture: 'shrug' }]));
+        return;
+      }
+      case 'itemDropped': {
+        // You dropped his thing: he goes and gets it (unless he's in the middle of something that matters more).
+        const it = c.items.list.find((x) => x.uid === e.uid);
+        const busy = this.skill && !['idle', 'wander', 'sit', 'sulk', 'explore', 'sigh', 'askback', 'hey'].includes(this.skill.name);
+        if (it && ch.useHand && !busy && ch.whole) {
+          if (chance(0.5)) c.say(pick(['hey, careful', 'my ' + e.name + '!', 'I got it']), 1.2);
+          this.interrupt(c, new FetchItem(it));
+          this.why = `you dropped his ${e.name}`;
+        }
+        return;
+      }
+      case 'itemGiven':
+        m.nudge({ happiness: 0.08, trust: 0.02, annoyance: -0.1 });
+        c.say(pick(['thanks!', 'oh, thanks', 'mine again', ':)']), 1.3);
         return;
       case 'poked': return this.onPoke(c);
 

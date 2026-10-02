@@ -10,10 +10,21 @@
     /* Preview mode (plain browser): fake a desktop so you can see him. */
     body.preview { background: linear-gradient(160deg, #2c3e50, #4a6278); }
     body.preview .hint { position: fixed; top: 10px; left: 12px; color: #fffa; font: 13px system-ui, sans-serif; }
+    /* The talk box: a chunky pixel-style text field that pops up above his head. */
+    #talk { position: fixed; display: none; gap: 0; transform: translate(-50%, -100%); filter: drop-shadow(3px 3px 0 #0006); }
+    #talk.open { display: flex; }
+    #talk input, #talk button { font: 15px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #1b1d2e; background: #fff;
+      border: 3px solid var(--ink, #232a6b); border-radius: 0; padding: 7px 9px; outline: none; }
+    #talk input { width: 230px; border-right: 0; }
+    #talk button { background: var(--ink, #232a6b); color: #fff; cursor: pointer; padding: 7px 10px; }
+    #talk .x { background: #fff; color: var(--ink, #232a6b); border-left: 0; }
+    #talk::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 9px; height: 9px; background: var(--ink, #232a6b);
+      clip-path: polygon(0 0, 100% 0, 50% 100%); }
   </style>
 </head>
 <body>
   <canvas id="stage"></canvas>
+  <form id="talk" autocomplete="off"><input id="talkText" maxlength="300" placeholder="say something…" spellcheck="false" /><button type="submit">↵</button><button class="x" type="button" id="talkClose" title="Close (Esc)">✕</button></form>
   <script src="renderer.js"></script>
 </body>
 </html>

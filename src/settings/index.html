@@ -104,6 +104,7 @@
       <button role="tab" data-tab="chat" aria-selected="false">Chat</button>
       <button role="tab" data-tab="mood" aria-selected="true">Mood</button>
       <button role="tab" data-tab="mind" aria-selected="false">Mind</button>
+      <button role="tab" data-tab="items" aria-selected="false">Items</button>
       <button role="tab" data-tab="look" aria-selected="false">Look</button>
       <button role="tab" data-tab="body" aria-selected="false">Movement</button>
       <button role="tab" data-tab="him" aria-selected="false">General</button>
@@ -189,6 +190,23 @@
           </div>
         </div>
         <p class="note">His notes, in his words: things about you, things that happened, his opinions. With an AI brain on, he writes his own and every so often the AI tidies them into the summary. Offline, he still counts what you do to him and remembers it. Click a note to edit it; your edits are his memories now. Saved in memory.json next to his settings.</p>
+      </div>
+    </section>
+
+    <section data-panel="items" hidden>
+      <div class="group">
+        <h2>His belt</h2>
+        <div class="card"><div id="itemList" class="list"></div></div>
+        <p class="note">He wears a belt with three slots: left hip, right hip, and his back. His pen lives on his hip (he draws with it) and his wooden sword on his back. Right-click him on the desktop to take something; it dangles from your cursor (swing it at him if you're feeling mean). Click him to give it back, or click anywhere else to drop it. He'll ask for his things back, and pick them up if they're lying around.</p>
+      </div>
+      <div class="group">
+        <h2>Give him something</h2>
+        <div class="chips" id="itemKinds"></div>
+      </div>
+      <div class="group">
+        <h2>Make your own</h2>
+        <div class="btns"><button class="btn ghost" id="openItems" type="button">Open items folder</button><button class="btn ghost" id="reloadItems" type="button">Reload items</button></div>
+        <p class="note">Every item is a small .json file. Copy one of the examples in the folder (pen.json, wooden-sword.json), change the name, the length, the colors and the shape, save it, then click Reload items. The README.md in the folder explains every field.</p>
       </div>
     </section>
 

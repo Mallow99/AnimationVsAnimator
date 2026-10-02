@@ -11,7 +11,8 @@ interface Weigh { name: string; score: number; why: string }
 interface Drawing { title: string; shape: { x: number; y: number }[][]; color: string; at: number }
 interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at: number; by: 'him' | 'ai' | 'you'; weight: number }
 interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
-interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView }
+interface ItemsView { kinds: { id: string; name: string; about: string; use: string; drawn: boolean }[]; list: { uid: number; id: string; name: string; where: 'belt' | 'hand' | 'world' | 'cursor'; slot: number; drawn: boolean }[] }
+interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView; items?: ItemsView }
 interface Stats {
   name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number;
   brain: { active: boolean; status: string; log: LogLine[] };
@@ -31,6 +32,8 @@ interface Shell {
   setKey(key: string): void;
   onTab(cb: (tab: string) => void): void;
   onCollections(cb: (c: Collections) => void): void;
+  openItemsFolder(): void;
+  reloadItems(): void;
 }
 const shell = (window as unknown as { petShell: Shell }).petShell;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -129,7 +132,7 @@ const DOING: Record<string, string> = {
   again: 'Wants to go again', mope: 'Moping', 'shake-off': 'Shaking it off', wave: 'Waving', laugh: 'Laughing', stomp: 'Stomping',
   cower: 'Cowering', explore: 'Exploring', climb: 'Climbing onto a window', monkeybars: 'Monkey bars', climbwall: 'Climbing', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
   getup: 'Getting up', ground: 'Standing', lie: 'Lying down', ceiling: 'Hanging from the top of the screen',
-  reattach: 'Getting his limb back', loseArm: 'Taking his arm off', loseLeg: 'Taking his leg off', move: 'Doing a made-up move',
+  reattach: 'Getting his limb back', swing: 'Swinging his sword', slash: 'Attacking your cursor', pickup: 'Picking his stuff up', askback: 'Asking for his stuff back', hey: 'Hey!', loseArm: 'Taking his arm off', loseLeg: 'Taking his leg off', move: 'Doing a made-up move',
 };
 shell.onStats((s) => {
   for (const [k] of MOOD_ROWS) {
@@ -291,13 +294,13 @@ function askName(i: number, suggested: string) {
   $('recentMoves').prepend(form);
   input.focus(); input.select();
 }
-function moveRow(name: string, poses: number, buttons: [string, () => void][]) {
+function moveRow(name: string, poses: number, buttons: [string, () => void][], detail?: string) {
   const row = document.createElement('div');
   row.className = 'row';
   const label = document.createElement('span');
   label.textContent = name;
   const info = document.createElement('small');
-  info.textContent = `${poses} poses`;
+  info.textContent = detail ?? `${poses} poses`;
   row.append(label, info);
   for (const [text, fn] of buttons) {
     const b = document.createElement('button');
@@ -350,7 +353,26 @@ shell.onCollections((c) => {
     return fig;
   }).reverse() : [emptyNote('No drawings yet.')]));
 });
-shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); });
+shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); if (c.items) renderItems(c.items); });
+
+// ── Items tab ──
+const SLOTS = ['left hip', 'right hip', 'back'];
+function renderItems(v: ItemsView) {
+  const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `on his belt (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'world' ? 'lying around' : 'you have it';
+  $('itemList').replaceChildren(...(v.list.length ? v.list.map((it) => moveRow(it.name + (it.drawn ? ' (drawn)' : ''), 0, [
+    ...(it.where === 'belt' || it.where === 'hand' ? [['Take', () => shell.command(`item:take:${it.uid}`)] as [string, () => void]] : []),
+    ...(it.where === 'cursor' || it.where === 'world' ? [['Give back', () => shell.command(`item:return:${it.uid}`)] as [string, () => void]] : []),
+    ['Throw away', () => shell.command(`item:remove:${it.uid}`)],
+  ], where(it))) : [emptyNote('He has nothing. Give him something below.')]));
+  $('itemKinds').replaceChildren(...v.kinds.filter((k) => !k.drawn).map((k) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.textContent = k.name; b.title = k.about;
+    b.addEventListener('click', () => shell.command(`item:give:${k.id}`));
+    return b;
+  }));
+}
+$('openItems').addEventListener('click', () => shell.openItemsFolder());
+$('reloadItems').addEventListener('click', () => shell.reloadItems());
 shell.command('sync'); // ask him for his drawings, moves and memories
 
 // ── Mind tab: memories ──
