@@ -19,7 +19,7 @@
 
 import { Body, JOINTS, LIMB_JOINTS, LIMBS, limbOf, makeDims, type Dims, type JointName, type LimbId } from './body';
 import { LooseLimb } from './limbs';
-import { collide, collidePlatforms, FLOOR, integrate, NONE, solveSticks, type Bounds, type Platform } from './physics';
+import { collide, collidePlatforms, FLOOR, integrate, NONE, platY, solveSticks, type Bounds, type Platform } from './physics';
 import {
   basis, clamp, dist, dist3, distToSegment, inFrame, lerp, lerp3, sign, smooth, twoBoneIK, twoBoneIK3, type Basis, type V3, type Vec,
 } from './math';
@@ -559,10 +559,57 @@ export class Character {
     this.running = run;
   }
 
-  /** Left/right ends of what he's standing on. */
+  /** The surface at x that's within a small step (up `up` or down `down` px) of height y: a platform, the floor, or null. */
+  private stepAt(x: number, y: number, up: number, down: number, not = NONE): { id: number; x1: number; x2: number } | null {
+    let best: { id: number; x1: number; x2: number; y: number } | null = null;
+    for (const p of this.platforms) {
+      if (p.id === not || x < p.x1 || x > p.x2) continue;
+      const py = platY(p, x);
+      if (py >= y - up && py <= y + down && (!best || Math.abs(py - y) < Math.abs(best.y - y))) best = { id: p.id, x1: p.x1, x2: p.x2, y: py };
+    }
+    if (best) return best;
+    const f = this.bounds.floor;
+    return f >= y - up && f <= y + down && not !== FLOOR ? { id: FLOOR, x1: this.bounds.left + 20, x2: this.bounds.right - 20 } : null;
+  }
+
+  /**
+   * Walking onto a low surface (the foot of a ramp, a low step) or off one onto something just
+   * below: he just steps, no jump and no fall.
+   */
+  private stepUpOrDown() {
+    const sc = this.scale, x = this.rootX, g = this.groundY();
+    for (const p of this.platforms) {
+      if (p.id === this.support || x < p.x1 + 2 || x > p.x2 - 2) continue;
+      const y = platY(p, x);
+      if (y < g - 0.5 && y >= g - 12 * sc) { this.support = p.id; return; }
+    }
+    const p = this.supportPlatform();
+    if (p && (x < p.x1 - 2 * sc || x > p.x2 + 2 * sc)) {
+      const end = platY(p, x < p.x1 ? p.x1 : p.x2);
+      const next = this.stepAt(x, end, 12 * sc, 14 * sc, p.id);
+      if (next) this.support = next.id;
+    }
+  }
+
+  /** Left/right ends of where he can walk from here without jumping (low steps onto ramps, floors and windows count). */
   surfaceRange() {
     const p = this.supportPlatform();
-    return p ? { x1: p.x1, x2: p.x2 } : { x1: this.bounds.left + 20, x2: this.bounds.right - 20 };
+    const r = p ? { x1: p.x1, x2: p.x2 } : { x1: this.bounds.left + 20, x2: this.bounds.right - 20 };
+    if (!p) return r;
+    const sc = this.scale;
+    // Follow low steps off either end (at most a few hops: ramp → floor, ramp → window top...).
+    let left: Platform | null = p, right: Platform | null = p;
+    for (let hop = 0; hop < 3 && (left || right); hop++) {
+      if (left) {
+        const n = this.stepAt(left.x1 - 4 * sc, platY(left, left.x1), 12 * sc, 14 * sc, left.id);
+        if (n && n.x1 < r.x1) { r.x1 = n.x1; left = n.id === FLOOR ? null : this.platforms.find((q) => q.id === n.id) ?? null; } else left = null;
+      }
+      if (right) {
+        const n = this.stepAt(right.x2 + 4 * sc, platY(right, right.x2), 12 * sc, 14 * sc, right.id);
+        if (n && n.x2 > r.x2) { r.x2 = n.x2; right = n.id === FLOOR ? null : this.platforms.find((q) => q.id === n.id) ?? null; } else right = null;
+      }
+    }
+    return r;
   }
 
   /** The window top he's standing on, if any. */
@@ -591,11 +638,12 @@ export class Character {
       return;
     }
     if (!onIt) return;
-    const dy = now.y - before.y;
+    const dy = platY(now, this.x) - platY(before, this.x);
     // Use the window's own position when we know it (covering part of the edge
     // changes the edge's ends but doesn't move the window).
     const dx = now.wx !== undefined && before.wx !== undefined ? now.wx - before.wx
-      : Math.abs((now.x1 - before.x1) - (now.x2 - before.x2)) < 1 ? now.x1 - before.x1 : 0;
+      : Math.abs((now.x1 - before.x1) - (now.x2 - before.x2)) < 1 ? now.x1 - before.x1
+        : now.win === undefined && Math.abs((now.x2 - now.x1) - (before.x2 - before.x1)) < 3 ? ((now.x1 + now.x2) - (before.x1 + before.x2)) / 2 : 0;
     if (!dx && !dy) return;
     this.body.translate(dx, dy);
     this.rootX += dx;
@@ -1017,6 +1065,7 @@ export class Character {
         break;
       }
       case 'ground': {
+        this.stepUpOrDown();
         if (this.support >= 0) {
           const p = this.supportPlatform();
           const edge = 3 * this.scale;
@@ -1088,7 +1137,11 @@ export class Character {
 
   // ───────────────────────── poses ─────────────────────────
 
-  private groundY() { return this.supportPlatform()?.y ?? this.bounds.floor; }
+  /** The ground under him at x (what he's standing on; slopes go up and down). */
+  private groundY(x = this.rootX) {
+    const p = this.supportPlatform();
+    return p ? platY(p, x) : this.bounds.floor;
+  }
 
   /** Half the distance between his feet when standing. */
   private stanceHalf() { return (this.d.thigh + this.d.shin) * (0.04 + 0.2 * this.style.spread); }
@@ -1109,14 +1162,15 @@ export class Character {
    * one back, and out to his sides), so he reads as an upside-down V from any angle.
    */
   private standFoot(k: 'L' | 'R', yaw = this.yaw, x = this.rootX): V3 {
-    if (this.legCount === 1) return this.off(this.pt(x, this.groundY() - 2), 1 * this.scale, 0, sideOf(k) * 1.5 * this.scale, yaw);
+    if (this.legCount === 1) return this.off(this.pt(x, this.groundY(x) - 2), 1 * this.scale, 0, sideOf(k) * 1.5 * this.scale, yaw);
     const st = this.stanceHalf();
-    return this.off(this.pt(x, this.groundY() - 2), -sideOf(k) * st, 0, sideOf(k) * st, yaw);
+    return this.off(this.pt(x, this.groundY(x) - 2), -sideOf(k) * st, 0, sideOf(k) * st, yaw);
   }
 
   private groundPose(dt: number, t: Targets, s: Strengths) {
     const d = this.d, P = this.posture, sc = this.scale, j = this.body.j;
-    const floor = this.groundY();
+    // On a slope, his hips go by the lower foot (the uphill knee bends).
+    const floor = this.supportPlatform()?.y2 !== undefined ? Math.max(this.groundY(this.feet.L.x), this.groundY(this.feet.R.x)) : this.groundY();
 
     if (this.surf) this.crouch = Math.max(this.crouch, 12 * sc);
     // Jump wind-up: crouch, then spring.
@@ -1228,7 +1282,8 @@ export class Character {
       }
     }
     let swingT = 0;
-    const footY: Record<'L' | 'R', number> = { L: floor, R: floor };
+    // (On a slope each foot stands on its own bit of ground.)
+    const footY: Record<'L' | 'R', number> = { L: this.groundY(this.feet.L.x), R: this.groundY(this.feet.R.x) };
     for (const k of ['L', 'R'] as const) {
       const ft = this.feet[k];
       if (!ft.swinging) continue;
@@ -1240,7 +1295,7 @@ export class Character {
       ft.x = lerp(ft.fromX, ft.toX, smooth(u));
       ft.z = lerp(ft.fromZ, ft.toZ, smooth(u));
       // Stomping: slow lift, fast slam.
-      footY[k] = floor - Math.sin(Math.PI * (this.gait === 'stomp' && moving ? u ** 1.6 : u)) * ft.lift;
+      footY[k] = this.groundY(ft.x) - Math.sin(Math.PI * (this.gait === 'stomp' && moving ? u ** 1.6 : u)) * ft.lift;
       swingT = u;
       if (ft.t >= 1) { ft.swinging = false; if (moving || ft.lift > 4 * sc) this.events.push({ type: 'step' }); }
     }

@@ -4,7 +4,7 @@
 import type { Vec } from './math';
 
 /** What a drawing turns into when it comes to life (Animator vs. Animation style). */
-export type Becomes = 'ball' | 'box' | 'platform' | 'item';
+export type Becomes = 'ball' | 'box' | 'platform' | 'item' | 'ramp' | 'bridge';
 
 export interface Doodle {
   strokes: Vec[][]; color: string; born: number; done: boolean;
@@ -20,6 +20,8 @@ export interface Doodle {
   win?: number; wx?: number; wy?: number;
   /** Already checked whether it was drawn on a window. */
   anchored?: boolean;
+  /** Which way a ramp goes up (+1 = toward the right). */
+  dir?: number;
 }
 
 const arc = (cx: number, cy: number, r: number, a0: number, a1: number, n = 18): Vec[] =>
@@ -43,6 +45,10 @@ export const LIVE_SHAPES: Record<string, Vec[][]> = {
   ball: [arc(0, 0, 0.45, 0, Math.PI * 2, 24), arc(0, 0.9, 0.75, -Math.PI * 0.68, -Math.PI * 0.32, 8)],
   box: [[{ x: -0.45, y: -0.45 }, { x: 0.45, y: -0.45 }, { x: 0.45, y: 0.45 }, { x: -0.45, y: 0.45 }, { x: -0.45, y: -0.45 }], [{ x: -0.45, y: -0.45 }, { x: 0.45, y: 0.45 }], [{ x: 0.45, y: -0.45 }, { x: -0.45, y: 0.45 }]],
   platform: [[{ x: -0.5, y: -0.05 }, { x: 0.5, y: -0.05 }, { x: 0.5, y: 0.06 }, { x: -0.5, y: 0.06 }, { x: -0.5, y: -0.05 }], [{ x: -0.3, y: -0.05 }, { x: -0.3, y: 0.06 }], [{ x: 0.1, y: -0.05 }, { x: 0.1, y: 0.06 }]],
+  // A wedge: base along the bottom, slope up to the right, back edge down.
+  ramp: [[{ x: -0.5, y: 0.45 }, { x: 0.5, y: 0.45 }], [{ x: -0.5, y: 0.45 }, { x: 0.5, y: -0.2 }], [{ x: 0.5, y: -0.2 }, { x: 0.5, y: 0.45 }]],
+  // A rope bridge: a plank at each end (stuck into the wall), and a string between them.
+  bridge: [[{ x: -0.5, y: 0 }, { x: -0.3, y: 0 }], [{ x: -0.3, y: 0 }, { x: 0, y: 0.08 }, { x: 0.3, y: 0 }], [{ x: 0.3, y: 0 }, { x: 0.5, y: 0 }]],
   sword: [[{ x: 0, y: 0.5 }, { x: 0, y: 0.28 }], [{ x: -0.13, y: 0.28 }, { x: 0.13, y: 0.28 }], [{ x: -0.05, y: 0.28 }, { x: -0.05, y: -0.4 }, { x: 0, y: -0.5 }, { x: 0.05, y: -0.4 }, { x: 0.05, y: 0.28 }]],
 };
 

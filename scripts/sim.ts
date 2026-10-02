@@ -865,6 +865,71 @@ function calmPet() {
   check('a ball thrown at him bonks him', got.includes('bonked'), got.join(','));
 }
 
+// ───── drawings with real physics ─────
+{ // A box drawn in mid-air falls, lands, and a second one stacks on it.
+  const pet = calmPet();
+  pet.paused = true;
+  const mk = (cx: number, cy: number) => pet.props.bringToLife({ strokes: [], color: '#000', born: pet.ctx.world.time, done: true, shape: [], cx, cy, size: 50 }, 'box', bounds);
+  mk(300, 400); petFor(2, pet);
+  const first = pet.props.things[0];
+  mk(305, 300); petFor(2.5, pet);
+  const second = pet.props.things[1];
+  const b1 = Math.max(...first.points.map((q) => q.y)), b2 = Math.max(...second.points.map((q) => q.y)), t1 = Math.min(...first.points.map((q) => q.y));
+  check('drawn boxes fall and stack', Math.abs(b1 - 800) < 3 && Math.abs(b2 - t1) < 4, `bottom1=${b1.toFixed(0)} bottom2=${b2.toFixed(0)} top1=${t1.toFixed(0)}`);
+}
+{ // A ledge stays stuck in the air until you pull it loose; then it falls.
+  const pet = calmPet();
+  pet.paused = true;
+  pet.props.bringToLife({ strokes: [], color: '#000', born: pet.ctx.world.time, done: true, shape: [], cx: 400, cy: 500, size: 80 }, 'platform', bounds);
+  const ledge = pet.props.things[0];
+  petFor(2, pet);
+  const stillStuck = ledge.stuck && Math.abs(ledge.center.y - 500) < 2;
+  pet.pointerDown(400, 500, 0);
+  for (let i = 0; i < 20; i++) { pet.pointerMove(400, 500 + i * 3, 0, 180, 100 + i * 16); petFor(1 / 60, pet); }
+  pet.pointerUp(400, 560);
+  petFor(2, pet);
+  check('ledge: stuck in the air, pulled loose it falls', stillStuck && !ledge.stuck && ledge.center.y > 780, `stuck before=${stillStuck} now=${ledge.stuck} y=${ledge.center.y.toFixed(0)}`);
+}
+{ // A punch knocks a stuck ledge loose too.
+  const pet = calmPet();
+  pet.paused = true;
+  const j = pet.char.body.j;
+  pet.props.bringToLife({ strokes: [], color: '#000', born: pet.ctx.world.time, done: true, shape: [], cx: pet.char.x + 34, cy: j.neck.y, size: 50 }, 'platform', bounds);
+  const ledge = pet.props.things[0];
+  pet.char.facing = 1;
+  pet.char.doGesture('punch', { x: pet.char.x + 34, y: j.neck.y });
+  petFor(2, pet);
+  check('ledge: a punch knocks it loose', !ledge.stuck, `stuck=${ledge.stuck}`);
+}
+{ // A bridge between two windows sags, and sags more with him on it.
+  const pet = calmPet();
+  pet.paused = true;
+  pet.setWindows([{ id: 1, x: 100, y: 500, w: 300, h: 300 }, { id: 2, x: 700, y: 500, w: 300, h: 300 }]);
+  petFor(0.3, pet);
+  const d = { strokes: [], color: '#000', born: pet.ctx.world.time, done: true, shape: [], cx: 550, cy: 500, size: 300 };
+  const br = (() => { pet.props.bringToLife(d, 'bridge', bounds); return pet.props.things[0]; })();
+  petFor(3, pet);
+  const mid = () => br.points[Math.floor(br.points.length / 2)].y;
+  const empty = mid();
+  pet.char.body.translate(550 - pet.char.x, 440 - pet.char.body.j.footL.y); pet.char.mode = 'air';
+  petFor(3, pet);
+  const onIt = pet.props.thingOf(pet.char.support) === br, loaded = mid();
+  check('bridge: sags, and sags more with him on it', empty > 503 && onIt && loaded > empty + 4, `empty=${empty.toFixed(0)} with him=${loaded.toFixed(0)} onIt=${onIt}`);
+}
+{ // A ramp: he walks onto it from the floor, up it, and onto the window it leans on.
+  const pet = calmPet();
+  pet.setWindows([{ id: 1, x: 900, y: 650, w: 400, h: 150 }]);
+  pet.paused = true; petFor(0.3, pet);
+  const { makeRamp } = await import('../src/core/props');
+  const r = makeRamp({ strokes: [], color: '#000', born: pet.ctx.world.time, done: true }, 640, 902, 800, 649);
+  pet.props.add(r);
+  petFor(1, pet);
+  pet.char.walkTo(1100);
+  let onRamp = false, fell = false;
+  petFor(14, pet, () => { if (pet.props.thingOf(pet.char.support) === r) onRamp = true; if (pet.char.mode === 'air' && onRamp && pet.char.support < 0 && pet.char.body.j.hip.y > 700) fell = true; });
+  check('ramp: walks up it onto the window, no jumping', onRamp && pet.char.supportPlatform()?.win === 1 && Math.abs(pet.char.x - 1100) < 25, `onRamp=${onRamp} support=${pet.char.support} x=${pet.char.x.toFixed(0)} fell=${fell}`);
+}
+
 // ───── memories (milestone 5) ─────
 function throwHim(pet: Pet) {
   const c = pet.char, n = c.body.j.neck;
@@ -1117,8 +1182,9 @@ function events(pet: Pet) {
   // (Keep poking fast and annoyed turns into angry: that's on purpose.)
   const names: string[] = [];
   for (let i = 0; i < 14; i++) {
-    pet.command('mood:annoyed'); pet.mood.s.annoyance = 0.42;
-    pet.mind.reset(pet.ctx); petFor(6.5, pet);
+    pet.mind.reset(pet.ctx); pet.paused = true; petFor(6.5, pet); pet.paused = false;
+    if (pet.char.mode === 'sit' || pet.char.mode === 'lie') { pet.char.standUp(); petFor(1.5, pet); }
+    pet.command('mood:annoyed'); pet.mood.s.annoyance = 0.42; pet.mood.flash = null; // (the proud flash from above, frozen while paused)
     (pet as unknown as { poke(j: string, x: number): void }).poke('neck', pet.char.x + 10); petFor(0.1, pet);
     names.push(pet.mind.skill?.name ?? '-');
   }

@@ -17,15 +17,32 @@ export interface Point {
 
 export const FLOOR = -1, NONE = -2;
 
-/** A surface he can stand on: the visible part of a window's top edge. One-way (you can jump up through it). */
+/**
+ * A surface he can stand on: the visible part of a window's top edge, or the top of something he drew.
+ * One-way (you can jump up through it). Usually flat; `y2` makes it a slope (y at x1 is `y`, at x2 is `y2`).
+ */
 export interface Platform {
   id: number; x1: number; x2: number; y: number;
+  /** y at the right end, for a slope (a ramp, a tilted box, a sagging bridge plank). Left out = flat. */
+  y2?: number;
+  /** How far it moved up since the last step (things he drew move): lets what's resting on it stay on. */
+  lift?: number;
   win?: number; // which window this edge belongs to
   wx?: number;  // that window's left x (to tell real moves from parts getting covered)
 }
 
-/** A bone. `minOnly`: only keeps the ends from getting too close. `off`: broken (a limb came off). */
-export interface Stick { a: Point; b: Point; len: number; minOnly?: boolean; off?: boolean }
+/** How high a platform's surface is at x (slopes are straight lines between their ends). */
+export function platY(p: Platform, x: number) {
+  if (p.y2 === undefined || p.x2 <= p.x1) return p.y;
+  const u = Math.min(1, Math.max(0, (x - p.x1) / (p.x2 - p.x1)));
+  return p.y + (p.y2 - p.y) * u;
+}
+
+/**
+ * A bone. `minOnly`: only keeps the ends from getting too close. `off`: broken (a limb came off).
+ * `stiff` (0..1, default 1): how hard it pulls back each pass; less = stretchy (a rope bridge).
+ */
+export interface Stick { a: Point; b: Point; len: number; minOnly?: boolean; off?: boolean; stiff?: number }
 
 /**
  * The space he lives in. In milestone 3 window tops became extra floors.
@@ -61,7 +78,7 @@ export function solveSticks(sticks: Stick[]) {
     if (s.minOnly && d >= s.len) continue;
     const w = s.a.invMass + s.b.invMass;
     if (w === 0) continue;
-    const diff = (d - s.len) / d / w;
+    const diff = ((d - s.len) / d / w) * (s.stiff ?? 1);
     s.a.x += dx * diff * s.a.invMass; s.a.y += dy * diff * s.a.invMass; s.a.z += dz * diff * s.a.invMass;
     s.b.x -= dx * diff * s.b.invMass; s.b.y -= dy * diff * s.b.invMass; s.b.z -= dz * diff * s.b.invMass;
   }
@@ -101,8 +118,8 @@ export function collidePlatforms(points: Point[], platforms: Platform[], frictio
     if (p.invMass === 0) continue;
     for (const pl of platforms) {
       if (p.x < pl.x1 || p.x > pl.x2) continue;
-      const top = pl.y - p.r;
-      if (p.py <= top + 0.5 && p.y > top) {
+      const top = platY(pl, p.x) - p.r, before = (pl.y2 === undefined ? top : platY(pl, p.px) - p.r) + 0.5 + (pl.lift ?? 0);
+      if (p.py <= before && p.y > top) {
         const vy = p.y - p.py;
         p.y = top;
         p.py = p.y + vy * bounce;

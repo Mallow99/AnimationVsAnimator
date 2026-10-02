@@ -4,7 +4,7 @@
 // A window's top edge is a platform — but only the parts of it you can actually
 // see. If another window in front covers part of that edge, he can't stand there.
 
-import type { Bounds, Platform } from './physics';
+import { platY, type Bounds, type Platform } from './physics';
 
 export interface WinRect { id: number; x: number; y: number; w: number; h: number }
 
@@ -40,7 +40,7 @@ export function windowPlatforms(wins: WinRect[], bounds: Bounds, minWidth = 40, 
 /** The highest surface directly below (x, y): a platform's y, or the floor. */
 export function surfaceBelow(x: number, y: number, platforms: Platform[], floor: number): { y: number; id: number } {
   let best = { y: floor, id: -1 };
-  for (const p of platforms) if (x >= p.x1 && x <= p.x2 && p.y >= y && p.y < best.y) best = { y: p.y, id: p.id };
+  for (const p of platforms) { const py = platY(p, x); if (x >= p.x1 && x <= p.x2 && py >= y && py < best.y) best = { y: py, id: p.id }; }
   return best;
 }
 

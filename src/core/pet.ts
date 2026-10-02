@@ -11,7 +11,7 @@ import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowSides, windowWalls, type WinRect } from './world';
 import { beltParts, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
 import { drawItem, itemFromDrawing, Items, type Item } from './items';
-import { Props, type Ball } from './props';
+import { Props, type Ball, type Thing } from './props';
 import type { Doodle } from './doodles';
 import type { Platform } from './physics';
 import type { LooseLimb } from './limbs';
@@ -55,7 +55,7 @@ export class Pet {
   /** Turn his mind off (for debugging poses by hand). */
   paused = false;
   private acc = 0;
-  private press: { joint: JointName; limb?: { piece: LooseLimb; idx: number }; ball?: Ball; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
+  private press: { joint: JointName; limb?: { piece: LooseLimb; idx: number }; ball?: Ball; thing?: Thing; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
   /** His drawings that came to life: balls, boxes, ledges. */
   readonly props = new Props();
   private windowPlats: Platform[] = [];
@@ -184,7 +184,10 @@ export class Pet {
     this.smoothWindows(dt);
     while (this.acc >= STEP) {
       this.char.step(STEP);
-      this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.ctx.world.platforms);
+      // Standing on something he drew: his weight pushes on it (a bridge sags under him).
+      const under = this.props.thingOf(this.char.support);
+      if (under && (this.char.mode === 'ground' || this.char.mode === 'sit')) under.carry(this.char.support, this.char.x);
+      this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.windowPlats);
       this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms);
       this.ballContact();
       this.acc -= STEP;
@@ -575,7 +578,9 @@ export class Pet {
   }
 
   /** Is the cursor over him, one of his loose limbs, or one of his things? (decides whether clicks reach us or the desktop) */
-  hit(x: number, y: number) { return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null || this.items.hitWorld(x, y) !== null || this.props.ballAt(x, y) !== null; }
+  hit(x: number, y: number) {
+    return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null || this.items.hitWorld(x, y) !== null || this.props.ballAt(x, y) !== null || this.props.thingAt(x, y) !== null;
+  }
 
   private emit(e: MindEvent) {
     this.remember(e);
@@ -690,6 +695,14 @@ export class Pet {
       // Not him: maybe one of his limbs lying around, or one of his things.
       const limb = this.char.hitLimb(x, y);
       if (limb) { this.press = { joint: 'hip', limb, x, y, t: now, moved: false, grabbed: false }; return true; }
+      const thing = this.props.thingAt(x, y);
+      if (thing && !this.items.hitWorld(x, y) && !this.props.ballAt(x, y)) {
+        // One of his drawings: grab it and drag it around (a stuck ledge pops loose if you pull hard).
+        thing.grab(x, y);
+        this.press = { joint: 'hip', thing, x, y, t: now, moved: true, grabbed: true };
+        this.sound('pickup', 0.4);
+        return true;
+      }
       const ball = this.props.ballAt(x, y);
       if (ball) { ball.grab(x, y); this.press = { joint: 'hip', ball, x, y, t: now, moved: true, grabbed: true }; return true; }
       const it = this.items.hitWorld(x, y);
@@ -710,6 +723,7 @@ export class Pet {
       if (p.limb) this.char.grabLimb(p.limb.piece, p.limb.idx, x, y);
       else this.char.grab(p.joint, x, y);
     }
+    if (p.thing?.held) Object.assign(p.thing.held, { x, y, vx, vy });
     if (p.ball) p.ball.moveHold(x, y, vx, vy);
     else if (p.grabbed) this.char.moveHold(x, y, vx, vy);
   }
@@ -720,6 +734,7 @@ export class Pet {
     if (!p) return;
     this.press = null;
     if (p.ball) { p.ball.release(); return; }
+    if (p.thing) { p.thing.release(); return; }
     if (p.grabbed) { this.char.release(); return; }
     if (p.limb) { const q = p.limb.piece.points[p.limb.idx]; q.px = q.x + Math.sign(q.x - x || 1) * -3; q.py = q.y + 4; return; } // flick it
     // A quick click: a poke, as soon as it's clear this wasn't a double-click.
@@ -911,6 +926,16 @@ export class Pet {
         return;
       }
     }
+    // Something he drew: a punch or kick shoves it (and knocks a stuck ledge loose).
+    const th = this.props.thingAt(p.x, p.y);
+    if (th && (Math.abs(jv.x) + Math.abs(jv.y) > 250)) {
+      this.lastStrike = st.id;
+      const loose = st.power > 0.5 && th.unstick();
+      th.hit(p.x, p.y, jv.x * 0.5 + this.char.facing * 250 * st.power, jv.y * 0.4 - 120 * st.power);
+      this.sound(loose ? 'snap' : 'kick', 0.7);
+      this.burstAt(p.x, p.y, loose ? 12 : 5);
+      return;
+    }
     for (const b of this.props.balls) {
       if (b.heldBy || Math.hypot(b.x - p.x, b.y - p.y) > b.r + 6 * sc) continue;
       this.lastStrike = st.id;
@@ -950,6 +975,17 @@ export class Pet {
         other.push(v.x * 0.7, Math.min(v.y * 0.7, -120) - 150);
         other.thrownAt = w.time;
         this.sound('clang', 0.5);
+      }
+      for (const th of this.props.things) {
+        if (!ready(th)) continue;
+        const tip = it.tip, mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const at = th.contains(tip.x, tip.y) ? tip : th.contains(mid.x, mid.y) ? mid : null;
+        if (!at) continue;
+        this.bladeCooldown.set(th, w.time + 0.35);
+        const loose = it.tipSpeed > 700 && th.unstick();
+        th.hit(at.x, at.y, v.x * 0.6, v.y * 0.6 - 100);
+        this.sound(loose ? 'snap' : it.def.use === 'smash' ? 'bonk' : 'clang', 0.7);
+        this.burstAt(at.x, at.y, loose ? 12 : 6);
       }
       for (const piece of this.char.missing.values()) {
         if (piece.heldBy || !ready(piece) || seg(piece.root.x, piece.root.y) > 8 * sc) continue;

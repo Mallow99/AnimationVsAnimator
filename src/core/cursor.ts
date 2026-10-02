@@ -7,7 +7,7 @@
 // every pointer position, including the ones we just put it at. So we keep a short trail
 // of where we put it; a reported position near that trail is an echo of our own move.
 
-import { GRAVITY, type Bounds, type Platform } from './physics';
+import { GRAVITY, platY, type Bounds, type Platform } from './physics';
 import type { Vec } from './math';
 
 export interface Flight { x: number; y: number; vx: number; vy: number; t: number; bounces: number; spin: number }
@@ -64,7 +64,7 @@ export class CursorBody {
       if (f.y < bounds.top + 2) { f.y = bounds.top + 2; f.vy = Math.abs(f.vy) * 0.5; f.bounces++; }
       // Window tops catch it (only from above, like they catch him) and so does the floor.
       let ground = bounds.floor - 3;
-      for (const p of platforms) if (f.x >= p.x1 && f.x <= p.x2 && py <= p.y && f.y >= p.y) ground = Math.min(ground, p.y - 1);
+      for (const p of platforms) { const top = platY(p, f.x); if (f.x >= p.x1 && f.x <= p.x2 && py <= top && f.y >= top) ground = Math.min(ground, top - 1); }
       if (f.y >= ground) {
         f.y = ground;
         onGround = true;
