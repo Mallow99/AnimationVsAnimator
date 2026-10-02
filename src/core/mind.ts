@@ -10,7 +10,8 @@
 // Later an LLM mind can sit on top of this: same skills, same mood, it just
 // gets a say in the choices and adds real words.
 
-import type { CharEvent } from './character';
+import type { CharEvent, Gesture } from './character';
+import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
   AvoidCursor, ChaseCursor, ClimbOnto, dropFrom, GetDown, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
@@ -18,7 +19,34 @@ import {
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
 
-interface Option { name: string; score: number; make: () => Skill }
+interface Option { name: string; score: number; why: string; make: () => Skill }
+
+/** What finishing an activity does to his mood. Gives his feelings real causes. */
+const AFTERGLOW: Record<string, Partial<MoodState>> = {
+  dance: { boredom: -0.3, happiness: 0.06, energy: -0.04 },
+  hop: { boredom: -0.1, happiness: 0.02, energy: -0.02 },
+  chase: { boredom: -0.35, happiness: 0.05, energy: -0.05 },
+  explore: { boredom: -0.25 },
+  wander: { boredom: -0.1 },
+  climb: { boredom: -0.25, happiness: 0.05 },
+  getdown: { boredom: -0.05 },
+  stretch: { energy: 0.03 },
+  sit: { energy: 0.03, boredom: 0.03 },
+  sulk: { happiness: 0.06, annoyance: -0.15 },
+  tantrum: { annoyance: -0.25 },
+  hunt: { annoyance: -0.15, energy: -0.04 },
+  sleep: { happiness: 0.06 },
+};
+
+/** Things you can tell him to do from the settings window. */
+export const COMMANDS: { name: string; label: string }[] = [
+  { name: 'wander', label: 'Wander' }, { name: 'explore', label: 'Explore' }, { name: 'sit', label: 'Sit' },
+  { name: 'sleep', label: 'Nap' }, { name: 'wake', label: 'Wake up' }, { name: 'dance', label: 'Dance' },
+  { name: 'hop', label: 'Hop' }, { name: 'chase', label: 'Chase cursor' }, { name: 'climb', label: 'Climb a window' },
+  { name: 'getdown', label: 'Get down' }, { name: 'tantrum', label: 'Tantrum' }, { name: 'sulk', label: 'Sulk' },
+  { name: 'wave', label: 'Wave' }, { name: 'laugh', label: 'Laugh' }, { name: 'shrug', label: 'Shrug' },
+  { name: 'stomp', label: 'Stomp' }, { name: 'stretch', label: 'Stretch' }, { name: 'cower', label: 'Cower' },
+];
 
 export class Mind {
   skill: Skill | null = null;
@@ -32,6 +60,10 @@ export class Mind {
   private lastSupport = -1;
   private quipAt = 0;           // rate-limits little remarks
   private stuckAsked = 0;
+  private restUntil = 0;        // short breather between activities
+  private lastCursorSeen = 0;
+  /** Why he's doing what he's doing (shown in settings). */
+  why = '';
 
   /** Recent skill names, newest last (for debugging and, later, the LLM). */
   get recent() { return this.history; }
@@ -43,15 +75,59 @@ export class Mind {
       this.onWindowSince = c.char.support >= 0 ? c.world.time : -1;
     }
     c.char.posture = c.mood.posture();
+    this.feelings(c, dt);
 
     if (this.skill) {
       this.skill.t += dt;
-      if (this.skill.update(c, dt)) this.end(c);
-    } else if (c.char.ready || (c.char.mode === 'sit' && this.queued)) {
-      this.begin(c, this.queued ?? this.choose(c));
+      if (this.skill.update(c, dt)) {
+        const glow = AFTERGLOW[this.skill.name];
+        if (glow) c.mood.nudge(glow);
+        this.end(c);
+        // Catch his breath before the next thing (longer when tired) — keeps him from twitching between activities.
+        this.restUntil = c.world.time + rand(1.5, 4) * (1.5 - c.mood.s.energy * 0.5);
+      }
+    } else if (this.queued && (c.char.ready || c.char.mode === 'sit')) {
+      this.begin(c, this.queued);
       this.queued = null;
+    } else if (c.char.ready && c.world.time >= this.restUntil) {
+      const o = this.choose(c);
+      this.why = o.why;
+      this.begin(c, o.make());
     }
     this.updateLook(c);
+  }
+
+  /** Slow, sensible mood changes from what's going on around him. */
+  private feelings(c: Ctx, dt: number) {
+    const m = c.mood, w = c.world, ch = c.char;
+    // Moving around tires him out (running more), on top of the slow drain over time.
+    if (ch.walking) m.s.energy -= dt / (ch.posture.speed > 1.2 ? 900 : 1800);
+    // You coming back after a while: he's glad to see you.
+    if (w.cursorMovedAt - this.lastCursorSeen > 120 && this.lastCursorSeen > 0 && !m.asleep) {
+      m.nudge({ happiness: 0.08 * m.s.trust * 2, boredom: -0.25 });
+      if (m.s.trust > 0.35 && ch.ready) { this.interrupt(c, new Sequence('greet', [{ face: 'cursor' }, { say: pick(['oh hi!', 'hey!', "you're back"]) }, { gesture: 'wave' }])); this.why = 'you came back'; }
+    }
+    this.lastCursorSeen = w.cursorMovedAt;
+    const away = w.time - w.cursorMovedAt;
+    if (away > 300) { m.s.boredom += dt / 300; m.s.happiness -= dt / 1200; } // ignored for 5+ min: lonely
+    else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.s.happiness += dt / 600; // company
+  }
+
+  /** Do something because you said so (from the settings window). */
+  command(c: Ctx, name: string) {
+    const ch = c.char, m = c.mood;
+    if (name === 'wake') { m.asleep = false; this.end(c); ch.standUp(); return; }
+    const gestures: Gesture[] = ['wave', 'laugh', 'shrug', 'stomp', 'stretch', 'cower'];
+    if ((gestures as string[]).includes(name)) {
+      this.interrupt(c, new Sequence(name, [{ gesture: name as Gesture, atCursor: true }]));
+    } else {
+      const o = this.options(c).find((x) => x.name === name);
+      if (!o) { c.say('?', 1); return; }
+      this.interrupt(c, o.make());
+    }
+    m.asleep = false;
+    this.why = 'you told him to';
+    if (ch.mode === 'lie' || ch.mode === 'sit') ch.standUp();
   }
 
   /** Forget the current plan (e.g. his body was rebuilt). */
@@ -81,28 +157,8 @@ export class Mind {
 
   // ───────────── choosing what to do ─────────────
 
-  private choose(c: Ctx): Skill {
-    const s = c.mood.s, L = c.mood.label, w = c.world, ch = c.char;
-    const cur = w.cursor;
-    const cursorActive = !!cur && w.time - w.cursorMovedAt < 6;
-    const near = cursorActive && Math.abs(cur!.x - ch.x) < 250;
-    const opts: Option[] = [
-      { name: 'idle', score: 1, make: () => new Idle(rand(3, 8)) },
-      { name: 'wander', score: 0.6 + s.boredom + s.energy * 0.3, make: () => new Wander() },
-      { name: 'sit', score: 0.2 + (1 - s.energy) * 0.8, make: () => new SitFor(rand(6, 18)) },
-      { name: 'sleep', score: s.energy < 0.25 && s.annoyance < 0.5 && s.fear < 0.3 ? 2 + (0.25 - s.energy) * 8 : 0, make: () => new Sleep() },
-      { name: 'chase', score: cursorActive && L === 'playful' ? 1.2 * s.trust + s.boredom : 0, make: () => new ChaseCursor(rand(4, 8), false) },
-      { name: 'hunt', score: cursorActive && L === 'angry' ? 1.5 : 0, make: () => new ChaseCursor(4, true) },
-      { name: 'avoid', score: near && (L === 'scared' || s.trust < 0.3) ? 2 : 0, make: () => new AvoidCursor(4) },
-      { name: 'dance', score: L === 'playful' ? 0.8 : 0, make: presets.dance },
-      { name: 'hop', score: 0.15 + s.energy * 0.3 + (L === 'playful' ? 0.4 : 0), make: () => presets.hop(s.energy) },
-      { name: 'sulk', score: L === 'sad' ? 1.5 : 0, make: () => new SitFor(rand(8, 20), true) },
-      { name: 'tantrum', score: L === 'angry' ? 1 : 0, make: presets.tantrum },
-      { name: 'explore', score: L === 'bored' ? 1.2 : 0.15, make: presets.explore },
-      { name: 'stretch', score: 0.1 + (1 - s.energy) * 0.4, make: presets.stretch },
-      { name: 'sigh', score: L === 'bored' ? 0.6 : 0, make: presets.sigh },
-      ...this.windowOptions(c),
-    ];
+  private choose(c: Ctx): Option {
+    const opts = this.options(c);
     // Square the scores so strong urges win more often; avoid repeating himself.
     let total = 0;
     const weights = opts.map((o) => {
@@ -113,9 +169,35 @@ export class Mind {
     let r = Math.random() * total;
     for (let i = 0; i < opts.length; i++) {
       r -= weights[i];
-      if (r <= 0) return opts[i].make();
+      if (r <= 0) return opts[i];
     }
-    return opts[0].make();
+    return opts[0];
+  }
+
+  /** Everything he could do right now, how much he wants to, and why. */
+  private options(c: Ctx): Option[] {
+    const s = c.mood.s, L = c.mood.label, w = c.world, ch = c.char;
+    const cur = w.cursor;
+    const cursorActive = !!cur && w.time - w.cursorMovedAt < 6;
+    const near = cursorActive && Math.abs(cur!.x - ch.x) < 250;
+    const opts: Option[] = [
+      { name: 'idle', score: 1.3, why: 'taking it easy', make: () => new Idle(rand(4, 10)) },
+      { name: 'wander', score: 0.5 + s.boredom + s.energy * 0.3, why: s.boredom > 0.5 ? 'bored' : 'stretching his legs', make: () => new Wander() },
+      { name: 'sit', score: 0.3 + (1 - s.energy) * 0.9, why: s.energy < 0.4 ? 'tired' : 'resting', make: () => new SitFor(rand(8, 20)) },
+      { name: 'sleep', score: s.energy < 0.25 && s.annoyance < 0.5 && s.fear < 0.3 ? 2 + (0.25 - s.energy) * 8 : 0, why: 'worn out', make: () => new Sleep() },
+      { name: 'chase', score: cursorActive && L === 'playful' ? 1.2 * s.trust + s.boredom : 0, why: 'wants to play with you', make: () => new ChaseCursor(rand(4, 8), false) },
+      { name: 'hunt', score: cursorActive && L === 'angry' ? 1.5 : 0, why: "mad at you", make: () => new ChaseCursor(4, true) },
+      { name: 'avoid', score: near && (L === 'scared' || s.trust < 0.3) ? 2 : 0, why: s.fear > 0.3 ? 'scared of you' : "doesn't trust you", make: () => new AvoidCursor(4) },
+      { name: 'dance', score: L === 'playful' ? 0.7 : 0, why: 'in a great mood', make: presets.dance },
+      { name: 'hop', score: 0.05 + s.energy * 0.15 + (L === 'playful' ? 0.35 : 0), why: 'full of energy', make: () => presets.hop(s.energy) },
+      { name: 'sulk', score: L === 'sad' ? 1.5 : 0, why: 'feeling down', make: () => new SitFor(rand(10, 22), true) },
+      { name: 'tantrum', score: L === 'angry' ? 1 : 0, why: 'angry', make: presets.tantrum },
+      { name: 'explore', score: L === 'bored' ? 1.2 : 0.15, why: 'curious', make: presets.explore },
+      { name: 'stretch', score: 0.08 + (1 - s.energy) * 0.3, why: 'stiff', make: presets.stretch },
+      { name: 'sigh', score: L === 'bored' ? 0.6 : 0, why: 'bored', make: presets.sigh },
+      ...this.windowOptions(c),
+    ];
+    return opts;
   }
 
   /** Climbing onto windows and getting back down. */
@@ -124,7 +206,7 @@ export class Mind {
     const up = reachableAbove(c);
     if (up.length && L !== 'sleepy' && L !== 'sad') {
       const target = up[Math.floor(Math.random() * up.length)];
-      opts.push({ name: 'climb', score: 0.3 + s.boredom * 0.9 + s.energy * 0.4 + (L === 'playful' ? 0.4 : 0), make: () => new ClimbOnto(target) });
+      opts.push({ name: 'climb', why: s.boredom > 0.4 ? 'bored, looking for something to do' : 'wants a better view', score: 0.3 + s.boredom * 0.9 + s.energy * 0.4 + (L === 'playful' ? 0.4 : 0), make: () => new ClimbOnto(target) });
     }
     if (ch.support >= 0) {
       const onFor = c.world.time - this.onWindowSince;
@@ -133,10 +215,10 @@ export class Mind {
       const sides = ([-1, 1] as const).map((side) => ({ side, drop: dropFrom(c, side) })).filter((o) => o.drop < safe);
       if (sides.length) {
         const best = sides.reduce((a, b) => (a.drop < b.drop ? a : b));
-        opts.push({ name: 'getdown', score: want, make: () => new GetDown(best.side) });
+        opts.push({ name: 'getdown', why: 'done up here', score: want, make: () => new GetDown(best.side) });
       } else if (onFor > 45 && c.world.time - this.stuckAsked > 60) {
         // Too high both ways: he's stuck up here.
-        opts.push({ name: 'stuck', score: want, make: () => { this.stuckAsked = c.world.time; return new Sequence('stuck', [
+        opts.push({ name: 'stuck', why: 'too high to jump down', score: want, make: () => { this.stuckAsked = c.world.time; return new Sequence('stuck', [
           { gesture: 'lookAround' }, { face: 'cursor' }, { say: pick(['uh... help?', 'how do I get down', 'too high...']) }, { sit: rand(6, 12) },
         ]); } });
       }
@@ -178,6 +260,7 @@ export class Mind {
       case 'smacked': {
         // Much worse than a poke: it hurts, and it was on purpose.
         m.nudge({ annoyance: 0.28, fear: 0.08, trust: -0.03, happiness: -0.06, boredom: -0.4 });
+        this.why = 'you smacked him';
         const wasAsleep = m.asleep;
         m.asleep = false;
         c.say(wasAsleep ? pick(['WHA-', '!?!']) : e.speed > 3000 ? pick(['OW!', 'HEY!!', 'OWW']) : pick(['ow!', 'hey!', '!!']), 1.3);
@@ -231,6 +314,7 @@ export class Mind {
         m.nudge({ happiness: -0.08, fear: 0.12, annoyance: 0.08, trust: -0.01 });
         c.say(e.speed > 1600 ? 'OW' : pick(['ow.', 'oof', 'ouch']), 1.4);
         this.interrupt(c, this.afterFall(c));
+        this.why = 'recovering from a fall';
         return;
 
       case 'tripped':
@@ -273,6 +357,7 @@ export class Mind {
     const recent = this.pokes.length;
     this.pokes.push(now);
     m.nudge({ annoyance: 0.1 + 0.07 * recent, boredom: -0.3, trust: -0.004 });
+    this.why = recent > 1 ? 'you keep poking him' : `you poked him (he was ${m.label})`;
 
     if (m.asleep) {
       if (chance(0.35 + 0.2 * recent)) {

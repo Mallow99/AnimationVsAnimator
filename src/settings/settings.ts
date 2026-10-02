@@ -3,9 +3,10 @@
 
 import { RANGES, type PetConfig } from '../core/config';
 import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
-import type { MoodState } from '../core/mood';
+import { MOOD_PRESETS, type MoodState } from '../core/mood';
+import { COMMANDS } from '../core/mind';
 
-interface Stats { name: string; mood: MoodState; label: string; asleep: boolean; doing: string; recent: string[] }
+interface Stats { name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[] }
 interface Shell {
   getConfig(): Promise<PetConfig>;
   onConfig(cb: (c: PetConfig) => void): void;
@@ -31,28 +32,60 @@ const MOOD_ROWS: [keyof MoodState, string][] = [
   ['happiness', 'Happiness'], ['energy', 'Energy'], ['boredom', 'Boredom'],
   ['annoyance', 'Annoyance'], ['fear', 'Fear'], ['trust', 'Trust in you'],
 ];
-const fills: Record<string, [HTMLElement, HTMLElement]> = {};
+// Each mood is a slider: it follows his real mood live, and you can drag it to set it.
+const fills: Record<string, [HTMLInputElement, HTMLElement]> = {};
+let dragging: string | null = null;
 for (const [k, label] of MOOD_ROWS) {
-  const row = document.createElement('div');
+  const row = document.createElement('label');
   row.className = 'bar';
-  row.innerHTML = `<span class="name">${label}</span><span class="track"><span class="fill"></span></span><span class="val">–</span>`;
+  row.innerHTML = `<span class="name">${label}</span><input type="range" min="0" max="1" step="0.01" id="mood-${k}" /><span class="val">–</span>`;
   $('bars').appendChild(row);
-  fills[k] = [row.querySelector('.fill')!, row.querySelector('.val')!];
+  const input = row.querySelector('input')!;
+  input.addEventListener('pointerdown', () => { dragging = k; });
+  input.addEventListener('pointerup', () => { dragging = null; });
+  input.addEventListener('blur', () => { dragging = null; });
+  input.addEventListener('input', () => {
+    row.querySelector('.val')!.textContent = Number(input.value).toFixed(2);
+    shell.command(`setMood:${JSON.stringify({ [k]: Number(input.value) })}`);
+  });
+  fills[k] = [input, row.querySelector('.val')!];
 }
+for (const name of Object.keys(MOOD_PRESETS)) {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.type = 'button'; b.textContent = name[0].toUpperCase() + name.slice(1);
+  b.addEventListener('click', () => shell.command(`mood:${name}`));
+  $('moodPresets').appendChild(b);
+}
+for (const c of COMMANDS) {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.type = 'button'; b.textContent = c.label;
+  b.addEventListener('click', () => shell.command(`do:${c.name}`));
+  $('commands').appendChild(b);
+}
+$('sayForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const t = $<HTMLInputElement>('sayText');
+  if (t.value.trim()) shell.command(`say:${t.value}`);
+  t.value = '';
+});
 const DOING: Record<string, string> = {
   idle: 'Standing around', wander: 'Wandering', sit: 'Sitting', sulk: 'Sulking', sleep: 'Napping', chase: 'Chasing your cursor',
   hunt: 'Hunting your cursor', avoid: 'Keeping away from you', dance: 'Dancing', hop: 'Hopping', tantrum: 'Throwing a tantrum',
-  explore: 'Exploring', climb: 'Climbing onto a window', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
+  greet: 'Saying hi', retaliate: 'Getting you back', glare: 'Glaring at you', flinch: 'Flinching', giggle: 'Giggling',
+  tag: 'Playing tag', boing: 'Bouncing', 'poke-back': 'Poking you back', huh: 'Confused', shrug: 'Shrugging', woken: 'Woken up',
+  again: 'Wants to go again', mope: 'Moping', 'shake-off': 'Shaking it off', wave: 'Waving', laugh: 'Laughing', stomp: 'Stomping',
+  cower: 'Cowering', explore: 'Exploring', climb: 'Climbing onto a window', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
   getup: 'Getting up', ground: 'Standing', lie: 'Lying down',
 };
 shell.onStats((s) => {
   for (const [k] of MOOD_ROWS) {
+    if (dragging === k) continue;
     const v = s.mood[k];
-    fills[k][0].style.width = `${Math.round(v * 100)}%`;
+    fills[k][0].value = String(v);
     fills[k][1].textContent = v.toFixed(2);
   }
   $('label').textContent = s.asleep ? 'asleep' : s.label;
-  $('doing').textContent = DOING[s.doing] ?? s.doing;
+  $('doing').textContent = (DOING[s.doing] ?? s.doing) + (s.why ? ` — ${s.why}` : '');
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
 });
 $('resetMood').addEventListener('click', () => shell.command('resetMood'));

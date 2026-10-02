@@ -285,22 +285,29 @@ export class ClimbOnto extends Skill {
 export class GetDown extends Skill {
   readonly name = 'getdown';
   private phase: 'walk' | 'hop' = 'walk';
+  private from = -1;
+  private tries = 0;
   drop = 0;
   constructor(private side: -1 | 1) { super(); }
   start(c: Ctx) {
     const ch = c.char, r = ch.surfaceRange();
     this.drop = dropFrom(c, this.side);
+    this.from = ch.support;
     ch.walkTo(this.side < 0 ? r.x1 : r.x2);
   }
   update(c: Ctx) {
     const ch = c.char;
     if (this.phase === 'walk' && ch.ready && !ch.walking) {
       ch.facing = this.side;
-      ch.jump(this.side * 130, -260);
+      ch.jump(this.side * (200 + this.tries * 80), -240);
       this.phase = 'hop';
       this.t = 0;
+    } else if (this.phase === 'hop' && this.t > 0.4 && ch.mode !== 'air') {
+      // Landed back on the same window? Hop again, a bit harder.
+      if (ch.ready && ch.support === this.from && this.from >= 0 && ++this.tries < 3) { this.phase = 'walk'; return false; }
+      return true;
     }
-    return (this.phase === 'hop' && this.t > 0.4 && ch.mode !== 'air') || this.t > 20;
+    return this.t > 20;
   }
   stop(c: Ctx) { c.char.stop(); }
 }

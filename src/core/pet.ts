@@ -5,7 +5,7 @@ import { Character } from './character';
 import { DEFAULT_CONFIG, type PetConfig } from './config';
 import type { JointName } from './body';
 import type { Bounds } from './physics';
-import { Mood } from './mood';
+import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, type WinRect } from './world';
@@ -209,11 +209,28 @@ export class Pet {
       label: this.mood.label,
       asleep: this.mood.asleep,
       doing: this.mind.skill?.name ?? this.char.mode,
+      why: this.mind.why,
       recent: this.mind.recent.slice(-8),
     };
   }
 
+  /**
+   * Commands from the settings window:
+   *   do:<skill>  mood:<preset>  setMood:{"energy":0.3}  say:<text>  resetMood  respawn
+   */
   command(cmd: string) {
+    const [verb, ...rest] = cmd.split(':');
+    const arg = rest.join(':');
+    if (verb === 'do') { this.mind.command(this.ctx, arg); return; }
+    if (verb === 'say') { if (arg.trim()) this.say(arg.trim().slice(0, 80)); return; }
+    if (verb === 'mood') { const p = MOOD_PRESETS[arg]; if (p) { this.mood.asleep = false; Object.assign(this.mood.s, p); } return; }
+    if (verb === 'setMood') {
+      try {
+        const d = JSON.parse(arg) as Partial<MoodState>;
+        for (const k of Object.keys(this.mood.s) as (keyof MoodState)[]) if (typeof d[k] === 'number') this.mood.s[k] = Math.min(1, Math.max(0, d[k]!));
+      } catch { /* ignore bad input */ }
+      return;
+    }
     if (cmd === 'resetMood') {
       this.mood.s = new Mood().s;
       this.mood.asleep = false;

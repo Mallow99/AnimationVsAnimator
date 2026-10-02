@@ -35,7 +35,7 @@
     h2 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
     .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; }
     .bar { display: grid; grid-template-columns: 112px 1fr 38px; align-items: center; gap: 10px; }
-    .bar .track { display: block; height: 10px; border-radius: 99px; background: var(--track); overflow: hidden; }
+    .bar input[type="range"] { margin: 0; }
     .bar .fill { display: block; width: 0; height: 100%; border-radius: 99px; background: var(--accent); transition: width .35s ease; }
     .bar .val { font: 12px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
     .bar .name { font-weight: 600; }
@@ -75,6 +75,7 @@
     <p class="doing" id="doing">Waiting for him to report in…</p>
     <nav role="tablist">
       <button role="tab" data-tab="mood" aria-selected="true">Mood</button>
+      <button role="tab" data-tab="control" aria-selected="false">Control</button>
       <button role="tab" data-tab="look" aria-selected="false">Look</button>
       <button role="tab" data-tab="body" aria-selected="false">Movement</button>
       <button role="tab" data-tab="him" aria-selected="false">General</button>
@@ -85,7 +86,8 @@
       <div class="group">
         <h2>How he feels</h2>
         <div class="card" id="bars"></div>
-        <p class="note">Each bar moves on its own. Right now the strongest one mostly decides how he reacts; blending them is planned.</p>
+        <p class="note">Each bar moves on its own as things happen to him. Drag a bar to set it yourself.</p>
+        <div class="chips" id="moodPresets"></div>
       </div>
       <div class="group">
         <h2>Recently</h2>
@@ -102,6 +104,19 @@
       <div class="group">
         <h2>Personality</h2>
         <div class="card"><p class="note">His written persona arrives with the AI brain in milestone 4. For now his personality comes from how his moods react.</p></div>
+      </div>
+    </section>
+
+    <section data-panel="control" hidden>
+      <div class="group">
+        <h2>Make him…</h2>
+        <div class="chips" id="commands"></div>
+        <p class="note">He'll do it right away (if he can: climbing needs a window close enough, getting down needs him to be on one).</p>
+      </div>
+      <div class="group">
+        <h2>Make him say</h2>
+        <form class="inline" id="sayForm"><input type="text" id="sayText" maxlength="80" placeholder="hello!" /><button class="btn" type="submit">Say</button></form>
+        <p class="note">Just puts words in his bubble for now. Real conversation comes with the AI brain.</p>
       </div>
     </section>
 

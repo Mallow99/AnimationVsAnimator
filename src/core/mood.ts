@@ -14,6 +14,17 @@ export interface MoodState {
   trust: number;     // long-term: how he feels about you. Moves slowly, persists.
 }
 
+/** One-click moods for testing (settings → Mood). */
+export const MOOD_PRESETS: Record<string, Partial<MoodState>> = {
+  happy: { happiness: 0.9, energy: 0.85, annoyance: 0, fear: 0, boredom: 0.1 },
+  sad: { happiness: 0.1, annoyance: 0, fear: 0, energy: 0.6 },
+  angry: { annoyance: 0.9, happiness: 0.4, fear: 0 },
+  sleepy: { energy: 0.08, annoyance: 0, fear: 0 },
+  scared: { fear: 0.9, annoyance: 0 },
+  bored: { boredom: 0.95, happiness: 0.5, annoyance: 0, fear: 0, energy: 0.7 },
+  calm: { happiness: 0.6, energy: 0.7, boredom: 0.2, annoyance: 0, fear: 0 },
+};
+
 export type MoodLabel = 'sleepy' | 'sad' | 'angry' | 'scared' | 'playful' | 'bored' | 'content';
 
 export class Mood {
