@@ -57,7 +57,6 @@ export type ThingKind = 'box' | 'ledge' | 'ramp' | 'bridge';
  * chain is a platform.
  */
 export class Thing {
-  readonly n = nextProp++;
   readonly points: Point[] = [];
   readonly sticks: Stick[] = [];
   outline: number[] = [];
@@ -77,7 +76,7 @@ export class Thing {
   /** Made by you from his inventory (not a drawing: doesn't fade). */
   forever = false;
 
-  constructor(readonly kind: ThingKind, readonly doodle: Doodle) {}
+  constructor(readonly kind: ThingKind, readonly doodle: Doodle, readonly n = nextProp++) {}
 
   point(x: number, y: number) { const p = makePoint(x, y, 1.5); this.points.push(p); return this.points.length - 1; }
   stick(a: number, b: number, slack = 1, stiff = 1) {
@@ -300,8 +299,8 @@ export function makeBox(d: Doodle, x1: number, y1: number, x2: number, y2: numbe
  * A ramp: a wedge sitting on the ground, the slope going up toward `dir`.
  * Points: 0 = the low end of the slope, 1 = the top of the slope, 2 = under the top.
  */
-export function makeRamp(d: Doodle, xLow: number, xHigh: number, floor: number, top: number) {
-  const t = new Thing('ramp', d);
+export function makeRamp(d: Doodle, xLow: number, xHigh: number, floor: number, top: number, n?: number) {
+  const t = new Thing('ramp', d, n);
   const right = xHigh > xLow;
   t.point(xLow, floor); t.point(xHigh, top); t.point(xHigh, floor);
   // Clockwise on screen: slope first when it goes up to the right, else the vertical side first.
@@ -328,9 +327,17 @@ export function makeBridge(d: Doodle, x1: number, y1: number, x2: number, y2: nu
 /** Compatibility with older code: a thing he can stand on, and its main platform. */
 export interface Block { doodle: Doodle; platform: Platform; thing: Thing }
 
+/** The id a ramp's slope will have once it's a real thing (so wet ink he's standing on turns into it seamlessly). */
+export function rampSlopeId(n: number, up: 1 | -1) { return PROP_ID + n * 64 + (up > 0 ? 0 : 1); }
+/** A fresh number for a thing that doesn't exist yet. */
+export const reserveThing = () => nextProp++;
+
 export class Props {
   balls: Ball[] = [];
   things: Thing[] = [];
+  /** Wet ink: a line he's drawing right now that's already solid enough to stand on (a ramp or bridge on its way). */
+  wet = new Map<number, Platform>();
+  setWet(id: number, p: Platform | null) { if (p) this.wet.set(id, p); else this.wet.delete(id); this.onPlatforms?.(); }
   /** Called when platforms change (appear, vanish, or move): the world's platforms need updating. */
   onPlatforms: (() => void) | null = null;
 
@@ -366,7 +373,7 @@ export class Props {
 
   remove(t: Thing) { this.things = this.things.filter((x) => x !== t); this.onPlatforms?.(); }
 
-  get platforms() { return this.things.flatMap((t) => t.platforms); }
+  get platforms() { return [...this.things.flatMap((t) => t.platforms), ...this.wet.values()]; }
   /** Things he can get on top of (for "get on what he drew"). */
   get blocks(): Block[] { return this.things.filter((t) => t.platforms.length).map((t) => ({ doodle: t.doodle, platform: t.platform, thing: t })); }
 

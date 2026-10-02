@@ -16,7 +16,7 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  Brawl, HangCursor, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
+  Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
@@ -73,7 +73,7 @@ class PlanSkill extends Skill {
     if ('wait' in st) { this.waitLeft = Math.min(5, Math.max(0, st.wait)); return false; }
     const sub = 'do' in st ? this.mind.makeSkill(c, st.do)
       : 'move' in st ? new PuppetMove(st.move)
-        : 'draw' in st ? new DoodleSkill(st.draw, st.title, { becomes: st.becomes, place: st.place ?? (st.becomes === 'box' ? 'floor' : st.becomes === 'platform' ? 'air' : 'front') })
+        : 'draw' in st ? new DoodleSkill(st.draw, st.title, { becomes: st.becomes, place: st.place ?? (st.becomes === 'box' || st.becomes === 'ramp' ? 'floor' : st.becomes === 'platform' || st.becomes === 'bridge' ? 'air' : 'front') })
           : new Sequence('walk', [{ walkTo: this.walkTarget(c, st.walk) }]);
     if (sub) { this.sub = sub; sub.start(c); }
     return false;
@@ -146,6 +146,8 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'throw', label: 'Throw his ball at the cursor' }, { name: 'bounce', label: 'Bounce his ball' }, { name: 'smash', label: 'Smash with his mallet' },
   { name: 'pushwindow', label: 'Push a window' }, { name: 'kickwindow', label: 'Kick a window' }, { name: 'surf', label: 'Surf on a window' },
   { name: 'knock', label: 'Knock on a window' }, { name: 'ledgesit', label: 'Sit on the edge' }, { name: 'hang', label: 'Hang off the cursor' },
+  { name: 'ramp', label: 'Draw a ramp up to a window' }, { name: 'bridge', label: 'Draw a bridge to a window' }, { name: 'drawramp', label: 'Draw a ramp (and jump off it)' },
+  { name: 'ropebridge', label: 'Draw a rope bridge' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
@@ -461,6 +463,11 @@ export class Mind {
     draw('drawball', 'ball', 'ball', [{ do: 'kick' }], 'wants something to kick around', fun * 0.8 + s.boredom * 0.1);
     draw('drawbox', 'box', 'box', [{ do: 'getonit' }, { wait: 1.5 }, { do: 'getdown' }], 'drawing himself something to climb', fun * 0.6 + s.boredom * 0.08);
     draw('drawledge', 'platform', 'platform', [{ do: 'getonit' }, { wait: 2 }, { do: 'getdown' }], 'drawing himself a ledge', fun * 0.3);
+    draw('ropebridge', 'bridge', 'bridge', [{ do: 'getonit' }, { wait: 2 }, { do: 'getdown' }], 'drawing a rope bridge to hang out on', fun * 0.15);
+    // A ramp to walk up and jump off (the pen draws it as he goes).
+    if (canDraw && fresh && rampPlan(c, null)) opts.push({ name: 'drawramp', why: 'drawing a ramp to jump off', score: fun * 0.45,
+      make: () => { this.lastDoodle = w.time; return new PlanSkill(this, [{ do: 'rampnow' }, { wait: 0.6 }, { do: chance(0.5) ? 'frontflip' : 'getdown' }]); } });
+    if (canDraw) opts.push({ name: 'rampnow', why: 'drawing a ramp', score: 0, make: () => new DrawRamp(null) });
     // You took his sword? He draws a new one.
     draw('drawsword', 'sword', 'item', [{ do: 'swing' }], 'you took his sword, so he drew one', swordTaken && (L === 'angry' || L === 'playful') ? 0.9 : 0);
     const ball = c.props?.nearestBall(ch.x, ch.body.j.hip.y);
@@ -572,8 +579,23 @@ export class Mind {
     const up = reachableAbove(c);
     if (up.length) {
       const pickOne = up[Math.floor(Math.random() * up.length)];
+      // Doesn't feel like climbing (a bit tired, or just because): he draws himself a way up instead.
+      const tired = s.energy < 0.55;
       opts.push({ name: 'climb', why: s.boredom > 0.4 ? 'bored, looking for something to do' : 'wants a better view',
-        score: lazy ? 0 : 0.3 + s.boredom * 0.9 + s.energy * 0.4 + (L === 'playful' ? 0.4 : 0), make: () => new ClimbOnto(pickOne.target, pickOne.route) });
+        score: lazy ? 0 : 0.3 + s.boredom * 0.9 + s.energy * 0.4 + (L === 'playful' ? 0.4 : 0),
+        make: () => {
+          const r = pickOne.drawn && (pickOne.route.kind === 'wall' || pickOne.route.kind === 'ceiling') && (tired || chance(0.35)) ? pickOne.drawn : pickOne.route;
+          if (r !== pickOne.route) this.why = "doesn't feel like climbing: drawing his way up";
+          return new ClimbOnto(pickOne.target, r);
+        } });
+      const drawable = up.filter((o) => o.drawn);
+      if (this.forced && !drawable.some((o) => o.drawn!.kind === 'ramp')) this.cant.ramp = !c.items.find('draw') ? 'I need my pen for that' : 'nowhere to draw a ramp up to from here';
+      if (this.forced && !drawable.some((o) => o.drawn!.kind === 'bridge')) this.cant.bridge = !c.items.find('draw') ? 'I need my pen for that' : 'no gap to bridge from here';
+      if (drawable.length) {
+        const o = drawable[Math.floor(Math.random() * drawable.length)];
+        opts.push({ name: o.drawn!.kind === 'bridge' ? 'bridge' : 'ramp', why: o.drawn!.kind === 'bridge' ? 'drawing a bridge over to that window' : "wants up there, doesn't want to climb",
+          score: L === 'sleepy' || L === 'sad' ? 0 : 0.1 + (tired ? 0.35 : 0) + s.boredom * 0.25, make: () => new ClimbOnto(o.target, o.drawn!) });
+      }
     }
     // Monkey bars across the top of the screen.
     const edge = c.world.walls.filter((w) => w.top === 'ceiling').sort((a, b) => Math.abs(a.x - ch.x) - Math.abs(b.x - ch.x))[0];

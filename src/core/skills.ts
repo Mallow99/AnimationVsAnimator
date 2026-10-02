@@ -7,7 +7,8 @@ import type { Mood } from './mood';
 import { GRAVITY, type Bounds, type Platform } from './physics';
 import { surfaceBelow, type Wall } from './world';
 import { SHAPES, type Becomes, type Doodle } from './doodles';
-import type { Ball, Props } from './props';
+import { makeBridge, makeRamp, rampSlopeId, reserveThing, type Ball, type Props } from './props';
+import { platY } from './physics';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 import type { Memory } from './memory';
 import type { LimbId } from './body';
@@ -295,7 +296,9 @@ export type Route =
   | { kind: 'jump' }
   | { kind: 'vault'; edgeX: number; fromX: number }
   | { kind: 'wall'; wall: Wall; jump: boolean }
-  | { kind: 'ceiling'; edge: Wall; dropX: number };
+  | { kind: 'ceiling'; edge: Wall; dropX: number }
+  | { kind: 'ramp' }    // draw himself a ramp up to it
+  | { kind: 'bridge' }; // draw a bridge across the gap to it
 
 /** Can he stand at x on what he's standing on now? */
 const canStandAt = (ch: Character, x: number) => { const r = ch.surfaceRange(); return x >= r.x1 && x <= r.x2; };
@@ -337,11 +340,19 @@ export function routeTo(c: Ctx, target: Platform): Route | null {
   return null;
 }
 
-/** Window tops he could get onto from where he stands (by any route). */
-export function reachableAbove(c: Ctx): { target: Platform; route: Route }[] {
+/** A route he'd have to draw: a ramp up to it, or a bridge across to it. */
+export function drawnRoute(c: Ctx, target: Platform): Route | null {
+  if (target.id === c.char.support || target.win === undefined) return null;
+  if (bridgePlan(c, target)) return { kind: 'bridge' };
+  if (rampPlan(c, target)) return { kind: 'ramp' };
+  return null;
+}
+
+/** Window tops he could get onto from where he stands (by any route, drawing one if he has to). */
+export function reachableAbove(c: Ctx): { target: Platform; route: Route; drawn: Route | null }[] {
   return c.world.platforms
-    .map((target) => ({ target, route: routeTo(c, target) }))
-    .filter((o): o is { target: Platform; route: Route } => o.route !== null);
+    .map((target) => { const drawn = drawnRoute(c, target); return { target, route: routeTo(c, target) ?? drawn, drawn }; })
+    .filter((o): o is { target: Platform; route: Route; drawn: Route | null } => o.route !== null);
 }
 
 /** Drop height (px) if he hops off the given side of what he's standing on. */
@@ -368,12 +379,14 @@ export class ClimbOnto extends Skill {
   readonly name = 'climb';
   private phase: 'walk' | 'go' | 'wait' = 'walk';
   private tries = 0;
-  private sub: MonkeyBars | null = null;
+  private sub: Skill | null = null;
   constructor(private target: Platform, private route: Route) { super(); }
 
   start(c: Ctx) {
     c.look = 'none';
     if (this.route.kind === 'ceiling') { this.sub = new MonkeyBars(this.route.edge, this.route.dropX, false); this.sub.start(c); return; }
+    if (this.route.kind === 'ramp') { this.sub = new DrawRamp(this.target); this.sub.start(c); return; }
+    if (this.route.kind === 'bridge') { this.sub = new BridgeTo(this.target); this.sub.start(c); return; }
     this.walkToLaunch(c);
   }
 
@@ -401,7 +414,7 @@ export class ClimbOnto extends Skill {
   update(c: Ctx, dt: number) {
     if (this.sub) {
       this.sub.t += dt;
-      const done = this.sub.update(c);
+      const done = this.sub.update(c, dt);
       if (done && c.char.support === this.target.id && chance(0.5)) c.say(pick(['ta-da', 'made it', 'hi up here']));
       return done;
     }
@@ -712,13 +725,15 @@ export class DoodleSkill extends Skill {
   private begin(c: Ctx) {
     const ch = c.char, sc = ch.scale, j = ch.body.j;
     const keys = Object.keys(SHAPES), name = keys[Math.floor(Math.random() * keys.length)];
-    const shape = this.shape ?? SHAPES[name];
+    // (A ramp goes up the way he's facing: drawn facing left, it's the other way round.)
+    const shape0 = this.shape ?? SHAPES[name];
+    const shape = this.opts.becomes === 'ramp' && ch.facing < 0 ? shape0.map((st) => st.map((p) => ({ x: -p.x, y: p.y }))) : shape0;
     const place = this.opts.place ?? 'front', floor = Math.max(j.footL.y, j.footR.y) + 2;
     const size = (place === 'air' ? 64 : place === 'floor' ? 50 : 46) * sc;
     const cx = ch.x + ch.facing * (place === 'front' ? 40 : place === 'floor' ? 36 : 50) * sc;
     const cy = place === 'floor' ? floor - size * 0.47 : place === 'air' ? floor - 100 * sc : j.neck.y + 8 * sc;
     this.plan = shape.map((st) => st.map((p) => ({ x: cx + p.x * size, y: cy + p.y * size })));
-    this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false, shape, title: this.title || (this.shape ? 'made up' : name), becomes: this.opts.becomes, cx, cy, size };
+    this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false, shape, title: this.title || (this.shape ? 'made up' : name), becomes: this.opts.becomes, cx, cy, size, dir: ch.facing > 0 ? 1 : -1 };
     c.doodles.push(this.doodle);
     if (c.doodles.length > 8) c.doodles.shift();
   }
@@ -1061,6 +1076,264 @@ export class GrabCursor extends Skill {
     return this.t > this.until;
   }
   stop(c: Ctx) { c.char.handTarget = null; c.char.stop(); }
+}
+
+// ───────────── drawing his way there ─────────────
+
+/** How steep the ramps he draws are (rise over run: 0.6 is about 31°). */
+const RAMP_SLOPE = 0.6;
+
+/** Hold his pen so its tip touches `tip` (pointing forward and down, like writing on the floor). */
+function penTo(c: Ctx, pen: Item, tip: Vec) {
+  const ch = c.char, aim = ch.dirToWorld(0.45, -0.89), len = pen.def.length * ch.scale;
+  pen.aim = aim;
+  ch.handTarget = { x: tip.x - aim.x * len, y: tip.y - aim.y * len };
+}
+
+/** Is there a ramp he could draw from where he stands up onto `target`? (Floor space for it, his pen, not too high.) */
+export function rampPlan(c: Ctx, target: Platform | null): { x0: number; xe: number; dir: 1 | -1; floor: number; top: number } | null {
+  const ch = c.char, sc = ch.scale, pen = c.items.find('draw');
+  if (!pen || pen.where === 'cursor' || !ch.useHand || ch.legCount < 2) return null;
+  const sp = ch.supportPlatform();
+  if (sp?.y2 !== undefined) return null; // not from a slope
+  const floor = sp ? sp.y : c.world.bounds.floor;
+  if (!target) {
+    // Just a ramp, in front of him: something to walk up and jump off.
+    const h = 70 * sc, dir = (ch.facing > 0 ? 1 : -1) as 1 | -1, x0 = ch.x + dir * 30 * sc, xe = x0 + dir * (h / RAMP_SLOPE);
+    return canStandAt(ch, xe + dir * 5) && canStandAt(ch, x0 - dir * 30 * sc) ? { x0, xe, dir, floor, top: floor - h } : null;
+  }
+  const h = floor - target.y;
+  if (h < 40 * sc || h > 330 * sc || target.x2 - target.x1 < 40 || target.y2 !== undefined) return null;
+  // Lean it on whichever end of the window is nearer, coming from outside the window.
+  for (const dir of (ch.x < (target.x1 + target.x2) / 2 ? [1, -1] : [-1, 1]) as (1 | -1)[]) {
+    const xe = dir > 0 ? target.x1 : target.x2, x0 = xe - dir * (h / RAMP_SLOPE);
+    if (canStandAt(ch, x0 - dir * 36 * sc) && canStandAt(ch, xe - dir * 4)) return { x0, xe, dir, floor, top: target.y };
+  }
+  return null;
+}
+
+/**
+ * He draws himself a ramp, Animator vs. Animation style: walks to where it'll go, draws its base
+ * along the floor, turns round, and walks up the slope while his pen draws it just ahead of his
+ * feet (the wet ink holds him). At the top he steps off onto the window and the drawing turns into
+ * a real ramp (a wedge with weight; you can knock it over).
+ */
+export class DrawRamp extends Skill {
+  readonly name = 'drawramp';
+  private phase: 'go' | 'pen' | 'base' | 'turn' | 'slope' | 'off' | 'stow' | 'done' = 'go';
+  private tool = new Tool('draw');
+  private plan: NonNullable<ReturnType<typeof rampPlan>> | null = null;
+  private doodle: Doodle | null = null;
+  private baseEnd = 0;
+  private ink = 0;
+  private n = reserveThing();
+  private wetId = 0;
+  private pt = 0;
+  constructor(private target: Platform | null) { super(); }
+  start(c: Ctx) {
+    this.plan = rampPlan(c, this.target);
+    c.look = 'none';
+    if (!this.plan) return;
+    this.wetId = rampSlopeId(this.n, this.plan.dir);
+    if (chance(0.6)) c.say(pick(["climb? nah. I'll draw", 'one sec', 'ramp time', 'watch this']), 1.6);
+  }
+  private slopeY(x: number) { const p = this.plan!; return Math.max(p.top, p.floor - (x - p.x0) * p.dir * RAMP_SLOPE); }
+
+  update(c: Ctx, dt: number) {
+    const ch = c.char, p = this.plan, sc = ch.scale;
+    if (!p) { c.say(pick(['no room for a ramp', 'nope']), 1.4); return true; }
+    this.pt += dt;
+    const pen = this.tool.item;
+    if (this.t > 60) return true;
+    switch (this.phase) {
+      case 'go':
+        // Start by the high end, so the base gets drawn walking away from the window.
+        if (!arrive(c, p.xe - p.dir * 16 * sc, 10)) return false;
+        this.phase = 'pen'; this.pt = 0;
+        return false;
+      case 'pen': {
+        const r = this.tool.fetch(c, dt);
+        if (r === 'none') { missingTool(c, this.tool, 'pen'); return true; }
+        if (r !== 'ready') return false;
+        ch.facing = -p.dir;
+        this.doodle = { strokes: [[{ x: p.xe, y: p.floor - 1 }]], color: c.inkColor, born: c.world.time, done: false, title: 'ramp', cx: (p.x0 + p.xe) / 2, cy: (p.floor + p.top) / 2, size: Math.abs(p.xe - p.x0) };
+        c.doodles.push(this.doodle);
+        this.baseEnd = p.xe;
+        this.phase = 'base'; this.pt = 0;
+        return false;
+      }
+      case 'base': {
+        // Walking away from the window, pen on the floor in front of him: the base line.
+        if (!pen || pen.where !== 'hand') return this.lost(c);
+        const tipX = ch.x - p.dir * 22 * sc;
+        if ((this.baseEnd - tipX) * p.dir > 0) this.baseEnd = p.dir > 0 ? Math.max(p.x0, tipX) : Math.min(p.x0, tipX);
+        penTo(c, pen, { x: this.baseEnd, y: p.floor - 1 });
+        this.doodle!.strokes[0] = [{ x: p.xe, y: p.floor - 1 }, { x: this.baseEnd, y: p.floor - 1 }];
+        if (Math.random() < dt * 6) c.sound?.('scribble');
+        if (Math.abs(this.baseEnd - p.x0) < 1) { this.phase = 'turn'; this.pt = 0; ch.handTarget = null; pen.aim = null; return false; }
+        if (ch.ready && !ch.walking) ch.walkTo(p.x0 + p.dir * 18 * sc);
+        return this.pt > 20 ? this.lost(c) : false;
+      }
+      case 'turn':
+        // Round to the low end, and face up the slope.
+        if (!arrive(c, p.x0 - p.dir * 22 * sc, 6)) return this.pt > 10 ? this.lost(c) : false;
+        ch.facing = p.dir;
+        this.ink = p.x0;
+        this.doodle!.strokes[1] = [{ x: p.x0, y: p.floor - 1 }];
+        this.phase = 'slope'; this.pt = 0;
+        return false;
+      case 'slope': {
+        // Up the slope, drawing it a step ahead of his feet. The wet line is solid already.
+        if (!pen || pen.where !== 'hand') return this.lost(c);
+        const end = p.xe + p.dir * 10 * sc;
+        const tipX = ch.x + p.dir * 24 * sc;
+        if ((tipX - this.ink) * p.dir > 0) this.ink = p.dir > 0 ? Math.min(end, tipX) : Math.max(end, tipX);
+        const a = { x: p.x0 - p.dir * 3, y: p.floor }, b = { x: this.ink, y: this.slopeY(this.ink) };
+        const [l, r] = a.x < b.x ? [a, b] : [b, a];
+        c.props?.setWet(this.wetId, { id: this.wetId, x1: l.x, x2: r.x, y: l.y, y2: r.y });
+        this.doodle!.strokes[1] = [{ x: p.x0, y: p.floor - 1 }, { x: this.ink, y: this.slopeY(this.ink) - 1 }];
+        penTo(c, pen, { x: this.ink, y: this.slopeY(this.ink) - 1 });
+        if (Math.random() < dt * 6) c.sound?.('scribble');
+        if (Math.abs(this.ink - end) < 1) {
+          ch.handTarget = null; pen.aim = null;
+          // Back edge, down from the top (it draws itself: the magic of ink).
+          this.doodle!.strokes[2] = [{ x: p.xe, y: p.top - 1 }, { x: p.xe, y: p.floor - 1 }];
+          if (this.target) { this.phase = 'off'; this.pt = 0; ch.walkTo(p.xe + p.dir * 28 * sc, false, true); }
+          else { this.phase = 'stow'; this.pt = 0; this.makeReal(c); }
+          return false;
+        }
+        if (ch.mode === 'ground' && (this.ink - ch.x) * p.dir > 20 * sc) ch.walkTo(this.ink - p.dir * 18 * sc);
+        if (ch.mode !== 'ground' && ch.mode !== 'air') return this.lost(c);
+        return this.pt > 30 ? this.lost(c) : false;
+      }
+      case 'off':
+        // Onto the window, then the drawing becomes a real ramp behind him.
+        if (this.pt > 0.8 && ch.ready && (ch.supportPlatform()?.win === this.target?.win || this.pt > 4)) { this.makeReal(c); this.phase = 'stow'; this.pt = 0; }
+        return false;
+      case 'stow':
+        if (this.tool.stow(c, dt) || this.pt > 2) {
+          if (chance(0.6)) c.say(pick(['ta-da', 'who needs stairs', 'art AND engineering', 'easy']), 1.4);
+          c.mood.feel('proud', 4);
+          return true;
+        }
+        return false;
+    }
+    return this.t > 60;
+  }
+
+  private makeReal(c: Ctx) {
+    const p = this.plan!, d = this.doodle!;
+    c.props?.setWet(this.wetId, null);
+    const t = makeRamp(d, p.x0, p.xe, p.floor, p.top, this.n);
+    t.setDrawing(d.strokes);
+    d.alive = true; d.done = true;
+    c.props?.add(t);
+    c.sound?.('poof', 0.5);
+  }
+
+  private lost(c: Ctx) {
+    // Interrupted (you grabbed him, or his pen): the wet line dries up and vanishes.
+    c.props?.setWet(this.wetId, null);
+    if (this.doodle) this.doodle.done = true;
+    c.char.handTarget = null;
+    return true;
+  }
+  stop(c: Ctx) {
+    if (this.phase !== 'stow' && this.phase !== 'done') this.lost(c);
+    c.char.handTarget = null;
+    const pen = this.tool.item;
+    if (pen?.where === 'hand') { pen.aim = null; c.items.stow(pen); }
+  }
+}
+
+/** Is there a gap from the edge of what he's on to `target` (about the same height) that he could draw a bridge over? */
+export function bridgePlan(c: Ctx, target: Platform) {
+  const ch = c.char, sc = ch.scale, sp = ch.supportPlatform(), pen = c.items.find('draw');
+  if (!sp || sp.y2 !== undefined || target.y2 !== undefined || !pen || pen.where === 'cursor' || !ch.useHand) return null;
+  if (Math.abs(target.y - sp.y) > 45 * sc) return null;
+  const dir = (target.x1 >= sp.x2 ? 1 : target.x2 <= sp.x1 ? -1 : 0) as 1 | -1 | 0;
+  if (!dir) return null;
+  const from = dir > 0 ? sp.x2 : sp.x1, to = dir > 0 ? target.x1 : target.x2, gap = Math.abs(to - from);
+  if (gap < 30 * sc || gap > 380 * sc) return null;
+  return { dir, from, to, y1: sp.y, y2: target.y };
+}
+
+/**
+ * A gap between two windows: he draws a bridge across it, walking out over the gap behind his pen
+ * (the wet ink holds him). Once he's across, it turns into a real plank bridge stuck into both windows:
+ * it sags a bit, more when someone's on it, and you can knock it loose.
+ */
+export class BridgeTo extends Skill {
+  readonly name = 'drawbridge';
+  private phase: 'go' | 'pen' | 'draw' | 'off' | 'stow' = 'go';
+  private tool = new Tool('draw');
+  private plan: ReturnType<typeof bridgePlan> = null;
+  private doodle: Doodle | null = null;
+  private ink = 0;
+  private wetId = rampSlopeId(reserveThing(), 1);
+  private pt = 0;
+  constructor(private target: Platform) { super(); }
+  start(c: Ctx) { this.plan = bridgePlan(c, this.target); c.look = 'none'; }
+  private lineY(x: number) { const p = this.plan!; return p.y1 + (p.y2 - p.y1) * Math.min(1, Math.max(0, (x - p.from) / (p.to - p.from))); }
+  update(c: Ctx, dt: number) {
+    const ch = c.char, p = this.plan, sc = ch.scale, pen = this.tool.item;
+    if (!p) { c.say(pick(["can't bridge that", 'too far']), 1.4); return true; }
+    this.pt += dt;
+    if (this.t > 60) return this.lost(c);
+    switch (this.phase) {
+      case 'go':
+        if (!arrive(c, p.from - p.dir * 14 * sc, 8)) return false;
+        ch.facing = p.dir; this.phase = 'pen'; this.pt = 0;
+        if (chance(0.6)) c.say(pick(['bridge time', 'hold on', 'I got this']), 1.4);
+        return false;
+      case 'pen': {
+        const r = this.tool.fetch(c, dt);
+        if (r === 'none') { missingTool(c, this.tool, 'pen'); return true; }
+        if (r !== 'ready') return false;
+        this.ink = p.from;
+        this.doodle = { strokes: [[{ x: p.from, y: p.y1 - 1 }]], color: c.inkColor, born: c.world.time, done: false, title: 'bridge' };
+        c.doodles.push(this.doodle);
+        this.phase = 'draw'; this.pt = 0;
+        return false;
+      }
+      case 'draw': {
+        if (!pen || pen.where !== 'hand' || (ch.mode !== 'ground' && ch.mode !== 'air')) return this.lost(c);
+        const end = p.to + p.dir * 8 * sc, tipX = ch.x + p.dir * 24 * sc;
+        if ((tipX - this.ink) * p.dir > 0) this.ink = p.dir > 0 ? Math.min(end, tipX) : Math.max(end, tipX);
+        const a = { x: p.from - p.dir * 4, y: p.y1 }, b = { x: this.ink, y: this.lineY(this.ink) };
+        const [l, r] = a.x < b.x ? [a, b] : [b, a];
+        c.props?.setWet(this.wetId, { id: this.wetId, x1: l.x, x2: r.x, y: l.y, y2: Math.abs(r.y - l.y) > 0.5 ? r.y : undefined });
+        this.doodle!.strokes[0] = [{ x: p.from, y: p.y1 - 1 }, { x: this.ink, y: this.lineY(this.ink) - 1 }];
+        penTo(c, pen, { x: this.ink, y: this.lineY(this.ink) - 1 });
+        if (Math.random() < dt * 6) c.sound?.('scribble');
+        if (Math.abs(this.ink - end) < 1) { ch.handTarget = null; pen.aim = null; this.phase = 'off'; this.pt = 0; ch.walkTo(p.to + p.dir * 30 * sc, false, true); return false; }
+        if (ch.mode === 'ground' && (this.ink - ch.x) * p.dir > 20 * sc) ch.walkTo(this.ink - p.dir * 18 * sc, false, true);
+        return this.pt > 30 ? this.lost(c) : false;
+      }
+      case 'off':
+        if (this.pt > 0.8 && ch.ready && (ch.support === this.target.id || ch.supportPlatform()?.win === this.target.win || this.pt > 4)) {
+          // Across: now it's a real bridge (with planks), stuck into the windows on both ends.
+          c.props?.setWet(this.wetId, null);
+          const d = this.doodle!;
+          d.alive = true; d.done = true;
+          c.props?.add(makeBridge(d, p.from - p.dir * 2, p.y1, p.to + p.dir * 2, p.y2, 1.03));
+          c.sound?.('poof', 0.5);
+          this.phase = 'stow'; this.pt = 0;
+        }
+        return false;
+      case 'stow':
+        if (this.tool.stow(c, dt) || this.pt > 2) { if (chance(0.5)) c.say(pick(['bridged it', 'nailed it', 'engineering!']), 1.4); c.mood.feel('proud', 4); return true; }
+        return false;
+    }
+    return false;
+  }
+  private lost(c: Ctx) { c.props?.setWet(this.wetId, null); if (this.doodle) this.doodle.done = true; c.char.handTarget = null; return true; }
+  stop(c: Ctx) {
+    if (this.phase !== 'stow') this.lost(c);
+    c.char.handTarget = null;
+    const pen = this.tool.item;
+    if (pen?.where === 'hand') { pen.aim = null; c.items.stow(pen); }
+  }
 }
 
 // ───────────── fighting your cursor ─────────────

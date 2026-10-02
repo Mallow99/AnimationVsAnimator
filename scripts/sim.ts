@@ -929,6 +929,36 @@ function calmPet() {
   petFor(14, pet, () => { if (pet.props.thingOf(pet.char.support) === r) onRamp = true; if (pet.char.mode === 'air' && onRamp && pet.char.support < 0 && pet.char.body.j.hip.y > 700) fell = true; });
   check('ramp: walks up it onto the window, no jumping', onRamp && pet.char.supportPlatform()?.win === 1 && Math.abs(pet.char.x - 1100) < 25, `onRamp=${onRamp} support=${pet.char.support} x=${pet.char.x.toFixed(0)} fell=${fell}`);
 }
+{ // He draws himself a ramp up onto a window: base first, then up the slope behind his pen; it becomes real.
+  const pet = calmPet();
+  pet.setWindows([{ id: 1, x: 950, y: 560, w: 400, h: 240 }]);
+  pet.paused = true; petFor(0.5, pet); pet.paused = false;
+  pet.mind.command(pet.ctx, 'ramp');
+  let onWet = false, drew = 0, up = false;
+  petFor(40, pet, () => {
+    if (pet.char.support >= 1_000_000_000 && pet.props.thingOf(pet.char.support) === null) onWet = true;
+    drew = Math.max(drew, pet.ctx.doodles.filter((d) => d.title === 'ramp').length);
+    if (pet.props.things.some((t) => t.kind === 'ramp') && pet.char.supportPlatform()?.win === 1) up = true; // (after that he may wander back down it)
+  });
+  const ramp = pet.props.things.find((t) => t.kind === 'ramp');
+  check('draws a ramp up to a window, walks up the wet ink, it turns real', onWet && !!ramp && up, `onWet=${onWet} ramp=${!!ramp} support=${pet.char.support} skill=${pet.mind.skill?.name} drew=${drew}`);
+}
+{ // A gap between two windows at the same height: he draws a bridge across, then it's a real (sagging) bridge.
+  const pet = calmPet();
+  pet.setWindows([{ id: 1, x: 100, y: 520, w: 380, h: 280 }, { id: 2, x: 700, y: 520, w: 380, h: 280 }]);
+  pet.paused = true;
+  pet.char.body.translate(300 - pet.char.x, 520 - pet.char.body.j.footL.y - 2); pet.char.mode = 'air';
+  petFor(2, pet); pet.paused = false;
+  const onFirst = pet.char.supportPlatform()?.win === 1;
+  pet.mind.command(pet.ctx, 'bridge');
+  let overGap = false, across = false;
+  petFor(40, pet, () => {
+    if (pet.char.mode === 'ground' && pet.char.x > 500 && pet.char.x < 680) overGap = true;
+    if (pet.props.things.some((t) => t.kind === 'bridge') && pet.char.supportPlatform()?.win === 2) across = true;
+  });
+  const br = pet.props.things.find((t) => t.kind === 'bridge');
+  check('draws a bridge over a gap, walks across, it turns into a real bridge', onFirst && overGap && !!br && br.stuck && across, `onFirst=${onFirst} overGap=${overGap} bridge=${!!br} support=${pet.char.support}`);
+}
 
 // ───── memories (milestone 5) ─────
 function throwHim(pet: Pet) {
@@ -1214,9 +1244,12 @@ function events(pet: Pet) {
   const pet = calmPet();
   const ball = pet.items.find('throw')!;
   pet.mind.command(pet.ctx, 'bounce');
-  let left = 0, caught = 0, wasOut = false;
-  petFor(25, pet, () => { if (ball.where === 'world') { if (!wasOut) left++; wasOut = true; } else if (wasOut && ball.where === 'hand') { caught++; wasOut = false; } });
-  check('ball: bounces it and catches it', left >= 2 && caught >= 1 && ball.where === 'belt', `throws=${left} caught=${caught} where=${ball.where}`);
+  let left = 0, caught = 0, wasOut = false, putAway = false;
+  petFor(25, pet, () => {
+    if (ball.where === 'world') { if (!wasOut) left++; wasOut = true; } else if (wasOut && ball.where === 'hand') { caught++; wasOut = false; }
+    if (caught && ball.where === 'belt') putAway = true;
+  });
+  check('ball: bounces it and catches it', left >= 2 && caught >= 1 && putAway, `throws=${left} caught=${caught} where=${ball.where}`);
 }
 
 // ───── your windows ─────
