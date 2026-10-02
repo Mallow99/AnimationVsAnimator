@@ -53,6 +53,20 @@ Layers inside core:
 8. Customization (accessories/items with definition files), tray settings, packaging.
 Then: Android shell.
 
+## Status
+- Milestone 1 ✅ overlay, ragdoll, drag/poke/throw, getting up.
+- Milestone 2 ✅ walking/running/jumping/sitting/sleeping, gestures, mood engine,
+  offline instinct mind (`src/core/mind.ts`), speech bubbles, petting, mood saved in localStorage.
+- Verified in the cloud container: physics + mind via `npm run sim`, rendering via
+  headless Chromium screenshots, Electron launch under Xvfb. NOT yet verified on a real
+  Mac/PC: click-through, always-on-top, feel.
+
+## Key files
+- `src/core/character.ts` body controller (modes, stepping, gestures). Tune feel here.
+- `src/core/mood.ts` dials + posture. `src/core/mind.ts` choices + reactions. `src/core/skills.ts` skills.
+- `src/core/pet.ts` glue + input. `src/app/renderer.ts` page + click-through. `src/electron/main.ts` window.
+- Debug in DevTools: `pet.paused = true`, `pet.mood.s`, `pet.char.walkTo(x)`, `pet.char.doGesture('wave')`.
+
 ## Commands
 - `npm start`     build + launch the pet (Electron)
 - `npm run preview` build + open in a normal browser window (no click-through)

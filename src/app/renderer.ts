@@ -24,6 +24,12 @@ function bounds(): Bounds {
 }
 
 const pet = new Pet(bounds());
+// Remember his mood between runs (browser storage works in Electron too).
+const SAVE_KEY = 'pet-save';
+try { pet.load(localStorage.getItem(SAVE_KEY)); } catch { /* storage blocked */ }
+const save = () => { try { localStorage.setItem(SAVE_KEY, pet.save()); } catch { /* ignore */ } };
+setInterval(save, 15000);
+window.addEventListener('beforeunload', save);
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools
 
 function resize() {
@@ -59,6 +65,7 @@ window.addEventListener('mousemove', (e) => {
   vel.x += ((e.clientX - last.x) / dt - vel.x) * 0.5;
   vel.y += ((e.clientY - last.y) / dt - vel.y) * 0.5;
   last = { x: e.clientX, y: e.clientY, t: now };
+  pet.cursor(e.clientX, e.clientY);
   pet.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now);
   updateClickThrough(e.clientX, e.clientY);
 });

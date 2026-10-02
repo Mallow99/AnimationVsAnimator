@@ -40,3 +40,37 @@ export function drawCharacter(ctx: CanvasRenderingContext2D, c: Character, style
   }
   ctx.restore();
 }
+
+/** A speech bubble above his head, kept on screen. */
+export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, alpha: number, b: { left: number; right: number; top: number }) {
+  const head = c.body.j.head, sc = c.scale;
+  const short = text.length <= 3; // emotes like "!" or "♥" get a smaller bubble
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, alpha);
+  ctx.font = `${short ? 600 : 500} ${short ? 15 : 13}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  const padX = short ? 7 : 9, h = short ? 24 : 26;
+  const w = Math.max(ctx.measureText(text).width + padX * 2, h);
+  const tipX = head.x, tipY = head.y - c.d.headR - 5 * sc;
+  const x = Math.min(Math.max(tipX - w / 2, b.left + 4), b.right - w - 4);
+  const y = Math.max(tipY - 8 - h, b.top + 4);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.96)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, h / 2);
+  ctx.fill();
+  ctx.stroke();
+  // little tail pointing at his head
+  const tx = Math.min(Math.max(tipX, x + 10), x + w - 10);
+  ctx.beginPath();
+  ctx.moveTo(tx - 5, y + h - 0.5); ctx.lineTo(tx, y + h + 7); ctx.lineTo(tx + 5, y + h - 0.5);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#222';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + w / 2, y + h / 2 + 1);
+  ctx.restore();
+}

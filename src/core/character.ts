@@ -65,6 +65,7 @@ export class Character {
   private calm = 0;
   private dt = 1 / 120;
   private stun = 0;
+  private offBalance = 0;
   private hipTarget: Vec | null = null;
   private getup: { from: Record<JointName, Vec>; crouch: Targets; stand: Targets; x: number } | null = null;
   private held: { joint: JointName; x: number; y: number; vx: number; vy: number } | null = null;
@@ -122,7 +123,13 @@ export class Character {
     if (this.mode === 'sit') {
       this.setMode('ground');
       this.rootX = this.body.j.hip.x;
-      this.plantFeet();
+      // Tuck the feet back under the hips first, like a person does.
+      const st = 4 * this.scale;
+      for (const [k, side] of [['L', -1], ['R', 1]] as const) {
+        const f = this.feet[k];
+        f.x = f.fromX = f.toX = this.rootX + side * this.facing * st;
+        f.swinging = false;
+      }
       // Start from a deep crouch so he rises instead of "losing balance".
       this.crouch = Math.max(0, this.body.j.hip.y - (this.groundY() - (this.d.thigh + this.d.shin) * 0.93));
     } else if (this.mode === 'lie' || this.mode === 'ragdoll') {
@@ -253,6 +260,7 @@ export class Character {
     this.mode = m;
     this.modeTime = 0;
     this.calm = 0;
+    this.offBalance = 0;
     if (m !== 'ground') { this.jumpPrep = null; if (m !== 'held') this.gesture = null; }
   }
 
@@ -307,8 +315,11 @@ export class Character {
       }
       case 'ground': {
         const tg = this.hipTarget;
-        const lost = tg && dist(j.hip.x, j.hip.y, tg.x, tg.y) > 24 * this.scale;
-        if (otherDown || lost) {
+        const headDown = j.head.grounded || j.neck.grounded; // hips on the floor is fine (rising from a sit)
+        // Off balance = hips far from where they should be, for more than a moment.
+        const off = tg ? dist(j.hip.x, j.hip.y, tg.x, tg.y) : 0;
+        this.offBalance = off > 22 * this.scale + this.crouch ? this.offBalance + dt : 0;
+        if (headDown || this.offBalance > 0.12 || off > 45 * this.scale) {
           this.setMode('ragdoll');
           this.events.push({ type: 'tripped' });
         }
@@ -369,7 +380,7 @@ export class Character {
     // Locomotion: slide an invisible "root" toward the goal; the feet chase it.
     const speedMul = P.speed * (this.running ? 2.3 : 1);
     let want = 0;
-    if (this.goalX !== null && !this.gesture && !this.jumpPrep) {
+    if (this.goalX !== null && !this.gesture && !this.jumpPrep && this.crouch < 6 * sc) {
       const dx = this.goalX - this.rootX;
       if (Math.abs(dx) < 4 && Math.abs(this.rootVX) < 40) {
         this.goalX = null;
