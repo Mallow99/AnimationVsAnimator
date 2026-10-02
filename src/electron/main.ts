@@ -146,7 +146,7 @@ function buildTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: config.name, enabled: false },
     { label: 'Settings…', click: () => openSettings() },
-    { label: `Talk to ${config.name}…`, click: () => openSettings('control') },
+    { label: `Talk to ${config.name}…`, click: () => openSettings('chat') },
     { label: 'Smack mode', type: 'checkbox', checked: config.smacking, click: () => setConfig({ smacking: !config.smacking }) },
     { label: 'Mischief mode', type: 'checkbox', checked: config.mischief, click: () => setConfig({ mischief: !config.mischief }) },
     { label: 'Climb on windows', type: 'checkbox', checked: config.windows, click: () => setConfig({ windows: !config.windows }) },
@@ -171,6 +171,7 @@ ipcMain.handle('config:get', () => config);
 ipcMain.on('config:set', (_e, patch: unknown) => setConfig(patch));
 ipcMain.on('config:reset', () => setConfig(DEFAULT_CONFIG));
 ipcMain.on('pet:stats', (_e, stats: unknown) => settingsWin?.webContents.send('pet:stats', stats));
+ipcMain.on('pet:collections', (_e, data: unknown) => settingsWin?.webContents.send('pet:collections', data));
 ipcMain.on('pet:command', (_e, cmd: string) => win?.webContents.send('pet:command', cmd));
 ipcMain.on('settings:open', () => openSettings());
 // The AI brain: the overlay asks, main calls the AI service with the saved key.

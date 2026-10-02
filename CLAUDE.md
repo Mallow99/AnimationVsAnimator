@@ -132,7 +132,27 @@ Then: Android shell.
     `:free` models. JSON mode, retried without it on a 400. "Find models" lists what the key can use (model names
     change often). Keys per provider in userData/brain-keys, encrypted with safeStorage.
   - The Claude SDK version was dropped (owner can't pay); it's in git history if ever wanted.
-- NEXT: owner tries the AI brain with a real key on the Mac. Options offered, not chosen yet: talk to him right on the
+- Owner's first real tests (Groq, openai/gpt-oss-120b): works, but one action per reply, "[hop]" tags in the log,
+  and a mean message got a ChatGPT-style crisis answer. Fixed in the next round:
+  - Replies are `{say, feel, plan}`: plan = up to 8 steps in order (`do`, `say`, `wait`, `walk`, `move` + name,
+    `replay` a saved move, `draw` strokes -50..50 y-up). `PlanSkill` in mind.ts runs them; `mind.makeSkill()` builds
+    any command. `feel` nudges his mood (±0.4). Prompt rewritten with examples: in his own voice, never helpdesk/
+    therapist; takes insults personally; EXCEPTION: if the person says THEY are in danger, he drops the act and
+    points to a trusted adult / 988. Chat log shows actions as a grey "*hop ×3*" line (`describePlan`).
+  - 2.5D: `yaw` angle (0 right, π left, π/2 facing you). Physics stays 2D; poses use `turnF`=cos(yaw) for forward
+    offsets and `turnS`=sin(yaw) to spread limbs sideways (`SIDE` table), so turning is an eased ~0.32 s spin through
+    a front view. Puppet poses are stored in his own frame and projected every step; keyframe `turn` (degrees) spins.
+    Owner's idea; true 3D physics would be part of the later physics overhaul (with limb ripping).
+  - Indie feel: `pixelfont.ts` (hand-made 5x7), `drawPixelBubble` (stepped corners/tail), typed-out speech with
+    square-wave blips (pitch from mood; `onBlip` → Web Audio in renderer; config `sound`), dust puffs, hit-stop.
+    Owner wants the "There Is No Game" indie feel; asked for reference screenshots/clips.
+  - Settings tabs: Chat | Mood (+ commands) | Mind | Look | Movement | General. Mind = neurons (live from
+    `mind.weigh()`: mood → options sized by score → current action; AI node), persona, moves (save AI-made
+    moves, do/forget; instinct 'showoff' uses saved ones), drawings gallery (persisted in the pet save, redraw/forget).
+    Look: `outline` option.
+- Owner's later ideas (agreed, not built): a belt with tools (pen, wooden sword) he grabs and uses (hit the
+  cursor, draw); interactable drawings; ripping limbs off — all with the items + physics overhaul.
+- NEXT: owner tests this round on the Mac. Options offered, not chosen yet: talk to him right on the
   desktop (double-click him → a little text field) instead of the settings window; a local/free model (Ollama).
   Owner also wants more Desktop Goose / Shimeji behaviors and better animations over time.
 

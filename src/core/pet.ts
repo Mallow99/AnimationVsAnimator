@@ -12,6 +12,10 @@ import { windowPlatforms, windowWalls, type WinRect } from './world';
 import { drawBubble, drawCharacter, drawPixelBubble, drawPuffs, PixelLayer, shade, type Puff } from './render';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, splitSpeech } from './brain';
+import type { Vec } from './math';
+
+/** A finished drawing kept in his gallery. Shape is in a box from -0.5 to 0.5. */
+export interface Drawing { title: string; shape: Vec[][]; color: string; at: number }
 
 export { DEFAULT_CONFIG, type PetConfig } from './config';
 
@@ -48,6 +52,10 @@ export class Pet {
   private winShown: WinRect[] = [];
   private pixels = new PixelLayer();
   private rub = { dist: 0, since: 0, lastX: 0, lastY: 0, over: false };
+  /** Everything he's drawn (newest last), kept between runs. */
+  gallery: Drawing[] = [];
+  /** Called when his gallery or his moves change (the app tells the settings window). */
+  onCollections: (() => void) | null = null;
 
   constructor(bounds: Bounds, readonly config: PetConfig = structuredClone(DEFAULT_CONFIG)) {
     this.char = new Character(bounds, (bounds.left + bounds.right) / 2, config.scale);
@@ -69,6 +77,14 @@ export class Pet {
       canGrabCursor: false,
     };
     this.brain.onSpeak = (text) => this.speak(text);
+    this.ctx.savedMoves = this.brain.savedMoves;
+    this.brain.onMoves = () => this.onCollections?.();
+    this.ctx.onDrawn = (d) => {
+      if (!d.shape) return;
+      this.gallery.push({ title: d.title ?? 'doodle', shape: d.shape, color: d.color, at: Date.now() });
+      if (this.gallery.length > 40) this.gallery.shift();
+      this.onCollections?.();
+    };
   }
 
   /** Advance by real elapsed seconds (any frame rate). */
@@ -334,6 +350,17 @@ export class Pet {
       windows: this.winShown.length,
       platforms: this.ctx.world.platforms.length,
       brain: { active: this.brain.active, status: this.brain.status, log: this.brain.log.slice(-20) },
+      // For the neurons view: everything he's weighing, how much, and what won.
+      mind: { weigh: this.mind.weigh(this.ctx), thinking: this.brain.status === 'thinking…' },
+    };
+  }
+
+  /** His drawings and moves, for the Mind tab (sent only when they change: they can be big-ish). */
+  collections() {
+    return {
+      gallery: this.gallery,
+      recentMoves: this.brain.recentMoves.map((m) => ({ name: m.name, poses: m.frames.length })),
+      savedMoves: this.brain.savedMoves.map((m) => ({ name: m.name, poses: m.frames.length })),
     };
   }
 
@@ -347,6 +374,7 @@ export class Pet {
     if (verb === 'do') { this.mind.command(this.ctx, arg); return; }
     if (verb === 'say') { if (arg.trim()) this.say(arg.trim().slice(0, 80)); return; }
     if (verb === 'hear') { this.brain.hear(this.ctx, arg); return; }
+    if (this.collectionCommand(verb, arg)) { this.onCollections?.(); return; }
     if (verb === 'mood') { const p = MOOD_PRESETS[arg]; if (p) { this.mood.asleep = false; Object.assign(this.mood.s, p); } return; }
     if (verb === 'setMood') {
       try {
@@ -372,14 +400,44 @@ export class Pet {
     }
   }
 
+  /**
+   * Gallery and moves, from the Mind tab:
+   *   saveMove:<recent index>:<name>  playMove:<i>  forgetMove:<i>  redraw:<i>  forgetDrawing:<i>  sync
+   */
+  private collectionCommand(verb: string, arg: string): boolean {
+    const [a, ...rest] = arg.split(':'), i = Number(a);
+    const b = this.brain, saved = b.savedMoves;
+    switch (verb) {
+      case 'sync': return true;
+      case 'saveMove': {
+        const m = b.recentMoves[i];
+        if (!m) return false;
+        saved.push({ name: (rest.join(':').trim() || m.name).slice(0, 40), frames: m.frames });
+        b.recentMoves.splice(i, 1);
+        if (saved.length > 30) saved.shift();
+        return true;
+      }
+      case 'playMove': if (saved[i]) this.mind.perform(this.ctx, [{ move: saved[i].frames, name: saved[i].name }], 'you told him to'); return false;
+      case 'forgetMove': if (!saved[i]) return false; saved.splice(i, 1); return true;
+      case 'redraw': { const d = this.gallery[i]; if (d) this.mind.perform(this.ctx, [{ draw: d.shape, title: d.title }], 'you told him to'); return false; }
+      case 'forgetDrawing': if (!this.gallery[i]) return false; this.gallery.splice(i, 1); return true;
+    }
+    return false;
+  }
+
   // ── saving between runs ──
-  save() { return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons }); }
+  save() {
+    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves });
+  }
   load(json: string | null) {
     if (!json) return;
     try {
       const d = JSON.parse(json);
       this.mood.load(d.mood);
       if (typeof d.lessons?.safeDrop === 'number') this.ctx.lessons.safeDrop = d.lessons.safeDrop;
+      if (Array.isArray(d.gallery)) this.gallery = d.gallery.slice(-40);
+      // Same array object the brain and mind already hold: fill it in place.
+      if (Array.isArray(d.moves)) this.brain.savedMoves.splice(0, Infinity, ...d.moves.slice(-30));
     } catch { /* corrupt save: start fresh */ }
   }
 }

@@ -246,6 +246,8 @@ export class Brain {
   recentMoves: MadeMove[] = [];
   /** Moves you saved: he remembers them and can do them again (even offline). */
   savedMoves: MadeMove[] = [];
+  /** Called when he makes up a new move (so the Mind tab can offer to save it). */
+  onMoves: () => void = () => {};
 
   private history: BrainTurn[] = [];
   private busy = false;
@@ -404,6 +406,7 @@ export class Brain {
       if ('move' in st && !this.savedMoves.some((m) => m.frames === st.move)) {
         this.recentMoves.push({ name: st.name || 'made-up move', frames: st.move });
         if (this.recentMoves.length > 10) this.recentMoves.shift();
+        this.onMoves();
       }
     }
     // He says his first line right away; the rest happens as the plan plays out.

@@ -6,10 +6,14 @@ import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
 import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
 
-interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number }
+interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
+interface Weigh { name: string; score: number; why: string }
+interface Drawing { title: string; shape: { x: number; y: number }[][]; color: string; at: number }
+interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[] }
 interface Stats {
   name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number;
   brain: { active: boolean; status: string; log: LogLine[] };
+  mind?: { weigh: Weigh[]; thinking: boolean };
 }
 interface KeyStatus { provider: ProviderId; saved: boolean; hint: string }
 interface Shell {
@@ -24,6 +28,7 @@ interface Shell {
   onKeyStatus(cb: (k: KeyStatus) => void): void;
   setKey(key: string): void;
   onTab(cb: (tab: string) => void): void;
+  onCollections(cb: (c: Collections) => void): void;
 }
 const shell = (window as unknown as { petShell: Shell }).petShell;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -35,7 +40,7 @@ function showTab(name: string) {
   for (const p of document.querySelectorAll<HTMLElement>('[data-panel]')) p.hidden = p.dataset.panel !== name;
 }
 for (const tab of document.querySelectorAll<HTMLButtonElement>('nav button')) tab.addEventListener('click', () => showTab(tab.dataset.tab!));
-shell.onTab((tab) => { showTab(tab); if (tab === 'control') $('talkText').focus(); });
+shell.onTab((tab) => { showTab(tab === 'control' ? 'chat' : tab); if (tab === 'chat' || tab === 'control') $('talkText').focus(); });
 
 // ── mood ──
 const MOOD_ROWS: [keyof MoodState, string][] = [
@@ -92,11 +97,22 @@ function renderChat(log: LogLine[], status: string, active: boolean) {
   chatShown = key;
   const box = $('chat');
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 30;
-  box.replaceChildren(...(log.length ? log : [{ who: 'note' as const, text: 'Say hi. He answers in his speech bubble.', at: 0 }]).map((l) => {
-    const p = document.createElement('p');
-    p.className = l.who;
-    p.textContent = l.text;
-    return p;
+  box.replaceChildren(...(log.length ? log : [{ who: 'note' as const, text: 'Say hi. He answers in his speech bubble.', at: 0 } as LogLine]).flatMap((l) => {
+    const out: HTMLElement[] = [];
+    if (l.text || !l.acts) {
+      const p = document.createElement('p');
+      p.className = l.who;
+      p.textContent = l.text || '…';
+      out.push(p);
+    }
+    if (l.acts) {
+      // What he did, in his own grey line: "*hop ×3, walks away*"
+      const a = document.createElement('p');
+      a.className = 'acts';
+      a.textContent = `*${l.acts}*`;
+      out.push(a);
+    }
+    return out;
   }));
   if (atBottom) box.scrollTop = box.scrollHeight;
   $('brainState').textContent = status === 'thinking…' ? 'He\'s thinking…'
@@ -124,6 +140,7 @@ shell.onStats((s) => {
   $('winInfo').textContent = s.windows ? `He can see ${s.windows} window(s) and ${s.platforms} window top(s) to stand on.` : 'He can\'t see any windows yet. If this stays at zero, check the Terminal for lines starting with [windows].';
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
   if (s.brain) renderChat(s.brain.log, s.brain.status, s.brain.active);
+  latest = s;
 });
 $('resetMood').addEventListener('click', () => shell.command('resetMood'));
 $('clearDoodles').addEventListener('click', () => shell.command('clearDoodles'));
@@ -190,6 +207,7 @@ $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.t
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
 $<HTMLTextAreaElement>('persona').addEventListener('input', (e) => set({ persona: (e.target as HTMLTextAreaElement).value }));
 $<HTMLInputElement>('model').addEventListener('change', (e) => set({ model: (e.target as HTMLInputElement).value.trim() }));
+$<HTMLInputElement>('outline').addEventListener('change', (e) => set({ look: { outline: (e.target as HTMLInputElement).checked } }));
 $<HTMLInputElement>('puppet').addEventListener('change', (e) => set({ puppet: (e.target as HTMLInputElement).checked }));
 
 // ── AI service + key (kept by the desktop shell; this page only ever sees the last 4 characters) ──
@@ -242,6 +260,7 @@ function render(c: PetConfig) {
   providerSel.value = c.provider;
   $<HTMLAnchorElement>('keyLink').href = PROVIDERS[c.provider].keyUrl;
   $<HTMLInputElement>('puppet').checked = c.puppet;
+  $<HTMLInputElement>('outline').checked = c.look.outline;
   for (const [input, out, key] of sliders) {
     const [a, b] = key.split('.');
     const v = b ? (c as any)[a][b] : (c as any)[a];
@@ -252,3 +271,153 @@ function render(c: PetConfig) {
 }
 shell.getConfig().then(render);
 shell.onConfig(render);
+
+// ── Mind tab: moves and drawings ──
+/** Name a made-up move before saving it (a little inline box; Electron has no prompt()). */
+function askName(i: number, suggested: string) {
+  const form = document.createElement('form');
+  form.className = 'inline';
+  const input = document.createElement('input');
+  input.type = 'text'; input.maxLength = 40; input.value = suggested;
+  const ok = document.createElement('button');
+  ok.className = 'btn small'; ok.type = 'submit'; ok.textContent = 'Save';
+  form.append(input, ok);
+  form.addEventListener('submit', (e) => { e.preventDefault(); shell.command(`saveMove:${i}:${input.value}`); });
+  $('recentMoves').prepend(form);
+  input.focus(); input.select();
+}
+function moveRow(name: string, poses: number, buttons: [string, () => void][]) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const label = document.createElement('span');
+  label.textContent = name;
+  const info = document.createElement('small');
+  info.textContent = `${poses} poses`;
+  row.append(label, info);
+  for (const [text, fn] of buttons) {
+    const b = document.createElement('button');
+    b.className = 'btn ghost small'; b.type = 'button'; b.textContent = text;
+    b.addEventListener('click', fn);
+    row.append(b);
+  }
+  return row;
+}
+function emptyNote(text: string) { const p = document.createElement('p'); p.className = 'note'; p.textContent = text; return p; }
+
+function drawThumb(cv: HTMLCanvasElement, d: Drawing) {
+  const size = 96;
+  cv.width = size; cv.height = size;
+  const g = cv.getContext('2d')!;
+  g.strokeStyle = d.color; g.lineWidth = 3; g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const st of d.shape) {
+    if (st.length < 2) continue;
+    g.beginPath();
+    st.forEach((p, i) => (i ? g.lineTo : g.moveTo).call(g, size / 2 + p.x * size * 0.8, size / 2 + p.y * size * 0.8));
+    g.stroke();
+  }
+}
+
+shell.onCollections((c) => {
+  $('savedMoves').replaceChildren(...(c.savedMoves.length ? c.savedMoves.map((m, i) => moveRow(m.name, m.poses, [
+    ['Do it', () => shell.command(`playMove:${i}`)],
+    ['Forget', () => shell.command(`forgetMove:${i}`)],
+  ])) : [emptyNote('None yet.')]));
+  $('recentMoves').replaceChildren(...(c.recentMoves.length ? c.recentMoves.map((m, i) => moveRow(m.name, m.poses, [
+    ['Save', () => askName(i, m.name)],
+  ])).reverse() : [emptyNote('Nothing yet. Ask him for something weird in Chat ("do a handstand").')]));
+  $('gallery').replaceChildren(...(c.gallery.length ? c.gallery.map((d, i) => {
+    const fig = document.createElement('figure');
+    const cv = document.createElement('canvas');
+    drawThumb(cv, d);
+    const cap = document.createElement('figcaption');
+    cap.textContent = d.title;
+    cap.title = new Date(d.at).toLocaleString();
+    const btns = document.createElement('div');
+    btns.className = 'btns';
+    for (const [text, cmd] of [['Again', 'redraw'], ['✕', 'forgetDrawing']] as const) {
+      const b = document.createElement('button');
+      b.className = 'btn ghost small'; b.type = 'button'; b.textContent = text;
+      b.title = cmd === 'redraw' ? 'Have him draw it again' : 'Throw it away';
+      b.addEventListener('click', () => shell.command(`${cmd}:${i}`));
+      btns.append(b);
+    }
+    fig.append(cv, cap, btns);
+    return fig;
+  }).reverse() : [emptyNote('No drawings yet.')]));
+});
+shell.command('sync'); // ask him for his drawings and moves
+
+// ── Mind tab: neurons ──
+// What he feels on the left, everything he could do in the middle (sized by how much he wants it),
+// what he's doing on the right. Not decoration: it's drawn straight from his real decision-making.
+let latest: Stats | null = null;
+const cvN = $<HTMLCanvasElement>('neurons');
+const shown: Record<string, number> = {}; // eased values so nodes glide instead of jumping
+const ease = (key: string, v: number) => (shown[key] = (shown[key] ?? v) + (v - (shown[key] ?? v)) * 0.15);
+function neurons(now: number) {
+  requestAnimationFrame(neurons);
+  if (cvN.offsetParent === null || !latest?.mind) return; // tab hidden
+  const dpr = window.devicePixelRatio || 1, W = cvN.clientWidth, H = 320;
+  if (cvN.width !== Math.round(W * dpr)) { cvN.width = Math.round(W * dpr); cvN.height = Math.round(H * dpr); }
+  const g = cvN.getContext('2d')!;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim(), ink = css.getPropertyValue('--ink').trim(), muted = css.getPropertyValue('--muted').trim();
+  g.font = '11px ' + css.getPropertyValue('--ui');
+  g.textBaseline = 'middle';
+
+  const s = latest;
+  const inputs = MOOD_ROWS.map(([k, label]) => ({ label, v: ease('in-' + k, s.mood[k]) }));
+  const opts = s.mind!.weigh;
+  const maxScore = Math.max(1, ...opts.map((o) => o.score));
+  const doing = s.doing, aiDriven = /\(AI/.test(s.why);
+  const inX = 112, opX = W * 0.5, outX = W - 64;
+  const inY = (i: number) => 40 + (i * (H - 80)) / (inputs.length - 1);
+  const opY = (i: number) => 14 + (i * (H - 28)) / Math.max(1, opts.length - 1);
+  const outY = H / 2, aiY = 34;
+  const chosen = opts.findIndex((o) => o.name === doing);
+
+  // Wires: everything he feels feeds every choice (faint); the winning path glows, with pulses running along it.
+  g.lineWidth = 1;
+  for (let i = 0; i < inputs.length; i++) for (let k = 0; k < opts.length; k++) {
+    g.strokeStyle = accent; g.globalAlpha = k === chosen ? 0.12 + inputs[i].v * 0.5 : 0.03 + (opts[k].score / maxScore) * 0.05;
+    g.beginPath(); g.moveTo(inX, inY(i)); g.lineTo(opX, opY(k)); g.stroke();
+  }
+  const pulse = (x1: number, y1: number, x2: number, y2: number, speed: number) => {
+    const u = ((now / 1000) * speed) % 1;
+    g.globalAlpha = 1; g.fillStyle = accent;
+    g.beginPath(); g.arc(x1 + (x2 - x1) * u, y1 + (y2 - y1) * u, 2.5, 0, 7); g.fill();
+  };
+  if (chosen >= 0) {
+    g.globalAlpha = 0.8; g.lineWidth = 2; g.strokeStyle = accent;
+    g.beginPath(); g.moveTo(opX, opY(chosen)); g.lineTo(outX, outY); g.stroke();
+    pulse(opX, opY(chosen), outX, outY, 0.9);
+    for (let i = 0; i < inputs.length; i++) if (inputs[i].v > 0.35) pulse(inX, inY(i), opX, opY(chosen), 0.5 + inputs[i].v);
+  }
+  // The AI brain: lights up while it thinks; wired to the output when it made the call.
+  const aiOn = s.mind!.thinking;
+  if (aiDriven || aiOn) {
+    g.globalAlpha = aiOn ? 0.5 + 0.5 * Math.sin(now / 120) ** 2 : 0.7; g.lineWidth = 2; g.strokeStyle = accent;
+    g.beginPath(); g.moveTo(outX, aiY); g.lineTo(outX, outY); g.stroke();
+    if (aiDriven) pulse(outX, aiY, outX, outY, 0.8);
+  }
+
+  // Nodes.
+  const node = (x: number, y: number, r: number, lit: number, label: string, side: -1 | 1, bold = false) => {
+    g.globalAlpha = 1;
+    g.fillStyle = css.getPropertyValue('--panel').trim(); g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    g.globalAlpha = 0.15 + lit * 0.85; g.fillStyle = accent; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    g.globalAlpha = 1; g.strokeStyle = accent; g.lineWidth = bold ? 2.5 : 1; g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke();
+    g.fillStyle = bold ? ink : muted; g.textAlign = side < 0 ? 'right' : 'left';
+    g.fillText(label, x + side * (r + 5), y);
+  };
+  inputs.forEach((n, i) => node(inX, inY(i), 7, n.v, `${n.label} ${n.v.toFixed(2)}`, -1));
+  opts.forEach((o, k) => {
+    const v = ease('op-' + o.name, o.score / maxScore);
+    node(opX, opY(k), 2.5 + v * 6, v, o.name, 1, k === chosen);
+  });
+  node(outX, outY, 12, 1, DOING[doing] ?? doing, -1, true);
+  node(outX, aiY, 9, aiOn ? 1 : aiDriven ? 0.6 : 0.1, aiOn ? 'AI thinking…' : 'AI brain', -1, aiOn);
+}
+requestAnimationFrame(neurons);

@@ -11,9 +11,11 @@ export interface Look {
   headSize: number;   // 1 = normal
   pixel: number;      // 1 = smooth; 2+ = pixel-art with pixels this many screen points wide
   showJoints: boolean;
+  /** A dark outline around him, like a sprite in a pixel-art game. */
+  outline: boolean;
 }
 
-export const DEFAULT_LOOK: Look = { color: '#4450d6', lineWidth: 7, headSize: 1.25, pixel: 2, showJoints: false };
+export const DEFAULT_LOOK: Look = { color: '#4450d6', lineWidth: 7, headSize: 1.25, pixel: 2, showJoints: false, outline: false };
 
 /** Darken (amount < 0) or lighten a #rrggbb color. */
 export function shade(hex: string, amount: number) {
@@ -26,6 +28,8 @@ export function shade(hex: string, amount: number) {
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 export function drawCharacter(ctx: Ctx2D, c: Character, look: Look) {
+  // Smooth style with an outline: draw him once fatter and darker underneath.
+  if (look.outline && look.pixel <= 1) drawCharacter(ctx, c, { ...look, outline: false, color: shade(look.color, -0.7), lineWidth: look.lineWidth + 3 });
   const j = c.body.j, sc = c.scale;
   ctx.save();
   ctx.lineCap = 'round';
@@ -70,7 +74,7 @@ export class PixelLayer {
 
   draw(ctx: CanvasRenderingContext2D, c: Character, look: Look) {
     const p = Math.max(2, Math.round(look.pixel));
-    const pad = c.d.headR + look.lineWidth * c.scale + p * 2;
+    const pad = c.d.headR + look.lineWidth * c.scale + p * 3;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const pt of c.body.points) {
       minX = Math.min(minX, pt.x); minY = Math.min(minY, pt.y);
@@ -88,6 +92,18 @@ export class PixelLayer {
     drawCharacter(g, c, { ...look, lineWidth: Math.max(look.lineWidth, (1.5 * p) / c.scale) });
     const img = g.getImageData(0, 0, w, h), a = img.data;
     for (let i = 3; i < a.length; i += 4) a[i] = a[i] >= 110 ? 255 : 0;
+    if (look.outline) {
+      // Any empty pixel touching him becomes outline.
+      const n = parseInt(shade(look.color, -0.7).slice(1), 16), solid = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) solid[i] = a[i * 4 + 3] ? 1 : 0;
+      for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+        const i = yy * w + xx;
+        if (solid[i]) continue;
+        if ((xx > 0 && solid[i - 1]) || (xx < w - 1 && solid[i + 1]) || (yy > 0 && solid[i - w]) || (yy < h - 1 && solid[i + w])) {
+          a[i * 4] = n >> 16; a[i * 4 + 1] = (n >> 8) & 255; a[i * 4 + 2] = n & 255; a[i * 4 + 3] = 255;
+        }
+      }
+    }
     g.putImageData(img, 0, 0);
     ctx.save();
     ctx.imageSmoothingEnabled = false;

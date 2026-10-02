@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('petShell', {
   // overlay
   setClickThrough: (ignore: boolean) => ipcRenderer.send('pet:clickThrough', ignore),
   sendStats: (stats: unknown) => ipcRenderer.send('pet:stats', stats),
+  sendCollections: (data: unknown) => ipcRenderer.send('pet:collections', data),
   onCommand: on('pet:command'),
   onWindows: on('world:windows'),
   pressed: () => ipcRenderer.send('pet:pressed'),
@@ -24,6 +25,7 @@ contextBridge.exposeInMainWorld('petShell', {
   resetConfig: () => ipcRenderer.send('config:reset'),
   command: (cmd: string) => ipcRenderer.send('pet:command', cmd),
   onStats: on('pet:stats'),
+  onCollections: on('pet:collections'),
   keyStatus: (provider: string) => ipcRenderer.invoke('brain:keyStatus', provider),
   listModels: () => ipcRenderer.invoke('brain:models'),
   onKeyStatus: on('brain:keyStatus'),

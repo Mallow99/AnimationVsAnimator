@@ -12,6 +12,7 @@ interface PetShell {
   getConfig(): Promise<PetConfig>;
   onConfig(cb: (c: PetConfig) => void): void;
   sendStats(stats: unknown): void;
+  sendCollections(data: unknown): void;
   onCommand(cb: (cmd: string) => void): void;
   onWindows(cb: (wins: WinRect[]) => void): void;
   pressed(): void;
@@ -58,6 +59,7 @@ if (shell) {
     return r.text;
   };
   setInterval(() => shell.sendStats(pet.stats()), 400);
+  pet.onCollections = () => { shell.sendCollections(pet.collections()); save(); };
 }
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools
 

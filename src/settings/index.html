@@ -60,6 +60,19 @@
     a { color: var(--accent); }
     input[type="password"] { font: 14px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
     .chat { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+    .chat.tall { max-height: 52vh; min-height: 200px; align-content: start; }
+    .chat .acts { justify-self: start; color: var(--muted); font-size: 12px; font-style: italic; padding: 0 10px; margin-top: -4px; }
+    #neurons { width: 100%; display: block; }
+    .list { display: grid; gap: 6px; }
+    .list .row { display: flex; align-items: center; gap: 8px; }
+    .list .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .list .row small { color: var(--muted); }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+    .gallery figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; display: grid; gap: 4px; }
+    .gallery canvas { width: 100%; aspect-ratio: 1; background: #fff; border-radius: 4px; image-rendering: pixelated; }
+    .gallery figcaption { font-size: 12px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gallery .btns { justify-content: center; gap: 4px; }
+    .btn.small { padding: 5px 8px; font-size: 12px; }
     .chat p { margin: 0; padding: 7px 10px; border-radius: 10px; max-width: 85%; overflow-wrap: anywhere; }
     .chat .you { justify-self: end; background: var(--accent); color: var(--accent-ink); }
     .chat .him { justify-self: start; background: var(--track); }
@@ -83,8 +96,9 @@
     <div class="who"><h1 id="title">Blurp</h1><span class="mood-chip" id="label">…</span></div>
     <p class="doing" id="doing">Waiting for him to report in…</p>
     <nav role="tablist">
+      <button role="tab" data-tab="chat" aria-selected="false">Chat</button>
       <button role="tab" data-tab="mood" aria-selected="true">Mood</button>
-      <button role="tab" data-tab="control" aria-selected="false">Control</button>
+      <button role="tab" data-tab="mind" aria-selected="false">Mind</button>
       <button role="tab" data-tab="look" aria-selected="false">Look</button>
       <button role="tab" data-tab="body" aria-selected="false">Movement</button>
       <button role="tab" data-tab="him" aria-selected="false">General</button>
@@ -99,34 +113,25 @@
         <div class="chips" id="moodPresets"></div>
       </div>
       <div class="group">
+        <h2>Make him…</h2>
+        <div class="chips" id="commands"></div>
+        <p class="note">He'll do it right away if he can (getting down needs him to be on a window; grabbing the cursor needs Mischief mode on, under General). His learned moves are in the Mind tab.</p>
+      </div>
+      <div class="group">
         <h2>Recently</h2>
         <div class="card"><div class="recent" id="recent">—</div></div>
       </div>
       <div class="btns">
         <button class="btn ghost" id="resetMood" type="button">Reset his mood</button>
         <button class="btn ghost" id="respawn" type="button">Drop him in again</button>
-      </div>
-      <div class="group">
-        <h2>Memories</h2>
-        <div class="card"><p class="note">He doesn't keep memories yet. They arrive in milestone 5, as a notes file he writes and tidies up himself.</p></div>
-      </div>
-      <div class="group">
-        <h2>Personality</h2>
-        <textarea id="persona" maxlength="1500" aria-label="Persona"></textarea>
-        <p class="note">Who he is, in your words. His AI brain plays this character (Chat or Full brain, under General). His moods still come from what happens to him.</p>
+        <button class="btn ghost" id="clearDoodles" type="button">Wipe doodles off the screen</button>
       </div>
     </section>
 
-    <section data-panel="control" hidden>
-      <div class="group">
-        <h2>Make him…</h2>
-        <div class="chips" id="commands"></div>
-        <p class="note">He'll do it right away if he can (getting down needs him to be on a window; grabbing the cursor needs Mischief mode on, under General).</p>
-        <div class="btns"><button class="btn ghost" id="clearDoodles" type="button">Clear his doodles</button></div>
-      </div>
+    <section data-panel="chat" hidden>
       <div class="group">
         <h2>Talk to him</h2>
-        <div class="card"><div class="chat" id="chat"><p class="note">Say hi. He answers in his speech bubble.</p></div></div>
+        <div class="card"><div class="chat tall" id="chat"><p class="note">Say hi. He answers in his speech bubble.</p></div></div>
         <form class="inline" id="talkForm"><input type="text" id="talkText" maxlength="300" placeholder="hey, what are you up to?" /><button class="btn" type="submit">Send</button></form>
         <p class="note" id="brainState"></p>
       </div>
@@ -137,6 +142,38 @@
       </div>
     </section>
 
+    <section data-panel="mind" hidden>
+      <div class="group">
+        <h2>Neurons</h2>
+        <div class="card"><canvas id="neurons" height="320"></canvas></div>
+        <p class="note">His real decision-making, live. Left: what he feels and senses. Middle: everything he could do, bigger and brighter = wants it more. Right: what he's doing. The AI node lights up while his AI brain thinks.</p>
+      </div>
+      <div class="group">
+        <h2>Personality</h2>
+        <textarea id="persona" maxlength="1500" aria-label="Persona"></textarea>
+        <p class="note">Who he is, in your words. His AI brain plays this character (Chat or Full brain, under General). His moods still come from what happens to him.</p>
+      </div>
+      <div class="group">
+        <h2>Moves</h2>
+        <div class="card">
+          <span class="row-label">Learned</span>
+          <div id="savedMoves" class="list"></div>
+          <span class="row-label">Made up lately</span>
+          <div id="recentMoves" class="list"></div>
+        </div>
+        <p class="note">When his AI brain makes up a move you like, save it. He remembers saved moves, shows them off on his own when he's in a good mood (even offline), and the AI can do them again by name.</p>
+      </div>
+      <div class="group">
+        <h2>Drawings</h2>
+        <div class="gallery" id="gallery"></div>
+        <p class="note">Everything he's drawn. Ask him to draw something in Chat, or tell him to Doodle.</p>
+      </div>
+      <div class="group">
+        <h2>Memories</h2>
+        <div class="card"><p class="note">He doesn't keep memories yet. They arrive in milestone 5, as a notes file he writes and tidies up himself.</p></div>
+      </div>
+    </section>
+
     <section data-panel="look" hidden>
       <div class="group"><h2>Presets</h2><div class="bundles" id="bundles"></div></div>
       <div class="group" id="lookRows"></div>
@@ -144,6 +181,7 @@
         <h2>Fine-tune</h2>
         <div class="card">
           <div class="inline"><input type="color" id="color" aria-label="Color" /><span class="row-label">Color</span></div>
+          <label class="switch"><span><span class="row-label">Outline</span><br /><small class="note">A dark edge around him, like a sprite in a pixel-art game.</small></span><input type="checkbox" id="outline" /></label>
           <div id="lookSliders" class="group"></div>
         </div>
       </div>

@@ -47,6 +47,8 @@ export interface Ctx {
   canGrabCursor: boolean;
   /** He finished a drawing (the pet keeps it in his gallery). */
   onDrawn?: (d: Doodle) => void;
+  /** Moves he learned (made up by his AI brain, kept by you). He can show them off on his own. */
+  savedMoves?: { name: string; frames: Keyframe[] }[];
 }
 
 export abstract class Skill {

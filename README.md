@@ -27,7 +27,8 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
 - **Climbing**: he climbs window sides and the screen edges, and does monkey bars across the top.
 - **Mischief mode** (Settings → General, off by default): Desktop Goose style, he grabs your cursor
   and drags it around for a moment. Move your mouse to take it back. He also doodles on your screen.
-- **Control tab** in Settings: make him do anything on command, drag his mood bars, make him talk.
+- **Settings tabs**: Chat (talk to him), Mood (his feelings + make him do things), Mind (watch his neurons decide,
+  edit his personality, keep moves he made up, see everything he's drawn), Look, Movement, General.
 - **Talk to him** (AI brain, free): Settings → General → Brain. Pick a service (Google Gemini is the default), click
   "Get a free key", make the key on their site (no credit card), paste it, and pick **Chat** (AI only when you talk
   to him) or **Full** (he also decides what to do and comments on things). Type to him in Settings → Control →
