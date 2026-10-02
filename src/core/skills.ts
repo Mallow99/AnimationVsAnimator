@@ -5,7 +5,7 @@
 import type { Character, Gesture } from './character';
 import type { Mood } from './mood';
 import { GRAVITY, type Bounds, type Platform } from './physics';
-import { surfaceBelow } from './world';
+import { surfaceBelow, type Wall } from './world';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none';
@@ -16,6 +16,7 @@ export interface World {
   cursorMovedAt: number; // world.time when the cursor last moved
   time: number;          // seconds since start
   platforms: Platform[]; // window tops he can stand on
+  walls: Wall[];         // window sides and screen edges he can climb
 }
 
 /** Things he has learned from experience. Saved between runs. */
@@ -221,16 +222,58 @@ export class AvoidCursor extends Skill {
 /** How high he can jump, in px (grows with his size). */
 export const maxClimb = (ch: Character) => 230 * ch.scale;
 
-/** Window tops he could jump up onto from where he stands. */
-export function reachableAbove(c: Ctx): Platform[] {
-  const ch = c.char, floorY = ch.body.j.footL.y, range = ch.surfaceRange();
-  return c.world.platforms.filter((p) => {
-    const h = floorY - p.y;
-    if (p.id === ch.support || h < 40 * ch.scale || h > maxClimb(ch) || p.x2 - p.x1 < 50) return false;
-    // Must be able to get close: overlapping our surface, or within a short hop of its ends.
-    const gap = Math.max(p.x1 - range.x2, range.x1 - p.x2, 0);
-    return gap < 90 * ch.scale;
-  });
+/** Highest point (y) his hands reach standing where he is. */
+const handReach = (ch: Character) => ch.body.j.footL.y - (ch.d.thigh + ch.d.shin + ch.d.torso + (ch.d.upperArm + ch.d.foreArm) * 0.9);
+/** Extra height a jump adds to his reach. */
+const jumpReach = (ch: Character) => 110 * ch.scale;
+/** Height of his body hanging from the ceiling (hands to feet). */
+const hangLength = (ch: Character) => ch.d.upperArm + ch.d.foreArm + ch.d.torso + ch.d.thigh + ch.d.shin;
+
+/** How he'll get onto a window: jump up, climb its side, or go over the ceiling and drop on. */
+export type Route =
+  | { kind: 'jump' }
+  | { kind: 'wall'; wall: Wall; jump: boolean }
+  | { kind: 'ceiling'; edge: Wall; dropX: number };
+
+/** Can he stand at x on what he's standing on now? */
+const canStandAt = (ch: Character, x: number) => { const r = ch.surfaceRange(); return x >= r.x1 && x <= r.x2; };
+
+/** The screen edge he can walk to from here (nearest first), if any. */
+function reachableEdges(c: Ctx): Wall[] {
+  const ch = c.char;
+  return c.world.walls
+    .filter((w) => w.top === 'ceiling' && canStandAt(ch, w.x - w.face * 16 * ch.scale) && w.y2 >= handReach(ch))
+    .sort((a, b) => Math.abs(a.x - ch.x) - Math.abs(b.x - ch.x));
+}
+
+export function routeTo(c: Ctx, target: Platform): Route | null {
+  const ch = c.char, sc = ch.scale, floorY = ch.body.j.footL.y, range = ch.surfaceRange();
+  const h = floorY - target.y;
+  if (target.id === ch.support || h < 40 * sc || target.x2 - target.x1 < 50) return null;
+  // 1. Close enough to jump.
+  const gap = Math.max(target.x1 - range.x2, range.x1 - target.x2, 0);
+  if (h <= maxClimb(ch) && gap < 90 * sc) return { kind: 'jump' };
+  // 2. Climb one of that window's sides.
+  for (const w of c.world.walls) {
+    if (w.top !== 'platform' || w.win === undefined || w.win !== target.win || Math.abs(w.y1 - target.y) > 3) continue;
+    if (!canStandAt(ch, w.x - w.face * 16 * sc)) continue;
+    if (w.y2 >= handReach(ch)) return { kind: 'wall', wall: w, jump: false };
+    if (w.y2 >= handReach(ch) - jumpReach(ch)) return { kind: 'wall', wall: w, jump: true };
+  }
+  // 3. Over the ceiling, then drop onto it (if that drop is one he's comfortable with).
+  const edge = reachableEdges(c)[0];
+  const drop = target.y - (c.world.bounds.top + hangLength(ch));
+  if (edge && drop > 0 && drop < c.lessons.safeDrop * sc) {
+    return { kind: 'ceiling', edge, dropX: (target.x1 + target.x2) / 2 };
+  }
+  return null;
+}
+
+/** Window tops he could get onto from where he stands (by any route). */
+export function reachableAbove(c: Ctx): { target: Platform; route: Route }[] {
+  return c.world.platforms
+    .map((target) => ({ target, route: routeTo(c, target) }))
+    .filter((o): o is { target: Platform; route: Route } => o.route !== null);
 }
 
 /** Drop height (px) if he hops off the given side of what he's standing on. */
@@ -241,73 +284,143 @@ export function dropFrom(c: Ctx, side: -1 | 1) {
   return surfaceBelow(x, y + 5, c.world.platforms, c.world.bounds.floor).y - y;
 }
 
+/** The side of his current window he could climb down, and the drop at its bottom. */
+export function climbDownOption(c: Ctx, side: -1 | 1): { wall: Wall; drop: number } | null {
+  const ch = c.char, p = ch.supportPlatform();
+  if (!p || p.win === undefined) return null;
+  const edgeX = side < 0 ? p.x1 : p.x2;
+  const wall = c.world.walls.find((w) => w.win === p.win && w.top === 'platform' && Math.abs(w.x - edgeX) < 3 && w.face === -side);
+  if (!wall) return null;
+  const legLen = ch.d.thigh + ch.d.shin;
+  const below = surfaceBelow(wall.x + side * 20 * ch.scale, wall.y2 - legLen, c.world.platforms, c.world.bounds.floor).y;
+  return { wall, drop: Math.max(0, below - wall.y2) };
+}
+
 export class ClimbOnto extends Skill {
   readonly name = 'climb';
-  private phase: 'walk' | 'jump' | 'check' = 'walk';
+  private phase: 'walk' | 'go' | 'wait' = 'walk';
   private tries = 0;
-  private launchX = 0;
-  constructor(private target: Platform) { super(); }
+  private sub: MonkeyBars | null = null;
+  constructor(private target: Platform, private route: Route) { super(); }
 
-  start(c: Ctx) { this.planLaunch(c); c.look = 'none'; }
+  start(c: Ctx) {
+    c.look = 'none';
+    if (this.route.kind === 'ceiling') { this.sub = new MonkeyBars(this.route.edge, this.route.dropX, false); this.sub.start(c); return; }
+    this.walkToLaunch(c);
+  }
 
-  private planLaunch(c: Ctx) {
+  private walkToLaunch(c: Ctx) {
     const ch = c.char, t = this.target, r = ch.surfaceRange(), m = 16 * ch.scale;
-    // Best: stand right under the window (overlap) and jump straight up through it.
-    const lo = Math.max(r.x1 + m, t.x1 + m), hi = Math.min(r.x2 - m, t.x2 - m);
-    this.launchX = lo <= hi ? clamp(ch.x, lo, hi) : t.x1 > r.x2 ? r.x2 - m : r.x1 + m;
-    ch.walkTo(this.launchX);
+    if (this.route.kind === 'wall') { ch.walkTo(this.route.wall.x - this.route.wall.face * m); }
+    else {
+      // Stand right under the window if we can and jump straight up through it; otherwise from the nearest end.
+      const lo = Math.max(r.x1 + m, t.x1 + m), hi = Math.min(r.x2 - m, t.x2 - m);
+      ch.walkTo(lo <= hi ? clamp(ch.x, lo, hi) : t.x1 > r.x2 ? r.x2 - m : r.x1 + m);
+    }
     this.phase = 'walk';
   }
 
-  update(c: Ctx) {
-    const ch = c.char, t = c.world.platforms.find((p) => p.id === this.target.id);
+  update(c: Ctx, dt: number) {
+    if (this.sub) {
+      this.sub.t += dt;
+      const done = this.sub.update(c);
+      if (done && c.char.support === this.target.id && chance(0.5)) c.say(pick(['ta-da', 'made it', 'hi up here']));
+      return done;
+    }
+    const ch = c.char;
+    const t = c.world.platforms.find((p) => p.id === this.target.id) ?? c.world.platforms.find((p) => p.win === this.target.win);
     if (!t) return true; // the window went away
     this.target = t;
     if (this.phase === 'walk' && ch.ready && !ch.walking) {
-      const h = ch.body.j.footL.y - t.y + 28 * ch.scale;
-      const vy = Math.sqrt(2 * GRAVITY * Math.max(h, 10));
-      const landX = clamp(ch.x, t.x1 + 20 * ch.scale, t.x2 - 20 * ch.scale);
-      const vx = clamp(((landX - ch.x) / (vy / GRAVITY)) * 0.9, -320, 320);
-      ch.facing = sign(landX - ch.x + 0.01);
-      ch.jump(vx, -vy);
-      this.phase = 'jump';
+      if (this.route.kind === 'wall') {
+        ch.facing = this.route.wall.face;
+        if (this.route.jump) ch.jump(0, -Math.sqrt(2 * GRAVITY * jumpReach(ch) * 1.1));
+        else ch.grabWall(this.route.wall, -1);
+      } else {
+        const h = ch.body.j.footL.y - t.y + 28 * ch.scale;
+        const vy = Math.sqrt(2 * GRAVITY * Math.max(h, 10));
+        const landX = clamp(ch.x, t.x1 + 20 * ch.scale, t.x2 - 20 * ch.scale);
+        const vx = clamp(((landX - ch.x) / (vy / GRAVITY)) * 0.9, -320, 320);
+        ch.facing = sign(landX - ch.x + 0.01);
+        ch.jump(vx, -vy);
+      }
+      this.phase = 'go';
       this.t = 0;
-    } else if (this.phase === 'jump' && this.t > 0.3 && ch.ready) {
-      if (ch.support === t.id) { if (chance(0.4)) c.say(pick(['ha!', 'up!', 'made it'])); return true; }
-      if (++this.tries >= 2) { c.say(pick(['hmph.', 'nope', 'too high'])); return true; }
-      this.planLaunch(c);
+    } else if (this.phase === 'go') {
+      // Jump-and-grab: catch the wall as soon as his hands reach it.
+      if (this.route.kind === 'wall' && this.route.jump && ch.mode === 'air') {
+        const handsY = ch.body.j.neck.y - (ch.d.upperArm + ch.d.foreArm) * 0.9;
+        if (handsY <= this.route.wall.y2 - 6) ch.grabWall(this.route.wall, -1);
+      }
+      if (this.t > 0.4 && ch.ready) {
+        if (ch.support === t.id || (t.win !== undefined && ch.supportPlatform()?.win === t.win)) {
+          if (chance(0.4)) c.say(pick(['ha!', 'up!', 'made it']));
+          return true;
+        }
+        if (++this.tries >= 2) { c.say(pick(['hmph.', 'nope', 'too high'])); return true; }
+        this.walkToLaunch(c);
+      }
     }
-    return this.t > 20;
+    return this.t > 30;
+  }
+  stop(c: Ctx) { c.char.stop(); this.sub?.stop(c); }
+}
+
+/** Climb a screen edge, cross the top of the screen hand over hand, then drop (or climb down the far side). */
+export class MonkeyBars extends Skill {
+  readonly name = 'monkeybars';
+  private phase: 'walk' | 'climb' = 'walk';
+  constructor(private edge: Wall, private goalX: number, private climbDown: boolean) { super(); }
+  start(c: Ctx) { c.char.walkTo(this.edge.x - this.edge.face * 16 * c.char.scale); c.look = 'none'; }
+  update(c: Ctx) {
+    const ch = c.char;
+    if (this.phase === 'walk' && ch.ready && !ch.walking) {
+      if (!ch.grabWall(this.edge, -1)) return true;
+      this.phase = 'climb';
+      this.t = 0;
+    } else if (this.phase === 'climb') {
+      if (ch.onCeiling) { ch.ceilingGoal = this.goalX; ch.climbDownAfterCeiling = this.climbDown; }
+      if (this.t > 1 && ch.ready) return true;
+    }
+    return this.t > 60;
   }
   stop(c: Ctx) { c.char.stop(); }
 }
 
 export class GetDown extends Skill {
   readonly name = 'getdown';
-  private phase: 'walk' | 'hop' = 'walk';
+  private phase: 'walk' | 'hop' | 'climb' = 'walk';
   private from = -1;
   private tries = 0;
   drop = 0;
-  constructor(private side: -1 | 1) { super(); }
+  /** `wall`: climb down this window side instead of hopping off. */
+  constructor(private side: -1 | 1, private wall: Wall | null = null) { super(); }
   start(c: Ctx) {
     const ch = c.char, r = ch.surfaceRange();
-    this.drop = dropFrom(c, this.side);
+    this.drop = this.wall ? (climbDownOption(c, this.side)?.drop ?? 0) : dropFrom(c, this.side);
     this.from = ch.support;
     ch.walkTo(this.side < 0 ? r.x1 : r.x2);
   }
   update(c: Ctx) {
     const ch = c.char;
     if (this.phase === 'walk' && ch.ready && !ch.walking) {
-      ch.facing = this.side;
-      ch.jump(this.side * (200 + this.tries * 80), -240);
-      this.phase = 'hop';
+      if (this.wall) {
+        ch.grabWall(this.wall, 1);
+        this.phase = 'climb';
+      } else {
+        ch.facing = this.side;
+        ch.jump(this.side * (200 + this.tries * 80), -240);
+        this.phase = 'hop';
+      }
       this.t = 0;
+    } else if (this.phase === 'climb') {
+      return this.t > 0.5 && ch.ready;
     } else if (this.phase === 'hop' && this.t > 0.4 && ch.mode !== 'air') {
       // Landed back on the same window? Hop again, a bit harder.
       if (ch.ready && ch.support === this.from && this.from >= 0 && ++this.tries < 3) { this.phase = 'walk'; return false; }
       return true;
     }
-    return this.t > 20;
+    return this.t > 30;
   }
   stop(c: Ctx) { c.char.stop(); }
 }

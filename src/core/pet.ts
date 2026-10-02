@@ -8,7 +8,7 @@ import type { Bounds } from './physics';
 import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
-import { windowPlatforms, type WinRect } from './world';
+import { windowPlatforms, windowWalls, type WinRect } from './world';
 import { drawBubble, drawCharacter, PixelLayer } from './render';
 
 export { DEFAULT_CONFIG, type PetConfig } from './config';
@@ -41,7 +41,7 @@ export class Pet {
     this.ctx = {
       char: this.char,
       mood: this.mood,
-      world: { bounds, cursor: null, cursorMovedAt: -100, time: 0, platforms: [] },
+      world: { bounds, cursor: null, cursorMovedAt: -100, time: 0, platforms: [], walls: windowWalls([], bounds) },
       lessons: { ...DEFAULT_LESSONS },
       look: 'default',
       say: (text, secs) => this.say(text, secs),
@@ -87,6 +87,7 @@ export class Pet {
       this.char = new Character(old.bounds, old.x, cfg.scale);
       this.char.facing = old.facing;
       this.char.setPlatforms(this.ctx.world.platforms);
+      this.char.setWalls(this.ctx.world.walls);
       this.ctx.char = this.char;
       this.press = null;
       this.mind.reset(this.ctx);
@@ -94,6 +95,9 @@ export class Pet {
     this.char.style = { ...cfg.body };
     this.char.setHeadSize(cfg.look.headSize);
   }
+
+  /** His standing height plus a little: window tops closer than this to the top of the screen are no use. */
+  private headroom() { const d = this.char.d; return d.thigh + d.shin + d.torso + d.neck + d.headR + 10; }
 
   /**
    * Latest window rectangles from the desktop shell (front-most first).
@@ -120,12 +124,19 @@ export class Pet {
     });
     this.winShown = shown;
     if (!changed) return;
-    const plats = windowPlatforms(shown, this.ctx.world.bounds);
+    const plats = windowPlatforms(shown, this.ctx.world.bounds, 40, this.headroom());
     this.ctx.world.platforms = plats;
     this.char.setPlatforms(plats);
+    this.ctx.world.walls = windowWalls(shown, this.ctx.world.bounds, this.headroom());
+    this.char.setWalls(this.ctx.world.walls);
   }
 
-  setBounds(b: Bounds) { this.char.setBounds(b); this.ctx.world.bounds = b; }
+  setBounds(b: Bounds) {
+    this.char.setBounds(b);
+    this.ctx.world.bounds = b;
+    this.ctx.world.walls = windowWalls(this.winShown, b, this.headroom());
+    this.char.setWalls(this.ctx.world.walls);
+  }
 
   /** Is the cursor over him? (decides whether clicks reach us or the desktop) */
   hit(x: number, y: number) { return this.char.hitTest(x, y) !== null; }
@@ -211,6 +222,8 @@ export class Pet {
       doing: this.mind.skill?.name ?? this.char.mode,
       why: this.mind.why,
       recent: this.mind.recent.slice(-8),
+      windows: this.winShown.length,
+      platforms: this.ctx.world.platforms.length,
     };
   }
 

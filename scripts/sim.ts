@@ -276,6 +276,28 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   petFor(8, pet);
   check('jumping off a too-high window teaches him', onTop && pet.ctx.lessons.safeDrop < 500, `onTop=${onTop} safeDrop=${pet.ctx.lessons.safeDrop.toFixed(0)}`);
 }
+{ // Tall windows (like a MacBook screen): he climbs their sides, climbs down when the drop scares him,
+  // and does monkey bars across the top of the screen.
+  const B = { left: 0, right: 1440, top: 0, floor: 860 };
+  const wins = [{ id: 1, x: 200, y: 60, w: 700, h: 700 }, { id: 2, x: 950, y: 120, w: 450, h: 740 }];
+  const setup = () => { const p = new Pet(B); p.setWindows(wins); petFor(3, p); return p; };
+  let pet = setup();
+  pet.mind.command(pet.ctx, 'climb');
+  petFor(30, pet);
+  const calm = () => ['ground', 'sit'].includes(pet.char.mode);
+  const up = pet.char.support >= 0 && calm();
+  check('climbs the side of a tall window onto it', up, `support=${pet.char.support} mode=${pet.char.mode}`);
+  pet.ctx.lessons.safeDrop = 150;
+  pet.mind.command(pet.ctx, 'getdown');
+  petFor(25, pet);
+  check('too high to jump: climbs down instead', up && pet.char.support === FLOOR && calm(), `support=${pet.char.support} mode=${pet.char.mode}`);
+  pet = setup();
+  pet.mind.command(pet.ctx, 'monkeybars');
+  let highest = 0;
+  petFor(45, pet, () => { highest = Math.min(800, Math.max(highest, 860 - pet.char.body.j.hip.y)); });
+  check('monkey bars across the top of the screen', highest > 700 && pet.char.mode !== 'ceiling' && pet.char.mode !== 'climb', `highest=${highest.toFixed(0)} mode=${pet.char.mode}`);
+  check('a window top with no headroom is not a platform', !pet.ctx.world.platforms.some((p) => p.win === 1));
+}
 function reactionTo(mood: Partial<import('../src/core/mood').MoodState>) {
   const names: string[] = [];
   for (let k = 0; k < 20; k++) {

@@ -6,7 +6,7 @@ import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
 import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
 
-interface Stats { name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[] }
+interface Stats { name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number }
 interface Shell {
   getConfig(): Promise<PetConfig>;
   onConfig(cb: (c: PetConfig) => void): void;
@@ -74,8 +74,8 @@ const DOING: Record<string, string> = {
   greet: 'Saying hi', retaliate: 'Getting you back', glare: 'Glaring at you', flinch: 'Flinching', giggle: 'Giggling',
   tag: 'Playing tag', boing: 'Bouncing', 'poke-back': 'Poking you back', huh: 'Confused', shrug: 'Shrugging', woken: 'Woken up',
   again: 'Wants to go again', mope: 'Moping', 'shake-off': 'Shaking it off', wave: 'Waving', laugh: 'Laughing', stomp: 'Stomping',
-  cower: 'Cowering', explore: 'Exploring', climb: 'Climbing onto a window', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
-  getup: 'Getting up', ground: 'Standing', lie: 'Lying down',
+  cower: 'Cowering', explore: 'Exploring', climb: 'Climbing onto a window', monkeybars: 'Monkey bars', climbwall: 'Climbing', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
+  getup: 'Getting up', ground: 'Standing', lie: 'Lying down', ceiling: 'Hanging from the top of the screen',
 };
 shell.onStats((s) => {
   for (const [k] of MOOD_ROWS) {
@@ -86,6 +86,7 @@ shell.onStats((s) => {
   }
   $('label').textContent = s.asleep ? 'asleep' : s.label;
   $('doing').textContent = (DOING[s.doing] ?? s.doing) + (s.why ? ` — ${s.why}` : '');
+  $('winInfo').textContent = s.windows ? `He can see ${s.windows} window(s) and ${s.platforms} window top(s) to stand on.` : 'He can\'t see any windows yet. If this stays at zero, check the Terminal for lines starting with [windows].';
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
 });
 $('resetMood').addEventListener('click', () => shell.command('resetMood'));

@@ -14,7 +14,7 @@ import type { CharEvent, Gesture } from './character';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  AvoidCursor, ChaseCursor, ClimbOnto, dropFrom, GetDown, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
+  AvoidCursor, ChaseCursor, ClimbOnto, climbDownOption, dropFrom, GetDown, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number };
@@ -27,6 +27,7 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   hop: { boredom: -0.1, happiness: 0.02, energy: -0.02 },
   chase: { boredom: -0.35, happiness: 0.05, energy: -0.05 },
   explore: { boredom: -0.25 },
+  monkeybars: { boredom: -0.4, happiness: 0.06, energy: -0.06 },
   wander: { boredom: -0.1 },
   climb: { boredom: -0.25, happiness: 0.05 },
   getdown: { boredom: -0.05 },
@@ -43,7 +44,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'wander', label: 'Wander' }, { name: 'explore', label: 'Explore' }, { name: 'sit', label: 'Sit' },
   { name: 'sleep', label: 'Nap' }, { name: 'wake', label: 'Wake up' }, { name: 'dance', label: 'Dance' },
   { name: 'hop', label: 'Hop' }, { name: 'chase', label: 'Chase cursor' }, { name: 'climb', label: 'Climb a window' },
-  { name: 'getdown', label: 'Get down' }, { name: 'tantrum', label: 'Tantrum' }, { name: 'sulk', label: 'Sulk' },
+  { name: 'getdown', label: 'Get down' }, { name: 'monkeybars', label: 'Monkey bars' }, { name: 'tantrum', label: 'Tantrum' }, { name: 'sulk', label: 'Sulk' },
   { name: 'wave', label: 'Wave' }, { name: 'laugh', label: 'Laugh' }, { name: 'shrug', label: 'Shrug' },
   { name: 'stomp', label: 'Stomp' }, { name: 'stretch', label: 'Stretch' }, { name: 'cower', label: 'Cower' },
 ];
@@ -203,19 +204,36 @@ export class Mind {
   /** Climbing onto windows and getting back down. */
   private windowOptions(c: Ctx): Option[] {
     const s = c.mood.s, L = c.mood.label, ch = c.char, opts: Option[] = [];
+    const lazy = L === 'sleepy' || L === 'sad';
     const up = reachableAbove(c);
-    if (up.length && L !== 'sleepy' && L !== 'sad') {
-      const target = up[Math.floor(Math.random() * up.length)];
-      opts.push({ name: 'climb', why: s.boredom > 0.4 ? 'bored, looking for something to do' : 'wants a better view', score: 0.3 + s.boredom * 0.9 + s.energy * 0.4 + (L === 'playful' ? 0.4 : 0), make: () => new ClimbOnto(target) });
+    if (up.length) {
+      const pickOne = up[Math.floor(Math.random() * up.length)];
+      opts.push({ name: 'climb', why: s.boredom > 0.4 ? 'bored, looking for something to do' : 'wants a better view',
+        score: lazy ? 0 : 0.3 + s.boredom * 0.9 + s.energy * 0.4 + (L === 'playful' ? 0.4 : 0), make: () => new ClimbOnto(pickOne.target, pickOne.route) });
+    }
+    // Monkey bars across the top of the screen.
+    const edge = c.world.walls.filter((w) => w.top === 'ceiling').sort((a, b) => Math.abs(a.x - ch.x) - Math.abs(b.x - ch.x))[0];
+    if (edge && ch.support < 0) {
+      const far = c.world.walls.find((w) => w.top === 'ceiling' && w !== edge)!;
+      const hangLen = ch.d.upperArm + ch.d.foreArm + ch.d.torso + ch.d.thigh + ch.d.shin;
+      const landing = c.world.platforms.filter((p) => p.y - (c.world.bounds.top + hangLen) < c.lessons.safeDrop * ch.scale && p.x2 - p.x1 > 60);
+      const dropOn = landing.length && chance(0.6) ? landing[Math.floor(Math.random() * landing.length)] : null;
+      opts.push({ name: 'monkeybars', why: L === 'playful' ? 'feeling acrobatic' : 'bored',
+        score: lazy || s.energy < 0.4 ? 0 : 0.12 + s.boredom * 0.5 + (L === 'playful' ? 0.35 : 0),
+        make: () => dropOn ? new MonkeyBars(edge, (dropOn.x1 + dropOn.x2) / 2, false) : new MonkeyBars(edge, far.x - far.face * 30 * ch.scale, true) });
     }
     if (ch.support >= 0) {
       const onFor = c.world.time - this.onWindowSince;
       const want = 0.15 + Math.min(onFor / 60, 1) * 0.6 + (L === 'sleepy' ? 0.3 : 0);
       const safe = c.lessons.safeDrop * ch.scale;
-      const sides = ([-1, 1] as const).map((side) => ({ side, drop: dropFrom(c, side) })).filter((o) => o.drop < safe);
-      if (sides.length) {
-        const best = sides.reduce((a, b) => (a.drop < b.drop ? a : b));
+      const hops = ([-1, 1] as const).map((side) => ({ side, drop: dropFrom(c, side) })).filter((o) => o.drop < safe);
+      const climbs = ([-1, 1] as const).map((side) => ({ side, o: climbDownOption(c, side) })).filter((x) => x.o && x.o.drop < safe);
+      if (hops.length) {
+        const best = hops.reduce((a, b) => (a.drop < b.drop ? a : b));
         opts.push({ name: 'getdown', why: 'done up here', score: want, make: () => new GetDown(best.side) });
+      } else if (climbs.length) {
+        const best = climbs[0];
+        opts.push({ name: 'getdown', why: 'done up here (too high to jump, climbing down)', score: want, make: () => new GetDown(best.side, best.o!.wall) });
       } else if (onFor > 45 && c.world.time - this.stuckAsked > 60) {
         // Too high both ways: he's stuck up here.
         opts.push({ name: 'stuck', why: 'too high to jump down', score: want, make: () => { this.stuckAsked = c.world.time; return new Sequence('stuck', [

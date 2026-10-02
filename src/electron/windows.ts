@@ -32,7 +32,7 @@ async function macHelper(log: (m: string) => void): Promise<string | null> {
   return new Promise((resolve) => {
     execFile('xcrun', ['swiftc', '-O', src, '-o', bin], { timeout: 180_000 }, (err, _out, stderr) => {
       if (err) { log(`could not compile window helper: ${stderr || err.message}`); resolve(null); }
-      else resolve(bin);
+      else { log('window helper compiled'); resolve(bin); }
     });
   });
 }
@@ -41,6 +41,7 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
   let child: ChildProcess | null = null;
   let stopped = false;
   let failures = 0;
+  let seenAny = false;
 
   const launch = async () => {
     if (stopped) return;
@@ -70,7 +71,11 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
         const line = buf.slice(0, nl).trim();
         buf = buf.slice(nl + 1);
         if (!line) continue;
-        try { onUpdate(JSON.parse(line)); failures = 0; } catch { /* half a line or noise: skip */ }
+        try {
+          const wins = JSON.parse(line) as WinRect[];
+          if (!seenAny) { seenAny = true; log(`helper running: sees ${wins.length} window(s)`); }
+          onUpdate(wins); failures = 0;
+        } catch { /* half a line or noise: skip */ }
       }
     });
     child.stderr!.setEncoding('utf8');

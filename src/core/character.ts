@@ -14,8 +14,9 @@
 import { Body, JOINTS, makeDims, type Dims, type JointName } from './body';
 import { collide, collidePlatforms, FLOOR, integrate, NONE, solveSticks, type Bounds, type Platform } from './physics';
 import { clamp, dist, distToSegment, lerp, sign, smooth, twoBoneIK, type Vec } from './math';
+import type { Wall } from './world';
 
-export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie';
+export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie' | 'climb' | 'ceiling';
 
 export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower';
 
@@ -31,7 +32,9 @@ export type CharEvent =
   | { type: 'stomped' }
   | { type: 'hitWall' }
   | { type: 'fellOff' }          // walked/was pushed off an edge, or the window vanished
-  | { type: 'carried'; speed: number }; // the window under him moved
+  | { type: 'carried'; speed: number } // the window under him moved
+  | { type: 'reachedTop' }      // climbed to the top of a wall
+  | { type: 'letGo' };          // dropped off a wall or the ceiling
 
 /** How he carries himself. Part of his "look"; set from the settings / presets. */
 export interface BodyStyle {
@@ -75,6 +78,13 @@ export class Character {
   platforms: Platform[] = [];
   /** What he's standing on: a platform id, FLOOR, or NONE while airborne. */
   support = FLOOR;
+  /** Climbable walls (window sides, screen edges). */
+  walls: Wall[] = [];
+  private climb: { wall: Wall; y: number; dir: -1 | 1; phase: number } | null = null;
+  private hang: { x: number; goal: number; phase: number } | null = null;
+  get onCeiling() { return this.mode === 'ceiling'; }
+  /** At the end of the ceiling, climb down the screen edge instead of dropping. */
+  climbDownAfterCeiling = false;
   private rootX: number;
   private rootVX = 0;
   private goalX: number | null = null;
@@ -115,6 +125,44 @@ export class Character {
   /** Standing on the ground and free to take a new order. */
   get ready() { return this.mode === 'ground' && !this.gesture && !this.jumpPrep; }
   get walking() { return this.mode === 'ground' && this.goalX !== null; }
+  get climbingWall() { return this.mode === 'climb' ? this.climb!.wall : null; }
+
+  /**
+   * Grab a wall and climb it: up (dir -1) or down (dir 1). Works from standing,
+   * or mid-jump. At the top of a window side he pulls himself onto the window;
+   * at the top of a screen edge he swings onto the ceiling (monkey bars).
+   */
+  grabWall(wall: Wall, dir: -1 | 1) {
+    if (this.mode !== 'ground' && this.mode !== 'air' && this.mode !== 'sit') return false;
+    const j = this.body.j;
+    const y = clamp(j.hip.y, wall.y1 + 4, wall.y2 - 4);
+    this.climb = { wall, y, dir, phase: 0 };
+    this.facing = wall.face;
+    this.goalX = null; this.gesture = null; this.jumpPrep = null;
+    this.setMode('climb');
+    return true;
+  }
+
+  /** While hanging from the ceiling: where to go before letting go. */
+  set ceilingGoal(x: number) { if (this.hang) this.hang.goal = clamp(x, this.bounds.left + 20, this.bounds.right - 20); }
+
+  /** Let go of a wall or the ceiling. */
+  letGo() {
+    if (this.mode !== 'climb' && this.mode !== 'ceiling') return;
+    this.climb = null; this.hang = null;
+    this.setMode('air');
+    this.events.push({ type: 'letGo' });
+  }
+
+  /** New walls. If he's on one that moved, he moves with it; if it's gone, he falls. */
+  setWalls(list: Wall[]) {
+    this.walls = list;
+    if (this.mode !== 'climb' || !this.climb) return;
+    const now = list.find((w) => w.id === this.climb!.wall.id);
+    if (!now) { this.letGo(); return; }
+    this.climb.y += now.y1 - this.climb.wall.y1; // ride along if the window moved up/down
+    this.climb.wall = now;
+  }
   get currentGesture() { return this.gesture?.name ?? null; }
 
   /** Walk to x. He stops at the edge of whatever he's standing on, unless `offEdge` (then he walks off and drops). */
@@ -235,6 +283,7 @@ export class Character {
     // A hit knocks the wind out of him: muscles go weak for a moment.
     const speed = Math.hypot(vx, vy);
     this.stun = Math.max(this.stun, clamp(speed / 1500, 0, 1) * 0.5);
+    if (speed > 1200 && (this.mode === 'climb' || this.mode === 'ceiling')) { this.letGo(); return; } // knocked off
     if (speed > 1500 && (this.mode === 'ground' || this.mode === 'sit')) {
       this.setMode('ragdoll');
       this.events.push({ type: 'tripped' });
@@ -321,6 +370,8 @@ export class Character {
       case 'air': this.airPose(t, s, 0.07); internal = true; break;
       case 'held': this.airPose(t, s, 0.025); this.flailOverlay(t, s); internal = true; break;
       case 'ragdoll': break;
+      case 'climb': this.climbPose(dt, t, s); break;
+      case 'ceiling': this.ceilingPose(dt, t, s); break;
     }
 
     const b = this.body;
@@ -343,6 +394,8 @@ export class Character {
   }
 
   private setMode(m: Mode) {
+    if (m !== 'climb') this.climb = null;
+    if (m !== 'ceiling') this.hang = null;
     if (m === 'air' || m === 'held') this.support = NONE;
     this.mode = m;
     this.modeTime = 0;
@@ -755,15 +808,18 @@ export class Character {
     return t;
   }
 
-  private startGetup() {
+  private startGetup(onto?: number, atX?: number) {
     const j = this.body.j;
-    // What is he lying on? Prefer what his hips touch, else anything touching.
-    const touching = [j.hip, j.footL, j.footR, j.neck, j.head, ...this.body.points].find((p) => p.on !== NONE);
-    this.support = touching ? touching.on : FLOOR;
+    if (onto !== undefined) this.support = onto;
+    else {
+      // What is he lying on? Prefer what his hips touch, else anything touching.
+      const touching = [j.hip, j.footL, j.footR, j.neck, j.head, ...this.body.points].find((p) => p.on !== NONE);
+      this.support = touching ? touching.on : FLOOR;
+    }
     const r = this.surfaceRange();
-    const x = clamp(j.hip.x, r.x1 + 6, r.x2 - 6);
+    const x = clamp(atX ?? j.hip.x, r.x1 + 6, r.x2 - 6);
     // Get up facing whichever way his head ended up.
-    if (Math.abs(j.head.x - j.hip.x) > 3) this.facing = sign(j.head.x - j.hip.x);
+    if (onto === undefined && Math.abs(j.head.x - j.hip.x) > 3) this.facing = sign(j.head.x - j.hip.x);
     const from = {} as Record<JointName, Vec>;
     for (const n of JOINTS) from[n] = { x: j[n].x, y: j[n].y };
     this.getup = { from, crouch: this.crouchPose(x), stand: this.standPose(x), x };
@@ -829,6 +885,83 @@ export class Character {
       { x: hip.x - f * 4 * sc, y: hip.y + legLen * (1 - tuck) }, { x: hip.x + f * 7 * sc, y: hip.y + legLen * (1 - tuck) },
       f, 1);
     for (const n of JOINTS) s[n] = n === 'hip' ? 0 : k;
+  }
+
+  // ───────────── climbing ─────────────
+
+  private climbPose(dt: number, t: Targets, s: Strengths) {
+    const c = this.climb!, w = c.wall, d = this.d, sc = this.scale, f = w.face;
+    const speed = 95 * sc * (0.7 + this.posture.speed * 0.3);
+    c.y = clamp(c.y + c.dir * speed * dt, w.y1 - 20 * sc, w.y2 + 10 * sc);
+    c.phase += dt * 5;
+    const legLen = d.thigh + d.shin, armLen = d.upperArm + d.foreArm;
+    const hipX = w.x - f * (w.top === 'ceiling' ? 16 : 10) * sc; // screen edges: keep clear of the edge
+    const hip = { x: hipX, y: c.y };
+    const neck = { x: hipX + f * 3 * sc, y: c.y - d.torso };
+    const wx = w.x - f * 2 * sc, a = Math.sin(c.phase);
+    // Hands take turns reaching up the wall; feet push off it.
+    let handL = { x: wx, y: neck.y - armLen * (0.55 + 0.35 * a) };
+    let handR = { x: wx, y: neck.y - armLen * (0.55 - 0.35 * a) };
+    const footL = { x: wx, y: c.y + legLen * (0.6 - 0.2 * a) };
+    const footR = { x: wx, y: c.y + legLen * (0.6 + 0.2 * a) };
+    // Don't grab above the top of the wall.
+    const topY = w.y1 + 2;
+    if (handL.y < topY) handL = { x: handL.x, y: topY };
+    if (handR.y < topY) handR = { x: handR.x, y: topY };
+    this.fillLimbs(t, hip, neck, f * -0.2, handL, handR, footL, footR, f, -1);
+    Object.assign(s, { hip: 0.35, neck: 0.35, head: 0.35, handL: 0.5, handR: 0.5, footL: 0.35, footR: 0.35, kneeL: 0.2, kneeR: 0.2, elbowL: 0.2, elbowR: 0.2 });
+
+    if (c.dir < 0 && c.y - d.torso - armLen * 0.4 <= w.y1) {
+      // Reached the top.
+      this.climb = null;
+      this.events.push({ type: 'reachedTop' });
+      const plat = w.top === 'platform'
+        ? this.platforms.find((p) => Math.abs(p.y - w.y1) < 3 && w.x + f * 20 * sc >= p.x1 && w.x + f * 20 * sc <= p.x2)
+        : undefined;
+      if (plat) {
+        // Pull himself up and over onto the window (same motion as getting up).
+        this.startGetup(plat.id, w.x + f * 22 * sc);
+      } else if (w.top === 'platform') {
+        this.letGo(); // the top is covered by another window: nothing to pull onto
+      } else {
+        // Top of the screen: swing onto the ceiling, heading away from the wall.
+        this.hang = { x: hipX - f * 10 * sc, goal: hipX - f * 300, phase: 0 };
+        this.setMode('ceiling');
+      }
+    } else if (c.dir > 0 && c.y + legLen * 0.8 >= w.y2) {
+      this.letGo(); // bottom of the wall: hop off
+    }
+  }
+
+  private ceilingPose(dt: number, t: Targets, s: Strengths) {
+    const h = this.hang!, d = this.d, sc = this.scale, top = this.bounds.top;
+    const dir = sign(h.goal - h.x);
+    const speed = 80 * sc * (0.7 + this.posture.speed * 0.3);
+    if (Math.abs(h.goal - h.x) > 3) h.x += dir * Math.min(speed * dt, Math.abs(h.goal - h.x));
+    h.phase += dt * 6;
+    this.facing = dir;
+    const armLen = d.upperArm + d.foreArm, a = Math.sin(h.phase);
+    // Hand over hand along the top of the screen: arms in a wide V above his head, legs dangling.
+    const spreadA = (12 + 7 * a) * sc, spreadB = (12 - 7 * a) * sc;
+    const handL = { x: h.x + dir * spreadA, y: top + 3 };
+    const handR = { x: h.x - dir * spreadB, y: top + 3 };
+    const neck = { x: h.x, y: top + 3 + Math.sqrt(Math.max(armLen * armLen * 0.9 - 144 * sc * sc, 1)) };
+    const hip = { x: h.x - dir * 3 * sc, y: neck.y + d.torso };
+    const legLen = d.thigh + d.shin;
+    const footL = { x: hip.x + Math.sin(h.phase * 0.5) * 6 * sc, y: hip.y + legLen * 0.95 };
+    const footR = { x: hip.x - Math.sin(h.phase * 0.5) * 6 * sc, y: hip.y + legLen * 0.95 };
+    this.fillLimbs(t, hip, neck, 0, handL, handR, footL, footR, dir, 1);
+    Object.assign(s, { handL: 0.6, handR: 0.6, neck: 0.4, head: 0.3, elbowL: 0.2, elbowR: 0.2, hip: 0.08, kneeL: 0.03, kneeR: 0.03, footL: 0.03, footR: 0.03 });
+    if (Math.abs(h.goal - h.x) <= 3 && this.modeTime > 0.5) {
+      const edge = this.walls.find((w) => w.top === 'ceiling' && Math.abs(w.x - h.x) < 40 * sc);
+      if (this.climbDownAfterCeiling && edge) {
+        this.climbDownAfterCeiling = false;
+        this.hang = null;
+        this.climb = { wall: edge, y: top + armLen + d.torso, dir: 1, phase: 0 };
+        this.facing = edge.face;
+        this.setMode('climb');
+      } else this.letGo();
+    }
   }
 
   private flailOverlay(t: Targets, s: Strengths) {
