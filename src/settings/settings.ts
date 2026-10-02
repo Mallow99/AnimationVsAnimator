@@ -7,7 +7,7 @@ import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
 
 interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
-interface Weigh { name: string; score: number; why: string }
+interface Weigh { name: string; score: number; why: string; bias?: number }
 interface Drawing { title: string; shape: { x: number; y: number }[][]; color: string; at: number }
 interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at: number; by: 'him' | 'ai' | 'you'; weight: number }
 interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
@@ -375,7 +375,6 @@ function renderItems(v: ItemsView) {
 }
 $('openItems').addEventListener('click', () => shell.openItemsFolder());
 $('reloadItems').addEventListener('click', () => shell.reloadItems());
-shell.command('sync'); // ask him for his drawings, moves and memories
 
 // ── Mind tab: memories ──
 const KIND_LABEL = { you: 'about you', event: 'happened', opinion: 'opinion' } as const;
@@ -387,7 +386,8 @@ let memShown = '';
 function renderMemory(m: MemoryView) {
   const t = m.tally, parts = [['thrown', 'thrown'], ['poked', 'poked'], ['petted', 'petted'], ['smacked', 'smacked'], ['talks', 'talked to'], ['ripped', 'limbs lost']]
     .filter(([k]) => t[k]).map(([k, label]) => `${label} ${t[k]}×`);
-  $('memTally').textContent = `Met you ${ago(m.firstMet).replace(' ago', '')} ago${parts.length ? ' · ' + parts.join(' · ') : ''}`;
+  const met = ago(m.firstMet);
+  $('memTally').textContent = `Met you ${met === 'just now' ? met : met.replace(' ago', '') + ' ago'}${parts.length ? ' · ' + parts.join(' · ') : ''}`;
   const sum = $<HTMLTextAreaElement>('memSummary');
   if (document.activeElement !== sum) sum.value = m.summary;
   $('memSummaryInfo').textContent = m.summarizedAt ? `Last tidied ${ago(m.summarizedAt)}.` : '';
@@ -431,77 +431,215 @@ $('memClear').addEventListener('click', () => {
   setTimeout(() => { if (Date.now() - clearArmed >= 4000) b.textContent = 'Forget everything'; }, 4100);
 });
 
-// ── Mind tab: neurons ──
-// What he feels on the left, everything he could do in the middle (sized by how much he wants it),
-// what he's doing on the right. Not decoration: it's drawn straight from his real decision-making.
+// ── Mind tab: neurons inside his head ──
+// A 3D model of his head with his real decision-making inside: what he feels (a ring of
+// neurons low at the back), everything he could do (scattered through his head, bigger and
+// brighter = wants it more), and what he's doing (at the front). Not decoration: it's drawn
+// straight from his mind, live. Drag the head to turn it. Drag a feeling up or down to change
+// it. Click a choice to make him do it; drag it up or down (or scroll on it) to make him like
+// it more or less from now on.
 let latest: Stats | null = null;
 const cvN = $<HTMLCanvasElement>('neurons');
-const shown: Record<string, number> = {}; // eased values so nodes glide instead of jumping
+const shown: Record<string, number> = {}; // eased values so neurons glide instead of jumping
 const ease = (key: string, v: number) => (shown[key] = (shown[key] ?? v) + (v - (shown[key] ?? v)) * 0.15);
+type V = { x: number; y: number; z: number };
+interface Neuron { id: string; kind: 'mood' | 'option' | 'out' | 'ai'; pos: V; label: string; lit: number; size: number; why?: string; bias?: number; key?: keyof MoodState; value?: number }
+const view = { yaw: 0.5, pitch: -0.18, auto: true, lastTouch: 0 };
+let drag: { mode: 'rotate' | 'mood' | 'option'; n?: Neuron; x: number; y: number; yaw: number; pitch: number; start: number; moved: number } | null = null;
+let hover: Neuron | null = null;
+let projected: { n: Neuron; sx: number; sy: number; r: number; z: number }[] = [];
+
+/** A stable spot inside his head for each choice (so a neuron doesn't jump around as choices come and go). */
+function spotFor(name: string): V {
+  let h1 = 2166136261, h2 = 52711;
+  for (const ch of name) { h1 = Math.imul(h1 ^ ch.charCodeAt(0), 16777619); h2 = Math.imul(h2 + ch.charCodeAt(0), 2654435761); }
+  const u = ((h1 >>> 0) % 1000) / 1000, v = ((h2 >>> 0) % 1000) / 1000;
+  const y = -0.62 + u * 0.8, phi = v * Math.PI * 2, r = Math.sqrt(Math.max(0.05, 0.62 - y * y)) * 0.85;
+  return { x: Math.cos(phi) * r, y, z: Math.sin(phi) * r };
+}
+
+function neuronsNow(s: Stats): Neuron[] {
+  const out: Neuron[] = [];
+  MOOD_ROWS.forEach(([k, label], i) => {
+    const a = (i / MOOD_ROWS.length) * Math.PI * 2 + Math.PI;
+    const v = ease('in-' + k, s.mood[k]);
+    out.push({ id: 'mood-' + k, kind: 'mood', key: k, value: s.mood[k], pos: { x: Math.cos(a) * 0.62, y: 0.5 + Math.sin(a * 2) * 0.08, z: Math.sin(a) * 0.62 - 0.1 }, label: `${label} ${v.toFixed(2)}`, lit: v, size: 5 });
+  });
+  const opts = s.mind!.weigh, maxScore = Math.max(1, ...opts.map((o) => o.score));
+  for (const o of opts) {
+    const v = ease('op-' + o.name, o.score / maxScore);
+    out.push({ id: 'op-' + o.name, kind: 'option', pos: spotFor(o.name), label: o.name, lit: v, size: 2.5 + v * 5.5, why: o.why, bias: o.bias ?? 1 });
+  }
+  out.push({ id: 'out', kind: 'out', pos: { x: 0, y: 0.02, z: 0.8 }, label: DOING[s.doing] ?? s.doing, lit: 1, size: 9 });
+  out.push({ id: 'ai', kind: 'ai', pos: { x: 0, y: -0.86, z: 0.1 }, label: s.mind!.thinking ? 'AI thinking…' : 'AI brain', lit: s.mind!.thinking ? 1 : /\(AI/.test(s.why) ? 0.6 : 0.1, size: 6 });
+  return out;
+}
+
+function project(p: V, W: number, H: number) {
+  const R = Math.min(W, H) * 0.38, cx = W / 2, cy = H * 0.46;
+  const cyw = Math.cos(view.yaw), syw = Math.sin(view.yaw), cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+  const x1 = p.x * cyw + p.z * syw, z1 = -p.x * syw + p.z * cyw;
+  const y2 = p.y * cp - z1 * sp, z2 = p.y * sp + z1 * cp;
+  const k = 3.2 / (3.2 - z2);
+  return { sx: cx + x1 * k * R, sy: cy + y2 * k * R, k, z: z2, R };
+}
+
 function neurons(now: number) {
   requestAnimationFrame(neurons);
   if (cvN.offsetParent === null || !latest?.mind) return; // tab hidden
-  const dpr = window.devicePixelRatio || 1, W = cvN.clientWidth, H = 320;
-  if (cvN.width !== Math.round(W * dpr)) { cvN.width = Math.round(W * dpr); cvN.height = Math.round(H * dpr); }
+  const dpr = window.devicePixelRatio || 1, W = cvN.clientWidth, H = 380;
+  if (cvN.width !== Math.round(W * dpr)) { cvN.width = Math.round(W * dpr); cvN.height = Math.round(H * dpr); cvN.style.height = H + 'px'; }
   const g = cvN.getContext('2d')!;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, W, H);
   const css = getComputedStyle(document.documentElement);
-  const accent = css.getPropertyValue('--accent').trim(), ink = css.getPropertyValue('--ink').trim(), muted = css.getPropertyValue('--muted').trim();
+  const accent = css.getPropertyValue('--accent').trim(), ink = css.getPropertyValue('--ink').trim(), muted = css.getPropertyValue('--muted').trim(), panel = css.getPropertyValue('--panel').trim();
+  const skin = cfg?.look.color ?? accent;
+  if (view.auto && !drag && now - view.lastTouch > 4000) view.yaw += 0.004;
   g.font = '11px ' + css.getPropertyValue('--ui');
   g.textBaseline = 'middle';
 
-  const s = latest;
-  const inputs = MOOD_ROWS.map(([k, label]) => ({ label, v: ease('in-' + k, s.mood[k]) }));
-  const opts = s.mind!.weigh;
-  const maxScore = Math.max(1, ...opts.map((o) => o.score));
-  const doing = s.doing, aiDriven = /\(AI/.test(s.why);
-  const inX = 112, opX = W * 0.5, outX = W - 64;
-  const inY = (i: number) => 40 + (i * (H - 80)) / (inputs.length - 1);
-  const opY = (i: number) => 14 + (i * (H - 28)) / Math.max(1, opts.length - 1);
-  const outY = H / 2, aiY = 34;
-  const chosen = opts.findIndex((o) => o.name === doing);
+  const s = latest, ns = neuronsNow(s);
+  const P = (p: V) => project(p, W, H);
+  const head = P({ x: 0, y: 0, z: 0 }), R = head.R;
 
-  // Wires: everything he feels feeds every choice (faint); the winning path glows, with pulses running along it.
-  g.lineWidth = 1;
-  for (let i = 0; i < inputs.length; i++) for (let k = 0; k < opts.length; k++) {
-    g.strokeStyle = accent; g.globalAlpha = k === chosen ? 0.12 + inputs[i].v * 0.5 : 0.03 + (opts[k].score / maxScore) * 0.05;
-    g.beginPath(); g.moveTo(inX, inY(i)); g.lineTo(opX, opY(k)); g.stroke();
+  // His neck and head: a thick outline in his color, like him.
+  const neckA = P({ x: 0, y: 1, z: 0 }), neckB = P({ x: 0, y: 1.45, z: 0 });
+  g.strokeStyle = skin; g.lineCap = 'round'; g.lineWidth = R * 0.16;
+  g.beginPath(); g.moveTo(neckA.sx, neckA.sy); g.lineTo(neckB.sx, neckB.sy); g.stroke();
+  const grad = g.createRadialGradient(head.sx - R * 0.3, head.sy - R * 0.35, R * 0.1, head.sx, head.sy, R * 1.08);
+  grad.addColorStop(0, panel); grad.addColorStop(1, skin + '22');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(head.sx, head.sy, R * 1.05, 0, 7); g.fill();
+  g.lineWidth = Math.max(3, R * 0.07); g.strokeStyle = skin;
+  g.beginPath(); g.arc(head.sx, head.sy, R * 1.05, 0, 7); g.stroke();
+  // A faint equator and meridian so you can see it turn.
+  g.lineWidth = 1; g.strokeStyle = skin; g.globalAlpha = 0.18;
+  for (const ring of [(a: number): V => ({ x: Math.cos(a), y: 0, z: Math.sin(a) }), (a: number): V => ({ x: 0, y: Math.cos(a), z: Math.sin(a) })]) {
+    g.beginPath();
+    for (let i = 0; i <= 48; i++) { const q = P(ring((i / 48) * Math.PI * 2)); if (i) g.lineTo(q.sx, q.sy); else g.moveTo(q.sx, q.sy); }
+    g.stroke();
   }
-  const pulse = (x1: number, y1: number, x2: number, y2: number, speed: number) => {
+  g.globalAlpha = 1;
+
+  projected = ns.map((n) => { const q = P(n.pos); return { n, sx: q.sx, sy: q.sy, r: n.size * q.k, z: q.z }; });
+  const at = (id: string) => projected.find((q) => q.n.id === id)!;
+  const chosen = projected.find((q) => q.n.kind === 'option' && q.n.label === s.doing);
+  const out = at('out'), ai = at('ai');
+
+  // Wires: every feeling feeds every choice (faint); the winning path glows, with pulses running along it.
+  for (const m of projected.filter((q) => q.n.kind === 'mood')) for (const o of projected.filter((q) => q.n.kind === 'option')) {
+    g.strokeStyle = accent; g.lineWidth = 1;
+    g.globalAlpha = o === chosen ? 0.12 + m.n.lit * 0.5 : 0.02 + o.n.lit * 0.05;
+    g.beginPath(); g.moveTo(m.sx, m.sy); g.lineTo(o.sx, o.sy); g.stroke();
+  }
+  const pulse = (a: { sx: number; sy: number }, b: { sx: number; sy: number }, speed: number) => {
     const u = ((now / 1000) * speed) % 1;
     g.globalAlpha = 1; g.fillStyle = accent;
-    g.beginPath(); g.arc(x1 + (x2 - x1) * u, y1 + (y2 - y1) * u, 2.5, 0, 7); g.fill();
+    g.beginPath(); g.arc(a.sx + (b.sx - a.sx) * u, a.sy + (b.sy - a.sy) * u, 2.5, 0, 7); g.fill();
   };
-  if (chosen >= 0) {
+  if (chosen) {
     g.globalAlpha = 0.8; g.lineWidth = 2; g.strokeStyle = accent;
-    g.beginPath(); g.moveTo(opX, opY(chosen)); g.lineTo(outX, outY); g.stroke();
-    pulse(opX, opY(chosen), outX, outY, 0.9);
-    for (let i = 0; i < inputs.length; i++) if (inputs[i].v > 0.35) pulse(inX, inY(i), opX, opY(chosen), 0.5 + inputs[i].v);
+    g.beginPath(); g.moveTo(chosen.sx, chosen.sy); g.lineTo(out.sx, out.sy); g.stroke();
+    pulse(chosen, out, 0.9);
+    for (const m of projected.filter((q) => q.n.kind === 'mood' && q.n.lit > 0.35)) pulse(m, chosen, 0.5 + m.n.lit);
   }
-  // The AI brain: lights up while it thinks; wired to the output when it made the call.
-  const aiOn = s.mind!.thinking;
-  if (aiDriven || aiOn) {
-    g.globalAlpha = aiOn ? 0.5 + 0.5 * Math.sin(now / 120) ** 2 : 0.7; g.lineWidth = 2; g.strokeStyle = accent;
-    g.beginPath(); g.moveTo(outX, aiY); g.lineTo(outX, outY); g.stroke();
-    if (aiDriven) pulse(outX, aiY, outX, outY, 0.8);
+  if (ai.n.lit > 0.3) {
+    g.globalAlpha = ai.n.lit; g.lineWidth = 2; g.strokeStyle = accent;
+    g.beginPath(); g.moveTo(ai.sx, ai.sy); g.lineTo(out.sx, out.sy); g.stroke();
+    if (/\(AI/.test(s.why)) pulse(ai, out, 0.8);
   }
 
-  // Nodes.
-  const node = (x: number, y: number, r: number, lit: number, label: string, side: -1 | 1, bold = false) => {
-    g.globalAlpha = 1;
-    g.fillStyle = css.getPropertyValue('--panel').trim(); g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-    g.globalAlpha = 0.15 + lit * 0.85; g.fillStyle = accent; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-    g.globalAlpha = 1; g.strokeStyle = accent; g.lineWidth = bold ? 2.5 : 1; g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke();
-    g.fillStyle = bold ? ink : muted; g.textAlign = side < 0 ? 'right' : 'left';
-    g.fillText(label, x + side * (r + 5), y);
-  };
-  inputs.forEach((n, i) => node(inX, inY(i), 7, n.v, `${n.label} ${n.v.toFixed(2)}`, -1));
-  opts.forEach((o, k) => {
-    const v = ease('op-' + o.name, o.score / maxScore);
-    node(opX, opY(k), 2.5 + v * 6, v, o.name, 1, k === chosen);
-  });
-  node(outX, outY, 12, 1, DOING[doing] ?? doing, -1, true);
-  node(outX, aiY, 9, aiOn ? 1 : aiDriven ? 0.6 : 0.1, aiOn ? 'AI thinking…' : 'AI brain', -1, aiOn);
+  // Neurons, back to front. Ones you've made him like more get a ring (fewer rings = likes it less).
+  const top = new Set(projected.filter((q) => q.n.kind === 'option').sort((a, b) => b.n.lit - a.n.lit).slice(0, 5).map((q) => q.n.id));
+  for (const q of [...projected].sort((a, b) => a.z - b.z)) {
+    const n = q.n, depth = 0.55 + 0.45 * Math.min(1, Math.max(0, (q.z + 1) / 2));
+    g.globalAlpha = depth;
+    g.fillStyle = panel; g.beginPath(); g.arc(q.sx, q.sy, q.r, 0, 7); g.fill();
+    g.globalAlpha = depth * (0.15 + n.lit * 0.85);
+    g.fillStyle = n.kind === 'mood' ? skin : accent; g.beginPath(); g.arc(q.sx, q.sy, q.r, 0, 7); g.fill();
+    g.globalAlpha = depth;
+    const bold = n === chosen?.n || n.kind === 'out' || n === hover;
+    g.strokeStyle = n.kind === 'mood' ? skin : accent; g.lineWidth = bold ? 2.5 : 1;
+    g.beginPath(); g.arc(q.sx, q.sy, q.r, 0, 7); g.stroke();
+    if (n.bias && Math.abs(n.bias - 1) > 0.02) {
+      g.setLineDash(n.bias < 1 ? [2, 3] : []); g.lineWidth = 1.5;
+      g.beginPath(); g.arc(q.sx, q.sy, q.r + 3 + Math.abs(Math.log(n.bias)) * 4, 0, 7); g.stroke();
+      g.setLineDash([]);
+    }
+    if (n.kind !== 'option' || top.has(n.id) || n === hover || n === chosen?.n) {
+      g.fillStyle = bold ? ink : muted; g.globalAlpha = Math.max(depth, 0.7);
+      const right = q.sx >= head.sx;
+      g.textAlign = right ? 'left' : 'right';
+      g.fillText(n.label, q.sx + (right ? 1 : -1) * (q.r + 5), q.sy);
+    }
+  }
+  g.globalAlpha = 1;
+  // What the neuron under your cursor is.
+  if (hover) {
+    const n = hover;
+    const text = n.kind === 'mood' ? `${n.label} — drag up or down to change it`
+      : n.kind === 'option' ? `${n.label}: ${n.why ?? ''}${n.bias && Math.abs(n.bias - 1) > 0.02 ? ` · you made him like it ×${n.bias.toFixed(1)}` : ''} — click: do it · drag ↕: like it more/less`
+        : n.label;
+    g.font = '12px ' + css.getPropertyValue('--ui');
+    const w = Math.min(W - 16, g.measureText(text).width + 16);
+    g.fillStyle = ink; g.globalAlpha = 0.9; g.beginPath(); g.roundRect(8, H - 30, w, 22, 6); g.fill();
+    g.fillStyle = panel; g.globalAlpha = 1; g.textAlign = 'left'; g.fillText(text, 16, H - 19, W - 32);
+  }
 }
 requestAnimationFrame(neurons);
+(window as unknown as { __neurons: () => typeof projected }).__neurons = () => projected; // for poking at in DevTools
+
+function neuronAt(x: number, y: number) {
+  let best: Neuron | null = null, bd = Infinity;
+  for (const q of projected) { const d = Math.hypot(q.sx - x, q.sy - y); if (d < Math.max(9, q.r + 3) && d < bd) { bd = d; best = q.n; } }
+  return best;
+}
+const local = (e: PointerEvent | WheelEvent) => { const r = cvN.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+let biasSent = 0;
+function setBias(name: string, v: number, force = false) {
+  const biases = { ...(cfg?.biases ?? {}), [name]: Math.min(3, Math.max(0.2, v)) };
+  if (cfg) cfg.biases = biases;
+  if (force || performance.now() - biasSent > 100) { biasSent = performance.now(); set({ biases }); }
+}
+cvN.addEventListener('pointerdown', (e) => {
+  const p = local(e), n = neuronAt(p.x, p.y);
+  view.lastTouch = performance.now();
+  cvN.setPointerCapture(e.pointerId);
+  const mode = n?.kind === 'mood' ? 'mood' : n?.kind === 'option' ? 'option' : 'rotate';
+  drag = { mode, n: n ?? undefined, x: p.x, y: p.y, yaw: view.yaw, pitch: view.pitch, start: mode === 'mood' ? n!.value ?? 0 : mode === 'option' ? n!.bias ?? 1 : 0, moved: 0 };
+});
+cvN.addEventListener('pointermove', (e) => {
+  const p = local(e);
+  if (!drag) { hover = neuronAt(p.x, p.y); cvN.style.cursor = hover ? (hover.kind === 'option' ? 'pointer' : hover.kind === 'mood' ? 'ns-resize' : 'default') : 'grab'; return; }
+  view.lastTouch = performance.now();
+  const dx = p.x - drag.x, dy = p.y - drag.y;
+  drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
+  if (drag.mode === 'rotate') {
+    view.yaw = drag.yaw + dx * 0.01;
+    view.pitch = Math.max(-1.2, Math.min(1.2, drag.pitch + dy * 0.01));
+  } else if (drag.mode === 'mood' && drag.n?.key) {
+    const v = Math.min(1, Math.max(0, drag.start - dy / 120));
+    shell.command(`setMood:${JSON.stringify({ [drag.n.key]: v })}`);
+  } else if (drag.mode === 'option' && drag.n && drag.moved > 4) {
+    setBias(drag.n.label, drag.start * Math.exp(-dy / 90));
+  }
+});
+cvN.addEventListener('pointerup', () => {
+  if (drag?.mode === 'option' && drag.n) {
+    if (drag.moved <= 4) shell.command(`do:${drag.n.label}`); // a click: do it now
+    else setBias(drag.n.label, (cfg?.biases ?? {})[drag.n.label] ?? 1, true);
+  }
+  drag = null;
+});
+cvN.addEventListener('wheel', (e) => {
+  const p = local(e), n = neuronAt(p.x, p.y);
+  if (n?.kind !== 'option') return;
+  e.preventDefault();
+  setBias(n.label, (n.bias ?? 1) * (e.deltaY < 0 ? 1.12 : 1 / 1.12), true);
+}, { passive: false });
+cvN.addEventListener('pointerleave', () => { hover = null; });
+$('resetBiases').addEventListener('click', () => set({ biases: {} }));
+
+// Everything's set up: ask him for his drawings, moves, memories and things.
+shell.command('sync');

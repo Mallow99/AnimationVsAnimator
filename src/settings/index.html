@@ -74,7 +74,7 @@
     .gallery .btns { justify-content: center; gap: 4px; }
     .btn.small { padding: 5px 8px; font-size: 12px; }
     .notes .row { align-items: flex-start; }
-    .notes .kind { font: 600 10px/1.8 var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent); min-width: 54px; }
+    .notes .kind { flex: 0 0 auto !important; font: 600 10px/1.8 var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent); min-width: 62px; }
     .notes .text { flex: 1; white-space: normal !important; overflow-wrap: anywhere; cursor: text; border-radius: 4px; padding: 0 3px; }
     .notes .text:focus { outline: 1px solid var(--accent); background: var(--bg); }
     .notes small { white-space: nowrap; }
@@ -150,9 +150,10 @@
 
     <section data-panel="mind" hidden>
       <div class="group">
-        <h2>Neurons</h2>
-        <div class="card"><canvas id="neurons" height="320"></canvas></div>
-        <p class="note">His real decision-making, live. Left: what he feels and senses. Middle: everything he could do, bigger and brighter = wants it more. Right: what he's doing. The AI node lights up while his AI brain thinks.</p>
+        <h2>Inside his head</h2>
+        <div class="card"><canvas id="neurons" height="380" style="touch-action:none"></canvas></div>
+        <p class="note">His real decision-making, live, inside a model of his head. The ring low at the back is what he feels; the neurons scattered through his head are everything he could do (bigger and brighter = wants it more); the big one at the front is what he's doing; the one on top is his AI brain. <b>Drag the head</b> to turn it. <b>Drag a feeling</b> up or down to change it. <b>Click a choice</b> to make him do it; <b>drag it up or down</b> (or scroll on it) to make him like it more or less from now on (a ring shows your tweak; dotted = less).</p>
+        <div class="btns"><button class="btn ghost small" id="resetBiases" type="button">Reset his preferences</button></div>
       </div>
       <div class="group">
         <h2>Personality</h2>

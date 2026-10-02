@@ -152,6 +152,8 @@ export class Mind {
   why = '';
   /** While the AI brain is deciding what he does next, instinct waits until this time. */
   holdUntil = 0;
+  /** Your tweaks to how much he wants each thing (from the neurons in his head). 1 = normal. */
+  biases: Record<string, number> = {};
 
   /** Recent skill names, newest last (for debugging and, later, the LLM). */
   get recent() { return this.history; }
@@ -269,7 +271,10 @@ export class Mind {
 
   /** What he's weighing right now and how much he wants each (for the neurons view in settings). */
   weigh(c: Ctx) {
-    return this.options(c).map((o) => ({ name: o.name, score: Math.round(o.score * 100) / 100, why: o.why }));
+    return this.options(c).map((o) => {
+      const bias = this.biases[o.name] ?? 1;
+      return { name: o.name, score: Math.round(o.score * bias * 100) / 100, bias, why: o.why };
+    });
   }
 
   /** Forget the current plan (e.g. his body was rebuilt). */
@@ -301,7 +306,7 @@ export class Mind {
   // ───────────── choosing what to do ─────────────
 
   private choose(c: Ctx): Option {
-    const opts = this.options(c);
+    const opts = this.options(c).map((o) => ({ ...o, score: o.score * (this.biases[o.name] ?? 1) }));
     // Square the scores so strong urges win more often; avoid repeating himself.
     let total = 0;
     const weights = opts.map((o) => {

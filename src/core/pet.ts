@@ -279,6 +279,7 @@ export class Pet {
     const resized = this.config.scale !== cfg.scale;
     (this as { config: PetConfig }).config = structuredClone(cfg);
     Object.assign(this.brain, { mode: cfg.mind, name: cfg.name, persona: cfg.persona, puppet: cfg.puppet });
+    this.mind.biases = { ...cfg.biases };
     if (resized && this.ctx) {
       const old = this.char;
       this.char = new Character(old.bounds, old.x, cfg.scale);

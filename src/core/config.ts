@@ -43,6 +43,11 @@ export interface PetConfig {
   sfx: boolean;
   /** How loud his sounds are (voice and effects), 0..1. */
   volume: number;
+  /**
+   * His preferences, set by dragging neurons in his head (Mind tab): how much more (or less)
+   * he wants each thing than his mood alone would say. 1 = normal, 3 = loves it, 0.2 = hardly ever.
+   */
+  biases: Record<string, number>;
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
@@ -62,6 +67,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   destructible: true,
   sfx: true,
   volume: 0.6,
+  biases: {},
 };
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }
@@ -107,6 +113,13 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
     }
   };
   merge(out as unknown as Record<string, unknown>, p, '');
+  if (p.biases && typeof p.biases === 'object') {
+    // A whole new set of preferences (the Mind tab always sends all of them).
+    out.biases = {};
+    for (const [k, v] of Object.entries(p.biases as Record<string, unknown>).slice(0, 80)) {
+      if (/^[a-z-]{1,30}$/.test(k) && typeof v === 'number' && Number.isFinite(v) && Math.abs(v - 1) > 0.01) out.biases[k] = Math.min(3, Math.max(0.2, v));
+    }
+  }
   merge(out.look as unknown as Record<string, unknown>, p.look, 'look.');
   merge(out.body as unknown as Record<string, unknown>, p.body, 'body.');
   if (!['offline', 'chat', 'full'].includes(out.mind)) out.mind = 'offline';
