@@ -66,7 +66,11 @@ export class Mind {
   private stuckAsked = 0;
   private restUntil = 0;
   private lastDoodle = -60;
-  private lastGrab = -60;        // short breather between activities
+  private lastGrab = -60;
+  private watchStart = -1;
+  private chill = false;
+  private chillUntil = 0;
+  private boredOfCursor = 0;        // short breather between activities
   private lastCursorSeen = 0;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
@@ -106,6 +110,11 @@ export class Mind {
   /** Slow, sensible mood changes from what's going on around him. */
   private feelings(c: Ctx, dt: number) {
     const m = c.mood, w = c.world, ch = c.char;
+    // How he walks says how he feels.
+    if (w.time > this.chillUntil) { this.chill = chance(0.5); this.chillUntil = w.time + rand(90, 240); }
+    const L = m.label;
+    ch.gait = L === 'angry' ? 'stomp' : L === 'playful' ? 'skip' : L === 'sad' || L === 'sleepy' ? 'sulk'
+      : L === 'bored' || (L === 'content' && this.chill) ? 'pocket' : 'normal';
     // Moving around tires him out (running more), on top of the slow drain over time.
     if (ch.walking) m.s.energy -= dt / (ch.posture.speed > 1.2 ? 900 : 1800);
     // You coming back after a while: he's glad to see you.
@@ -267,10 +276,15 @@ export class Mind {
         ch.look = cur ? { x: ch.x - sign(cur.x - ch.x) * 300, y: head.y } : null;
         return;
     }
-    // Default: watch the cursor while it's moving nearby (unless he's down in the dumps),
-    // otherwise glance around now and then.
-    const watching = cur && w.time - w.cursorMovedAt < 2.5 && Math.abs(cur.x - ch.x) < 600 && c.mood.label !== 'sad';
-    if (watching) { ch.look = cur; return; }
+    // Default: glance at the cursor when it moves close by, then lose interest for a while
+    // (staring at it all the time looked creepy). Otherwise look around now and then.
+    const near = cur && Math.hypot(cur.x - ch.x, cur.y - head.y) < 260 && w.time - w.cursorMovedAt < 1.5;
+    if (near && w.time > this.boredOfCursor && c.mood.label !== 'sad') {
+      if (this.watchStart < 0) this.watchStart = w.time;
+      if (w.time - this.watchStart < 2.5) { ch.look = cur; return; }
+      this.boredOfCursor = w.time + rand(5, 10); // seen it
+    }
+    this.watchStart = -1;
     if (w.time > this.lookUntil) {
       this.lookUntil = w.time + rand(2, 5);
       this.lookAt = chance(0.5) ? null : { x: ch.x + rand(-400, 400), y: head.y + rand(-150, 80) };

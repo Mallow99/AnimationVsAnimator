@@ -50,6 +50,19 @@ export interface BodyStyle {
 
 export const DEFAULT_BODY: BodyStyle = { spread: 0.6, stand: 1, armHang: 1, armSwing: 1, stride: 0.8, lift: 1.1, bob: 1, lean: 0.4 };
 
+/**
+ * Walking style, picked from his mood:
+ * normal; pocket (nonchalant, hands in pockets); skip (happy); stomp (angry); sulk (sad, head down).
+ */
+export type Gait = 'normal' | 'pocket' | 'skip' | 'stomp' | 'sulk';
+const GAITS: Record<Gait, { speed: number; lift: number; bob: number; swing: number; lean: number }> = {
+  normal: { speed: 1, lift: 1, bob: 1, swing: 1, lean: 0 },
+  pocket: { speed: 0.85, lift: 0.8, bob: 0.7, swing: 0, lean: -2 },
+  skip: { speed: 1.1, lift: 2.2, bob: 3.5, swing: 1.8, lean: 1 },
+  stomp: { speed: 1.15, lift: 2, bob: 1.5, swing: 0.5, lean: 4 },
+  sulk: { speed: 0.75, lift: 0.45, bob: 0.5, swing: 0.25, lean: 0 },
+};
+
 /** Mood-driven body language, set from outside (0..1 each, speed ~0.5..1.5). */
 export interface Posture { hunch: number; bounce: number; tension: number; speed: number }
 
@@ -68,6 +81,8 @@ export class Character {
   facing = 1;
   posture: Posture = { hunch: 0, bounce: 0, tension: 0, speed: 1 };
   style: BodyStyle = { ...DEFAULT_BODY };
+  gait: Gait = 'normal';
+  private runPhase = 0;
   look: Vec | null = null;
   walkSpeed = 62;
   /** When true he stays down after falling / lying (sleeping, sulking). */
@@ -548,7 +563,8 @@ export class Character {
     }
 
     // Locomotion: slide an invisible "root" toward the goal; the feet chase it.
-    const speedMul = P.speed * (this.running ? 2.3 : 1);
+    const G = GAITS[this.gait];
+    const speedMul = P.speed * (this.running ? 2.3 : G.speed);
     let want = 0;
     if (this.goalX !== null && !this.gesture && !this.jumpPrep && this.crouch < 6 * sc) {
       const dx = this.goalX - this.rootX;
@@ -577,6 +593,9 @@ export class Character {
     if (moving) this.facing = sign(this.rootVX);
     else if (this.look && Math.abs(this.look.x - this.rootX) > 25 && !this.gesture) this.facing = sign(this.look.x - this.rootX);
     const f = this.facing;
+
+    // Running has its own cycle (see runPose).
+    if (this.running && moving && this.crouch < 6 * sc) { this.runPose(dt, t, s, floor); return; }
 
     // Feet. Walking: the foot that's furthest behind swings forward and lands half
     // a stride ahead of the hips, then the other foot goes — a steady left-right rhythm.
@@ -610,7 +629,7 @@ export class Character {
         ft.swinging = true; ft.t = 0; ft.fromX = ft.x;
         ft.dur = stepT;
         ft.toX = landAt(k, stepT);
-        ft.lift = (3 + 3 * P.bounce + (this.running ? 9 : 0) + Math.min(Math.abs(ft.toX - ft.fromX), 40) * 0.08) * sc * B.lift;
+        ft.lift = (3 + 3 * P.bounce + Math.min(Math.abs(ft.toX - ft.fromX), 40) * 0.08) * sc * B.lift * (moving ? G.lift : 1);
       }
     }
     // Don't let the body outrun the feet: if the planted foot is trailing too far, ease off.
@@ -630,7 +649,8 @@ export class Character {
       const u = Math.min(ft.t, 1);
       ft.toX = lerp(ft.toX, landAt(k, (1 - u) * ft.dur), 0.1);
       ft.x = lerp(ft.fromX, ft.toX, smooth(u));
-      footY[k] = floor - Math.sin(Math.PI * u) * ft.lift;
+      // Stomping: slow lift, fast slam.
+      footY[k] = floor - Math.sin(Math.PI * (this.gait === 'stomp' && moving ? u ** 1.6 : u)) * ft.lift;
       swingT = u;
       if (ft.t >= 1) ft.swinging = false;
     }
@@ -649,38 +669,45 @@ export class Character {
     }
     this.walkH = lerp(this.walkH || standH, reachH, 0.35);
     const hipH = lerp(standH, Math.min(standH, this.walkH), clamp(speed / 40, 0, 1));
+    const hunch = this.gait === 'sulk' && moving ? Math.max(P.hunch, 0.7) : P.hunch;
     const bob = moving
-      ? Math.sin(Math.PI * swingT) * (0.4 + 2.5 * P.bounce) * sc * B.bob
+      ? Math.sin(Math.PI * swingT) * (0.4 + 2.5 * P.bounce) * sc * B.bob * G.bob
       : Math.sin(this.time * 2.1) * 0.6 * sc;
-    const hip = { x: this.rootX, y: floor - 2 - hipH + this.crouch + P.hunch * 2 * sc - bob };
+    const hip = { x: this.rootX, y: floor - 2 - hipH + this.crouch + hunch * 2 * sc - bob };
     this.hipTarget = hip;
 
     // Torso leans into motion; sadness hunches it, anger pitches it forward.
-    const runLean = this.running && moving ? f * 9 * sc : 0; // AvA-style run: pitched forward
-    const lean = runLean + clamp(this.rootVX * 0.05 * B.lean, -10 * sc, 10 * sc) + f * (P.hunch * 5 + P.tension * 3) * sc + f * this.crouch * 0.5;
+    const gaitLean = moving ? f * G.lean * sc : 0;
+    const lean = gaitLean + clamp(this.rootVX * 0.05 * B.lean, -10 * sc, 10 * sc) + f * (hunch * 5 + P.tension * 3) * sc + f * this.crouch * 0.5;
     const neck = { x: hip.x + lean, y: hip.y - Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)) };
     // Head up by default; only a real mood drops it.
-    let tilt = f * P.hunch * 0.6;
-    if (this.look) tilt += f * clamp((this.look.y - neck.y) / 400, -0.5, 0.5);
+    let tilt = f * (hunch * 0.6 + (this.gait === 'sulk' && moving ? 0.3 : 0)); // sulking: eyes on the floor
+    // Only a slight nod toward what he's looking at; turning to face it does most of the work.
+    if (this.look) tilt += f * clamp((this.look.y - neck.y) / 600, -0.15, 0.15);
 
     // Arms swing opposite the legs.
     const armLen = d.upperArm + d.foreArm;
-    const ready = P.tension > 0.5;
-    const sprinting = this.running && moving;
-    const handY = neck.y + armLen * (sprinting ? 0.5 : ready ? 0.6 : 0.8 + 0.17 * B.armHang); // running: elbows bent
+    const ready = P.tension > 0.5 || (this.gait === 'stomp' && moving); // fists up
+    const skipping = this.gait === 'skip' && moving;
+    const handY = neck.y + armLen * (ready ? 0.6 : this.gait === 'sulk' && moving ? 0.98 : 0.8 + 0.17 * B.armHang);
     // Even "hanging" arms sit a touch apart (front one forward, back one behind),
     // otherwise in side view they lie on top of the torso and blur into it.
     const frontFwd = f * (ready ? 9 : 5 - 2.5 * B.armHang) * sc;
     const backFwd = f * (ready ? 6 : -(1.5 + 1.5 * B.armHang)) * sc;
     // Each hand swings with the opposite foot, along an arc (it rises a little at either end).
-    const swingAmt = (sprinting ? 1.0 : 0.65) * B.armSwing; // running: arms pump
+    const swingAmt = 0.65 * B.armSwing * (moving ? G.swing : 1);
     const armAt = (footX: number, fwd: number) => {
       const o = (footX - this.rootX) * swingAmt;
-      return { x: neck.x + fwd + o, y: handY - Math.abs(o) * 0.3 };
+      return { x: neck.x + fwd + o, y: handY - Math.abs(o) * (skipping ? 0.8 : 0.3) };
     };
     const frontIsR = f > 0;
     let handL = armAt(this.feet.R.x, frontIsR ? backFwd : frontFwd);
     let handR = armAt(this.feet.L.x, frontIsR ? frontFwd : backFwd);
+    if (this.gait === 'pocket' && !ready) {
+      // Hands tucked in his pockets, elbows out.
+      const back = { x: hip.x - f * 4 * sc, y: hip.y - 1 * sc }, front = { x: hip.x + f * 2 * sc, y: hip.y - 1 * sc };
+      if (frontIsR) { handR = front; handL = back; } else { handL = front; handR = back; }
+    }
     let footL = { x: this.feet.L.x, y: footY.L - 2 }, footR = { x: this.feet.R.x, y: footY.R - 2 };
     let hipT = hip, neckT = neck;
 
@@ -833,6 +860,49 @@ export class Character {
 
   /** The hand that's in front (the one he draws and grabs with). */
   get frontHand() { return this.facing > 0 ? this.body.j.handR : this.body.j.handL; }
+
+  /**
+   * The run: a proper cycle instead of planted steps. Each foot spends about a third
+   * of the time on the ground and the rest swinging — heel kicks up behind, then the
+   * knee drives forward — so there's a moment with both feet off the ground.
+   * Arms are bent and pump opposite the legs; the body pitches forward.
+   */
+  private runPose(dt: number, t: Targets, s: Strengths, floor: number) {
+    const d = this.d, sc = this.scale, f = this.facing, L = d.thigh + d.shin;
+    const angry = this.gait === 'stomp';
+    const speed = Math.abs(this.rootVX), stride = L * (angry ? 1.7 : 2.3);
+    this.runPhase = (this.runPhase + (speed * dt) / stride) % 1;
+    const ph = this.runPhase, stanceEnd = angry ? 0.42 : 0.32;
+    const footAt = (off: number) => {
+      const u = (ph + off) % 1;
+      if (u < stanceEnd) return { x: this.rootX + f * lerp(0.4 * L, -0.45 * L, u / stanceEnd), y: floor - 2 };
+      const k = (u - stanceEnd) / (1 - stanceEnd);
+      // Heel kicks up behind first, then the leg swings through and reaches far forward.
+      const lift = Math.sin(Math.PI * Math.min(1, k * 1.25)) * L * (angry ? 0.3 : 0.38);
+      return { x: this.rootX + f * lerp(-0.45 * L, 0.4 * L, smooth(k)), y: floor - 2 - lift };
+    };
+    const footL = footAt(0), footR = footAt(0.5);
+    // Lowest at mid-stance (foot under him), highest in the float; legs reach long at landing.
+    const mid = stanceEnd / 2;
+    const hip = { x: this.rootX, y: floor - 2 - L * 0.95 + Math.cos((ph - mid) * 4 * Math.PI) * 1.8 * sc };
+    this.hipTarget = hip;
+    const a = angry ? 0.42 : 0.34; // forward pitch
+    const neck = { x: hip.x + f * Math.sin(a) * d.torso, y: hip.y - Math.cos(a) * d.torso };
+    // Arms: upper arm swings from the shoulder, forearm bent ~90° forward.
+    const amp = angry ? 0.6 : 0.9;
+    const armAt = (theta: number) => {
+      const th = theta + a * 0.4;
+      const elbow = { x: neck.x + f * Math.sin(th) * d.upperArm, y: neck.y + Math.cos(th) * d.upperArm };
+      return { x: elbow.x + f * Math.cos(th) * d.foreArm * (angry ? 0.8 : 1), y: elbow.y - Math.sin(th) * d.foreArm * (angry ? 0.8 : 1) };
+    };
+    const swing = Math.sin(ph * 2 * Math.PI) * amp;
+    const handL = armAt(swing), handR = armAt(-swing); // each arm opposite its leg
+    this.fillLimbs(t, hip, neck, -f * 0.15, handL, handR, footL, footR, f, 1);
+    Object.assign(s, { hip: 0.3, neck: 0.3, head: 0.3, kneeL: 0.25, kneeR: 0.25, footL: 0.4, footR: 0.4, elbowL: 0.22, elbowR: 0.22, handL: 0.22, handR: 0.22 });
+    // Keep the walking feet in sync so stopping or slowing to a walk is seamless.
+    this.feet.L.x = footL.x; this.feet.R.x = footR.x;
+    this.feet.L.swinging = this.feet.R.swinging = false;
+  }
 
   /** Given hip, neck, hands and feet, place head, elbows and knees (IK). */
   private fillLimbs(t: Targets, hip: Vec, neck: Vec, tilt: number, handL: Vec, handR: Vec, footL: Vec, footR: Vec, f: number, kneeBend: number) {
