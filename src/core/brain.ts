@@ -202,6 +202,9 @@ function describe(e: MindEvent): string | null {
     case 'itemTaken': return `you took his ${e.name}`;
     case 'itemGiven': return `you gave him back his ${e.name}`;
     case 'itemDropped': return `you dropped his ${e.name} on the ground`;
+    case 'rolled': return 'he rolled out of a big landing';
+    case 'flipped': return 'he landed a flip';
+    case 'wallJump': return 'he kicked off a wall';
     default: return null;
   }
 }

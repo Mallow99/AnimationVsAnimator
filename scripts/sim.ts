@@ -263,13 +263,13 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
 }
 { // Cheap learning: a jump down that hurts makes him warier of that height.
   const pet = new Pet(bounds);
-  pet.setWindows([{ id: 1, x: 500, y: 250, w: 400, h: 500 }]); // ~550px drop: will hurt
+  pet.setWindows([{ id: 1, x: 500, y: 165, w: 400, h: 600 }]); // ~635px drop: too much even to roll out of
   petFor(1, pet);
   pet.paused = true;
   const c = pet.char;
   c.grab('neck', c.body.j.neck.x, c.body.j.neck.y);
-  for (let i = 0; i < 30; i++) { c.moveHold(700, 700 - i * 15, 0, -900); pet.update(1 / 60); }
-  c.moveHold(700, 160, 0, 0); petFor(0.5, pet);
+  for (let i = 0; i < 40; i++) { c.moveHold(700, 700 - i * 15, 0, -900); pet.update(1 / 60); }
+  c.moveHold(700, 75, 0, 0); petFor(0.5, pet);
   c.release(); petFor(3, pet);
   const onTop = c.support >= 0;
   pet.ctx.lessons.safeDrop = 600;
@@ -642,6 +642,44 @@ function yankHand(pet: Pet, speed = 3200) {
   check('a huge crash can snap a limb off', off > 0);
 }
 
+// ───── parkour ─────
+{ // A big drop he's in control of: he rolls out of it instead of crashing.
+  const c = new Character(bounds, 600);
+  run(c, 1);
+  c.body.translate(0, -320); c.body.launch(80, 0, DT); c.mode = 'air';
+  const ev = run(c, 3);
+  check('parkour: rolls out of a big landing', ev.includes('rolled') && !ev.includes('crashed') && upright(c), ev.filter((e) => e !== 'step').join(','));
+}
+{ // Flips in place: he goes over and lands it.
+  for (const turns of [-1, 1] as const) {
+    const c = new Character(bounds, 600);
+    run(c, 1);
+    c.flipJump(turns);
+    let over = false;
+    const ev = run(c, 3, () => { if (c.body.j.head.y > c.body.j.hip.y) over = true; });
+    check(`parkour: ${turns < 0 ? 'backflip' : 'front flip'} lands on his feet`, over && ev.includes('flipped') && !ev.includes('crashed') && upright(c), ev.filter((e) => e !== 'step').join(','));
+  }
+}
+{ // Wall jump: run at the screen edge, catch it, kick off with a backflip, land.
+  const pet = calmPet();
+  const got: string[] = [];
+  const orig = pet.mind.onEvent.bind(pet.mind);
+  pet.mind.onEvent = (c, e) => { if (e.type !== 'step') got.push(e.type); orig(c, e); };
+  pet.mind.command(pet.ctx, 'walljump');
+  petFor(8, pet);
+  check('parkour: wall jump off the screen edge', got.includes('wallJump') && !got.includes('crashed') && ['ground', 'sit'].includes(pet.char.mode), got.join(','));
+}
+{ // Vault onto a low ledge.
+  const c = new Character(bounds, 500);
+  const sc = c.scale;
+  c.setPlatforms([{ id: 8, x1: 560, x2: 800, y: 800 - 58 * sc }]);
+  run(c, 1);
+  c.walkTo(530); run(c, 2);
+  const ok = c.vault(560, 800 - 58 * sc);
+  const ev = run(c, 3);
+  check('parkour: vaults onto a low ledge', ok && c.support === 8 && ev.includes('vaulted') && upright(c), `ok=${ok} support=${c.support} ${ev.filter((e) => e !== 'step').join(',')}`);
+}
+
 // ───── items and his belt ─────
 function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, pet); pet.paused = false; return pet; }
 { // He starts with his pen and his sword on his belt; drawing takes the pen out and puts it back.
@@ -676,8 +714,9 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
   pet.mind.command(pet.ctx, 'doodle');
   petFor(2, pet);
   check('pen taken: he can\'t draw, and says so', pet.ctx.doodles.length === 0 && said.some((t) => /pen/.test(t)), said.join(' | '));
-  // Wait for him to ask for it back, holding it near him.
+  // Wait for him to ask for it back, holding it near him. (Calm, so he isn't off on the monkey bars.)
   let snatched = false;
+  pet.command('mood:calm');
   petFor(40, pet, () => {
     const h = pet.char.frontHand, cur = pet.ctx.world.cursor!;
     if (pen.where === 'cursor') pet.cursor(cur.x + (h.x - cur.x) * 0.02, cur.y + (h.y - cur.y) * 0.02, 0, 0);

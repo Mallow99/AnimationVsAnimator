@@ -15,7 +15,7 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  AskBack, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
+  AskBack, WallJump, wallJumpTarget, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number }
@@ -99,6 +99,10 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   sleep: { happiness: 0.06 },
   reattach: { happiness: 0.08, fear: -0.1 },
   swing: { boredom: -0.25, annoyance: -0.2, happiness: 0.03 },
+  walljump: { boredom: -0.35, happiness: 0.05, energy: -0.04 },
+  backflip: { boredom: -0.25, happiness: 0.04, energy: -0.03 },
+  frontflip: { boredom: -0.25, happiness: 0.04, energy: -0.03 },
+  roll: { boredom: -0.1 },
   pickup: { boredom: -0.05 },
 };
 
@@ -111,6 +115,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'doodle', label: 'Doodle' }, { name: 'grabcursor', label: 'Grab cursor (mischief)' }, { name: 'tantrum', label: 'Tantrum' }, { name: 'sulk', label: 'Sulk' },
   { name: 'wave', label: 'Wave' }, { name: 'laugh', label: 'Laugh' }, { name: 'shrug', label: 'Shrug' },
   { name: 'stomp', label: 'Stomp' }, { name: 'stretch', label: 'Stretch' }, { name: 'cower', label: 'Cower' },
+  { name: 'backflip', label: 'Backflip' }, { name: 'frontflip', label: 'Front flip' }, { name: 'roll', label: 'Roll' }, { name: 'walljump', label: 'Wall jump' },
   { name: 'swing', label: 'Swing his sword' }, { name: 'slash', label: 'Attack the cursor' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
@@ -194,6 +199,14 @@ export class Mind {
       }
     }
     this.lastCursorSeen = w.cursorMovedAt;
+    // You've had one of his things for a while: he stops lazing around and asks for it back.
+    const taken = c.items.carried;
+    const lazing = !this.skill || ['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch'].includes(this.skill.name);
+    if (taken && w.time - this.takenAt > 20 && lazing && !this.queued && ch.ready && ch.useHand && m.label !== 'sad' && m.label !== 'scared' && !m.asleep) {
+      this.takenAt = w.time;
+      this.interrupt(c, new AskBack(taken));
+      this.why = `wants his ${taken.def.name.toLowerCase()} back`;
+    }
     const away = w.time - w.cursorMovedAt;
     if (away > 300) { m.s.boredom += dt / 300; m.s.happiness -= dt / 1200; } // ignored for 5+ min: lonely
     else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.s.happiness += dt / 600; // company
@@ -326,6 +339,7 @@ export class Mind {
       { name: 'sigh', score: L === 'bored' ? 0.6 : 0, why: 'bored', make: presets.sigh },
       ...this.windowOptions(c),
       ...this.itemOptions(c),
+      ...this.parkourOptions(c),
       { name: 'showoff', score: c.savedMoves?.length && (L === 'playful' || L === 'bored') && s.energy > 0.4 ? 0.3 : 0,
         why: 'showing off a move he learned', make: () => { const m = pick(c.savedMoves!); return new PlanSkill(this, [{ say: `${m.name}!` }, { move: m.frames, name: m.name }]); } },
       { name: 'doodle', score: c.world.time - this.lastDoodle > 90 && L !== 'sad' && L !== 'sleepy' ? 0.08 + s.boredom * 0.35 + (L === 'playful' ? 0.15 : 0) : 0,
@@ -334,6 +348,20 @@ export class Mind {
         why: L === 'angry' ? 'getting back at you' : 'feeling mischievous', make: () => { this.lastGrab = c.world.time; return new GrabCursor(); } },
     ];
     return opts;
+  }
+
+  /** Showing off: flips, rolls, wall jumps. */
+  private parkourOptions(c: Ctx): Option[] {
+    const s = c.mood.s, L = c.mood.label, ch = c.char;
+    if (!ch.whole) return [];
+    const lively = (L === 'playful' ? 0.3 : L === 'bored' ? 0.15 : 0.02) * (s.energy > 0.45 ? 1 : 0);
+    const wall = wallJumpTarget(c);
+    return [
+      { name: 'backflip', why: 'showing off', score: lively * 0.8, make: () => new Sequence('backflip', [{ flip: -1 }]) },
+      { name: 'frontflip', why: 'showing off', score: lively * 0.6, make: () => new Sequence('frontflip', [{ flip: 1 }]) },
+      { name: 'roll', why: 'tumbling around', score: lively * 0.3, make: () => new Sequence('roll', [{ roll: true }]) },
+      ...(wall ? [{ name: 'walljump', why: 'doing parkour', score: lively * 0.9, make: () => new WallJump(wall) }] : []),
+    ];
   }
 
   /** Using his things: swinging his sword, tidying up what's lying around, asking for what you took. */
@@ -560,6 +588,15 @@ export class Mind {
         }
         return;
 
+      case 'rolled':
+        if (chance(0.3)) c.say(pick(['parkour!', 'nailed it', 'tuck and roll']), 1.2);
+        return;
+      case 'flipped':
+        if (chance(0.5)) c.say(pick(['ta-da!', 'stuck it', '10/10']), 1.2);
+        return;
+      case 'vaulted':
+        if (chance(0.3)) c.say(pick(['hup!', 'parkour', 'easy']), 1);
+        return;
       case 'landed':
         if (this.skill instanceof GetDown && e.speed > 600) {
           // Landed a big drop fine: a little braver next time.

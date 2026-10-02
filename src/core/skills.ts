@@ -86,7 +86,9 @@ export type Step =
   | { face: 'cursor' | 'away' | 'flip' }
   | { look: LookMode }
   | { sit: number }
-  | { pop: LimbId };
+  | { pop: LimbId }
+  | { flip: 1 | -1 }
+  | { roll: true };
 
 export class Sequence extends Skill {
   private i = 0;
@@ -114,6 +116,8 @@ export class Sequence extends Skill {
     if ('look' in st) { c.look = st.look; return true; }
     if ('sit' in st) { if (!ch.ready) return false; ch.sit(); return true; }
     if ('pop' in st) { ch.detach(st.pop, { x: -ch.facing * 120, y: -260, z: 80 }); return true; }
+    if ('flip' in st) { if (!ch.ready) return false; return ch.flipJump(st.flip) || true; }
+    if ('roll' in st) { if (!ch.ready) return false; return ch.rollForward() || true; }
     if (!ch.ready) return false;
     if ('gesture' in st) { ch.doGesture(st.gesture, st.atCursor && cur ? cur : undefined); return true; }
     if ('walkTo' in st) {
@@ -152,6 +156,7 @@ export class Sequence extends Skill {
       if (this.stepT >= st.sit && ch.mode === 'sit') ch.standUp();
       return this.stepT >= st.sit && ch.mode !== 'sit';
     }
+    if ('flip' in st || 'roll' in st) return (this.stepT > 0.4 && ch.ready) || this.stepT > 6;
     return true;
   }
 }
@@ -262,6 +267,7 @@ const hangLength = (ch: Character) => ch.d.upperArm + ch.d.foreArm + ch.d.torso 
 /** How he'll get onto a window: jump up, climb its side, or go over the ceiling and drop on. */
 export type Route =
   | { kind: 'jump' }
+  | { kind: 'vault'; edgeX: number; fromX: number }
   | { kind: 'wall'; wall: Wall; jump: boolean }
   | { kind: 'ceiling'; edge: Wall; dropX: number };
 
@@ -280,6 +286,12 @@ export function routeTo(c: Ctx, target: Platform): Route | null {
   const ch = c.char, sc = ch.scale, floorY = ch.body.j.footL.y, range = ch.surfaceRange();
   const h = floorY - target.y;
   if (target.id === ch.support || h < 40 * sc || target.x2 - target.x1 < 50) return null;
+  // 0. Low enough to vault onto (parkour): run up to one end, hands on the edge, legs over.
+  if (h >= 12 * sc && h <= 85 * sc && ch.whole) {
+    const fromLeft = ch.x < (target.x1 + target.x2) / 2;
+    const edgeX = fromLeft ? target.x1 : target.x2, fromX = edgeX + (fromLeft ? -26 : 26) * sc;
+    if (canStandAt(ch, fromX)) return { kind: 'vault', edgeX, fromX };
+  }
   // 1. Close enough to jump.
   const gap = Math.max(target.x1 - range.x2, range.x1 - target.x2, 0);
   if (h <= maxClimb(ch) && gap < 90 * sc) return { kind: 'jump' };
@@ -341,6 +353,11 @@ export class ClimbOnto extends Skill {
 
   private walkToLaunch(c: Ctx) {
     const ch = c.char, t = this.target, r = ch.surfaceRange(), m = 16 * ch.scale;
+    if (this.route.kind === 'vault') {
+      ch.walkTo(this.route.fromX, Math.abs(this.route.fromX - ch.x) > 120);
+      this.phase = 'walk';
+      return;
+    }
     if (this.route.kind === 'wall') {
       // Run up to the wall and leap onto it (or, after a miss, walk right up and grab it).
       const w = this.route.wall, gap = this.tries > 0 ? m : 55 * ch.scale;
@@ -367,7 +384,9 @@ export class ClimbOnto extends Skill {
     if (!t) return true; // the window went away
     this.target = t;
     if (this.phase === 'walk' && ch.ready && !ch.walking) {
-      if (this.route.kind === 'wall') {
+      if (this.route.kind === 'vault') {
+        if (!ch.vault(this.route.edgeX, t.y)) { this.route = { kind: 'jump' }; this.walkToLaunch(c); return false; }
+      } else if (this.route.kind === 'wall') {
         ch.facing = this.route.wall.face;
         const vy = -Math.sqrt(2 * GRAVITY * jumpReach(ch) * (this.route.jump ? 1.1 : 0.45));
         if (this.tries > 0 && !this.route.jump) ch.grabWall(this.route.wall, -1);
@@ -469,6 +488,43 @@ export class GetDown extends Skill {
     return this.t > 30;
   }
   stop(c: Ctx) { c.char.stop(); }
+}
+
+// ───────────── parkour ─────────────
+
+/** Run at a wall (a screen edge or a window side), leap onto it, and kick off it with a backflip. */
+export class WallJump extends Skill {
+  readonly name = 'walljump';
+  private phase: 'walk' | 'leap' | 'kick' | 'land' = 'walk';
+  constructor(private wall: Wall) { super(); }
+  start(c: Ctx) {
+    const ch = c.char, x = this.wall.x - this.wall.face * 60 * ch.scale;
+    ch.walkTo(x, Math.abs(x - ch.x) > 120);
+    c.look = 'none';
+  }
+  update(c: Ctx) {
+    const ch = c.char;
+    if (this.phase === 'walk' && ch.ready && !ch.walking) {
+      if (!ch.leapAt(this.wall, -470)) return true;
+      this.phase = 'leap'; this.t = 0;
+    } else if (this.phase === 'leap') {
+      if (ch.climbingWall) { this.phase = 'kick'; this.t = 0; }
+      else if (this.t > 1.2 && ch.ready) return true; // missed it
+    } else if (this.phase === 'kick' && this.t > 0.18) {
+      ch.wallJump(true);
+      this.phase = 'land'; this.t = 0;
+    } else if (this.phase === 'land') return this.t > 0.4 && (ch.ready || ch.mode === 'ragdoll');
+    return this.t > 12;
+  }
+  stop(c: Ctx) { c.char.stop(); if (c.char.climbingWall) c.char.letGo(); }
+}
+
+/** The nearest wall he could wall-jump off (one he can reach running from where he stands). */
+export function wallJumpTarget(c: Ctx): Wall | null {
+  const ch = c.char, foot = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
+  const ok = c.world.walls.filter((w) => w.y1 < foot - 120 * ch.scale && w.y2 >= foot - 10 && canStandAt(ch, w.x - w.face * 60 * ch.scale));
+  ok.sort((a, b) => Math.abs(a.x - ch.x) - Math.abs(b.x - ch.x));
+  return ok[0] ?? null;
 }
 
 // ───────────── made-up moves (his AI brain moving his body directly) ─────────────
@@ -757,7 +813,9 @@ export class FetchItem extends Skill {
     if (this.phase === 'stow') return this.tool.stow(c, dt) || this.t > 15;
     if (it.where === 'hand') { this.phase = 'stow'; return false; }
     const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
-    if (it.at.y < feet - 70 * ch.scale || this.t > 15) { if (this.comment) c.say(pick(['can\'t reach it', 'ugh. too high']), 1.4); return true; }
+    // (Give a falling thing a moment to land before deciding it's out of reach.)
+    if ((it.at.y < feet - 70 * ch.scale && this.t > 1.5) || this.t > 15) { if (this.comment) c.say(pick(['can\'t reach it', 'ugh. too high']), 1.4); return true; }
+    if (it.at.y < feet - 70 * ch.scale) return false;
     if (this.phase === 'go') {
       if (this.t < this.next || !ch.ready) return false;
       this.next = this.t + 0.3;

@@ -25,7 +25,7 @@ import {
 } from './math';
 import type { Wall } from './world';
 
-export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie' | 'climb' | 'ceiling' | 'puppet';
+export type Mode = 'ground' | 'air' | 'ragdoll' | 'getup' | 'held' | 'sit' | 'lie' | 'climb' | 'ceiling' | 'puppet' | 'roll';
 
 /** Body parts a puppet keyframe can place. "front" = the side facing the way he faces. */
 export const PUPPET_JOINTS = ['head', 'neck', 'hip', 'frontHand', 'backHand', 'frontElbow', 'backElbow', 'frontFoot', 'backFoot', 'frontKnee', 'backKnee'] as const;
@@ -72,7 +72,11 @@ export type CharEvent =
   | { type: 'letGo' }           // dropped off a wall or the ceiling
   | { type: 'step' }            // a foot touched down (footstep sounds)
   | { type: 'limbOff'; limb: LimbId; x: number; y: number; yanked: boolean } // a limb came off
-  | { type: 'limbOn'; limb: LimbId; x: number; y: number };                 // and went back on
+  | { type: 'limbOn'; limb: LimbId; x: number; y: number }                  // and went back on
+  | { type: 'rolled'; speed: number }  // rolled out of a big landing (parkour)
+  | { type: 'wallJump' }               // kicked off a wall
+  | { type: 'flipped' }                // landed a flip
+  | { type: 'vaulted' };               // vaulted onto a ledge
 
 /** How he carries himself. Part of his "look"; set from the settings / presets. */
 export interface BodyStyle {
@@ -213,6 +217,12 @@ export class Character {
   private held: { joint: JointName; limb?: LooseLimb; idx?: number; x: number; y: number; vx: number; vy: number } | null = null;
   private gesture: { name: Gesture; t: number; x: number; y: number; fired: boolean } | null = null;
   private jumpPrep: { t: number; vx: number; vy: number } | null = null;
+  /** Parkour: a forward roll out of a big landing. */
+  private rolling: { t: number; dur: number; dir: number; x0: number; speed: number } | null = null;
+  /** A flip in the air (off a jump or a wall): +1 = front flip, -1 = backflip. */
+  private airFlip: { t: number; dur: number; turns: number } | null = null;
+  /** A vault in progress (a scripted move): reports 'vaulted' when he lands. */
+  private vaulting = false;
   /** A made-up move being played (his AI brain moving his body directly). */
   private puppetMove: {
     times: number[];                  // seconds to reach each pose
@@ -715,6 +725,7 @@ export class Character {
       case 'climb': this.climbPose(dt, t, s); break;
       case 'ceiling': this.ceilingPose(dt, t, s); break;
       case 'puppet': this.puppetPose(dt, t, s); break;
+      case 'roll': this.rollPose(dt, t, s); break;
     }
 
     const b = this.body;
@@ -823,6 +834,10 @@ export class Character {
     if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
     if (m !== 'air') this.leapWall = null;
     if (m !== 'puppet') this.puppetMove = null;
+    if (m !== 'roll') this.rolling = null;
+    if (m !== 'air') { this.airFlip = null; this.flipDone = false; }
+    if (m !== 'ground' && m !== 'air') this.pendingFlip = 0;
+    if (m !== 'puppet' && m !== 'air') this.vaulting = false;
     if (m === 'air' || m === 'held') this.support = NONE;
     this.mode = m;
     this.modeTime = 0;
@@ -874,7 +889,18 @@ export class Character {
         if (this.modeTime < 0.05) break;
         const upsideDown = j.head.y > j.hip.y;
         if (anyFoot && !otherDown && !upsideDown) {
+          // Parkour: a big landing he's in control of turns into a forward roll instead of a crash.
+          const vx = (j.hip.x - j.hip.px) / dt;
+          if (hipVYBefore > 850 && hipVYBefore <= 1400 && this.whole) {
+            this.events.push({ type: 'landed', speed: hipVYBefore });
+            this.startRoll(Math.abs(vx) > 40 ? sign(vx) : this.facing, Math.abs(vx), hipVYBefore);
+            break;
+          }
           if (hipVYBefore > 1150) { this.crash(hipVYBefore); break; }
+          const flipped = this.modeTime > 0.3 && this.flipDone;
+          this.flipDone = false;
+          if (flipped) this.events.push({ type: 'flipped' });
+          if (this.vaulting) { this.vaulting = false; this.events.push({ type: 'vaulted' }); }
           this.setMode('ground');
           this.support = j.footL.grounded ? j.footL.on : j.footR.on;
           this.rootX = j.hip.x;
@@ -1000,6 +1026,7 @@ export class Character {
         this.body.launch(vx, vy, dt);
         if (vx) this.facing = sign(vx);
         this.setMode('air');
+        if (this.pendingFlip) { this.airFlip = { t: 0, dur: 0.5, turns: this.pendingFlip }; this.pendingFlip = 0; }
         this.events.push({ type: 'jumped' });
         this.airPose(t, s, 0.07);
         return;
@@ -1584,6 +1611,20 @@ export class Character {
 
   private airPose(t: Targets, s: Strengths, k: number) {
     const d = this.d, sc = this.scale, j = this.body.j;
+    // A flip in progress: tucked into a ball, spinning head over heels around his middle.
+    const fl = this.airFlip;
+    if (fl && this.mode === 'air') {
+      fl.t += this.dt;
+      const u = fl.t / fl.dur;
+      if (u < 1) {
+        const c = { x: (j.hip.x + j.neck.x) / 2, y: (j.hip.y + j.neck.y) / 2, z: (j.hip.z + j.neck.z) / 2 };
+        this.tuck(t, c, fl.turns * 2 * Math.PI * smooth(u));
+        for (const n of JOINTS) s[n] = 0.22;
+        return;
+      }
+      this.airFlip = null;
+      this.flipDone = true;
+    }
     const hip = { x: j.hip.x, y: j.hip.y, z: j.hip.z };
     const vy = (j.hip.y - j.hip.py) / this.dt;
     const neck = this.off(hip, 2 * sc, -d.torso);
@@ -1603,6 +1644,104 @@ export class Character {
       t.handL = { x: wx, y: neck.y - 6 * sc, z: this.latZ('L', 4 * sc) }; t.handR = { x: wx, y: neck.y - 12 * sc, z: this.latZ('R', 4 * sc) };
       s.handL = s.handR = 0.12;
     }
+  }
+
+  // ───────────── parkour ─────────────
+
+  /** Set when a flip finished in the air, so landing it can be celebrated. */
+  private flipDone = false;
+
+  /**
+   * Tucked into a ball (knees to his chest, hands on his shins), around center c,
+   * tipped head over heels by `pitch` radians. Used for rolls and flips.
+   */
+  private tuck(t: Targets, c: V3, pitch: number) {
+    const sc = this.scale, B = basis(this.yaw, pitch);
+    const at = (f: number, u: number, l = 0) => inFrame(c, B, f * sc, u * sc, l * sc);
+    t.hip = at(-3, -7); t.neck = at(7, 12); t.head = at(16, 15);
+    t.kneeL = at(11, 4, 3); t.kneeR = at(11, 4, -3);
+    t.footL = at(1, -12, 3); t.footR = at(1, -12, -3);
+    t.handL = at(10, -6, 5); t.handR = at(10, -6, -5);
+    t.elbowL = at(5, 2, 6); t.elbowR = at(5, 2, -6);
+  }
+
+  /** Roll forward out of a big landing: tuck, tumble once along the ground, come up on his feet. */
+  private startRoll(dir: number, vx: number, vy: number) {
+    this.facing = dir;
+    this.yaw = dir > 0 ? 0 : Math.PI;
+    this.turning = null;
+    this.setMode('roll');
+    this.rolling = { t: 0, dur: 0.5, dir, x0: this.body.j.hip.x, speed: clamp(vx * 0.6 + 120, 140, 320) };
+    this.events.push({ type: 'rolled', speed: vy });
+    this.support = this.body.j.footL.grounded ? this.body.j.footL.on : this.body.j.footR.grounded ? this.body.j.footR.on : this.support;
+  }
+
+  /** A forward roll on the spot (for show, or because you told him to). */
+  rollForward() {
+    if (this.mode !== 'ground' || !this.whole) return false;
+    this.goalX = null; this.gesture = null;
+    this.startRoll(this.facing, 60, 0);
+    return true;
+  }
+
+  private rollPose(dt: number, t: Targets, s: Strengths) {
+    const r = this.rolling!, sc = this.scale, floor = this.groundY();
+    r.t += dt;
+    const u = clamp(r.t / r.dur, 0, 1);
+    const x = r.x0 + r.dir * r.speed * r.t * (1 - u * 0.4);
+    this.tuck(t, { x, y: floor - 2 - 14 * sc, z: this.rootZ }, 2 * Math.PI * smooth(u));
+    for (const n of JOINTS) s[n] = 0.35;
+    if (u >= 1) {
+      this.setMode('ground');
+      this.rootX = x; this.rootVX = r.dir * r.speed * 0.3;
+      this.plantFeet();
+      this.crouch = 14 * sc;
+      this.events.push({ type: 'step' });
+    }
+  }
+
+  /** Jump with a flip: +1 = front flip, -1 = backflip. */
+  flipJump(turns: 1 | -1, vx = 0, vy = -680) {
+    if (this.mode !== 'ground' || !this.whole) return false;
+    this.jump(vx, vy);
+    this.pendingFlip = turns;
+    return true;
+  }
+  private pendingFlip = 0;
+
+  /** On a wall: kick off it, away from the wall, with a backflip. */
+  wallJump(flip = true) {
+    if (this.mode !== 'climb' || !this.climb) return false;
+    const w = this.climb.wall;
+    this.setMode('air');
+    this.facing = -w.face;
+    this.yaw = this.facing > 0 ? 0 : Math.PI;
+    this.body.launch(-w.face * 330, -620, this.dt);
+    if (flip) this.airFlip = { t: 0, dur: 0.52, turns: -1 };
+    this.events.push({ type: 'wallJump' });
+    return true;
+  }
+
+  /**
+   * Vault onto a ledge just ahead (a low window top, a box he drew): plant his hands on
+   * the edge, swing his legs over to the side, and land standing on top. Built as a
+   * scripted move from where he is, played by his muscles like a made-up move.
+   */
+  vault(edgeX: number, topY: number) {
+    if (this.mode !== 'ground' || !this.whole) return false;
+    const sc = this.scale, f = sign(edgeX - this.rootX) || this.facing;
+    this.facing = f;
+    const dx = Math.abs(edgeX - this.rootX) / sc, h = (this.groundY() - topY) / sc;
+    if (h < 8 || h > 95 || dx > 70) return false;
+    const frames: Keyframe[] = [
+      { t: 0.13, pose: { hip: [dx * 0.4, 34], neck: [dx * 0.4 + 12, 60], frontHand: [dx, h + 1], backHand: [dx + 4, h + 1], frontFoot: [dx * 0.3 + 4, 6], backFoot: [dx * 0.2, 2] } },
+      { t: 0.2, pose: { hip: [dx + 2, h + 24], neck: [dx + 14, h + 46], frontFoot: [dx + 6, h + 14, 18], backFoot: [dx, h + 12, 14] } },
+      { t: 0.17, pose: { hip: [dx + 18, h + 40], neck: [dx + 20, h + 70], head: [dx + 21, h + 86], frontFoot: [dx + 23, h + 2], backFoot: [dx + 14, h + 2], frontHand: [dx + 24, h + 42], backHand: [dx + 12, h + 40] } },
+    ];
+    if (!this.puppet(frames)) return false;
+    this.puppetMove!.total -= 0.15; // hand over to landing a little sooner
+    this.vaulting = true;
+    return true;
   }
 
   // ───────────── puppet (moves made up by his AI brain) ─────────────
