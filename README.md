@@ -51,6 +51,8 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   send your real cursor flying across the screen. Move your mouse and it's yours again straight away.
   - When he's playful he spars with it ("fight me!"): fists up, punch combos, high kicks, jumping punches.
     Angry, it's a real brawl. Leave your cursor parked on his head and he swats it off.
+  - Sometimes he jumps up, grabs your cursor and hangs off it, legs swinging, while you carry him around. Shake the
+    mouse hard to fling him off (or click).
   - Swipe at him (Smack mode) while his sword is out and he might parry it and knock your cursor back.
 - **His things do stuff**: the **mallet** on his left hip comes down overhead (on your cursor, or on the window he's standing
   on, which dips and springs back). The **bouncy ball** in his pocket gets thrown at your cursor, or bounced off the floor and

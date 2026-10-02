@@ -210,7 +210,9 @@ Then: Android shell.
   - Skills: `Brawl` ('spar' playful / 'brawl' angry, replaces the angry 'hunt'), `ThrowItem` ('throw' at the cursor with a
     ballistic aim / 'bounce' and catch), `SwordSwing(times, atCursor, 'swing'|'smash')` (mallet = overhead; approach puts
     the cursor on the circle the far end sweeps), `PushWindow`, `KickWindow`, `WindowSurf`, `KnockWindow`, `LedgeSit`.
-    Mind: swat reaction when your cursor sits still on him for 2.2 s; `windowPranks()` (cooldown 50 s / 25 s angry; skips
+    `HangCursor` ('hang': jumps up with `jumpPunch(at, grab)` / `airReach`, `Character.grab(hand, x, y, self=true)` →
+    'hangOn' event, `hangingOn`; Pet moves the hold with your cursor, a shake > 1900 px/s or a click lets go; legs swing).
+    Mind: swat reaction when your cursor sits still on him for 2.2 s (not while you hold one of his things); `windowPranks()` (cooldown 50 s / 25 s angry; skips
     the window your cursor is busy in unless he's angry); parry in the smack path (`Pet.parry`).
   - Items: `use` smash/throw, `belt: 'pocket'` (slot 3, hidden), `bounce`; built-ins mallet (`hammer.json`) and bouncy ball;
     `Items.known` + `giveNewBuiltins` so old saves get new built-ins once. World-item physics moved into the fixed 120 Hz loop

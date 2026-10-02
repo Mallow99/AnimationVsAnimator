@@ -126,6 +126,7 @@ export class Pet {
     this.char.mode = 'air';
     const pet = this;
     this.ctx = {
+      get cursorPlay() { return pet.config.knockCursor; },
       get canMoveWindows() { return pet.config.moveWindows && pet.config.windows && !!pet.onMoveWindow && pet.ctx.world.time > pet.windowsStuckUntil; },
       char: this.char,
       mood: this.mood,
@@ -145,6 +146,7 @@ export class Pet {
       shoveWindow: (id, vx, vy, spring) => this.shoveWindow(id, vx, vy, spring),
       pushWindow: (id, vx) => this.pushWindow(id, vx),
       windowMoving: (id) => this.winMotion.has(id),
+      hangOnCursor: () => this.hangOnCursor(),
       props: this.props,
       onBecome: (d) => this.becomeReal(d),
     };
@@ -190,6 +192,9 @@ export class Pet {
     // A single click on him turns into a poke once it's clearly not a double-click.
     const pp = this.pendingPoke;
     if (pp && this.ctx.world.time - pp.at > 0.25) { this.pendingPoke = null; this.poke(pp.joint, pp.x); }
+    if (this.char.hangingOn && this.ctx.world.time - this.ctx.world.cursorMovedAt > 0.06 && this.ctx.world.cursor) {
+      this.char.moveHold(this.ctx.world.cursor.x, this.ctx.world.cursor.y, 0, 0); // the mouse is still: so is the hand
+    }
     if (this.listening) { this.char.presentWant = 0.6; this.mind.holdUntil = this.ctx.world.time + 1; if (this.char.walking) this.char.stop(); }
     else this.char.presentWant = 0;
     if (!this.paused) { this.mind.update(this.ctx, dt); this.brain.update(this.ctx, this.mind); }
@@ -625,6 +630,11 @@ export class Pet {
     w.cursor = { x, y };
     w.cursorMovedAt = w.time;
     this.cursorVel = { x: vx, y: vy };
+    // He's hanging off your cursor: he comes along. Shake it hard and he lets go (and goes flying).
+    if (this.char.hangingOn) {
+      if (speed > 1900) this.char.release();
+      else this.char.moveHold(x, y, vx, vy);
+    }
     if (this.menu) this.menu.hover = this.menuRow(x, y);
     if (Date.now() - this.memory.lastSeen > 60_000) this.memory.sawYou();
     const over = !this.press && speed < 1200 && this.char.hitTest(x, y, 20) !== null;
@@ -654,6 +664,8 @@ export class Pet {
       if (i >= 0) rows[i].act();
       return true;
     }
+    // Click while he's hanging off your cursor: he drops off.
+    if (this.char.hangingOn) { this.char.release(); return true; }
     const joint = this.char.hitTest(x, y);
     const carried = this.items.carried;
     if (carried) {
@@ -825,6 +837,15 @@ export class Pet {
     if (this.config.knockCursor) this.cursorBody.hit(at, vx, vy, this.ctx.world.time);
     this.memory.count('cursorHits');
     this.emit({ type: 'hitCursor', power, by });
+  }
+
+  /** He jumped up and grabbed your cursor: he hangs from it by his front hand, and goes where it goes. */
+  private hangOnCursor() {
+    const cur = this.ctx.world.cursor, hand = this.char.useHand;
+    if (!cur || !hand || !this.config.knockCursor || this.press || this.items.carried) return false;
+    this.char.grab(hand === 'L' ? 'handL' : 'handR', cur.x, cur.y, true);
+    this.sound('pickup', 0.5);
+    return true;
   }
 
   /** The knocked cursor flies along; the real one follows (on the desktop). */

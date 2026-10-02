@@ -84,7 +84,8 @@ export type CharEvent =
   | { type: 'wallJump' }               // kicked off a wall
   | { type: 'flipped' }                // landed a flip
   | { type: 'vaulted' }                // vaulted onto a ledge
-  | { type: 'knock'; x: number; y: number }; // a knuckle tap on something (a window)
+  | { type: 'knock'; x: number; y: number } // a knuckle tap on something (a window)
+  | { type: 'hangOn' };                       // he grabbed onto your cursor and is hanging from it
 
 /** How he carries himself. Part of his "look"; set from the settings / presets. */
 export interface BodyStyle {
@@ -188,6 +189,8 @@ export class Character {
   private knocks = 0;
   /** Jumping at something to punch it: where (a skill keeps it pointed at the target). */
   airPunch: Vec | null = null;
+  /** Jumping up to grab something (your cursor): his front hand reaches for it, no punch. */
+  airReach: Vec | null = null;
   /** Pushing something at this x (a window's side): both hands on it, leaning in. */
   pushAt: number | null = null;
   /** Riding a window across the screen: knees bent, arms out. */
@@ -240,7 +243,8 @@ export class Character {
   private hipTarget: V3 | null = null;
   private getup: { from: Record<JointName, V3>; crouch: Targets; stand: Targets; x: number } | null = null;
   /** What your cursor is holding: one of his joints, or one of his loose limbs (`limb`, point `idx`). */
-  private held: { joint: JointName; limb?: LooseLimb; idx?: number; x: number; y: number; vx: number; vy: number } | null = null;
+  /** `self`: he's the one holding on (hanging from your cursor), not you holding him. */
+  private held: { joint: JointName; limb?: LooseLimb; idx?: number; x: number; y: number; vx: number; vy: number; self?: boolean } | null = null;
   private gesture: { name: Gesture; t: number; x: number; y: number; fired: boolean } | null = null;
   private jumpPrep: { t: number; vx: number; vy: number } | null = null;
   // ── animation principles (Becker's toolbox) ──
@@ -609,7 +613,7 @@ export class Character {
   }
 
   /** Jump up at a point (your cursor, above his head) and punch it at the top of the jump. */
-  jumpPunch(at: Vec) {
+  jumpPunch(at: Vec, grab = false) {
     if (this.mode !== 'ground' || this.jumpPrep || this.legCount < 2) return false;
     const g = 2000, armLen = this.d.upperArm + this.d.foreArm;
     const rise = clamp(this.body.j.neck.y - (at.y + armLen * 0.55), 30 * this.scale, 260 * this.scale);
@@ -617,7 +621,7 @@ export class Character {
     const vx = clamp((at.x - this.x) / tUp * 0.85, -380, 380);
     this.jump(vx, -vy);
     this.facing = sign(at.x - this.x) || this.facing;
-    this.airPunch = { x: at.x, y: at.y };
+    if (grab) this.airReach = { x: at.x, y: at.y }; else this.airPunch = { x: at.x, y: at.y };
     this.gestureId++;
     return true;
   }
@@ -693,15 +697,18 @@ export class Character {
     }
   }
 
-  grab(joint: JointName, x: number, y: number) {
+  /** You grab him by a joint. `self`: no, HE grabbed onto your cursor with that hand (and hangs from it). */
+  grab(joint: JointName, x: number, y: number, self = false) {
     this.releaseGrips();
-    this.held = { joint, x, y, vx: 0, vy: 0 };
+    this.held = { joint, x, y, vx: 0, vy: 0, self };
     this.body.j[joint].invMass = 0;
     this.goalX = null; this.gesture = null; this.jumpPrep = null;
     this.stayDown = false;
     this.setMode('held');
-    this.events.push({ type: 'grabbed' });
+    this.events.push({ type: self ? 'hangOn' : 'grabbed' });
   }
+  /** Hanging off your cursor by one hand. */
+  get hangingOn() { return !!this.held?.self; }
 
   moveHold(x: number, y: number, vx: number, vy: number) {
     if (this.held) Object.assign(this.held, { x, y, vx, vy });
@@ -825,7 +832,7 @@ export class Character {
       // Yanked hard by a hand or a foot: that limb comes off, and you're left holding it.
       const limb = limbOf(this.held.joint);
       const speed = Math.hypot(this.held.vx, this.held.vy);
-      this.yank = limb && this.destructible && speed > 2700 && this.modeTime > 0.1 ? this.yank + dt : 0;
+      this.yank = limb && this.destructible && !this.held.self && speed > 2700 && this.modeTime > 0.1 ? this.yank + dt : 0;
       if (limb && this.yank > 0.03) {
         const { x, y, vx, vy } = this.held, idx = this.held.joint === LIMB_JOINTS[limb].mid ? 1 : 2;
         this.held = null;
@@ -908,7 +915,7 @@ export class Character {
     if (m !== 'climb') this.climb = null;
     if (m !== 'ceiling') this.hang = null;
     if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
-    if (m !== 'air') { this.leapWall = null; this.airPunch = null; }
+    if (m !== 'air') { this.leapWall = null; this.airPunch = null; this.airReach = null; }
     if (m !== 'ground') this.pushAt = null;
     if (m !== 'sit') this.ledge = null;
     if (m !== 'puppet') this.puppetMove = null;
@@ -1866,13 +1873,21 @@ export class Character {
     this.fillLimbs(t, hip, neck, 0.1, 0, hands.L, hands.R,
       this.off(hip, -4 * sc, legLen * (1 - tuck), 3 * sc), this.off(hip, 7 * sc, legLen * (1 - tuck), -3 * sc));
     for (const n of JOINTS) s[n] = n === 'hip' ? 0 : k;
-    // Jump-punching something above him: front fist up at it, the other one back.
-    if (this.airPunch && this.mode === 'air') {
+    // Jump-punching something above him (or reaching up to grab it): front hand up at it.
+    const reachUp = this.airPunch ?? this.airReach;
+    if (reachUp && this.mode === 'air') {
       const front = this.facing > 0 ? 'R' : 'L';
-      const fist = this.aimFrom(neck, this.airPunch, (d.upperArm + d.foreArm) * 0.98, front);
+      const fist = this.aimFrom(neck, reachUp, (d.upperArm + d.foreArm) * 0.98, front);
       t[front === 'R' ? 'handR' : 'handL'] = fist;
       s[front === 'R' ? 'handR' : 'handL'] = 0.35;
-      if (this.modeTime > 0.05 && this.modeTime < 0.7) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: 0.85, id: this.gestureId };
+      if (this.airPunch && this.modeTime > 0.05 && this.modeTime < 0.7) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: 0.85, id: this.gestureId };
+    }
+    // Hanging off your cursor: swinging his legs like a kid on the monkey bars.
+    if (this.mode === 'held' && this.held?.self) {
+      const a = Math.sin(this.time * 4.5) * 10 * sc;
+      t.footL = this.off(hip, a, legLen * 0.9, 3 * sc);
+      t.footR = this.off(hip, -a * 0.7, legLen * 0.85, -3 * sc);
+      s.footL = s.footR = 0.05;
     }
     // Leaping at a wall: both hands reach out for it.
     if (this.leapWall) {

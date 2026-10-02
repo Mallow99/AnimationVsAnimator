@@ -73,6 +73,10 @@ export interface Ctx {
   pushWindow?: (id: number, vx: number) => boolean;
   /** Is this window still moving (he shoved it)? */
   windowMoving?: (id: number) => boolean;
+  /** Grab onto your cursor with his front hand and hang from it (if it's right there). */
+  hangOnCursor?: () => boolean;
+  /** He's allowed to play with your cursor (hit it, hang off it): the "He can hit your cursor" setting. */
+  cursorPlay?: boolean;
   /** Drawings that came to life: balls, boxes, ledges. */
   props?: Props;
   /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
@@ -1119,6 +1123,52 @@ export class Brawl extends Skill {
     return false;
   }
   stop(c: Ctx) { c.char.guard = false; c.char.stop(); c.char.airPunch = null; }
+}
+
+/**
+ * Monkey bars, but it's your cursor: he jumps up, grabs it and hangs off it for a few
+ * seconds, swinging his legs, while you carry him around. Shake him off, or he lets go.
+ */
+export class HangCursor extends Skill {
+  readonly name = 'hang';
+  private phase: 'go' | 'jump' | 'hang' = 'go';
+  private tries = 0;
+  private until = 0;
+  private next = 0;
+  start(c: Ctx) { c.look = 'cursor'; }
+  update(c: Ctx) {
+    const ch = c.char, cur = c.world.cursor;
+    if (this.phase === 'hang') {
+      if (!ch.hangingOn) { if (ch.mode !== 'held') return this.t > 0.2; return false; }
+      if (this.t > this.until) { ch.release(); c.say(pick(['bye!', 'wheee', 'ok down']), 1); return true; }
+      return false;
+    }
+    if (!cur || this.t > 10) return true;
+    const j = ch.body.j, arm = ch.d.upperArm + ch.d.foreArm, above = j.neck.y - cur.y;
+    if (this.phase === 'jump') {
+      if (ch.mode === 'air') {
+        ch.airReach = { x: cur.x, y: cur.y };
+        const h = ch.frontHand;
+        if (Math.hypot(h.x - cur.x, h.y - cur.y) < 14 * ch.scale && c.hangOnCursor?.()) {
+          this.phase = 'hang'; this.t = 0; this.until = rand(3, 6);
+          c.say(pick(['gotcha!', 'hi!', 'wheee', 'take me places']), 1.4);
+        }
+        return false;
+      }
+      if (!ch.ready) return false;
+      if (++this.tries >= 3) { c.say(pick(['aw', 'too high']), 1); return true; }
+      this.phase = 'go';
+    }
+    // Get under it, then jump for it.
+    if (!ch.ready || this.t < this.next) return false;
+    this.next = this.t + 0.25;
+    if (above < arm * 0.5 || above > arm + 240 * ch.scale) return this.t > 3; // not up where he can jump for it
+    if (Math.abs(cur.x - ch.x) > 14 * ch.scale) { ch.walkTo(cur.x, Math.abs(cur.x - ch.x) > 150); return false; }
+    ch.jumpPunch(cur, true);
+    this.phase = 'jump';
+    return false;
+  }
+  stop(c: Ctx) { if (c.char.hangingOn) c.char.release(); c.char.airReach = null; }
 }
 
 // ───────────── throwing things ─────────────

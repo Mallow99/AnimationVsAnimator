@@ -809,7 +809,8 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
     const n = (pet.mind.skill?.name ?? '-') + '/' + pet.char.mode; if (n !== lastN) { DBG.push(n + '@' + t.toFixed(1) + (ball ? ':' + ball.x.toFixed(0) : '')); lastN = n; }
   });
   pet.onSound = orig;
-  check('drawn ball comes to life and he kicks it', !!ball && kicks >= 1 && maxMove > 120, `ball=${!!ball} kicks=${kicks} moved=${maxMove.toFixed(0)} ${DBG.join(' ')}`);
+  const okKick = !!ball && kicks >= 1 && maxMove > 120;
+  check('drawn ball comes to life and he kicks it', okKick, `ball=${!!ball} kicks=${kicks} moved=${maxMove.toFixed(0)}${okKick ? '' : ' ' + DBG.join(' ')}`);
 }
 { // Draws a box on the floor, it turns solid, he vaults onto it.
   const pet = calmPet();
@@ -1040,6 +1041,23 @@ function events(pet: Pet) {
   }
   check('parry: with his sword out he blocks your smack', parried, got.join(','));
 }
+{ // He jumps up and hangs off your cursor; you carry him; shake him off and he goes flying.
+  const { pet, step } = desktopPet();
+  const j = pet.char.body.j;
+  const at = { x: pet.char.x + 30, y: j.head.y - 60 * pet.char.scale };
+  pet.cursor(at.x, at.y, 0, 0);
+  pet.mind.command(pet.ctx, 'hang');
+  let hung = false;
+  step(4, () => { if (pet.char.hangingOn) hung = true; if (!pet.char.hangingOn && !hung) pet.ctx.world.cursorMovedAt = pet.ctx.world.time; });
+  // Carry him to the right, slowly: he comes along.
+  const x0 = pet.char.x;
+  for (let i = 0; i < 40 && pet.char.hangingOn; i++) { const c = pet.ctx.world.cursor!; pet.cursor(c.x + 4, c.y, 240, 0); pet.update(1 / 60); }
+  const carried = pet.char.x - x0;
+  const got = events(pet);
+  for (let i = 0; i < 6 && pet.char.hangingOn; i++) { const c = pet.ctx.world.cursor!; pet.cursor(c.x + 50, c.y - 20, 3000, -1200); pet.update(1 / 60); }
+  step(4);
+  check('hangs off your cursor, gets carried, shaken off he flies', hung && carried > 60 && got.includes('released') && !pet.char.hangingOn && ['ground', 'sit', 'roll', 'ragdoll', 'getup'].includes(pet.char.mode), `hung=${hung} carried=${carried.toFixed(0)} ${got.join(',')} mode=${pet.char.mode}`);
+}
 
 // ───── his ball ─────
 { // He throws his bouncy ball at your cursor (it hits), then fetches it back to his pocket.
@@ -1056,7 +1074,8 @@ function events(pet: Pet) {
     const st = `${sk?.name ?? '-'}:${sk?.phase ?? ''}${sk?.sub ? '>' + sk.sub.name + ':' + sk.sub.phase : ''} ${ball.where}`;
     if (st !== lastS) { DBG.push(`${t.toFixed(1)} ${st} b=${ball.at.x.toFixed(0)},${ball.at.y.toFixed(0)} him=${pet.char.x.toFixed(0)}/${pet.char.mode}`); lastS = st; }
   });
-  check('ball: thrown at the cursor, hits it, goes back in his pocket', flew && got.includes('hitCursor') && ball.where === 'belt' && ball.slot === 3, `flew=${flew} where=${ball.where} ${got.join(',')}\n${DBG.join('\n')}`);
+  const okBall = flew && got.includes('hitCursor') && ball.where === 'belt' && ball.slot === 3;
+  check('ball: thrown at the cursor, hits it, goes back in his pocket', okBall, `flew=${flew} where=${ball.where} ${got.join(',')}${okBall ? '' : '\n' + DBG.join('\n')}`);
 }
 { // Just playing: bounce it off the floor and catch it.
   const pet = calmPet();
@@ -1096,7 +1115,7 @@ const W1 = () => [{ id: 7, x: 700, y: 380, w: 420, h: 420 }];
     if (pet.char.supportPlatform()?.win === 7) rode = Math.max(rode, wins[0].x - 300);
     else if (surfing && pet.char.surf) stayed = false;
   });
-  check('surf: he rides the window across the screen', onIt && rode > 200 && stayed && !got.includes('crashed'), `onIt=${onIt} rode=${rode.toFixed(0)} stayed=${stayed} ${got.join(',')}`);
+  check('surf: he rides the window across the screen', onIt && rode > 200 && stayed && !got.includes('crashed'), `onIt=${onIt} rode=${rode.toFixed(0)} stayed=${stayed} ${[...new Set(got)].join(',')}`);
 }
 { // Knock knock: the window wobbles and settles back where it was.
   const { pet, wins, winMoves, step } = desktopPet({ wins: W1() });

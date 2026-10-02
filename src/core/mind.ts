@@ -16,7 +16,7 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  Brawl, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
+  Brawl, HangCursor, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
@@ -125,6 +125,7 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   surf: { boredom: -0.45, happiness: 0.08 },
   knock: { boredom: -0.15 },
   ledgesit: { energy: 0.05, boredom: 0.02, happiness: 0.03 },
+  hang: { boredom: -0.35, happiness: 0.06 },
 };
 
 /** Things you can tell him to do from the settings window. */
@@ -143,7 +144,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'spar', label: 'Spar with the cursor' }, { name: 'brawl', label: 'Fight the cursor (for real)' },
   { name: 'throw', label: 'Throw his ball at the cursor' }, { name: 'bounce', label: 'Bounce his ball' }, { name: 'smash', label: 'Smash with his mallet' },
   { name: 'pushwindow', label: 'Push a window' }, { name: 'kickwindow', label: 'Kick a window' }, { name: 'surf', label: 'Surf on a window' },
-  { name: 'knock', label: 'Knock on a window' }, { name: 'ledgesit', label: 'Sit on the edge' },
+  { name: 'knock', label: 'Knock on a window' }, { name: 'ledgesit', label: 'Sit on the edge' }, { name: 'hang', label: 'Hang off the cursor' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
@@ -171,6 +172,7 @@ export class Mind {
   private takenAt = -100;
   /** When he last swatted your cursor off him, and last messed with a window. */
   private swatAt = -100;
+  private hungAt = -100;
   private windowPrankAt = -100;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
@@ -240,7 +242,7 @@ export class Mind {
       this.why = `wants his ${taken.def.name.toLowerCase()} back`;
     }
     // Your cursor parked right on him: he swats it away (or boops it, or just glares at it).
-    if (cur0(w) && w.time - w.cursorMovedAt > 2.2 && w.time > this.swatAt && lazing && !this.queued && (ch.ready || ch.mode === 'sit') && ch.useHand && !m.asleep) {
+    if (cur0(w) && w.time - w.cursorMovedAt > 2.2 && w.time > this.swatAt && lazing && !this.queued && !taken && (ch.ready || ch.mode === 'sit') && ch.useHand && !m.asleep) {
       const cur = w.cursor!, j = ch.body.j;
       const onHim = ch.hitTest(cur.x, cur.y, 12) !== null || Math.hypot(cur.x - j.head.x, cur.y - (j.head.y - ch.d.headR - 8 * ch.scale)) < 26 * ch.scale;
       if (onHim) {
@@ -381,6 +383,9 @@ export class Mind {
       { name: 'sleep', score: s.energy < 0.25 && s.annoyance < 0.5 && s.fear < 0.3 ? 2 + (0.25 - s.energy) * 8 : 0, why: 'worn out', make: () => new Sleep() },
       { name: 'chase', score: cursorActive && L === 'playful' ? 1.2 * s.trust + s.boredom : 0, why: 'wants to play with you', make: () => new ChaseCursor(rand(4, 8), false) },
       { name: 'brawl', score: cursorActive && L === 'angry' && ch.legCount === 2 && ch.useHand ? 1.5 : 0, why: 'mad at you: fists up', make: () => new Brawl(rand(5, 9), true) },
+      { name: 'hang', score: cursorActive && c.cursorPlay && ch.legCount === 2 && ch.useHand && w.time - this.hungAt > 60 && cur!.y < ch.body.j.head.y - 20 && Math.abs(cur!.x - ch.x) < 300
+          ? (L === 'playful' ? 0.45 : L === 'bored' ? 0.15 : 0) : 0,
+        why: 'wants to hang off your cursor', make: () => { this.hungAt = w.time; return new HangCursor(); } },
       { name: 'spar', score: cursorActive && near && ch.legCount === 2 && ch.useHand ? (L === 'playful' ? 0.6 + s.trust * 0.4 : L === 'bored' ? 0.3 : 0.05) : 0,
         why: 'wants to spar with your cursor', make: () => new Brawl(rand(6, 10), false) },
       { name: 'avoid', score: near && (L === 'scared' || s.trust < 0.3) ? 2 : 0, why: s.fear > 0.3 ? 'scared of you' : "doesn't trust you", make: () => new AvoidCursor(4) },
@@ -658,6 +663,7 @@ export class Mind {
         if (chance(0.4)) c.say((chance(0.3) ? c.memory.recall('petted') : null) ?? pick([':)', '♪', 'hehe', 'mmm']), 1.2);
         return;
 
+      case 'hangOn': return;
       case 'grabbed': {
         this.interrupt(c);
         m.asleep = false;
