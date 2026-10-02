@@ -22,6 +22,7 @@ import {
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number }
   | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number }
+  | { type: 'itemSpawned'; name: string; uid: number } // something new appeared (you dropped it in from his inventory)
   | { type: 'bonked'; speed: number } // a ball hit him
   | { type: 'hitCursor'; power: number; by: string } // he hit your cursor (and maybe sent it flying)
   | { type: 'cursorFreed' }   // you took your cursor back mid-flight
@@ -426,7 +427,7 @@ export class Mind {
     const canDraw = !!pen && pen.where !== 'cursor' && !!ch.useHand && L !== 'sleepy' && L !== 'sad';
     const fresh = w.time - this.lastDoodle > 60;
     const fun = L === 'playful' ? 0.25 : L === 'bored' ? 0.2 : 0.04;
-    const sword = c.items.list.find((it) => it.def.use === 'swing' && it.where !== 'cursor');
+    const swordTaken = c.items.list.some((it) => it.def.use === 'swing' && it.where === 'cursor') && !c.items.list.some((it) => it.def.use === 'swing' && it.where !== 'cursor');
     const opts: Option[] = [];
     const draw = (name: string, shape: keyof typeof LIVE_SHAPES, becomes: Becomes, then: PlanStep[], why: string, score: number) =>
       opts.push({ name, why, score: canDraw && fresh ? score : 0, make: () => { this.lastDoodle = w.time; return new PlanSkill(this, [{ draw: LIVE_SHAPES[shape], title: shape, becomes }, ...then]); } });
@@ -434,7 +435,7 @@ export class Mind {
     draw('drawbox', 'box', 'box', [{ do: 'getonit' }, { wait: 1.5 }, { do: 'getdown' }], 'drawing himself something to climb', fun * 0.6 + s.boredom * 0.08);
     draw('drawledge', 'platform', 'platform', [{ do: 'getonit' }, { wait: 2 }, { do: 'getdown' }], 'drawing himself a ledge', fun * 0.3);
     // You took his sword? He draws a new one.
-    draw('drawsword', 'sword', 'item', [{ do: 'swing' }], 'you took his sword, so he drew one', !sword && (L === 'angry' || L === 'playful') ? 0.9 : 0);
+    draw('drawsword', 'sword', 'item', [{ do: 'swing' }], 'you took his sword, so he drew one', swordTaken && (L === 'angry' || L === 'playful') ? 0.9 : 0);
     const ball = c.props?.nearestBall(ch.x, ch.body.j.hip.y);
     if (ball && ch.legCount === 2) opts.push({ name: 'kick', why: 'kicking his ball around', score: L === 'playful' ? 0.9 : L === 'bored' ? 0.7 : 0.25, make: () => new KickBall(ball) });
     const block = c.props?.blocks.length ? onDrawnBlock(c) : null;
@@ -643,6 +644,17 @@ export class Mind {
           this.interrupt(c, new FetchItem(it));
           this.why = `you dropped his ${e.name}`;
         }
+        return;
+      }
+      case 'itemSpawned': {
+        // Something new fell out of the sky: he looks up, and goes to get it (unless he's busy with something that matters).
+        const it = c.items.list.find((x) => x.uid === e.uid);
+        const busy = this.skill && !['idle', 'wander', 'sit', 'sulk', 'explore', 'sigh', 'stretch', 'ledgesit'].includes(this.skill.name);
+        if (!it || m.asleep || busy || !ch.useHand) { if (!m.asleep) c.say('!', 0.8); return; }
+        if (ch.mode === 'sit') ch.standUp();
+        c.say(pick(['ooh!', "what's that?", '!', 'for me?']), 1.2);
+        this.interrupt(c, new FetchItem(it));
+        this.why = `a ${e.name} fell out of the sky`;
         return;
       }
       case 'itemGiven':

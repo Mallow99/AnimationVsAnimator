@@ -78,6 +78,9 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
   return def;
 }
 
+/** What a brand-new him starts with (everything else is in his inventory for you to hand out). */
+export const STARTER_ITEMS = ['pen'];
+
 /** The items that come with him. */
 export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, hammerDef, ballDef].map((d) => parseItemDef(d)!);
 
@@ -258,9 +261,23 @@ export class Items {
     return this.list.filter((x) => x.def.use === use).sort((a, b) => order[a.where] - order[b.where])[0] ?? null;
   }
 
-  /** Give him any built-in thing he's never had (new ones that come with an update). */
-  giveNewBuiltins(ch: Character) {
-    for (const d of BUILTIN_ITEMS) if (!this.known.has(d.id)) { this.known.add(d.id); if (!this.list.some((it) => it.def.id === d.id)) this.give(d.id, ch); }
+  /** A brand-new him gets his starter things (just his pen). Older saves keep what they have. */
+  giveStarter(ch: Character) {
+    for (const id of STARTER_ITEMS) if (!this.known.has(id)) { this.known.add(id); if (!this.list.some((it) => it.def.id === id)) this.give(id, ch); }
+  }
+
+  /** A new thing appears in the world at `at` (you dropped it in from your inventory). */
+  spawn(defId: string, at: Vec, scale: number): Item | null {
+    const def = this.defs.get(defId);
+    if (!def) return null;
+    const it = new Item(def, at, scale);
+    this.list.push(it);
+    it.where = 'world';
+    it.at = { x: at.x, y: at.y, z: 0 };
+    it.dir = norm3({ x: 0.4, y: 1, z: 0 });
+    it.loosen((Math.random() - 0.5) * 80, 60);
+    this.onChange?.();
+    return it;
   }
 
   /** Where a belt slot is right now, and which way an item hangs from it. */
@@ -358,7 +375,7 @@ export class Items {
       if (typeof o.slot === 'number' && o.slot >= 0 && o.slot < SLOTS && !this.belt[o.slot] && def.belt !== 'none') { this.belt[o.slot] = it; it.slot = o.slot; it.where = 'belt'; }
       else if (!this.stow(it)) { it.where = 'world'; it.at = { x: ch.x + 20, y: ch.body.j.hip.y, z: 0 }; it.loosen(); }
     }
-    this.giveNewBuiltins(ch);
+    this.giveStarter(ch);
   }
 }
 

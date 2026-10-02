@@ -364,7 +364,7 @@ shell.onCollections((c) => {
 shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); if (c.items) renderItems(c.items); });
 
 // ── Items tab ──
-const SLOTS = ['left hip', 'right hip', 'back'];
+const SLOTS = ['left hip', 'right hip', 'back', 'pocket'];
 function renderItems(v: ItemsView) {
   const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `on his belt (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'world' ? 'lying around' : 'you have it';
   $('itemList').replaceChildren(...(v.list.length ? v.list.map((it) => moveRow(it.name + (it.drawn ? ' (drawn)' : ''), 0, [
@@ -372,12 +372,12 @@ function renderItems(v: ItemsView) {
     ...(it.where === 'cursor' || it.where === 'world' ? [['Give back', () => shell.command(`item:return:${it.uid}`)] as [string, () => void]] : []),
     ['Throw away', () => shell.command(`item:remove:${it.uid}`)],
   ], where(it))) : [emptyNote('He has nothing. Give him something below.')]));
-  $('itemKinds').replaceChildren(...v.kinds.filter((k) => !k.drawn).map((k) => {
-    const b = document.createElement('button');
-    b.className = 'chip'; b.type = 'button'; b.textContent = k.name; b.title = k.about;
-    b.addEventListener('click', () => shell.command(`item:give:${k.id}`));
-    return b;
-  }));
+  // His inventory: every kind of thing there is. Drop one in (it falls from the top of the screen and he
+  // goes to get it), or put it straight on his belt.
+  $('itemKinds').replaceChildren(...v.kinds.filter((k) => !k.drawn).map((k) => moveRow(k.name, 0, [
+    ['Drop it in', () => shell.command(`item:spawn:${k.id}`)],
+    ['Give him', () => shell.command(`item:give:${k.id}`)],
+  ], k.about)));
 }
 $('openItems').addEventListener('click', () => shell.openItemsFolder());
 $('reloadItems').addEventListener('click', () => shell.reloadItems());

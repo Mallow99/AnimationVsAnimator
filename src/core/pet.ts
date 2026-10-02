@@ -102,6 +102,8 @@ export class Pet {
   private itemHitCooldown = 0;
   /** You're typing to him (the desktop text box is open): he turns to you and listens. */
   listening = false;
+  /** You're holding the mouse button down on one of his things (let go = drop or throw it). */
+  private carryHeld = false;
   /** Your cursor as a thing he can hit (and send flying). */
   readonly cursorBody = new CursorBody();
   /** The last punch/kick that connected (one hit per swing), and where the fist was last frame. */
@@ -157,7 +159,7 @@ export class Pet {
       onBecome: (d) => this.becomeReal(d),
     };
     this.props.onPlatforms = () => this.refreshPlatforms();
-    this.items.giveNewBuiltins(this.char); // his pen, his sword, his mallet, a bouncy ball
+    this.items.giveStarter(this.char); // just his pen; the rest is in his inventory (Settings → Items)
     this.items.onChange = () => this.onCollections?.();
     this.memory.onChange = () => { this.onCollections?.(); this.onMemorySave?.(this.memory.save()); };
     this.brain.onSpeak = (text) => this.speak(text);
@@ -675,17 +677,8 @@ export class Pet {
     // Click while he's hanging off your cursor: he drops off.
     if (this.char.hangingOn) { this.char.release(); return true; }
     const joint = this.char.hitTest(x, y);
-    const carried = this.items.carried;
-    if (carried) {
-      if (joint) this.giveBack(carried);
-      else {
-        this.items.drop(carried, this.cursorVel.x * 0.6, this.cursorVel.y * 0.6);
-        carried.thrownAt = w.time; // thrown hard enough, it can bonk him
-        this.sound('drop', 0.6);
-        this.emit({ type: 'itemDropped', name: carried.def.name.toLowerCase(), uid: carried.uid });
-      }
-      return true;
-    }
+    // Carrying one of his things (you took it from his menu): press to hold on to it; let go to drop or throw it.
+    if (this.items.carried) { this.carryHeld = true; return true; }
     if (joint && w.time - this.lastClickAt < 0.3) {
       // Second click of a double-click: no poke, he listens instead.
       this.pendingPoke = null;
@@ -700,7 +693,7 @@ export class Pet {
       const ball = this.props.ballAt(x, y);
       if (ball) { ball.grab(x, y); this.press = { joint: 'hip', ball, x, y, t: now, moved: true, grabbed: true }; return true; }
       const it = this.items.hitWorld(x, y);
-      if (it) { this.items.toCursor(it, { x, y }); this.sound('pickup', 0.6); return true; }
+      if (it) { this.items.toCursor(it, { x, y }); this.carryHeld = true; this.sound('pickup', 0.6); return true; }
       return false;
     }
     this.press = { joint, x, y, t: now, moved: false, grabbed: false };
@@ -721,7 +714,8 @@ export class Pet {
     else if (p.grabbed) this.char.moveHold(x, y, vx, vy);
   }
 
-  pointerUp(x: number, _y: number) {
+  pointerUp(x: number, y: number) {
+    if (this.carryHeld) { this.carryHeld = false; this.letGoOfItem(x, y); return; }
     const p = this.press;
     if (!p) return;
     this.press = null;
@@ -731,6 +725,22 @@ export class Pet {
     // A quick click: a poke, as soon as it's clear this wasn't a double-click.
     this.lastClickAt = this.ctx.world.time;
     this.pendingPoke = { joint: p.joint, x, at: this.ctx.world.time };
+  }
+
+  /**
+   * You let go of the thing you were holding: over him (gently), you hand it back; anywhere else it
+   * drops, or flies off the way you were swinging it (a throw).
+   */
+  private letGoOfItem(x: number, y: number) {
+    const it = this.items.carried, w = this.ctx.world;
+    if (!it) return;
+    const v = this.cursorVel, sp = Math.hypot(v.x, v.y);
+    if (this.char.hitTest(x, y, 4) && sp < 700) { this.giveBack(it); return; }
+    const k = sp > 2400 ? 2400 / sp : 1;
+    this.items.drop(it, v.x * k, v.y * k);
+    it.thrownAt = w.time; // thrown hard enough, it can bonk him
+    this.sound(sp > 900 ? 'whoosh' : 'drop', 0.6);
+    this.emit({ type: 'itemDropped', name: it.def.name.toLowerCase(), uid: it.uid });
   }
 
   /** A poke: push away from where you clicked. */
@@ -787,10 +797,11 @@ export class Pet {
   /** Is your cursor carrying one of his things? (Then clicks anywhere come to us: one drops it.) */
   get carrying() { return !!this.items.carried; }
 
-  /** You take one of his things: it dangles from your cursor. */
+  /** You take one of his things: it dangles from your cursor (press and hold to swing or throw it). */
   takeItem(it: Item) {
     const cur = this.ctx.world.cursor ?? { x: it.at.x, y: it.at.y };
     this.items.toCursor(it, cur);
+    this.carryHeld = false;
     this.sound('pickup', 0.8);
     this.emit({ type: 'itemTaken', name: it.def.name.toLowerCase() });
   }
@@ -1179,13 +1190,21 @@ export class Pet {
 
   /**
    * His things, from the Items tab:
-   *   item:give:<kind>  item:take:<uid>  item:return:<uid>  item:drop:<uid>  item:remove:<uid>
+   *   item:give:<kind>  item:spawn:<kind>  item:take:<uid>  item:return:<uid>  item:drop:<uid>  item:remove:<uid>
    */
   private itemCommand(arg: string) {
     const [verb, id] = arg.split(':');
     const it = this.items.list.find((x) => x.uid === Number(id));
     switch (verb) {
       case 'give': this.items.give(id, this.char); this.sound('pickup', 0.6); break;
+      case 'spawn': {
+        // Dropped in from the top of the screen, a little way from him: he notices and goes to get it.
+        const b = this.ctx.world.bounds, side = Math.random() < 0.5 ? -1 : 1;
+        const x = Math.min(b.right - 40, Math.max(b.left + 40, this.char.x + side * (90 + Math.random() * 160)));
+        const made = this.items.spawn(id, { x, y: b.top + 10 }, this.char.scale);
+        if (made) { this.sound('poof', 0.6); this.emit({ type: 'itemSpawned', name: made.def.name.toLowerCase(), uid: made.uid }); }
+        break;
+      }
       case 'take': if (it && (it.where === 'belt' || it.where === 'hand')) this.takeItem(it); break;
       case 'return': if (it) this.giveBack(it); break;
       case 'drop': if (it) this.items.drop(it, 0, 0); break;

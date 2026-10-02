@@ -682,7 +682,13 @@ function yankHand(pet: Pet, speed = 3200) {
 }
 
 // ───── items and his belt ─────
-function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, pet); pet.paused = false; return pet; }
+/** A settled pet with all his things (a new one only has his pen; these tests use the rest too). */
+function calmPet() {
+  const pet = new Pet(bounds);
+  for (const id of ['sword', 'hammer', 'bouncy-ball']) pet.items.give(id, pet.char);
+  pet.paused = true; petFor(3, pet); pet.paused = false;
+  return pet;
+}
 { // He starts with his pen and his sword on his belt; drawing takes the pen out and puts it back.
   const pet = calmPet();
   const pen = pet.items.find('draw')!, sword = pet.items.find('swing')!;
@@ -735,6 +741,7 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
   pet.items.toCursor(sword, { x: pet.char.x + 150, y: 700 });
   petFor(0.2, pet);
   pet.pointerDown(pet.char.x + 150, 700, 0);
+  pet.pointerUp(pet.char.x + 150, 700); // a quick click: it drops
   petFor(1, pet);
   const dropped = sword.where === 'world';
   petFor(20, pet);
@@ -799,8 +806,18 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
   const old = new Pet(bounds);
   old.load(JSON.stringify({ v: 1, items: [{ id: 'pen', slot: 1 }, { id: 'sword', slot: 2 }] }));
   const ids = old.items.list.map((x) => x.def.id).sort().join(',');
-  const again = new Pet(bounds); again.items.remove(again.items.list.find((x) => x.def.id === 'hammer')!); again.load(again.save());
-  check('older saves get his new things; things you removed stay gone', ids === 'bouncy-ball,hammer,pen,sword' && !again.items.list.some((x) => x.def.id === 'hammer'), ids);
+  const fresh = new Pet(bounds).items.list.map((x) => x.def.id).join(',');
+  const again = new Pet(bounds); again.items.remove(again.items.list.find((x) => x.def.id === 'pen')!); again.load(again.save());
+  check('a new him has just his pen; saves keep what he has (and what you took away stays gone)', fresh === 'pen' && ids === 'pen,sword' && again.items.list.length === 0, `new=${fresh} old=${ids}`);
+}
+{ // Drop something in from his inventory: it falls from the top of the screen, he goes and gets it.
+  const pet = new Pet(bounds); pet.paused = true; petFor(3, pet); pet.paused = false;
+  const said: string[] = []; const o = pet.ctx.say; pet.ctx.say = (t, x) => { said.push(t); o(t, x); };
+  pet.command('item:spawn:hammer');
+  const it = pet.items.list.find((x) => x.def.id === 'hammer')!;
+  let fell = false;
+  petFor(20, pet, () => { if (it.where === 'world' && it.at.y > 700) fell = true; });
+  check('inventory: drop a mallet in, it falls, he picks it up', !!it && fell && it.where === 'belt' && said.some((t) => /ooh|what|for me|!/.test(t)), `where=${it?.where} said=${said.join(' | ')}`);
 }
 
 // ───── his drawings come to life ─────
@@ -1049,6 +1066,22 @@ function events(pet: Pet) {
     parried = got.includes('parried');
   }
   check('parry: with his sword out he blocks your smack', parried, got.join(','));
+}
+{ // Pick up his sword off the floor, swing it, let go mid-swing: it flies.
+  const pet = calmPet();
+  pet.paused = true;
+  const sword = pet.items.find('swing')!;
+  pet.items.drop(sword, 0, 0);
+  sword.a.x = sword.a.px = pet.char.x + 200; sword.b.x = sword.b.px = pet.char.x + 200;
+  petFor(1.5, pet);
+  const at = { x: sword.at.x, y: sword.at.y };
+  pet.cursor(at.x, at.y, 0, 0);
+  const grabbed = pet.pointerDown(at.x, at.y, 0) && sword.where === 'cursor';
+  for (let i = 0; i < 20; i++) { pet.cursor(at.x + i * 25, at.y - i * 12, 1500, -720); pet.update(1 / 60); }
+  pet.pointerUp(at.x + 500, at.y - 240);
+  let flew = 0;
+  petFor(0.5, pet, () => { flew = Math.max(flew, sword.speed); });
+  check('hold to carry, let go to throw', grabbed && sword.where === 'world' && flew > 800, `grabbed=${grabbed} where=${sword.where} speed=${flew.toFixed(0)}`);
 }
 { // He jumps up and hangs off your cursor; you carry him; shake him off and he goes flying.
   const { pet, step } = desktopPet();
