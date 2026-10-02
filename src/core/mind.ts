@@ -11,15 +11,17 @@
 // gets a say in the choices and adds real words.
 
 import type { CharEvent, Gesture, Keyframe } from './character';
+import { LIVE_SHAPES, type Becomes } from './doodles';
 import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  AskBack, WallJump, wallJumpTarget, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
+  AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number }
-  | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number };
+  | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number }
+  | { type: 'bonked'; speed: number }; // a ball hit him
 
 interface Option { name: string; score: number; why: string; make: () => Skill }
 
@@ -30,7 +32,7 @@ export type PlanStep =
   | { wait: number }
   | { walk: 'left' | 'right' | 'cursor' | 'away' }
   | { move: Keyframe[]; name?: string }
-  | { draw: Vec[][]; title?: string };
+  | { draw: Vec[][]; title?: string; becomes?: Becomes; place?: DrawPlace };
 
 /** Runs a plan: each step's skill to the end, then the next. */
 class PlanSkill extends Skill {
@@ -63,7 +65,7 @@ class PlanSkill extends Skill {
     if ('wait' in st) { this.waitLeft = Math.min(5, Math.max(0, st.wait)); return false; }
     const sub = 'do' in st ? this.mind.makeSkill(c, st.do)
       : 'move' in st ? new PuppetMove(st.move)
-        : 'draw' in st ? new DoodleSkill(st.draw, st.title)
+        : 'draw' in st ? new DoodleSkill(st.draw, st.title, { becomes: st.becomes, place: st.place ?? (st.becomes === 'box' ? 'floor' : st.becomes === 'platform' ? 'air' : 'front') })
           : new Sequence('walk', [{ walkTo: this.walkTarget(c, st.walk) }]);
     if (sub) { this.sub = sub; sub.start(c); }
     return false;
@@ -100,6 +102,8 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   reattach: { happiness: 0.08, fear: -0.1 },
   swing: { boredom: -0.25, annoyance: -0.2, happiness: 0.03 },
   walljump: { boredom: -0.35, happiness: 0.05, energy: -0.04 },
+  kick: { boredom: -0.3, happiness: 0.05, energy: -0.03 },
+  drawball: { boredom: -0.3, happiness: 0.05 }, drawbox: { boredom: -0.3, happiness: 0.04 }, drawledge: { boredom: -0.25 }, drawsword: { annoyance: -0.15 },
   backflip: { boredom: -0.25, happiness: 0.04, energy: -0.03 },
   frontflip: { boredom: -0.25, happiness: 0.04, energy: -0.03 },
   roll: { boredom: -0.1 },
@@ -116,6 +120,8 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'wave', label: 'Wave' }, { name: 'laugh', label: 'Laugh' }, { name: 'shrug', label: 'Shrug' },
   { name: 'stomp', label: 'Stomp' }, { name: 'stretch', label: 'Stretch' }, { name: 'cower', label: 'Cower' },
   { name: 'backflip', label: 'Backflip' }, { name: 'frontflip', label: 'Front flip' }, { name: 'roll', label: 'Roll' }, { name: 'walljump', label: 'Wall jump' },
+  { name: 'drawball', label: 'Draw a ball (and kick it)' }, { name: 'drawbox', label: 'Draw a box (and vault it)' }, { name: 'drawledge', label: 'Draw a ledge (and get on it)' },
+  { name: 'drawsword', label: 'Draw a sword' }, { name: 'kick', label: 'Kick the ball' }, { name: 'getonit', label: 'Get on what he drew' },
   { name: 'swing', label: 'Swing his sword' }, { name: 'slash', label: 'Attack the cursor' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
@@ -340,6 +346,7 @@ export class Mind {
       ...this.windowOptions(c),
       ...this.itemOptions(c),
       ...this.parkourOptions(c),
+      ...this.liveDrawingOptions(c),
       { name: 'showoff', score: c.savedMoves?.length && (L === 'playful' || L === 'bored') && s.energy > 0.4 ? 0.3 : 0,
         why: 'showing off a move he learned', make: () => { const m = pick(c.savedMoves!); return new PlanSkill(this, [{ say: `${m.name}!` }, { move: m.frames, name: m.name }]); } },
       { name: 'doodle', score: c.world.time - this.lastDoodle > 90 && L !== 'sad' && L !== 'sleepy' ? 0.08 + s.boredom * 0.35 + (L === 'playful' ? 0.15 : 0) : 0,
@@ -347,6 +354,29 @@ export class Mind {
       { name: 'grabcursor', score: c.canGrabCursor && cursorActive && near && c.world.time - this.lastGrab > 60 && (L === 'playful' || L === 'bored' || L === 'angry') ? 0.7 : 0,
         why: L === 'angry' ? 'getting back at you' : 'feeling mischievous', make: () => { this.lastGrab = c.world.time; return new GrabCursor(); } },
     ];
+    return opts;
+  }
+
+  /** Drawing things that come to life (and then using them). */
+  private liveDrawingOptions(c: Ctx): Option[] {
+    const s = c.mood.s, L = c.mood.label, ch = c.char, w = c.world;
+    const pen = c.items.find('draw');
+    const canDraw = !!pen && pen.where !== 'cursor' && !!ch.useHand && L !== 'sleepy' && L !== 'sad';
+    const fresh = w.time - this.lastDoodle > 60;
+    const fun = L === 'playful' ? 0.25 : L === 'bored' ? 0.2 : 0.04;
+    const sword = c.items.list.find((it) => it.def.use === 'swing' && it.where !== 'cursor');
+    const opts: Option[] = [];
+    const draw = (name: string, shape: keyof typeof LIVE_SHAPES, becomes: Becomes, then: PlanStep[], why: string, score: number) =>
+      opts.push({ name, why, score: canDraw && fresh ? score : 0, make: () => { this.lastDoodle = w.time; return new PlanSkill(this, [{ draw: LIVE_SHAPES[shape], title: shape, becomes }, ...then]); } });
+    draw('drawball', 'ball', 'ball', [{ do: 'kick' }], 'wants something to kick around', fun * 0.8 + s.boredom * 0.1);
+    draw('drawbox', 'box', 'box', [{ do: 'getonit' }, { wait: 1.5 }, { do: 'getdown' }], 'drawing himself something to climb', fun * 0.6 + s.boredom * 0.08);
+    draw('drawledge', 'platform', 'platform', [{ do: 'getonit' }, { wait: 2 }, { do: 'getdown' }], 'drawing himself a ledge', fun * 0.3);
+    // You took his sword? He draws a new one.
+    draw('drawsword', 'sword', 'item', [{ do: 'swing' }], 'you took his sword, so he drew one', !sword && (L === 'angry' || L === 'playful') ? 0.9 : 0);
+    const ball = c.props?.nearestBall(ch.x, ch.body.j.hip.y);
+    if (ball && ch.legCount === 2) opts.push({ name: 'kick', why: 'kicking his ball around', score: L === 'playful' ? 0.9 : L === 'bored' ? 0.7 : 0.25, make: () => new KickBall(ball) });
+    const block = c.props?.blocks.length ? onDrawnBlock(c) : null;
+    if (block) opts.push({ name: 'getonit', why: 'climbing on what he drew', score: 0.15, make: () => onDrawnBlock(c)! });
     return opts;
   }
 
@@ -588,6 +618,10 @@ export class Mind {
         }
         return;
 
+      case 'bonked':
+        if (m.label === 'playful') { c.say(pick(['hey!', 'haha', 'ow, nice shot']), 1.2); m.nudge({ boredom: -0.2 }); }
+        else { c.say(pick(['OW', 'who threw that', 'ow!']), 1.2); m.nudge({ annoyance: 0.08, boredom: -0.2 }); }
+        return;
       case 'rolled':
         if (chance(0.3)) c.say(pick(['parkour!', 'nailed it', 'tuck and roll']), 1.2);
         return;

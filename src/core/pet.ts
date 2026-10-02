@@ -10,7 +10,10 @@ import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowWalls, type WinRect } from './world';
 import { beltParts, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
-import { drawItem, Items, type Item } from './items';
+import { drawItem, itemFromDrawing, Items, type Item } from './items';
+import { Props, type Ball } from './props';
+import type { Doodle } from './doodles';
+import type { Platform } from './physics';
 import type { LooseLimb } from './limbs';
 import { limbOf } from './body';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
@@ -40,7 +43,11 @@ export class Pet {
   /** Turn his mind off (for debugging poses by hand). */
   paused = false;
   private acc = 0;
-  private press: { joint: JointName; limb?: { piece: LooseLimb; idx: number }; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
+  private press: { joint: JointName; limb?: { piece: LooseLimb; idx: number }; ball?: Ball; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
+  /** His drawings that came to life: balls, boxes, ledges. */
+  readonly props = new Props();
+  private windowPlats: Platform[] = [];
+  private bonkCooldown = 0;
   /** Sparks from limbs snapping off and clicking back on. */
   private sparks: Spark[] = [];
   /** His speech bubble. Letters type out one by one (`shown`), with a little blip for each. */
@@ -106,7 +113,10 @@ export class Pet {
       items: this.items,
       sound: (name, strength) => this.sound(name, strength ?? 1),
       hitCursor: (x, y, dir) => this.swordHitsCursor(x, y, dir),
+      props: this.props,
+      onBecome: (d) => this.becomeReal(d),
     };
+    this.props.onPlatforms = () => this.refreshPlatforms();
     this.items.give('pen', this.char);
     this.items.give('sword', this.char);
     this.items.onChange = () => this.onCollections?.();
@@ -132,6 +142,8 @@ export class Pet {
     this.smoothWindows(dt);
     while (this.acc >= STEP) {
       this.char.step(STEP);
+      this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.ctx.world.platforms);
+      this.ballContact();
       this.acc -= STEP;
     }
     this.items.update(this.char, dt, this.ctx.world.bounds, this.ctx.world.platforms, this.ctx.world.cursor);
@@ -224,6 +236,7 @@ export class Pet {
     if (this.sparks.length) drawSparks(ctx, this.sparks, Math.max(1, Math.round(look.pixel)));
     if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
+    this.props.draw(ctx, this.ctx.world.time);
     for (const h of this.hearts) {
       ctx.save();
       ctx.globalAlpha = Math.max(0, 1 - h.t / 1.4);
@@ -303,11 +316,72 @@ export class Pet {
     });
     this.winShown = shown;
     if (!changed) return;
-    const plats = windowPlatforms(shown, this.ctx.world.bounds, 40, this.headroom());
-    this.ctx.world.platforms = plats;
-    this.char.setPlatforms(plats);
+    this.windowPlats = windowPlatforms(shown, this.ctx.world.bounds, 40, this.headroom());
+    this.refreshPlatforms();
     this.ctx.world.walls = windowWalls(shown, this.ctx.world.bounds, this.headroom());
     this.char.setWalls(this.ctx.world.walls);
+  }
+
+  /** Everything he can stand on: window tops plus boxes and ledges he drew. */
+  private refreshPlatforms() {
+    const all = [...this.windowPlats, ...this.props.platforms];
+    this.ctx.world.platforms = all;
+    this.char.setPlatforms(all);
+  }
+
+  /** One of his drawings comes to life (a pop, some sparkles): a ball, a box, a ledge, or a thing to hold. */
+  private becomeReal(d: Doodle) {
+    const x = d.cx ?? this.char.x, y = d.cy ?? this.char.body.j.neck.y;
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 160;
+      this.sparks.push({ x: x + Math.cos(a) * (d.size ?? 40) * 0.4, y: y + Math.sin(a) * (d.size ?? 40) * 0.4, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, t: 0, life: 0.4 + Math.random() * 0.3, color: i % 2 ? '#ffffff' : shade(d.color, 0.5) });
+    }
+    this.sound('poof', 1);
+    if (d.becomes === 'item') {
+      // He grabs it out of the air.
+      const def = itemFromDrawing(d.shape ?? [], d.title ?? 'drawing', d.color);
+      this.items.defs.set(def.id, def);
+      const it = this.items.give(def, this.char);
+      const hand = this.char.useHand;
+      if (it && hand) this.items.toHand(it, hand);
+      d.alive = true;
+      return;
+    }
+    if (d.becomes) this.props.bringToLife(d, d.becomes, this.ctx.world.bounds);
+  }
+
+  /** Balls meet his feet (kicks, dribbling) and his body (a ball flying into him: bonk). */
+  private ballContact() {
+    const j = this.char.body.j, sc = this.char.scale, t = this.ctx.world.time;
+    for (const b of this.props.balls) {
+      if (b.heldBy) continue;
+      for (const n of ['footL', 'footR'] as const) {
+        if (this.char.body.ghost.has(n)) continue;
+        const f = j[n], dx = b.x - f.x, dy = b.y - f.y, d = Math.hypot(dx, dy);
+        if (d > b.r + 3 * sc || d < 1e-3) continue;
+        const fvx = (f.x - f.px) * 120, fvy = (f.y - f.py) * 120;
+        const into = (fvx * dx + fvy * dy) / d - (b.vx * dx + b.vy * dy) / d;
+        // Push it out of his foot; a fast foot gives it a real kick.
+        b.p.x = f.x + (dx / d) * (b.r + 3 * sc); b.p.y = Math.min(b.p.y, f.y + (dy / d) * (b.r + 3 * sc));
+        if (into > 60) {
+          const k = into > 250 ? 1.5 : 1;
+          b.kick(b.vx * 0.2 + fvx * k + (dx / d) * 60, Math.min(b.vy, fvy * k) - Math.abs(fvx) * (into > 250 ? 0.55 : 0.1));
+          if (into > 250) this.sound('kick', Math.min(1, into / 600));
+        }
+      }
+      // Flying into him (not his feet: those kick).
+      const speed = Math.hypot(b.vx, b.vy);
+      if (speed > 450 && t > this.bonkCooldown) {
+        const joint = this.char.hitTest(b.x, b.y, b.r * 0.7);
+        if (joint && !joint.startsWith('foot') && !joint.startsWith('knee')) {
+          this.char.poke(joint, b.vx * 0.35, b.vy * 0.35 - 80);
+          b.kick(-b.vx * 0.4, -Math.abs(b.vy) * 0.3 - 150);
+          this.bonkCooldown = t + 0.6;
+          this.sound('bonk', Math.min(1, speed / 1200));
+          this.emit({ type: 'bonked', speed });
+        }
+      }
+    }
   }
 
   setBounds(b: Bounds) {
@@ -318,7 +392,7 @@ export class Pet {
   }
 
   /** Is the cursor over him, one of his loose limbs, or one of his things? (decides whether clicks reach us or the desktop) */
-  hit(x: number, y: number) { return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null || this.items.hitWorld(x, y) !== null; }
+  hit(x: number, y: number) { return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null || this.items.hitWorld(x, y) !== null || this.props.ballAt(x, y) !== null; }
 
   private emit(e: MindEvent) {
     this.remember(e);
@@ -425,6 +499,8 @@ export class Pet {
       // Not him: maybe one of his limbs lying around, or one of his things.
       const limb = this.char.hitLimb(x, y);
       if (limb) { this.press = { joint: 'hip', limb, x, y, t: now, moved: false, grabbed: false }; return true; }
+      const ball = this.props.ballAt(x, y);
+      if (ball) { ball.grab(x, y); this.press = { joint: 'hip', ball, x, y, t: now, moved: true, grabbed: true }; return true; }
       const it = this.items.hitWorld(x, y);
       if (it) { this.items.toCursor(it, { x, y }); this.sound('pickup', 0.6); return true; }
       return false;
@@ -443,13 +519,15 @@ export class Pet {
       if (p.limb) this.char.grabLimb(p.limb.piece, p.limb.idx, x, y);
       else this.char.grab(p.joint, x, y);
     }
-    if (p.grabbed) this.char.moveHold(x, y, vx, vy);
+    if (p.ball) p.ball.moveHold(x, y, vx, vy);
+    else if (p.grabbed) this.char.moveHold(x, y, vx, vy);
   }
 
   pointerUp(x: number, _y: number) {
     const p = this.press;
     if (!p) return;
     this.press = null;
+    if (p.ball) { p.ball.release(); return; }
     if (p.grabbed) { this.char.release(); return; }
     if (p.limb) { const q = p.limb.piece.points[p.limb.idx]; q.px = q.x + Math.sign(q.x - x || 1) * -3; q.py = q.y + 4; return; } // flick it
     // A quick click: a poke, as soon as it's clear this wasn't a double-click.
@@ -532,7 +610,7 @@ export class Pet {
   /** Swinging one of his things at him (you took his sword): hits him like a smack, only harder. */
   private itemHits() {
     const it = this.items.carried, w = this.ctx.world;
-    if (!it || it.def.hit <= 0 || it.tipSpeed < 450 || w.time < this.itemHitCooldown) return;
+    if (!it || it.def.hit <= 0 || it.tipSpeed < 450 || Math.hypot(this.cursorVel.x, this.cursorVel.y) < 300 || w.time < this.itemHitCooldown) return;
     const a = it.butt, b = it.tip;
     for (let i = 0; i <= 6; i++) {
       const px = a.x + ((b.x - a.x) * i) / 6, py = a.y + ((b.y - a.y) * i) / 6;

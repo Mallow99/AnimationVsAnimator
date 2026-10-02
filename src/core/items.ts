@@ -57,6 +57,20 @@ export function parseItemDef(raw: unknown): ItemDef | null {
   };
 }
 
+/**
+ * A drawing of his turned into a real thing he can hold: the drawing stands upright, with its
+ * bottom part as the handle. Swords, bats and sticks hit; pens and brushes draw.
+ */
+export function itemFromDrawing(shape: Vec[][], title: string, color: string): ItemDef {
+  const size = 46, grip = 0.3; // in the drawing's box (-0.5..0.5, y down): the handle is below y = 0.3
+  const t = title.toLowerCase();
+  const use: ItemUse = /pen|pencil|brush|crayon|marker/.test(t) ? 'draw' : /flower|hat|book|cup|key|heart/.test(t) ? 'none' : 'swing';
+  const strokes = shape.map((st) => ({ pts: st.map((p) => [(grip - p.y) * size, p.x * size] as [number, number]), color, width: 2.6 }));
+  const def = parseItemDef({ id: `drawn-${t.replace(/[^a-z0-9]+/g, '-') || 'thing'}`, name: title || 'drawing', about: 'He drew it, and it came to life.', use, length: (grip + 0.5) * size, grip: (0.5 - grip) * size, belt: 'back', hit: use === 'swing' ? 0.8 : 0, shape: strokes })!;
+  def.drawn = true;
+  return def;
+}
+
 /** The items that come with him. */
 export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef].map((d) => parseItemDef(d)!);
 
@@ -111,6 +125,9 @@ export class Item {
     this.at = { x: this.a.x, y: this.a.y, z: this.a.z };
     this.dir = norm3(sub3(this.b, this.a));
   }
+
+  /** Forget how it was moving (after it jumps somewhere new, like from his belt to your cursor). */
+  resetMotion() { this.lastTip = null; this.tipSpeed = 0; }
 
   /** Keep track of how fast the tip moves (for hits). */
   measure(dt: number) {
@@ -199,6 +216,7 @@ export class Items {
     it.at = { x: at.x, y: at.y, z: 30 };
     it.dir = { x: 0, y: 1, z: 0 };
     this.lastCursor = null; this.cursorV = { x: 0, y: 0 };
+    it.resetMotion();
     it.loosen();
     this.onChange?.();
   }

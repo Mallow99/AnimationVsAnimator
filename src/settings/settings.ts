@@ -132,7 +132,7 @@ const DOING: Record<string, string> = {
   again: 'Wants to go again', mope: 'Moping', 'shake-off': 'Shaking it off', wave: 'Waving', laugh: 'Laughing', stomp: 'Stomping',
   cower: 'Cowering', explore: 'Exploring', climb: 'Climbing onto a window', monkeybars: 'Monkey bars', climbwall: 'Climbing', getdown: 'Getting down', stuck: 'Stuck up high', stretch: 'Stretching', sigh: 'Sighing', held: 'Being held', air: 'Flying', ragdoll: 'Sprawled out',
   getup: 'Getting up', ground: 'Standing', lie: 'Lying down', ceiling: 'Hanging from the top of the screen',
-  walljump: 'Wall jumping', backflip: 'Backflip', frontflip: 'Front flip', roll: 'Rolling', reattach: 'Getting his limb back', swing: 'Swinging his sword', slash: 'Attacking your cursor', pickup: 'Picking his stuff up', askback: 'Asking for his stuff back', hey: 'Hey!', loseArm: 'Taking his arm off', loseLeg: 'Taking his leg off', move: 'Doing a made-up move',
+  kick: 'Kicking his ball', drawball: 'Drawing a ball', drawbox: 'Drawing a box', drawledge: 'Drawing a ledge', drawsword: 'Drawing a sword', getonit: 'Getting on what he drew', walljump: 'Wall jumping', backflip: 'Backflip', frontflip: 'Front flip', roll: 'Rolling', reattach: 'Getting his limb back', swing: 'Swinging his sword', slash: 'Attacking your cursor', pickup: 'Picking his stuff up', askback: 'Asking for his stuff back', hey: 'Hey!', loseArm: 'Taking his arm off', loseLeg: 'Taking his leg off', move: 'Doing a made-up move',
 };
 shell.onStats((s) => {
   for (const [k] of MOOD_ROWS) {

@@ -6,7 +6,8 @@ import type { Character, Gesture, Keyframe } from './character';
 import type { Mood } from './mood';
 import { GRAVITY, type Bounds, type Platform } from './physics';
 import { surfaceBelow, type Wall } from './world';
-import { SHAPES, type Doodle } from './doodles';
+import { SHAPES, type Becomes, type Doodle } from './doodles';
+import type { Ball, Props } from './props';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 import type { Memory } from './memory';
 import type { LimbId } from './body';
@@ -62,6 +63,10 @@ export interface Ctx {
   sound?: (name: string, strength?: number) => void;
   /** His sword hit your cursor. */
   hitCursor?: (x: number, y: number, dir: number) => void;
+  /** Drawings that came to life: balls, boxes, ledges. */
+  props?: Props;
+  /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
+  onBecome?: (d: Doodle) => void;
 }
 
 export abstract class Skill {
@@ -285,7 +290,7 @@ function reachableEdges(c: Ctx): Wall[] {
 export function routeTo(c: Ctx, target: Platform): Route | null {
   const ch = c.char, sc = ch.scale, floorY = ch.body.j.footL.y, range = ch.surfaceRange();
   const h = floorY - target.y;
-  if (target.id === ch.support || h < 40 * sc || target.x2 - target.x1 < 50) return null;
+  if (target.id === ch.support || h < 40 * sc || target.x2 - target.x1 < 36) return null;
   // 0. Low enough to vault onto (parkour): run up to one end, hands on the edge, legs over.
   if (h >= 12 * sc && h <= 85 * sc && ch.whole) {
     const fromLeft = ch.x < (target.x1 + target.x2) / 2;
@@ -490,6 +495,54 @@ export class GetDown extends Skill {
   stop(c: Ctx) { c.char.stop(); }
 }
 
+// ───────────── his drawings, alive ─────────────
+
+/** Kick a ball around: get behind it, wind up, boot it toward the middle of the screen. A few times. */
+export class KickBall extends Skill {
+  readonly name = 'kick';
+  private kicks = 0;
+  private phase: 'go' | 'kick' = 'go';
+  private next = 0;
+  constructor(private ball: Ball | null = null, private times = 3) { super(); }
+  start(c: Ctx) { c.look = 'target'; }
+  update(c: Ctx) {
+    const ch = c.char, b = this.ball ?? c.props?.nearestBall(ch.x, ch.body.j.hip.y) ?? null;
+    if (!b || !c.props?.balls.includes(b) || ch.legCount < 2) return true;
+    this.ball = b;
+    c.lookTarget = { x: b.x, y: b.y };
+    const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
+    if (b.y < feet - 90 * ch.scale || b.heldBy) return this.t > 12; // up somewhere, or you've got it
+    const b0 = c.world.bounds, dir = b.x < (b0.left + b0.right) / 2 ? 1 : -1; // toward the middle of the screen
+    if (this.phase === 'kick') {
+      if (ch.currentGesture === 'kick') return false;
+      this.kicks++;
+      if (this.kicks >= this.times) { if (chance(0.5)) c.say(pick(['GOAL', 'nice', 'heh']), 1.2); return true; }
+      this.phase = 'go'; this.next = this.t + 0.5;
+      return false;
+    }
+    if (this.t < this.next || !ch.ready) return this.t > 30;
+    this.next = this.t + 0.25;
+    const spot = b.x - dir * (b.r + 13 * ch.scale);
+    if (Math.abs(spot - ch.x) > 5 * ch.scale || Math.abs(b.vx) > 80) { ch.walkTo(spot, Math.abs(spot - ch.x) > 150); return false; }
+    ch.stop();
+    ch.facing = dir;
+    ch.doGesture('kick');
+    this.phase = 'kick';
+    return false;
+  }
+  stop(c: Ctx) { c.char.stop(); }
+}
+
+/** Get up onto the nearest box or ledge he drew (vaulting onto a box, jumping onto a ledge). */
+export function onDrawnBlock(c: Ctx): Skill | null {
+  const blocks = c.props?.blocks ?? [];
+  const ch = c.char;
+  const options = blocks.map((b) => ({ b, route: routeTo(c, b.platform) })).filter((o) => o.route);
+  options.sort((a, b) => Math.abs((a.b.platform.x1 + a.b.platform.x2) / 2 - ch.x) - Math.abs((b.b.platform.x1 + b.b.platform.x2) / 2 - ch.x));
+  const o = options[0];
+  return o ? new ClimbOnto(o.b.platform, o.route!) : null;
+}
+
 // ───────────── parkour ─────────────
 
 /** Run at a wall (a screen edge or a window side), leap onto it, and kick off it with a backflip. */
@@ -611,15 +664,22 @@ function missingTool(c: Ctx, tool: Tool, what: string) {
  * He draws a little picture next to himself with his own pen: takes it out of his belt,
  * draws (the pen's tip is what touches the screen), and puts it back.
  */
+/** Where a drawing goes: in front of him (chest height), on the floor in front, or up in the air. */
+export type DrawPlace = 'front' | 'floor' | 'air';
+
 export class DoodleSkill extends Skill {
   readonly name = 'doodle';
-  /** `shape`: strokes in a box from -0.5 to 0.5 (y down). Left out = one of his usual pictures. */
-  constructor(private shape?: Vec[][], private title = '') { super(); }
+  /**
+   * `shape`: strokes in a box from -0.5 to 0.5 (y down). Left out = one of his usual pictures.
+   * `becomes`: it comes to life when it's done (a ball, a box, a ledge, an item).
+   */
+  constructor(private shape?: Vec[][], private title = '', private opts: { becomes?: Becomes; place?: DrawPlace } = {}) { super(); }
   private doodle: Doodle | null = null;
   private plan: Vec[][] = [];
   private si = 0; private pi = 0; private along = 0;
   private finished = 0;
   private phase: 'tool' | 'fetch' | 'draw' | 'stow' | 'admire' = 'tool';
+  private popped = false;
   private tool = new Tool('draw');
   private sub: Skill | null = null;
   start(c: Ctx) { c.look = 'none'; }
@@ -629,9 +689,12 @@ export class DoodleSkill extends Skill {
     const ch = c.char, sc = ch.scale, j = ch.body.j;
     const keys = Object.keys(SHAPES), name = keys[Math.floor(Math.random() * keys.length)];
     const shape = this.shape ?? SHAPES[name];
-    const size = 46 * sc, cx = ch.x + ch.facing * 40 * sc, cy = j.neck.y + 8 * sc;
+    const place = this.opts.place ?? 'front', floor = Math.max(j.footL.y, j.footR.y) + 2;
+    const size = (place === 'air' ? 64 : place === 'floor' ? 50 : 46) * sc;
+    const cx = ch.x + ch.facing * (place === 'front' ? 40 : place === 'floor' ? 36 : 50) * sc;
+    const cy = place === 'floor' ? floor - size * 0.47 : place === 'air' ? floor - 100 * sc : j.neck.y + 8 * sc;
     this.plan = shape.map((st) => st.map((p) => ({ x: cx + p.x * size, y: cy + p.y * size })));
-    this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false, shape, title: this.title || (this.shape ? 'made up' : name) };
+    this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false, shape, title: this.title || (this.shape ? 'made up' : name), becomes: this.opts.becomes, cx, cy, size };
     c.doodles.push(this.doodle);
     if (c.doodles.length > 8) c.doodles.shift();
   }
@@ -659,10 +722,28 @@ export class DoodleSkill extends Skill {
       return false;
     }
     if (this.phase === 'stow') {
-      if (this.tool.stow(c, dt)) { this.phase = 'admire'; this.finished = this.t + 0.8; }
+      if (this.tool.stow(c, dt)) {
+        this.phase = 'admire'; this.finished = this.t + 0.8;
+        // Something solid needs room: step back from it first (he was leaning right over it).
+        const d = this.doodle;
+        if (d?.becomes === 'box' || d?.becomes === 'platform') {
+          const away = ch.x - Math.sign((d.cx ?? ch.x) - ch.x || ch.facing) * 22 * ch.scale;
+          ch.walkTo(away);
+          this.finished = this.t + 1.6;
+        }
+      }
       return false;
     }
-    if (this.phase === 'admire') return this.t > this.finished;
+    if (this.phase === 'admire') {
+      const d = this.doodle;
+      // Pen away, straightened up: now it comes to life.
+      if (d?.becomes && !this.popped && (this.t > this.finished - 0.4 || (!ch.walking && this.t > this.finished - 1.2))) {
+        this.popped = true;
+        if (d.cx !== undefined && !ch.walking) ch.facing = Math.sign(d.cx - ch.x) || ch.facing;
+        c.onBecome?.(d);
+      }
+      return this.t > this.finished;
+    }
     if (this.phase !== 'draw') return false;
     const d = this.doodle!, pen = this.tool.item!;
     if (pen.where !== 'hand') { c.say(pick(['hey!', 'my pen!']), 1.2); ch.handTarget = null; d.done = true; return true; } // it got taken mid-drawing
@@ -686,8 +767,9 @@ export class DoodleSkill extends Skill {
     const a = stroke[this.pi], b = stroke[Math.min(this.pi + 1, stroke.length - 1)];
     const seg = Math.hypot(b.x - a.x, b.y - a.y) || 1, k = Math.min(1, this.along / seg);
     const tip = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
-    // He holds the pen pointing forward and down; his hand goes where that puts the tip on the drawing.
-    const aim = ch.dirToWorld(0.45, -0.89);
+    // He holds the pen pointing forward and down (up, for things above his head); his hand goes
+    // where that puts the tip on the drawing.
+    const aim = tip.y < ch.body.j.neck.y - 10 * ch.scale ? ch.dirToWorld(0.55, 0.83) : ch.dirToWorld(0.45, -0.89);
     pen.aim = aim;
     const len = pen.def.length * ch.scale;
     ch.handTarget = { x: tip.x - aim.x * len, y: tip.y - aim.y * len };

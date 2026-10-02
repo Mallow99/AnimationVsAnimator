@@ -118,7 +118,8 @@ function parseStep(raw: unknown, saved: MadeMove[]): PlanStep | null {
   }
   if (o.draw !== undefined) {
     const d = parseDrawing(o.draw);
-    return d ? { draw: d, title: typeof o.title === 'string' ? o.title.slice(0, 40) : '' } : null;
+    const becomes = ['ball', 'box', 'platform', 'item'].includes(o.becomes as string) ? o.becomes as 'ball' : undefined;
+    return d ? { draw: d, title: typeof o.title === 'string' ? o.title.slice(0, 40) : '', ...(becomes ? { becomes } : {}) } : null;
   }
   return null;
 }
@@ -168,6 +169,8 @@ const BODY_GUIDE = [
 const DRAW_GUIDE = [
   '',
   'DRAWING: {"draw": [strokes], "title": "what it is"} draws a doodle on the screen next to you with your pen. Each stroke is a list of [x, y] points (pen down from first to last) in a box from -50 to 50, y UP. Up to 12 strokes, 60 points each. It ends up about 50 pixels big, so keep it simple: a cat, a sword, a face, a word.',
+  'DRAWINGS COME TO LIFE: add "becomes" to a drawing and it turns real when you finish it: "ball" (a ball that bounces; then {"do":"kick"} to kick it around), "box" (drawn on the floor; you can stand on it, {"do":"getonit"} vaults onto it), "platform" (a ledge drawn in the air; {"do":"getonit"} jumps onto it), "item" (something you hold, like a sword, a bat or a wand; drawn upright with the handle at the bottom; {"do":"swing"} swings it).',
+  'Example: {"plan":[{"draw":[[[0,-50],[0,-28]],[[-6,-28],[6,-28]],[[-3,-28],[-3,40],[0,50],[3,40],[3,-28]]],"title":"sword","becomes":"item"},{"do":"swing"}]}',
   'Example cat face: {"draw":[[[-30,-25],[-35,15],[-20,35],[-10,15],[10,15],[20,35],[35,15],[30,-25],[0,-35],[-30,-25]],[[-12,5],[-12,0]],[[12,5],[12,0]],[[-5,-10],[0,-14],[5,-10]]],"title":"cat"}',
 ];
 
@@ -205,6 +208,7 @@ function describe(e: MindEvent): string | null {
     case 'rolled': return 'he rolled out of a big landing';
     case 'flipped': return 'he landed a flip';
     case 'wallJump': return 'he kicked off a wall';
+    case 'bonked': return 'a ball hit him';
     default: return null;
   }
 }

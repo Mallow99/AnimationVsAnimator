@@ -53,7 +53,7 @@ const SIDE: Partial<Record<JointName, number>> = { handL: 8, handR: -8, elbowL: 
 /** +1 for his left side, -1 for his right. */
 const sideOf = (k: 'L' | 'R') => (k === 'L' ? 1 : -1);
 
-export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower' | 'dance' | 'nuzzle';
+export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower' | 'dance' | 'nuzzle' | 'kick';
 
 export type CharEvent =
   | { type: 'landed'; speed: number }
@@ -115,7 +115,7 @@ interface Foot { x: number; z: number; swinging: boolean; t: number; fromX: numb
 type Grip = { x: number; y: number; z: number; cx: number; cy: number; cz: number };
 
 const GESTURE_TIME: Record<Gesture, number> = {
-  stomp: 0.75, wave: 1.4, shrug: 0.9, laugh: 1.9, flail: 1.2, pokeBack: 0.5, stretch: 2.4, lookAround: 2.2, cower: 1.6, dance: 4, nuzzle: 1.6,
+  stomp: 0.75, wave: 1.4, shrug: 0.9, laugh: 1.9, flail: 1.2, pokeBack: 0.5, stretch: 2.4, lookAround: 2.2, cower: 1.6, dance: 4, nuzzle: 1.6, kick: 0.65,
 };
 /**
  * How much he turns toward you during a gesture (0 = stays side-on, 1 = faces you).
@@ -1312,6 +1312,19 @@ export class Character {
           if (!g.fired && u > 0.35) { g.fired = true; this.facing = -this.facing; }
           if (g.fired && u > 0.7 && u < 0.72) this.facing = -this.facing;
           nod += Math.sin(g.t * 3) * 0.3;
+          break;
+        }
+        case 'kick': {
+          // Wind up (foot back), swing through fast, then put it down. Arms swing the other way.
+          const back = smooth(clamp(u / 0.35, 0, 1)), through = smooth(clamp((u - 0.35) / 0.17, 0, 1)), down = smooth(clamp((u - 0.62) / 0.38, 0, 1));
+          const fwd = lerp(lerp(0, -12, back), 24, through) * (1 - down) * sc;
+          const lift = (back * 7 + through * 9) * (1 - down) * sc;
+          const foot = this.off(root, fwd, -lift, sideOf(front) * track);
+          if (front === 'R') footR = foot; else footL = foot;
+          neckT = this.off(neck, -4 * sc * through * (1 - down), 0);
+          handL = this.off(neck, (front === 'R' ? 10 : -8) * through * sc, armLen * 0.7, hang);
+          handR = this.off(neck, (front === 'R' ? -8 : 10) * through * sc, armLen * 0.7, -hang);
+          if (u > 0.4 && !g.fired) { g.fired = true; this.events.push({ type: 'step' }); }
           break;
         }
         case 'cower': {
