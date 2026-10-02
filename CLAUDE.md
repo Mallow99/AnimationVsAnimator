@@ -83,6 +83,22 @@ Then: Android shell.
   - NOT done yet: following across desktops (Spaces) is just "visible on all workspaces";
     walking to another desktop on his own is not built.
 
+- Round of owner feedback (fixed): legs now lock straight (hip height was measured from the floor,
+  not the feet) + stance width; smooth window riding (track window x, glide between updates,
+  adaptive 60/10 Hz polling); macOS focus hand-back via the Swift helper (Electron 44 bug
+  electron/electron#53889: panel windows activate the app); Control tab (commands, say) and
+  draggable mood bars + presets; moods have causes (AFTERGLOW in mind.ts, energy from moving,
+  greeting/loneliness); short rest between activities; `why` shown in settings.
+  Owner says: AvA-style = legs straight when standing. Offered to share reference images.
+
+## Ideas from research (not agreed yet — offer as options)
+- Shimeji-style: climb screen/window sides and ceilings, dangle from window edges, sit on a
+  window edge with legs hanging, peek from behind a window.
+- Desktop Goose-style mischief: drag/fling windows, leave notes or doodles, "gifts", footprints.
+- Becker's 12 principles: anticipation, follow-through, arcs, slow in/out, exaggeration.
+- Similar project for reference: github.com/spyderweb47/Desktop-Virtual-buddy (Electron+TS,
+  PowerShell window probe on Windows only, screenshot-based LLM brain, wall/ceiling climbing).
+
 ## Owner's wishlist (agreed, not built yet)
 - Memories and personality views in settings are placeholders until milestones 4–5.
 - Moods as blended bars where all of them matter (complex emotions), not just the loudest one.
