@@ -268,6 +268,72 @@ Then: Android shell.
   on a second monitor (the overlay only covers the main screen today), and maybe a lighter shareable version (e.g. an
   orange one named Leonard for JT).
 
+## Handoff: what to do next (written at the end of the last session)
+
+Whoever picks this up: start with "Check on real hardware" before building anything new. Almost everything
+since milestone 3 was built and tested in a cloud container (headless sim + Chromium + Electron under Xvfb),
+never on the owner's Mac. Ask the owner what actually happened on their machine; don't assume it works.
+
+### 1. Check on real hardware (do first)
+- **Swift helper compiles?** Not compiled since the AX/UI additions (no swiftc in the cloud). If the Terminal shows a
+  compile error, fix `src/electron/native/windows-mac.swift` first: without it he sees no windows at all.
+- **Accessibility permission** for moving windows and reading UI positions: which app macOS asks for (probably
+  Terminal), whether `AXIsProcessTrusted` updates without a restart, and what Settings → General → "Last word from
+  the window helper" says.
+- **Window push/kick/surf** actually moving windows; the stuck detector (`windowsStuckUntil`) not firing falsely.
+- **Cursor flight** with a real mouse: does the echo filter (`CursorBody.ours`) tell his moves from yours? Does
+  `CGWarpMouseCursorPosition` freeze the mouse briefly (the suppression interval)?
+- **Chat-app perching**: do Messages / Discord / Slack expose their messages through AX (`AXManualAccessibility`)?
+  Is the 1.5 s AX tree walk slow or does it make any app laggy?
+- Older untested items: the desktop talk box getting keyboard focus, right-click on the overlay, sounds, the items folder.
+- Windows PC: none of the PowerShell additions (window moves, ui on/off) have ever run.
+
+### 2. Improvements already discussed with the owner (he leaned yes)
+- **Use fewer AI calls / tokens** (owner is on free tiers): a "how chatty" setting for Full mode (think every 2–5 min
+  instead of ~40 s), and a slimmer prompt: send BODY_GUIDE / DRAW_GUIDE only when the request needs them.
+- **OpenRouter**: the default free model id in `PROVIDERS` (`llama-3.3-70b-instruct:free`) is probably stale;
+  `openai/gpt-oss-120b:free` worked well for him via Groq. Free OpenRouter limits count requests, not model size.
+- **Screen awareness step 2**: screenshots + the AI's vision, only when the owner asks him to "look" (privacy:
+  pictures of the screen go to the AI provider; make that clear). Real clicking: behind its own toggle, off by default.
+- **Textures / picture files** for his look and items (today everything is drawn with lines in code), so a shareable
+  version can have a different look.
+- **A lighter shareable version** (e.g. an orange one named Leonard for the owner's friend JT): fewer settings,
+  packaged as a real app (electron-builder or similar), so friends don't need Node and a terminal.
+
+### 3. Weak spots in the code (worth fixing)
+- The big files are getting hard to work in: `character.ts` (~2500 lines), `skills.ts` (~2100), `pet.ts` (~1400),
+  `mind.ts` (~1050). Splitting windows, cursor and input handling out of pet.ts, and skills into a few files by
+  topic (fighting, windows, drawing, props), would help the next person.
+- Drawing physics (`props.ts`) is simple Verlet: boxes stack via one-way tops + edge-on-corner support, not full
+  rigid-body contact. Fast tumbling things can still overlap. Side-by-side boxes pass through each other. He walks
+  through boxes instead of pushing them.
+- Ramps can only be drawn from flat ground up to a window; no ramps down, no ramps onto drawn things. Bridges need
+  a near-equal height. The ramp's base isn't checked for obstacles (props, other drawings) in the way.
+- Bridge ends are pinned in space, not to the windows: move a window and the bridge stays where it was.
+- Props only work when he's on the floor (`propOptions` bails out if he's up on a window).
+- `Mood.emotion` flashes (proud/embarrassed) override 'annoyed' while they last; fine, but keep in mind.
+- Several sim tests are timing/randomness-sensitive; they pass reliably now because they check "it happened"
+  instead of "the final frame". Keep writing new tests that way. Run `npm run sim` a few times before trusting a change.
+- Multi-monitor: the overlay only covers the main display.
+
+### 4. New ideas (offer these as options; the owner picks)
+- **Minecraft-style blocks** (owner's idea): pixel blocks as `Thing`s, a pickaxe item to break them, he builds stairs
+  and little huts out of them. Fits the existing physics and the item/prop file format.
+- **A house on a second monitor** (owner's idea): a big prop he goes "home" to, sleeps in, keeps his things in.
+  Needs the overlay to span more than one display first.
+- **Draw anything to get somewhere**: a ladder (climb it), a trampoline (bounces), a rope he swings on, a parachute
+  for big drops (uses `lessons.safeDrop`), stairs instead of a ramp.
+- **More props**: a bed (he sleeps there), a lamp he switches on at night, a fridge/snack, a skateboard (like the
+  scooter), a basketball hoop for his ball, a pet of his own.
+- **Window life**: hang from a window's bottom edge, peek around a window's side, "sweep" dust off a title bar,
+  carry a small window around, close a window by shoving it into a screen edge (risky; ask first).
+- **Reacting to the owner's day** (from the Google Calendar the owner uses): "homework due tomorrow?" nudges
+  (needs a connector or an exported calendar; ask before touching personal data).
+- **Mood blending** (on the wishlist): reactions that mix several dials at once, not just the dominant one.
+- **The visitor** (offered before, owner passed): a second stick figure: rival, friend, or the AvA "virus".
+- **Learned movement** (roadmap 7): train poses headlessly with the existing sim.
+- **JS Paint** (roadmap 6): host jspaint.app in a window he can draw in with his own pen.
+
 ## Ideas from research (not agreed yet — offer as options)
 - Shimeji-style: climb screen/window sides and ceilings, dangle from window edges, sit on a
   window edge with legs hanging, peek from behind a window.
