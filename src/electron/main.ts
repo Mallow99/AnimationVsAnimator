@@ -86,18 +86,27 @@ function toOverlay(wins: WinRect[]): WinRect[] {
   });
 }
 
+/** Overlay coordinates → the helper's screen coordinates (real pixels on Windows). */
+function toScreen(x: number, y: number, w = 1, h = 1) {
+  const wa = screen.getPrimaryDisplay().workArea;
+  let r = { x: x + wa.x, y: y + wa.y, width: w, height: h };
+  if (process.platform === 'win32') r = screen.dipToScreenRect(null, r); // app units → real pixels
+  return r;
+}
+
+// The helper runs whenever he needs it: to see windows, or to move your cursor (mischief, knocking it around).
 function updateWatcher() {
-  if (config.windows && !watcher) {
+  const need = config.windows || config.mischief || config.knockCursor;
+  if (need && !watcher) {
     watcher = watchWindows((wins) => {
-      lastWins = toOverlay(wins);
+      lastWins = config.windows ? toOverlay(wins) : [];
       win?.webContents.send('world:windows', lastWins);
     }, (m) => console.log('[windows]', m));
-  } else if (!config.windows && watcher) {
+  } else if (!need && watcher) {
     watcher.stop();
     watcher = null;
-    lastWins = [];
-    win?.webContents.send('world:windows', []);
   }
+  if (!config.windows && lastWins.length) { lastWins = []; win?.webContents.send('world:windows', []); }
 }
 
 // ───────────── windows ─────────────
@@ -183,6 +192,8 @@ function buildTrayMenu() {
     { label: 'Items…', click: () => openSettings('items') },
     { label: 'Smack mode', type: 'checkbox', checked: config.smacking, click: () => setConfig({ smacking: !config.smacking }) },
     { label: 'Mischief mode', type: 'checkbox', checked: config.mischief, click: () => setConfig({ mischief: !config.mischief }) },
+    { label: 'He can hit your cursor', type: 'checkbox', checked: config.knockCursor, click: () => setConfig({ knockCursor: !config.knockCursor }) },
+    { label: 'He can move your windows', type: 'checkbox', checked: config.moveWindows, click: () => setConfig({ moveWindows: !config.moveWindows }) },
     { label: 'Climb on windows', type: 'checkbox', checked: config.windows, click: () => setConfig({ windows: !config.windows }) },
     { label: 'Breakable', type: 'checkbox', checked: config.destructible, click: () => setConfig({ destructible: !config.destructible }) },
     { type: 'separator' },
@@ -236,13 +247,17 @@ ipcMain.on('brain:setKey', (_e, key: string) => {
 });
 // You pressed on him. On macOS that (wrongly) activates our app, so hand focus right back.
 ipcMain.on('pet:pressed', () => watcher?.refocus());
-// Mischief mode: he grabbed your cursor. Overlay coordinates → screen coordinates.
+// He grabbed your cursor (mischief mode) or knocked it flying. Overlay coordinates → screen coordinates.
 ipcMain.on('pet:moveCursor', (_e, x: number, y: number) => {
-  if (!config.mischief || !watcher) return;
-  const wa = screen.getPrimaryDisplay().workArea;
-  let p = { x: x + wa.x, y: y + wa.y };
-  if (process.platform === 'win32') p = screen.dipToScreenPoint(p); // app units → real pixels
+  if (!(config.mischief || config.knockCursor) || !watcher || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  const p = toScreen(x, y);
   watcher.moveCursor(p.x, p.y);
+});
+// He pushed, kicked or surfed one of your windows: move it for real.
+ipcMain.on('pet:moveWindow', (_e, id: number, x: number, y: number, w: number, h: number) => {
+  if (!config.moveWindows || !config.windows || !watcher || ![id, x, y, w, h].every(Number.isFinite)) return;
+  const r = toScreen(x, y, w, h);
+  watcher.moveWindow(id, r.x, r.y);
 });
 
 // His talking blips should play without you having to click first.

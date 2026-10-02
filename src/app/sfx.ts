@@ -52,7 +52,7 @@ function hiss(a: AudioContext, out: AudioNode, filter: BiquadFilterType, f0: num
 }
 
 /** Minimum seconds between two of the same sound (so a pile of events doesn't turn into a buzz). */
-const GAP: Record<string, number> = { step: 0.07, scribble: 0.06, thud: 0.08, kick: 0.08, bonk: 0.1, poke: 0.05 };
+const GAP: Record<string, number> = { step: 0.07, scribble: 0.06, thud: 0.08, kick: 0.08, bonk: 0.1, poke: 0.05, punch: 0.06, knock: 0.08 };
 
 /**
  * Play a sound effect. `strength` 0..1 scales it (a small landing vs a big one),
@@ -139,6 +139,15 @@ export function playSfx(name: string, strength = 1, volume = 0.6, pitch = 1) {
       tone(a, out, 'square', 880, 880, 0.05, 0.03, 0.05);
       tone(a, out, 'square', 1320, 1320, 0.07, 0.03, 0.1);
       tone(a, out, 'square', 1760, 1760, 0.1, 0.025, 0.15);
+      break;
+    case 'punch': // his fist meets your cursor: a snappy little "pap"
+      hiss(a, out, 'bandpass', 2400, 900, 0.06, 0.28 * s, 0, 1.8);
+      tone(a, out, 'square', 300, 120, 0.07, 0.06 * s);
+      tone(a, out, 'sine', 180, 70, 0.1, 0.2 * s);
+      break;
+    case 'knock': // knuckles on a window
+      tone(a, out, 'triangle', r(330, 380), 260, 0.07, 0.22);
+      hiss(a, out, 'bandpass', 1400, 900, 0.03, 0.08, 0, 3);
       break;
     case 'scribble': // pen on the screen
       hiss(a, out, 'highpass', r(3000, 5000), 2500, 0.04, 0.03);

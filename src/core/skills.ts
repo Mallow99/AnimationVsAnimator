@@ -11,7 +11,8 @@ import type { Ball, Props } from './props';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 import type { Memory } from './memory';
 import type { LimbId } from './body';
-import type { Item, Items, ItemUse } from './items';
+import { preferredSlots, type Item, type Items, type ItemUse } from './items';
+import type { WinRect } from './world';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none' | 'target';
 
@@ -22,6 +23,7 @@ export interface World {
   time: number;          // seconds since start
   platforms: Platform[]; // window tops he can stand on
   walls: Wall[];         // window sides and screen edges he can climb
+  windows: WinRect[];    // the windows on screen (front-most first), where they are right now
 }
 
 /** Things he has learned from experience. Saved between runs. */
@@ -61,8 +63,16 @@ export interface Ctx {
   items: Items;
   /** A sound effect (the app plays it). */
   sound?: (name: string, strength?: number) => void;
-  /** His sword hit your cursor. */
-  hitCursor?: (x: number, y: number, dir: number) => void;
+  /** His sword (or hammer, or ball) hit your cursor, moving at (vx, vy) px/s. `power` 0..1+. */
+  hitCursor?: (x: number, y: number, vx: number, vy: number, power: number) => void;
+  /** He's allowed to move your windows (setting on, desktop, and it's been working). */
+  canMoveWindows?: boolean;
+  /** Shove a window (px/s). `spring`: it wobbles and settles back where it was (a knock, a stomp). */
+  shoveWindow?: (id: number, vx: number, vy: number, spring?: boolean) => boolean;
+  /** Keep a window sliding at vx px/s right now (he's pushing it). */
+  pushWindow?: (id: number, vx: number) => boolean;
+  /** Is this window still moving (he shoved it)? */
+  windowMoving?: (id: number) => boolean;
   /** Drawings that came to life: balls, boxes, ledges. */
   props?: Props;
   /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
@@ -231,9 +241,13 @@ export class ChaseCursor extends Skill {
     if (this.t > this.retarget && ch.ready) {
       this.retarget = this.t + 0.35;
       const dx = cur.x - ch.x, above = ch.body.j.head.y - cur.y;
-      if (Math.abs(dx) < 35 && above > -20 && above < 160) {
-        if (this.angry) ch.doGesture('pokeBack', cur);
-        else ch.jump(clamp(dx * 2, -120, 120), -(420 + above * 3));
+      const arm = ch.d.upperArm + ch.d.foreArm;
+      if (Math.hypot(cur.x - ch.body.j.neck.x, cur.y - ch.body.j.neck.y) < arm) {
+        // In reach: angry, a real punch. Playful, a "tag!" poke.
+        ch.doGesture(this.angry ? 'punch' : 'pokeBack', cur);
+        if (!this.angry && chance(0.4)) c.say(pick(['tag!', 'boop', 'gotcha']), 0.9);
+      } else if (Math.abs(dx) < 40 && above > 0 && above < 200 * ch.scale) {
+        ch.jumpPunch(cur);
       } else {
         ch.walkTo(cur.x, this.angry || c.mood.s.energy > 0.5);
       }
@@ -512,7 +526,11 @@ export class KickBall extends Skill {
     c.lookTarget = { x: b.x, y: b.y };
     const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
     if (b.y < feet - 90 * ch.scale || b.heldBy) return this.t > 12; // up somewhere, or you've got it
-    const b0 = c.world.bounds, dir = b.x < (b0.left + b0.right) / 2 ? 1 : -1; // toward the middle of the screen
+    const b0 = c.world.bounds;
+    let dir = b.x < (b0.left + b0.right) / 2 ? 1 : -1; // toward the middle of the screen
+    // Up against a wall, there's no room to get behind it: kick it into the wall, it bounces back out.
+    const room = ch.surfaceRange(), behind = b.x - dir * (b.r + 13 * ch.scale);
+    if (behind < room.x1 + 8 || behind > room.x2 - 8) dir = -dir;
     if (this.phase === 'kick') {
       if (ch.currentGesture === 'kick') return false;
       this.kicks++;
@@ -637,8 +655,7 @@ export class Tool {
     if (!it || it.where !== 'hand') { ch.handTarget = null; return true; }
     this.stowT += dt;
     it.aim = null;
-    const prefer = it.def.belt === 'back' ? [2, 1, 0] : [1, 0, 2];
-    const slot = prefer.find((s) => !c.items.belt[s]);
+    const slot = preferredSlots(it.def).find((s) => !c.items.belt[s]);
     if (slot === undefined) { ch.handTarget = null; return true; } // belt's full: he just keeps holding it
     const at = c.items.slotPose(ch, slot).at;
     ch.handTarget = { x: at.x, y: at.y };
@@ -789,29 +806,51 @@ export class DoodleSkill extends Skill {
   }
 }
 
+/** How each kind of swing goes (angles in degrees: 0 = straight ahead, 90 = straight up, negative = down). */
+const SWINGS = {
+  // A sword: wound up high behind him, a diagonal cut down through the front.
+  swing: { top: 128, bottom: -48, windup: 0.38, cut: 0.13, follow: 0.3, lead: 0.45, bounce: -14, what: 'sword' },
+  // A mallet: right over his head and behind, then straight down into the floor in front. It bounces.
+  smash: { top: 165, bottom: -84, windup: 0.46, cut: 0.15, follow: 0.34, lead: 0.3, bounce: 20, what: 'mallet' },
+} as const;
+
 /**
- * Swinging his wooden sword: draw it from his back, wind up (big and slow — that's the
- * anticipation), slash (fast), follow through, then put it away. At your cursor if it's
- * close (when he's mad), or just practicing.
+ * Swinging his wooden sword (or smashing with his mallet): draw it from his belt, wind up
+ * (big and slow — that's the anticipation), cut (fast), follow through, then put it away.
+ * At your cursor if it's close (when he's mad, or sparring), or just practicing.
  */
 export class SwordSwing extends Skill {
-  readonly name = 'swing';
+  readonly name: string;
   private phase: 'tool' | 'approach' | 'windup' | 'slash' | 'follow' | 'stow' = 'tool';
-  private tool = new Tool('swing');
+  private tool: Tool;
   private pt = 0;
   private swings = 0;
   private hit = false;
   private from = -70;
-  constructor(private times = 2, private atCursor = true) { super(); }
+  private k: (typeof SWINGS)[keyof typeof SWINGS];
+  constructor(private times = 2, private atCursor = true, use: 'swing' | 'smash' = 'swing') {
+    super();
+    this.name = use === 'smash' ? 'smash' : 'swing';
+    this.tool = new Tool(use);
+    this.k = SWINGS[use];
+  }
   start(c: Ctx) { c.look = this.atCursor ? 'cursor' : 'none'; }
 
   /** Arm and sword at angle phi (degrees: 0 = straight ahead, 90 = straight up, negative = down). */
   private pose(c: Ctx, phi: number) {
     const ch = c.char, it = this.tool.item!, j = ch.body.j, armLen = (ch.d.upperArm + ch.d.foreArm) * 0.85;
-    const r = (phi * Math.PI) / 180, lead = r + 0.45;
+    const r = (phi * Math.PI) / 180, lead = r + this.k.lead;
     const arm = ch.dirToWorld(Math.cos(r), Math.sin(r));
     ch.handTarget = { x: j.neck.x + arm.x * armLen, y: j.neck.y + arm.y * armLen };
     it.aim = ch.dirToWorld(Math.cos(lead), Math.sin(lead));
+  }
+
+  /** Did the swing go through your cursor? (Once per swing.) */
+  private checkHit(c: Ctx) {
+    const it = this.tool.item!, cur = c.world.cursor, ch = c.char;
+    if (this.hit || !cur || it.tipSpeed < 200 || it.distTo(cur.x, cur.y) > (this.name === 'smash' ? 12 : 9) * ch.scale) return;
+    this.hit = true;
+    c.hitCursor?.(cur.x, cur.y, it.tipVel.x * 0.8, it.tipVel.y * 0.8 - (this.name === 'smash' ? 0 : 260), Math.max(0.6, it.def.hit));
   }
 
   update(c: Ctx, dt: number) {
@@ -821,15 +860,21 @@ export class SwordSwing extends Skill {
       case 'tool': {
         if (!ch.ready) return this.t > 20;
         const r = this.tool.fetch(c, dt);
-        if (r === 'none') { missingTool(c, this.tool, 'sword'); return true; }
+        if (r === 'none') { missingTool(c, this.tool, this.k.what); return true; }
         if (r === 'ready') { this.phase = 'approach'; this.pt = 0; }
         return false;
       }
       case 'approach': {
-        const reach = (ch.d.upperArm + ch.d.foreArm + this.tool.item!.def.length) * ch.scale * 0.85;
-        if (this.atCursor && cur && Math.abs(cur.x - ch.x) > reach && this.pt < 3) {
-          if (ch.ready && !ch.walking) ch.walkTo(cur.x - Math.sign(cur.x - ch.x) * reach * 0.7, true);
-          return false;
+        // The far end of what he swings sweeps a circle around his shoulder: stand where your cursor is on it.
+        const j = ch.body.j, arm = (ch.d.upperArm + ch.d.foreArm) * 0.85, L = this.tool.item!.def.length * ch.scale;
+        const R = Math.hypot(arm + L * Math.cos(this.k.lead), L * Math.sin(this.k.lead));
+        if (this.atCursor && cur && this.pt < 3) {
+          const dy = cur.y - j.neck.y, dx = cur.x - j.neck.x;
+          const want = Math.sqrt(Math.max((0.8 * R) ** 2 - dy * dy, (0.3 * R) ** 2));
+          if (Math.abs(Math.abs(dx) - want) > 8 * ch.scale) {
+            if (ch.ready && !ch.walking) ch.walkTo(ch.x + dx - (Math.sign(dx) || ch.facing) * want, Math.abs(dx) > 150);
+            return false;
+          }
         }
         ch.stop();
         if (this.atCursor && cur) ch.facing = Math.sign(cur.x - ch.x) || ch.facing;
@@ -838,30 +883,27 @@ export class SwordSwing extends Skill {
       }
       case 'windup': {
         // Anticipation: pull way back and up, slowing into the top.
-        const u = Math.min(1, this.pt / 0.38);
-        this.pose(c, lerpN(this.from, 128, 1 - (1 - u) ** 3));
+        const u = Math.min(1, this.pt / this.k.windup);
+        this.pose(c, lerpN(this.from, this.k.top, 1 - (1 - u) ** 3));
         if (u >= 1) { this.phase = 'slash'; this.pt = 0; this.hit = false; c.sound?.('whoosh'); }
         return false;
       }
       case 'slash': {
         // Fast, accelerating into the cut.
-        const u = Math.min(1, this.pt / 0.13);
-        this.pose(c, lerpN(128, -48, u * u));
-        const it = this.tool.item!;
-        if (!this.hit && cur && it.distTo(cur.x, cur.y) < 9 * ch.scale) {
-          this.hit = true;
-          c.hitCursor?.(cur.x, cur.y, ch.facing);
-        }
-        if (u >= 1) { this.phase = 'follow'; this.pt = 0; }
+        const u = Math.min(1, this.pt / this.k.cut);
+        this.pose(c, lerpN(this.k.top, this.k.bottom, u * u));
+        this.checkHit(c);
+        if (u >= 1) { this.phase = 'follow'; this.pt = 0; if (this.name === 'smash') c.sound?.('thud', 0.8); }
         return false;
       }
       case 'follow': {
-        // Follow-through: carries on a little past the cut, then settles.
-        const u = Math.min(1, this.pt / 0.3);
-        this.pose(c, -48 - Math.sin(Math.PI * u) * 14);
+        // Follow-through: carries on a little past the cut (a mallet bounces back up), then settles.
+        const u = Math.min(1, this.pt / this.k.follow);
+        this.pose(c, this.k.bottom + Math.sin(Math.PI * u) * this.k.bounce);
+        if (u < 0.4) this.checkHit(c); // (his hand catches up with the swing a moment after the cut)
         if (u >= 1) {
           this.swings++;
-          this.from = -48;
+          this.from = this.k.bottom;
           if (this.swings < this.times) { this.phase = 'windup'; this.pt = 0; }
           else { this.phase = 'stow'; this.pt = 0; if (!this.atCursor) c.say(pick(['hyah!', 'ha!', 'en garde']), 1.2); }
         }
@@ -895,8 +937,9 @@ export class FetchItem extends Skill {
     if (this.phase === 'stow') return this.tool.stow(c, dt) || this.t > 15;
     if (it.where === 'hand') { this.phase = 'stow'; return false; }
     const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
-    // (Give a falling thing a moment to land before deciding it's out of reach.)
-    if ((it.at.y < feet - 70 * ch.scale && this.t > 1.5) || this.t > 15) { if (this.comment) c.say(pick(['can\'t reach it', 'ugh. too high']), 1.4); return true; }
+    // (Give a falling or bouncing thing a moment to land before deciding it's out of reach.)
+    const settled = it.speed < 60;
+    if ((it.at.y < feet - 70 * ch.scale && this.t > 1.5 && settled) || this.t > 15) { if (this.comment) c.say(pick(['can\'t reach it', 'ugh. too high']), 1.4); return true; }
     if (it.at.y < feet - 70 * ch.scale) return false;
     if (this.phase === 'go') {
       if (this.t < this.next || !ch.ready) return false;
@@ -1011,6 +1054,386 @@ export class GrabCursor extends Skill {
     return this.t > this.until;
   }
   stop(c: Ctx) { c.char.handTarget = null; c.char.stop(); }
+}
+
+// ───────────── fighting your cursor ─────────────
+
+/**
+ * Sparring with your cursor (playful), or a real brawl (angry): fists up, close in, and
+ * throw whatever fits where the cursor is — punches and backhand swats in arm's reach,
+ * high kicks lower down, a jumping punch when it's above his head. His hits send it flying.
+ */
+export class Brawl extends Skill {
+  readonly name: string;
+  private next = 0;
+  private hits = 0;
+  private combo = 0;
+  private done = 0;
+  constructor(private dur: number, private angry: boolean) { super(); this.name = angry ? 'brawl' : 'spar'; }
+  start(c: Ctx) {
+    c.look = 'cursor';
+    c.char.guard = true;
+    c.say(this.angry ? pick(['come here.', 'you want some?', '>:(', 'oh it is ON']) : pick(['fight me!', 'put em up', 'en garde!', 'square up']), 1.4);
+  }
+  /** One of his hits landed (the mind tells him). */
+  landed() { this.hits++; }
+  update(c: Ctx) {
+    const ch = c.char, cur = c.world.cursor;
+    if (!cur) return true;
+    if (this.done) return this.t > this.done;
+    if (this.t > this.dur || this.hits >= (this.angry ? 4 : 3)) {
+      ch.guard = false;
+      if (ch.ready) {
+        if (this.hits) { c.say(this.angry ? pick(['and STAY down', 'hmph.', 'learned your lesson?']) : pick(['K.O.!', 'I win!', 'flawless', 'ding ding ding']), 1.6); if (!this.angry) ch.doGesture('laugh'); }
+        else c.say(pick(['too slow', 'hold still!', 'coward']), 1.4);
+      }
+      this.done = this.t + 1.2;
+      return false;
+    }
+    if (ch.airPunch && ch.mode === 'air') ch.airPunch = { x: cur.x, y: cur.y };
+    if (!ch.ready || this.t < this.next) return false;
+    const j = ch.body.j, sc = ch.scale, arm = ch.d.upperArm + ch.d.foreArm, leg = ch.d.thigh + ch.d.shin;
+    const dx = cur.x - ch.x, feet = Math.max(j.footL.y, j.footR.y);
+    ch.facing = sign(dx || ch.facing);
+    if (Math.hypot(cur.x - j.neck.x, cur.y - j.neck.y) < arm * 1.02 && cur.y < j.hip.y + 4 * sc) {
+      // Close: little combos of punches, with the odd backhand.
+      ch.stop();
+      ch.doGesture(chance(0.22) ? 'swat' : 'punch', cur);
+      this.next = this.t + (this.combo++ % 3 === 2 ? rand(0.45, 0.9) : 0.04);
+      return false;
+    }
+    if (cur.y >= j.hip.y - 6 * sc && cur.y < feet && Math.hypot(cur.x - j.hip.x, cur.y - j.hip.y) < leg * 0.98) {
+      ch.stop();
+      ch.doGesture('highkick', cur);
+      this.next = this.t + rand(0.3, 0.6);
+      return false;
+    }
+    const above = j.neck.y - cur.y;
+    if (Math.abs(dx) < arm * 1.3 && above > arm * 0.8 && above < arm + 230 * sc && ch.legCount === 2) {
+      ch.jumpPunch(cur);
+      this.next = this.t + 0.35;
+      return false;
+    }
+    ch.walkTo(cur.x - sign(dx) * arm * 0.75, Math.abs(dx) > 160 || this.angry);
+    this.next = this.t + 0.22;
+    return false;
+  }
+  stop(c: Ctx) { c.char.guard = false; c.char.stop(); c.char.airPunch = null; }
+}
+
+// ───────────── throwing things ─────────────
+
+/**
+ * Throwing his bouncy ball: out of his pocket, wind up overarm, and let fly at your cursor
+ * (aimed so it arcs onto it). Or, just playing, bounce it off the floor and catch it.
+ * Then he goes and gets it back.
+ */
+export class ThrowItem extends Skill {
+  readonly name: string;
+  private phase: 'tool' | 'approach' | 'wind' | 'fling' | 'watch' | 'catch' | 'fetch' | 'stow' = 'tool';
+  private tool = new Tool('throw');
+  private pt = 0;
+  private sub: Skill | null = null;
+  private throws = 0;
+  constructor(private atCursor = true, private times = 1) { super(); this.name = atCursor ? 'throw' : 'bounce'; }
+  start(c: Ctx) { c.look = this.atCursor ? 'cursor' : 'target'; }
+
+  private hand(c: Ctx, fwd: number, up: number) {
+    const ch = c.char, j = ch.body.j, arm = (ch.d.upperArm + ch.d.foreArm) * 0.9, d = ch.dirToWorld(fwd, up);
+    ch.handTarget = { x: j.neck.x + d.x * arm, y: j.neck.y + d.y * arm };
+  }
+
+  update(c: Ctx, dt: number) {
+    const ch = c.char, cur = c.world.cursor, it = this.tool.item;
+    this.pt += dt;
+    if (this.sub) {
+      this.sub.t += dt;
+      if (!this.sub.update(c, dt)) return this.t > 30;
+      this.sub.stop(c); this.sub = null;
+      if (++this.throws < this.times && it && it.where !== 'world') { this.phase = 'tool'; this.tool = new Tool('throw'); this.tool.item = it; this.pt = 0; return false; }
+      return true;
+    }
+    switch (this.phase) {
+      case 'tool': {
+        if (!ch.ready) return this.t > 15;
+        const r = this.tool.fetch(c, dt);
+        if (r === 'none') {
+          const ball = c.items.find('throw');
+          if (this.tool.why === 'lying' && ball && this.t < 15) { this.sub = new FetchItem(ball, false); this.sub.start(c); this.times = this.throws + 2; return false; }
+          missingTool(c, this.tool, 'ball');
+          return true;
+        }
+        if (r === 'ready') { this.phase = this.atCursor ? 'approach' : 'wind'; this.pt = 0; }
+        return false;
+      }
+      case 'approach': {
+        // Not too close, not across the whole screen.
+        if (!cur) return true;
+        const dx = cur.x - ch.x;
+        if (Math.abs(dx) > 520 && this.pt < 3) { if (ch.ready && !ch.walking) ch.walkTo(cur.x - sign(dx) * 380, true); return false; }
+        ch.stop();
+        ch.facing = sign(dx || ch.facing);
+        this.phase = 'wind'; this.pt = 0;
+        return false;
+      }
+      case 'wind':
+        // Anticipation: arm way back and up behind his head.
+        this.hand(c, -0.55, 0.8);
+        if (cur && this.atCursor) ch.facing = sign(cur.x - ch.x || ch.facing);
+        if (this.pt > 0.32) { this.phase = 'fling'; this.pt = 0; c.sound?.('whoosh', 0.6); }
+        return false;
+      case 'fling': {
+        this.hand(c, 0.95, 0.15);
+        if (this.pt < 0.06 || !it || it.where !== 'hand') return this.pt > 1;
+        const from = it.at;
+        let vx: number, vy: number;
+        if (this.atCursor && cur) {
+          // Pick a flight time from the distance, then solve for the throw that lands on the cursor.
+          const dx = cur.x - from.x, dy = cur.y - from.y, T = clamp(Math.hypot(dx, dy) / 950, 0.22, 0.75);
+          vx = dx / T; vy = dy / T - 0.5 * GRAVITY * T;
+        } else { vx = ch.facing * 140; vy = 520; } // down at the floor in front: it bounces back up
+        c.items.drop(it, clamp(vx, -1700, 1700), clamp(vy, -1700, 1700));
+        it.thrownAt = c.world.time;
+        ch.handTarget = null;
+        this.phase = this.atCursor ? 'watch' : 'catch'; this.pt = 0;
+        return false;
+      }
+      case 'watch':
+        // See where it went, then go get it.
+        if (it) c.lookTarget = { x: it.at.x, y: it.at.y };
+        c.look = 'target';
+        if (this.pt > 1.4 || (it && it.speed < 30 && this.pt > 0.5)) {
+          if (!it || it.where === 'cursor') return true;
+          this.sub = new FetchItem(it, false); this.sub.start(c);
+        }
+        return false;
+      case 'catch': {
+        // Hand out to where the ball's coming back up; grab it when it gets there.
+        if (!it || it.where !== 'world') return true;
+        c.lookTarget = { x: it.at.x, y: it.at.y }; c.look = 'target';
+        const hand = ch.useHand;
+        if (!hand) return true;
+        ch.handTarget = { x: it.at.x, y: Math.max(it.at.y, ch.body.j.neck.y - 10 * ch.scale) };
+        const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
+        if (this.pt > 0.15 && Math.hypot(h.x - it.at.x, h.y - it.at.y) < 11 * ch.scale) {
+          c.items.toHand(it, hand);
+          c.sound?.('pickup', 0.5);
+          if (++this.throws < this.times) { this.phase = 'wind'; this.pt = 0; return false; }
+          ch.handTarget = null;
+          this.phase = 'stow'; this.pt = 0;
+          return false;
+        }
+        if (this.pt > 2) { ch.handTarget = null; c.say(pick(['oops', 'butterfingers']), 1); this.sub = new FetchItem(it, false); this.sub.start(c); }
+        return false;
+      }
+      case 'stow': return this.tool.stow(c, dt) || this.pt > 2;
+    }
+    return this.t > 30;
+  }
+  stop(c: Ctx) { c.char.handTarget = null; this.sub?.stop(c); const it = this.tool.item; if (it?.where === 'hand') { it.aim = null; c.items.stow(it); } }
+}
+
+// ───────────── your windows ─────────────
+
+/** Window sides he could walk up to and put his hands on from where he stands (nearest first). */
+export function windowSidesAtHand(c: Ctx): Wall[] {
+  const ch = c.char, j = ch.body.j, arm = ch.d.upperArm + ch.d.foreArm;
+  return c.world.walls
+    .filter((w) => w.win !== undefined && w.y1 < j.neck.y - 4 * ch.scale && w.y2 > j.hip.y && w.win !== ch.supportPlatform()?.win
+      && canStandAt(ch, w.x - w.face * arm * 0.75))
+    .sort((a, b) => Math.abs(a.x - ch.x) - Math.abs(b.x - ch.x));
+}
+
+/**
+ * Walking up to a spot for a window trick: true once he's there. If something stopped him
+ * on the way (he tripped, got up somewhere else), he sets off again.
+ */
+function arrive(c: Ctx, x: number, tol = 8) {
+  const ch = c.char;
+  if (!ch.ready || ch.walking) return false;
+  if (Math.abs(ch.x - x) <= tol * ch.scale) return true;
+  ch.walkTo(x, Math.abs(x - ch.x) > 200);
+  return false;
+}
+
+/** Walk up to a window's side, put both hands on it, and push it along (it really moves). */
+export class PushWindow extends Skill {
+  readonly name = 'pushwindow';
+  private phase: 'walk' | 'push' | 'done' = 'walk';
+  private moved = 0;
+  private lastX = 0;
+  constructor(private wall: Wall, private dist = rand(120, 300)) { super(); }
+  start(c: Ctx) { c.look = 'none'; this.walkUp(c); }
+  private walkUp(c: Ctx) {
+    const ch = c.char, arm = ch.d.upperArm + ch.d.foreArm;
+    ch.walkTo(this.wall.x - this.wall.face * arm * 0.72);
+  }
+  update(c: Ctx) {
+    const ch = c.char;
+    const w = c.world.walls.find((x) => x.id === this.wall.id);
+    if (!w) return true; // the window's gone (or covered)
+    this.wall = w;
+    const arm = ch.d.upperArm + ch.d.foreArm;
+    if (this.phase === 'walk') {
+      if (this.t > 10) return true;
+      if (!arrive(c, w.x - w.face * arm * 0.72)) return false;
+      ch.facing = w.face;
+      ch.pushAt = w.x;
+      this.phase = 'push'; this.t = 0; this.lastX = w.x;
+      c.say(pick(['hnngh', 'heave', 'hup...', 'move it']), 1.4);
+      return false;
+    }
+    if (this.phase === 'push') {
+      if (ch.mode !== 'ground') return true;
+      ch.pushAt = w.x;
+      this.moved += Math.abs(w.x - this.lastX);
+      this.lastX = w.x;
+      // Lean in and walk it along, a step at a time.
+      if (this.t > 0.35 && !c.pushWindow?.(w.win!, w.face * 48 * ch.scale)) { c.say(pick(["won't budge", 'heavy...']), 1.4); this.phase = 'done'; this.t = 0; ch.pushAt = null; return false; }
+      ch.walkTo(w.x - w.face * arm * 0.6);
+      if (this.moved > this.dist || this.t > 6 || !canStandAt(ch, ch.x + w.face * 30 * ch.scale)) {
+        ch.pushAt = null; ch.stop();
+        this.phase = 'done'; this.t = 0;
+        c.memory.count('windowsMoved');
+        c.say(pick(['there.', 'much better', 'feng shui', 'phew']), 1.4);
+      }
+      return false;
+    }
+    return this.t > 0.8;
+  }
+  stop(c: Ctx) { c.char.pushAt = null; c.char.stop(); }
+}
+
+/** Walk up to a window's side and kick it (or punch it) across the screen. */
+export class KickWindow extends Skill {
+  readonly name = 'kickwindow';
+  private phase: 'walk' | 'kick' | 'watch' = 'walk';
+  constructor(private wall: Wall) { super(); }
+  start(c: Ctx) {
+    const ch = c.char;
+    c.look = 'none';
+    ch.walkTo(this.wall.x - this.wall.face * (ch.d.thigh + ch.d.shin) * 0.8, Math.abs(this.wall.x - ch.x) > 200);
+  }
+  update(c: Ctx) {
+    const ch = c.char, w = c.world.walls.find((x) => x.id === this.wall.id) ?? this.wall;
+    if (this.phase === 'walk') {
+      if (this.t > 10) return true;
+      if (!arrive(c, w.x - w.face * (ch.d.thigh + ch.d.shin) * 0.8)) return false;
+      ch.facing = w.face;
+      const j = ch.body.j, high = w.y2 > j.hip.y + 6 * ch.scale;
+      // Low enough: a kick at hip height. Else (the window ends above his hips): a punch.
+      if (high) ch.doGesture('highkick', { x: w.x + w.face * 6, y: j.hip.y - 2 * ch.scale });
+      else ch.doGesture('punch', { x: w.x + w.face * 6, y: Math.min(j.neck.y + 4 * ch.scale, w.y2 - 4) });
+      c.say(pick(['HI-YAH', 'hyah!', 'kiai!']), 1);
+      this.phase = 'kick'; this.t = 0;
+      return false;
+    }
+    if (this.phase === 'kick') {
+      if (ch.currentGesture) return this.t > 3;
+      this.phase = 'watch'; this.t = 0;
+      c.memory.count('windowsMoved');
+      return false;
+    }
+    c.look = 'target';
+    const r = c.world.windows.find((x) => x.id === w.win);
+    if (r) c.lookTarget = { x: r.x + r.w / 2, y: r.y + 20 };
+    if (this.t > 0.6 && chance(0.02)) c.say(pick(['heh', 'nailed it', 'bye window']), 1.2);
+    return this.t > 1.6;
+  }
+  stop(c: Ctx) { c.char.stop(); }
+}
+
+/** Standing on a window, he crouches and shoves off: the window slides across the screen with him riding it. */
+export class WindowSurf extends Skill {
+  readonly name = 'surf';
+  private phase: 'ready' | 'ride' | 'done' = 'ready';
+  private win = -1;
+  start(c: Ctx) {
+    const ch = c.char, p = ch.supportPlatform();
+    this.win = p?.win ?? -1;
+    c.look = 'none';
+    ch.surf = true;
+  }
+  update(c: Ctx) {
+    const ch = c.char, p = ch.supportPlatform();
+    if (this.win < 0 || !p || p.win !== this.win) return this.t > 0.5; // fell off, or never on one
+    if (this.phase === 'ready') {
+      if (this.t < 0.5) return false;
+      const r = c.world.windows.find((x) => x.id === this.win), b = c.world.bounds;
+      const room = r ? { left: r.x - b.left, right: b.right - (r.x + r.w) } : { left: 0, right: 0 };
+      const dir = room.right > room.left ? 1 : -1, space = Math.max(room.left, room.right);
+      if (space < 60 || !c.shoveWindow?.(this.win, dir * clamp(space * 2.2, 260, 720), 0)) { ch.surf = false; c.say(pick(['no room', 'nope']), 1); return true; }
+      ch.facing = dir;
+      c.say(pick(['WHEEE', 'surf\'s up!', 'cowabunga', 'wooo']), 1.6);
+      this.phase = 'ride'; this.t = 0;
+      c.memory.count('windowsMoved');
+      return false;
+    }
+    if (this.phase === 'ride') {
+      if (this.t > 0.3 && !c.windowMoving?.(this.win)) { ch.surf = false; this.phase = 'done'; this.t = 0; if (chance(0.5)) c.say(pick(['again!', 'gnarly', 'whoa']), 1.2); }
+      return this.t > 6;
+    }
+    return this.t > 0.6;
+  }
+  stop(c: Ctx) { c.char.surf = false; }
+}
+
+/** Knock knock: walk up to a window and rap on it. It wobbles a little with each knock. */
+export class KnockWindow extends Skill {
+  readonly name = 'knock';
+  private phase: 'walk' | 'knock' | 'wait' = 'walk';
+  constructor(private wall: Wall) { super(); }
+  start(c: Ctx) { c.look = 'none'; c.char.walkTo(this.wall.x - this.wall.face * (c.char.d.upperArm + c.char.d.foreArm) * 0.7); }
+  update(c: Ctx) {
+    const ch = c.char, w = c.world.walls.find((x) => x.id === this.wall.id) ?? this.wall;
+    if (this.phase === 'walk') {
+      if (this.t > 10) return true;
+      if (!arrive(c, w.x - w.face * (ch.d.upperArm + ch.d.foreArm) * 0.7)) return false;
+      ch.facing = w.face;
+      ch.doGesture('knock', { x: w.x, y: ch.body.j.neck.y + 2 * ch.scale });
+      this.phase = 'knock'; this.t = 0;
+      return false;
+    }
+    if (this.phase === 'knock') {
+      if (ch.currentGesture) return this.t > 3;
+      c.say(pick(['anyone home?', 'hello?', 'knock knock', 'open up!']), 1.6);
+      this.phase = 'wait'; this.t = 0;
+      return false;
+    }
+    if (this.t > 1.8 && ch.ready) { if (chance(0.5)) ch.doGesture('shrug'); return true; }
+    return this.t > 4;
+  }
+  stop(c: Ctx) { c.char.stop(); }
+}
+
+/** Sit on the edge of what he's standing on (a window top, a box), legs dangling, and watch the world. */
+export class LedgeSit extends Skill {
+  readonly name = 'ledgesit';
+  private phase: 'walk' | 'sit' = 'walk';
+  private side: 1 | -1 = 1;
+  constructor(private dur: number) { super(); }
+  start(c: Ctx) {
+    const ch = c.char, r = ch.surfaceRange();
+    this.side = ch.x - r.x1 < r.x2 - ch.x ? -1 : 1;
+    ch.walkTo(this.side > 0 ? r.x2 : r.x1);
+  }
+  update(c: Ctx) {
+    const ch = c.char;
+    if (this.phase === 'walk') {
+      if (this.t > 10) return true;
+      if (!ch.ready || ch.walking) return false;
+      if (!ch.sitEdge(this.side)) return true;
+      this.phase = 'sit'; this.t = 0;
+      if (chance(0.3)) c.say(pick(['nice view', 'ahh', '♪']), 1.4);
+      return false;
+    }
+    if (ch.mode !== 'sit') return true;
+    // Now and then, look down over the edge.
+    c.look = Math.sin(this.t * 0.7) > 0.6 ? 'down' : 'default';
+    if (this.t > this.dur) { ch.standUp(); return false; }
+    return false;
+  }
+  stop(c: Ctx) { if (c.char.mode === 'sit' && c.char.onLedge) c.char.standUp(); }
 }
 
 // ───────────── losing a limb, and getting it back ─────────────

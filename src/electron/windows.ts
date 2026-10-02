@@ -16,8 +16,10 @@ export interface WindowWatcher {
   stop(): void;
   /** macOS: give focus back to the app the user was using. */
   refocus(): void;
-  /** Mischief: move the mouse cursor to (x, y) in screen coordinates. */
+  /** Move the mouse cursor to (x, y) in screen coordinates (he grabbed it, or knocked it flying). */
   moveCursor(x: number, y: number): void;
+  /** Move another app's window so its top-left is at (x, y), in the helper's own screen coordinates. */
+  moveWindow(id: number, x: number, y: number): void;
 }
 
 const nativeDir = path.join(__dirname, 'native');
@@ -96,5 +98,6 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
     stop() { stopped = true; child?.kill(); },
     refocus() { if (process.platform === 'darwin') child?.stdin?.write('refocus\n'); },
     moveCursor(x, y) { child?.stdin?.write(`cursor ${Math.round(x)} ${Math.round(y)}\n`); },
+    moveWindow(id, x, y) { child?.stdin?.write(`win ${Math.round(id)} ${Math.round(x)} ${Math.round(y)}\n`); },
   };
 }

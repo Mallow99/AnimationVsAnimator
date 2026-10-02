@@ -18,8 +18,20 @@ import type { LooseLimb } from './limbs';
 import { limbOf } from './body';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, splitSpeech } from './brain';
-import type { Vec } from './math';
+import { distToSegment, type Vec } from './math';
 import { Memory } from './memory';
+import { CursorBody, drawCursorFlight } from './cursor';
+
+/** A window he's moving (shoved, kicked, pushed, surfing on it): where it is and how it's moving. */
+interface WinMotion {
+  x: number; y: number; vx: number; vy: number;
+  /** Wobbles and settles back here (a knock or a stomp) instead of sliding away. */
+  home?: { x: number; y: number };
+  /** Where it was when he started moving it, and when (to notice if it doesn't really move). */
+  from: { x: number; y: number }; t0: number;
+  /** Being pushed this frame: keep this speed instead of slowing down. */
+  push?: number;
+}
 
 /** A finished drawing kept in his gallery. Shape is in a box from -0.5 to 0.5. */
 export interface Drawing { title: string; shape: Vec[][]; color: string; at: number }
@@ -90,6 +102,21 @@ export class Pet {
   private itemHitCooldown = 0;
   /** You're typing to him (the desktop text box is open): he turns to you and listens. */
   listening = false;
+  /** Your cursor as a thing he can hit (and send flying). */
+  readonly cursorBody = new CursorBody();
+  /** The last punch/kick that connected (one hit per swing), and where the fist was last frame. */
+  private lastStrike = -1;
+  private strikeFrom: Vec | null = null;
+  private bladeCooldown = new Map<object, number>();
+  /** Set by the app: moves another app's window to (x, y) (overlay coordinates of its top-left). */
+  onMoveWindow: ((id: number, x: number, y: number, w: number, h: number) => void) | null = null;
+  private winMotion = new Map<number, WinMotion>();
+  /** Windows that just stopped moving: ignore the (late) reports of where they were, for a moment. */
+  private winQuiet = new Map<number, { x: number; y: number; until: number }>();
+  /** Where the desktop last said each window was (not smoothed, not overridden). */
+  private winReported = new Map<number, WinRect>();
+  /** Moving windows didn't work (no permission?): don't try again until this time. */
+  windowsStuckUntil = -1;
 
   constructor(bounds: Bounds, readonly config: PetConfig = structuredClone(DEFAULT_CONFIG)) {
     this.char = new Character(bounds, (bounds.left + bounds.right) / 2, config.scale);
@@ -97,10 +124,12 @@ export class Pet {
     // Start him up in the air so he drops in.
     this.char.body.translate(0, -Math.min(260, (bounds.floor - bounds.top) * 0.4));
     this.char.mode = 'air';
+    const pet = this;
     this.ctx = {
+      get canMoveWindows() { return pet.config.moveWindows && pet.config.windows && !!pet.onMoveWindow && pet.ctx.world.time > pet.windowsStuckUntil; },
       char: this.char,
       mood: this.mood,
-      world: { bounds, cursor: null, cursorMovedAt: -100, time: 0, platforms: [], walls: windowWalls([], bounds) },
+      world: { bounds, cursor: null, cursorMovedAt: -100, time: 0, platforms: [], walls: windowWalls([], bounds), windows: [] },
       lessons: { ...DEFAULT_LESSONS },
       look: 'default',
       say: (text, secs) => this.say(text, secs),
@@ -112,13 +141,15 @@ export class Pet {
       memory: this.memory,
       items: this.items,
       sound: (name, strength) => this.sound(name, strength ?? 1),
-      hitCursor: (x, y, dir) => this.swordHitsCursor(x, y, dir),
+      hitCursor: (x, y, vx, vy, power) => this.knockCursor({ x, y }, vx, vy, power, 'item'),
+      shoveWindow: (id, vx, vy, spring) => this.shoveWindow(id, vx, vy, spring),
+      pushWindow: (id, vx) => this.pushWindow(id, vx),
+      windowMoving: (id) => this.winMotion.has(id),
       props: this.props,
       onBecome: (d) => this.becomeReal(d),
     };
     this.props.onPlatforms = () => this.refreshPlatforms();
-    this.items.give('pen', this.char);
-    this.items.give('sword', this.char);
+    this.items.giveNewBuiltins(this.char); // his pen, his sword, his mallet, a bouncy ball
     this.items.onChange = () => this.onCollections?.();
     this.memory.onChange = () => { this.onCollections?.(); this.onMemorySave?.(this.memory.save()); };
     this.brain.onSpeak = (text) => this.speak(text);
@@ -139,15 +170,22 @@ export class Pet {
     this.ctx.canGrabCursor = this.config.mischief && !!this.onMoveCursor;
     if (this.freeze > 0) { this.freeze -= dt; dt = 0; }
     this.acc += dt;
+    this.stepWindows(dt);
     this.smoothWindows(dt);
     while (this.acc >= STEP) {
       this.char.step(STEP);
       this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.ctx.world.platforms);
+      this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms);
       this.ballContact();
       this.acc -= STEP;
     }
     this.items.update(this.char, dt, this.ctx.world.bounds, this.ctx.world.platforms, this.ctx.world.cursor);
-    this.itemHits();
+    if (!this.cursorBody.busy(this.ctx.world.time)) this.itemHits();
+    this.strikes();
+    this.bladeHits();
+    this.flyingItems();
+    this.flyCursor(dt);
+    this.anchorDoodles();
     for (const e of this.char.drainEvents()) { this.effects(e); this.emit(e); }
     // A single click on him turns into a poke once it's clearly not a double-click.
     const pp = this.pendingPoke;
@@ -214,6 +252,12 @@ export class Pet {
       case 'released': if ((e.speed ?? 0) > 900) this.sound('whoosh', 0.6); break;
       case 'limbOff': this.sound('snap'); break;
       case 'limbOn': this.sound('click'); break;
+      case 'knock': this.sound('knock'); this.knockOnWindow(e as unknown as { x: number; y: number }); break;
+    }
+    // Stomping (or landing hard) on a window: it dips under him and springs back.
+    const pl = this.char.supportPlatform();
+    if (pl?.win !== undefined && (e.type === 'stomped' || (e.type === 'landed' && (e.speed ?? 0) > 500))) {
+      this.shoveWindow(pl.win, 0, e.type === 'stomped' ? 160 : Math.min(320, (e.speed ?? 0) * 0.25), true);
     }
     if (e.type === 'limbOff' || e.type === 'limbOn') {
       // No gore: a burst of pixel sparks, and a hit-stop when it snaps.
@@ -225,6 +269,13 @@ export class Pet {
       }
       if (off) this.freeze = 0.09;
     }
+  }
+
+  /** A knock on a window's side: it wobbles a little. */
+  private knockOnWindow(at: { x: number; y: number }) {
+    const sc = this.char.scale;
+    const wl = this.ctx.world.walls.find((w) => w.win !== undefined && Math.abs(w.x - at.x) < 10 * sc && at.y >= w.y1 && at.y <= w.y2);
+    if (wl) this.shoveWindow(wl.win!, wl.face * 60, 0, true);
   }
 
   /** Say something longer: split into bubble-sized pieces, shown one after another. */
@@ -239,7 +290,7 @@ export class Pet {
     // Squash and stretch (drawing only): scale him about his feet for a moment.
     const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
-    const extras: DepthPart[] = [...beltParts(this.char, '#3a2a22'), ...this.items.onHim.map((it) => this.itemPart(it))];
+    const extras: DepthPart[] = [...beltParts(this.char, '#3a2a22'), ...this.items.onHim.filter((it) => !(it.where === 'belt' && it.slot === 3)).map((it) => this.itemPart(it))];
     if (look.pixel > 1) {
       this.pixels.draw(ctx, this.char, look, extras);
       for (const it of this.items.list) if (it.where === 'world' || it.where === 'cursor') this.pixels.paint(ctx, [it.butt, it.tip], 6 * this.char.scale, { ...look, outline: false }, (g) => drawItem(g, it));
@@ -253,6 +304,7 @@ export class Pet {
     if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
     this.props.draw(ctx, this.ctx.world.time);
+    drawCursorFlight(ctx, this.cursorBody, this.ctx.world.time, !this.onMoveCursor);
     for (const h of this.hearts) {
       ctx.save();
       ctx.globalAlpha = Math.max(0, 1 - h.t / 1.4);
@@ -302,6 +354,7 @@ export class Pet {
     this.onMoveCursor(x, y);
     this.cursorCmd = { x, y, t: this.ctx.world.time };
     this.ctx.world.cursor = { x, y };
+    this.ctx.world.cursorMovedAt = this.ctx.world.time; // it's moving (he's dragging it)
     return true;
   }
 
@@ -313,7 +366,93 @@ export class Pet {
    * They arrive a few dozen times a second at most, so instead of jumping to each
    * new position we glide toward it every frame — that keeps rides smooth.
    */
-  setWindows(wins: WinRect[]) { this.winTarget = wins.map((w) => ({ ...w })); }
+  setWindows(wins: WinRect[]) {
+    const now = this.ctx.world.time;
+    for (const w of wins) this.winReported.set(w.id, { ...w });
+    // A window he's moving: we know better where it is than the (slightly late) report.
+    this.winTarget = wins.map((w) => {
+      const m = this.winMotion.get(w.id), q = this.winQuiet.get(w.id);
+      if (m) return { ...w, x: m.x, y: m.y };
+      if (q && now < q.until && (Math.abs(w.x - q.x) > 1 || Math.abs(w.y - q.y) > 1)) return { ...w, x: q.x, y: q.y };
+      return { ...w };
+    });
+  }
+
+  // ── moving your windows (he pushes, kicks, surfs on them) ──
+
+  /** Give a window a shove (px/s). `spring`: it wobbles back to where it was. False if he can't. */
+  shoveWindow(id: number, vx: number, vy: number, spring = false) {
+    if (!this.ctx.canMoveWindows) return false;
+    const m = this.motionFor(id);
+    if (!m) return false;
+    if (spring && !m.home) m.home = { x: m.x, y: m.y };
+    m.vx += vx; m.vy += vy;
+    return true;
+  }
+
+  /** He's pushing a window along: keep it moving at vx (px/s) this frame. */
+  pushWindow(id: number, vx: number) {
+    if (!this.ctx.canMoveWindows) return false;
+    const m = this.motionFor(id);
+    if (!m) return false;
+    m.home = undefined;
+    m.push = vx;
+    return true;
+  }
+
+  private motionFor(id: number): WinMotion | null {
+    const have = this.winMotion.get(id);
+    if (have) return have;
+    const r = this.winShown.find((w) => w.id === id);
+    if (!r) return null;
+    const m: WinMotion = { x: r.x, y: r.y, vx: 0, vy: 0, from: { x: r.x, y: r.y }, t0: this.ctx.world.time };
+    this.winMotion.set(id, m);
+    return m;
+  }
+
+  /** Move the windows he set in motion: they slide and slow down (or wobble home), and stay on screen. */
+  private stepWindows(dt: number) {
+    if (!this.winMotion.size) return;
+    const b = this.ctx.world.bounds, now = this.ctx.world.time;
+    for (const [id, m] of this.winMotion) {
+      const r = this.winShown.find((w) => w.id === id) ?? this.winReported.get(id);
+      if (!r || !this.ctx.canMoveWindows) { this.winMotion.delete(id); continue; }
+      if (m.push !== undefined) { m.vx += (m.push - m.vx) * Math.min(1, dt * 12); m.push = undefined; }
+      else if (m.home) {
+        // A springy wobble back to where it was.
+        m.vx += (-(m.x - m.home.x) * 260 - m.vx * 14) * dt;
+        m.vy += (-(m.y - m.home.y) * 260 - m.vy * 14) * dt;
+      } else { const f = Math.exp(-dt * 3.2); m.vx *= f; m.vy *= f; }
+      m.x += m.vx * dt; m.y += m.vy * dt;
+      // Keep it on screen: bounce off the edges (a window wider than the screen just stays put sideways).
+      const minX = Math.min(b.left, b.right - r.w), maxX = Math.max(b.left, b.right - r.w);
+      if (m.x < minX) { m.x = minX; m.vx = Math.abs(m.vx) * 0.4; this.sound('thud', 0.4); }
+      if (m.x > maxX) { m.x = maxX; m.vx = -Math.abs(m.vx) * 0.4; this.sound('thud', 0.4); }
+      if (m.y < b.top) { m.y = b.top; m.vy = Math.abs(m.vy) * 0.4; }
+      if (m.y > b.floor - 40) { m.y = b.floor - 40; m.vy = -Math.abs(m.vy) * 0.4; }
+      this.onMoveWindow?.(id, Math.round(m.x), Math.round(m.y), r.w, r.h);
+      const t = this.winTarget?.find((w) => w.id === id);
+      if (t) { t.x = m.x; t.y = m.y; }
+      // Did the window really move? If the desktop still reports it where it started, moving windows isn't working.
+      const rep = this.winReported.get(id);
+      if (rep && now - m.t0 > 0.8 && Math.hypot(m.x - m.from.x, m.y - m.from.y) > 25 && Math.hypot(rep.x - m.from.x, rep.y - m.from.y) < 2) {
+        this.windowsStuckUntil = now + 600;
+        this.winMotion.clear(); this.winQuiet.clear();
+        if (this.winTarget) this.setWindows([...this.winReported.values()].filter((w) => this.winTarget!.some((x) => x.id === w.id)));
+        this.emit({ type: 'windowStuck' });
+        return;
+      }
+      const still = Math.hypot(m.vx, m.vy) < 8 && (!m.home || Math.hypot(m.x - m.home.x, m.y - m.home.y) < 0.6);
+      if (still) {
+        if (m.home) { m.x = m.home.x; m.y = m.home.y; this.onMoveWindow?.(id, Math.round(m.x), Math.round(m.y), r.w, r.h); }
+        this.winMotion.delete(id);
+        this.winQuiet.set(id, { x: m.x, y: m.y, until: now + 0.6 });
+      }
+    }
+  }
+
+  /** Is a window being moved by him right now? */
+  windowMoving(id: number) { return this.winMotion.has(id); }
 
   private smoothWindows(dt: number) {
     const target = this.winTarget;
@@ -332,6 +471,7 @@ export class Pet {
       return next;
     });
     this.winShown = shown;
+    this.ctx.world.windows = shown;
     if (!changed) return;
     this.windowPlats = windowPlatforms(shown, this.ctx.world.bounds, 40, this.headroom());
     this.refreshPlatforms();
@@ -367,9 +507,20 @@ export class Pet {
     if (d.becomes) this.props.bringToLife(d, d.becomes, this.ctx.world.bounds);
   }
 
-  /** Balls meet his feet (kicks, dribbling) and his body (a ball flying into him: bonk). */
+  /** Balls meet his feet (kicks, dribbling) and his body (a ball flying into him: bonk). Things on the floor get scuffed along. */
   private ballContact() {
     const j = this.char.body.j, sc = this.char.scale, t = this.ctx.world.time;
+    // (Running past, not when he's walking up to pick it up.)
+    const fetching = this.mind.skill?.name === 'pickup' || this.char.handTarget !== null;
+    for (const it of this.items.list) {
+      if (it.where !== 'world' || fetching) continue;
+      for (const n of ['footL', 'footR'] as const) {
+        if (this.char.body.ghost.has(n)) continue;
+        const f = j[n], fvx = (f.x - f.px) * 120;
+        if (Math.abs(fvx) < 150 || it.distTo(f.x, f.y) > 4 * sc) continue;
+        it.push(fvx * 0.9, -Math.abs(fvx) * 0.15);
+      }
+    }
     for (const b of this.props.balls) {
       if (b.heldBy) continue;
       for (const n of ['footL', 'footR'] as const) {
@@ -440,6 +591,13 @@ export class Pet {
    */
   cursor(x: number, y: number, vx = 0, vy = 0) {
     const w = this.ctx.world, r = this.rub;
+    // He knocked your cursor flying: the desktop reports the moves we make. Those aren't you.
+    // A position off our path means you grabbed the mouse: it's yours again.
+    const cb = this.cursorBody;
+    if (cb.busy(w.time)) {
+      if (cb.ours(x, y, w.time)) return;
+      if (cb.flying) { cb.cancel(); this.emit({ type: 'cursorFreed' }); }
+    }
     const speed = Math.hypot(vx, vy);
     // He's holding the cursor and you pulled it away: you win.
     const held = this.cursorCmd;
@@ -451,6 +609,7 @@ export class Pet {
         const px = r.lastX + ((x - r.lastX) * i) / (steps || 1), py = r.lastY + ((y - r.lastY) * i) / (steps || 1);
         const joint = this.char.hitTest(px, py, 4);
         if (!joint) continue;
+        if (this.parry(px, py, vx, vy, r.lastX)) { this.smackCooldown = w.time + 0.35; break; }
         const k = Math.min(speed, 5000) / speed * 0.55; // a share of the swipe's speed goes into him
         // A really hard swipe through an arm or a leg knocks it clean off.
         const limb = limbOf(joint);
@@ -501,6 +660,7 @@ export class Pet {
       if (joint) this.giveBack(carried);
       else {
         this.items.drop(carried, this.cursorVel.x * 0.6, this.cursorVel.y * 0.6);
+        carried.thrownAt = w.time; // thrown hard enough, it can bonk him
         this.sound('drop', 0.6);
         this.emit({ type: 'itemDropped', name: carried.def.name.toLowerCase(), uid: carried.uid });
       }
@@ -648,15 +808,212 @@ export class Pet {
     }
   }
 
-  /** His sword hit your cursor: a clang and sparks, and in mischief mode it knocks your cursor away. */
-  private swordHitsCursor(x: number, y: number, dir: number) {
-    for (let i = 0; i < 10; i++) {
-      const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * 200;
-      this.sparks.push({ x, y, vx: Math.cos(a) * v + dir * 120, vy: Math.sin(a) * v - 80, t: 0, life: 0.3 + Math.random() * 0.3, color: i % 2 ? '#ffffff' : '#ffe66d' });
+  /**
+   * He hit your cursor (a punch, a kick, his sword, a thrown ball...), at `at`, moving it at (vx, vy):
+   * sparks, a smack sound, a split-second freeze, and (if that's on) the real cursor goes flying.
+   */
+  knockCursor(at: Vec, vx: number, vy: number, power: number, by: string) {
+    const sp = Math.hypot(vx, vy) || 1, cap = 2600 / sp;
+    if (cap < 1) { vx *= cap; vy *= cap; }
+    const dir = Math.sign(vx || this.char.facing);
+    for (let i = 0; i < 8 + power * 8; i++) {
+      const a = Math.random() * Math.PI * 2, v = 100 + Math.random() * 220 * (0.5 + power);
+      this.sparks.push({ x: at.x, y: at.y, vx: Math.cos(a) * v + dir * 140, vy: Math.sin(a) * v - 90, t: 0, life: 0.25 + Math.random() * 0.3, color: i % 3 ? '#ffffff' : '#ffe66d' });
     }
-    this.freeze = 0.05;
+    this.freeze = Math.max(this.freeze, 0.03 + 0.05 * Math.min(1, power));
+    this.sound(by === 'item' ? 'clang' : 'punch', Math.min(1, 0.4 + power * 0.6));
+    if (this.config.knockCursor) this.cursorBody.hit(at, vx, vy, this.ctx.world.time);
+    this.memory.count('cursorHits');
+    this.emit({ type: 'hitCursor', power, by });
+  }
+
+  /** The knocked cursor flies along; the real one follows (on the desktop). */
+  private flyCursor(dt: number) {
+    const w = this.ctx.world;
+    const at = this.cursorBody.step(dt, w.bounds, w.platforms, w.time);
+    if (!at) return;
+    this.onMoveCursor?.(at.x, at.y);
+    w.cursor = at;
+    w.cursorMovedAt = w.time;
+  }
+
+  /** His punches and kicks: does the fist (or foot) meet your cursor, his ball, or something lying around? */
+  private strikes() {
+    const st = this.char.strike, w = this.ctx.world, sc = this.char.scale;
+    if (!st) { this.strikeFrom = null; return; }
+    const p = this.char.body.j[st.joint];
+    const from = this.strikeFrom ?? { x: p.x, y: p.y };
+    this.strikeFrom = { x: p.x, y: p.y };
+    if (st.id === this.lastStrike) return;
+    const jv = { x: (p.x - p.px) / STEP, y: (p.y - p.py) / STEP };
+    const cur = w.cursor;
+    if (cur && distToSegment(cur.x, cur.y, from.x, from.y, p.x, p.y) < 10 * sc) {
+      // Knocked along the way the punch was going, plus a pop upward so it arcs.
+      const base = st.joint.startsWith('foot') ? this.char.body.j.hip : this.char.body.j.neck;
+      const dx = cur.x - base.x, dy = cur.y - base.y, d = Math.hypot(dx, dy) || 1;
+      const speed = 500 + 900 * st.power;
+      this.lastStrike = st.id;
+      this.knockCursor({ x: cur.x, y: cur.y }, (dx / d) * speed + jv.x * 0.3, (dy / d) * speed + jv.y * 0.3 - 320 * st.power, st.power, st.joint.startsWith('foot') ? 'foot' : 'fist');
+      return;
+    }
+    // A window's side: punched or kicked, it shoots off the way he hit it.
+    if (this.ctx.canMoveWindows) {
+      for (const wl of w.walls) {
+        if (wl.win === undefined || this.winMotion.has(wl.win) || p.y < wl.y1 || p.y > wl.y2) continue;
+        if (Math.min(from.x, p.x) - 5 * sc > wl.x || Math.max(from.x, p.x) + 5 * sc < wl.x) continue;
+        if (Math.sign(jv.x) === -wl.face && Math.abs(jv.x) > 80) continue; // pulling back, not hitting it
+        this.lastStrike = st.id;
+        if (this.shoveWindow(wl.win, wl.face * (350 + 750 * st.power), 0)) {
+          this.sound('punch', 0.9); this.sound('thud', 0.7);
+          this.burstAt(wl.x, p.y, 12);
+          this.freeze = Math.max(this.freeze, 0.06);
+        }
+        return;
+      }
+    }
+    for (const b of this.props.balls) {
+      if (b.heldBy || Math.hypot(b.x - p.x, b.y - p.y) > b.r + 6 * sc) continue;
+      this.lastStrike = st.id;
+      b.kick(jv.x * 0.8 + this.char.facing * 300 * st.power, Math.min(b.vy, jv.y * 0.6) - 280 * st.power);
+      this.sound('kick', 0.7);
+      return;
+    }
+    for (const it of this.items.list) {
+      if (it.where !== 'world' || it.distTo(p.x, p.y) > 7 * sc) continue;
+      this.lastStrike = st.id;
+      it.push(jv.x * 0.6 + this.char.facing * 200 * st.power, -220 * st.power);
+      this.sound('kick', 0.4);
+      return;
+    }
+  }
+
+  /**
+   * Something swung in his hand (his sword, his mallet) whacks what it passes through:
+   * his ball (batting practice), things lying around, loose limbs, and the sides of windows.
+   */
+  private bladeHits() {
+    const w = this.ctx.world, sc = this.char.scale;
+    for (const it of this.items.list) {
+      if (it.where !== 'hand' || it.def.hit <= 0 || it.tipSpeed < 420) continue;
+      const a = it.butt, b = it.tip, v = it.tipVel, power = Math.min(1.5, it.tipSpeed / 1200) * it.def.hit;
+      const ready = (o: object) => (this.bladeCooldown.get(o) ?? -1) < w.time;
+      const seg = (x: number, y: number) => distToSegment(x, y, a.x, a.y, b.x, b.y);
+      for (const ball of this.props.balls) {
+        if (ball.heldBy || !ready(ball) || seg(ball.x, ball.y) > ball.r + 3 * sc) continue;
+        this.bladeCooldown.set(ball, w.time + 0.3);
+        ball.kick(v.x * 0.9, Math.min(v.y * 0.9, -150) - 200);
+        this.sound(it.def.use === 'smash' ? 'bonk' : 'kick', 0.9);
+      }
+      for (const other of this.items.list) {
+        if (other === it || other.where !== 'world' || !ready(other) || seg(other.at.x, other.at.y) > 7 * sc) continue;
+        this.bladeCooldown.set(other, w.time + 0.3);
+        other.push(v.x * 0.7, Math.min(v.y * 0.7, -120) - 150);
+        other.thrownAt = w.time;
+        this.sound('clang', 0.5);
+      }
+      for (const piece of this.char.missing.values()) {
+        if (piece.heldBy || !ready(piece) || seg(piece.root.x, piece.root.y) > 8 * sc) continue;
+        this.bladeCooldown.set(piece, w.time + 0.4);
+        for (const q of piece.points) { q.px = q.x - v.x * 0.5 / 120; q.py = q.y - (v.y * 0.5 - 200) / 120; }
+        this.sound('thwack', 0.5);
+      }
+      // Windows: the blade crossing one of their sides knocks them.
+      if (this.ctx.canMoveWindows) {
+        for (const wl of w.walls) {
+          if (wl.win === undefined || !ready(wl) || this.winMotion.has(wl.win)) continue;
+          if (Math.min(a.x, b.x) > wl.x || Math.max(a.x, b.x) < wl.x) continue;
+          const yAt = a.x === b.x ? a.y : a.y + (b.y - a.y) * ((wl.x - a.x) / (b.x - a.x));
+          if (yAt < wl.y1 || yAt > wl.y2) continue;
+          if (Math.sign(v.x) !== -wl.face && Math.abs(v.x) > 100) continue; // swinging away from it
+          this.bladeCooldown.set(wl, w.time + 0.5);
+          this.shoveWindow(wl.win, -wl.face * (250 + 450 * power), it.def.use === 'smash' ? 120 : 0);
+          this.sound(it.def.use === 'smash' ? 'bonk' : 'clang', 0.8);
+          this.burstAt(wl.x, yAt, 8);
+        }
+        // A smash on top of the window he's standing on: it jolts down and springs back.
+        const pl = this.char.supportPlatform();
+        if (it.def.use === 'smash' && pl?.win !== undefined && v.y > 300 && ready(pl) && Math.abs(b.y - pl.y) < 8 * sc) {
+          this.bladeCooldown.set(pl, w.time + 0.5);
+          this.shoveWindow(pl.win, 0, 500 * power, true);
+          this.sound('bonk', 1);
+          this.burstAt(b.x, pl.y, 10);
+        }
+      }
+    }
+  }
+
+  private burstAt(x: number, y: number, n: number) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 180;
+      this.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, t: 0, life: 0.25 + Math.random() * 0.3, color: i % 2 ? '#ffffff' : '#ffe66d' });
+    }
+  }
+
+  /** Things flying through the air (his ball, or something you threw): they can hit your cursor, or him. */
+  private flyingItems() {
+    const w = this.ctx.world, cur = w.cursor, t = w.time, sc = this.char.scale;
+    for (const it of this.items.list) {
+      if (it.where !== 'world' || t - it.thrownAt > 2.5) continue;
+      const v = { x: (it.a.x - it.a.px) * 120, y: (it.a.y - it.a.py) * 120 }, speed = Math.hypot(v.x, v.y);
+      if (speed < 260) continue;
+      if (cur && it.distTo(cur.x, cur.y) < 9 * sc && (this.bladeCooldown.get(it) ?? -1) < t) {
+        this.bladeCooldown.set(it, t + 0.4);
+        this.knockCursor({ x: cur.x, y: cur.y }, v.x * 0.9, v.y * 0.9 - 200, Math.min(1, speed / 1200) * Math.max(0.4, it.def.hit), 'item');
+        it.push(-v.x * 0.35, -Math.abs(v.y) * 0.3 - 120); // and it bounces off
+        continue;
+      }
+      // Flying into him (not right after he threw it).
+      if (t - it.thrownAt > 0.35 && speed > 420 && t > this.bonkCooldown) {
+        const joint = this.char.hitTest(it.at.x, it.at.y, 3);
+        if (joint && !joint.startsWith('foot')) {
+          this.char.poke(joint, v.x * 0.3, v.y * 0.3 - 80);
+          it.push(-v.x * 0.3, -Math.abs(v.y) * 0.3 - 150);
+          this.bonkCooldown = t + 0.6;
+          this.sound('bonk', Math.min(1, speed / 1200));
+          this.emit({ type: 'bonked', speed });
+        }
+      }
+    }
+  }
+
+  /**
+   * You swiped at him while he's ready for it (sword out, or fists up): he blocks it and
+   * knocks your cursor back. Returns true if he did.
+   */
+  private parry(x: number, y: number, vx: number, vy: number, fromX: number) {
+    const ch = this.char, w = this.ctx.world;
+    if (this.mood.asleep || ch.mode !== 'ground') return false;
+    const blade = this.items.list.find((it) => it.where === 'hand' && (it.def.use === 'swing' || it.def.use === 'smash'));
+    // He can only block what comes at him from the front.
+    const facing = Math.sign(fromX - ch.x) === ch.facing || Math.sign(vx) === -ch.facing;
+    const odds = blade ? 0.7 : ch.guard ? 0.35 : 0;
+    if (!facing || Math.random() >= odds) return false;
+    this.knockCursor({ x, y }, -vx * 0.6 + ch.facing * 500, -vy * 0.4 - 250, blade ? 0.9 : 0.6, blade ? 'item' : 'fist');
     this.sound('clang', 1);
-    if (this.config.mischief && this.onMoveCursor) this.moveCursor(x + dir * 70, y - 25);
+    this.emit({ type: 'parried' });
+    w.cursorMovedAt = w.time;
+    return true;
+  }
+
+  /** Finished drawings on top of a window stick to it: they move with it, and go when it does. */
+  private anchorDoodles() {
+    const wins = this.ctx.world.windows, now = this.ctx.world.time;
+    for (const d of this.ctx.doodles) {
+      if (d.alive || d.becomes) continue;
+      if (d.win === undefined) {
+        if (!d.done || d.anchored || d.cx === undefined || d.cy === undefined) continue;
+        d.anchored = true;
+        const host = wins.find((r) => d.cx! >= r.x && d.cx! <= r.x + r.w && d.cy! >= r.y && d.cy! <= r.y + r.h);
+        if (host) { d.win = host.id; d.wx = host.x; d.wy = host.y; }
+        continue;
+      }
+      const r = wins.find((x) => x.id === d.win);
+      if (!r) { d.born = Math.min(d.born, now - DOODLE_LIFE + 0.6); continue; } // the window's gone: so is the drawing
+      const dx = r.x - d.wx!, dy = r.y - d.wy!;
+      if (!dx && !dy) continue;
+      for (const st of d.strokes) for (const q of st) { q.x += dx; q.y += dy; }
+      d.cx! += dx; d.cy! += dy; d.wx = r.x; d.wy = r.y;
+    }
   }
 
   /** Play a sound effect (if sounds are on). */
@@ -703,6 +1060,7 @@ export class Pet {
       why: this.mind.why,
       recent: this.mind.recent.slice(-8),
       windows: this.winShown.length,
+      windowsStuck: this.ctx.world.time < this.windowsStuckUntil,
       platforms: this.ctx.world.platforms.length,
       brain: { active: this.brain.active, status: this.brain.status, log: this.brain.log.slice(-20) },
       // For the neurons view: everything he's weighing, how much, and what won.
@@ -825,7 +1183,7 @@ export class Pet {
 
   // ── saving between runs ──
   save() {
-    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save() });
+    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known] });
   }
   load(json: string | null) {
     if (!json) return;
@@ -836,7 +1194,7 @@ export class Pet {
       if (Array.isArray(d.gallery)) this.gallery = d.gallery.slice(-40);
       // Same array object the brain and mind already hold: fill it in place.
       if (Array.isArray(d.moves)) this.brain.savedMoves.splice(0, Infinity, ...d.moves.slice(-30));
-      if (Array.isArray(d.items)) this.items.load(d.items, this.char);
+      if (Array.isArray(d.items)) this.items.load(d.items, this.char, d.itemsKnown);
     } catch { /* corrupt save: start fresh */ }
   }
 }

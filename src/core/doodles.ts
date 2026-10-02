@@ -16,6 +16,10 @@ export interface Doodle {
   cx?: number; cy?: number; size?: number;
   /** It came to life: the drawing is now part of a real object (drawn by that object, not here). */
   alive?: boolean;
+  /** Drawn on a window: it sticks to it (moves with it). Which window, and where that window was. */
+  win?: number; wx?: number; wy?: number;
+  /** Already checked whether it was drawn on a window. */
+  anchored?: boolean;
 }
 
 const arc = (cx: number, cy: number, r: number, a0: number, a1: number, n = 18): Vec[] =>

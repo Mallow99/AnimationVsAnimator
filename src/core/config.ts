@@ -35,6 +35,10 @@ export interface PetConfig {
   windows: boolean;
   /** Desktop Goose mode: he may grab your cursor and drag it around for a moment. */
   mischief: boolean;
+  /** His punches, kicks and sword hits knock your real cursor flying (move the mouse to take it back). */
+  knockCursor: boolean;
+  /** He can push, kick and surf on your windows (moves them for real; macOS asks for Accessibility permission). */
+  moveWindows: boolean;
   /** Little blips when he talks, like characters in indie games. */
   sound: boolean;
   /** Limbs can come off: big crashes, hard smacks, or yanking a hand or foot. He puts them back on. */
@@ -63,6 +67,8 @@ export const DEFAULT_CONFIG: PetConfig = {
   smacking: false,
   windows: true,
   mischief: false,
+  knockCursor: true,
+  moveWindows: true,
   sound: true,
   destructible: true,
   sfx: true,

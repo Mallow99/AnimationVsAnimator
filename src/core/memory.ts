@@ -25,7 +25,7 @@ export interface Note {
 }
 
 /** Things he counts over his whole life. */
-export const TALLY_KEYS = ['thrown', 'poked', 'petted', 'smacked', 'grabbed', 'crashed', 'fellOff', 'talks', 'ripped', 'itemsTaken'] as const;
+export const TALLY_KEYS = ['thrown', 'poked', 'petted', 'smacked', 'grabbed', 'crashed', 'fellOff', 'talks', 'ripped', 'itemsTaken', 'cursorHits', 'windowsMoved'] as const;
 export type TallyKey = (typeof TALLY_KEYS)[number];
 
 /** Notes he writes the first time something happens, and again when it keeps happening. */
@@ -57,6 +57,14 @@ const MILESTONES: Partial<Record<TallyKey, { at: number; text: string; kind: Not
   ],
   itemsTaken: [{ at: 1, text: 'you took my stuff once.', kind: 'you', weight: 2 }],
   talks: [{ at: 1, text: 'you talked to me for the first time.', kind: 'event', weight: 2 }],
+  cursorHits: [
+    { at: 1, text: 'I punched your cursor. it went FLYING.', kind: 'event', weight: 2 },
+    { at: 25, text: 'hitting your cursor is my favorite sport.', kind: 'opinion', weight: 2 },
+  ],
+  windowsMoved: [
+    { at: 1, text: 'I moved one of your windows. it was heavy.', kind: 'event', weight: 2 },
+    { at: 20, text: 'your windows are my furniture now.', kind: 'opinion', weight: 2 },
+  ],
 };
 
 const MAX_NOTES = 80;

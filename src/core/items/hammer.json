@@ -1,0 +1,16 @@
+{
+  "id": "hammer",
+  "name": "Mallet",
+  "about": "A big wooden mallet. Overhead smashes: bonks your cursor into the floor, and windows he's standing on.",
+  "use": "smash",
+  "length": 24,
+  "grip": 3,
+  "belt": "side",
+  "hit": 1.5,
+  "shape": [
+    { "pts": [[-3, 0], [17, 0]], "color": "#8a5a30", "width": 2.6 },
+    { "pts": [[18, -7], [18, 7]], "color": "#6e4424", "width": 9 },
+    { "pts": [[18, -7.5], [18, -5.5]], "color": "#4a2e1a", "width": 9.4 },
+    { "pts": [[18, 5.5], [18, 7.5]], "color": "#4a2e1a", "width": 9.4 }
+  ]
+}

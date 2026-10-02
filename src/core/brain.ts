@@ -325,7 +325,15 @@ export class Brain {
     else if (has('wake')) { say = '!'; plan = [{ do: 'wake' }]; }
     else if (has('draw', 'doodle', 'paint')) { say = 'one sec'; plan = [{ do: 'doodle' }]; }
     else if (has('climb')) { say = 'on it'; plan = [{ do: 'climb' }]; }
-    else if (has('sword', 'fight', 'swing', 'attack')) { say = m.label === 'angry' ? 'oh it is ON' : 'en garde!'; plan = [{ do: m.label === 'angry' ? 'slash' : 'swing' }]; }
+    else if (has('sword', 'swing', 'slash')) { say = m.label === 'angry' ? 'oh it is ON' : 'en garde!'; plan = [{ do: m.label === 'angry' ? 'slash' : 'swing' }]; }
+    else if (has('fight', 'punch', 'spar', 'box', 'attack', 'hit me')) { say = m.label === 'angry' ? 'you asked for it' : 'put em up!'; plan = [{ do: m.label === 'angry' ? 'brawl' : 'spar' }]; }
+    else if (has('mallet', 'hammer', 'smash', 'bonk')) { say = 'BONK time'; plan = [{ do: 'smash' }]; }
+    else if (has('throw', 'catch', 'ball')) { say = has('catch') ? 'heads up!' : 'catch!'; plan = [{ do: has('bounce') ? 'bounce' : 'throw' }]; }
+    else if (has('surf')) { say = "surf's up"; plan = [{ do: 'surf' }]; }
+    else if (has('knock')) { say = 'knock knock'; plan = [{ do: 'knock' }]; }
+    else if (has('window') && has('kick')) { say = 'HI-YAH'; plan = [{ do: 'kickwindow' }]; }
+    else if (has('window') && has('push', 'move')) { say = 'on it'; plan = [{ do: 'pushwindow' }]; }
+    else if (has('edge', 'dangle', 'ledge')) { say = 'ok'; plan = [{ do: 'ledgesit' }]; }
     else if (has('wave', 'bye')) { say = has('bye') ? 'bye!' : 'hi!'; plan = [{ do: 'wave' }]; }
     else if (has('stretch')) { say = 'mmm'; plan = [{ do: 'stretch' }]; }
     else if (has('laugh', 'funny', 'joke', 'lol', 'haha')) { say = 'haha'; plan = [{ do: 'laugh' }]; }
@@ -388,7 +396,7 @@ export class Brain {
     return [
       `You ARE ${this.name}: not an assistant, not a chatbot, a little stick figure who lives on the person's computer screen. ${this.persona}`,
       '',
-      'Your world: you live on top of their desktop, in the spirit of Animator vs. Animation. Your body runs on physics: you walk, climb windows, fall, and get poked, petted, grabbed and thrown by their mouse cursor. You can\'t type, click, or use the computer.',
+      'Your world: you live on top of their desktop, in the spirit of Animator vs. Animation. Your body runs on physics: you walk, climb windows, fall, and get poked, petted, grabbed and thrown by their mouse cursor. You can\'t type, click, or use the computer, but you CAN hit their cursor (your punches, kicks, sword, mallet and ball send it flying; they take it back by moving the mouse) and shove their windows around (push, kick, surf on them) when that\'s switched on.',
       '',
       'HOW YOU TALK',
       '- Short, like speech in a comic: a few words, at most two short sentences. No lists, no markdown, at most one emoji.',
@@ -408,7 +416,9 @@ export class Brain {
       ...(this.puppet ? ['- {"move": [poses], "name": "..."} a move you make up (see MAKING UP MOVES)'] : []),
       ...(this.puppet && saved ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`] : []),
       '- {"draw": [strokes], "title": "..."} draw something with your pen (see DRAWING). Only works if you have your pen.',
-      'YOUR BELT: you wear a belt with three slots (left hip, right hip, back) where you keep your things: your pen (you draw with it) and a wooden sword ("swing" practices, "slash" goes after the cursor). [state] says what you have and where. If the person took something, you can ask for it back.',
+      'YOUR BELT: you wear a belt (left hip, right hip, back, and a pocket) where you keep your things: your pen (you draw with it), a wooden sword ("swing" practices, "slash" goes after the cursor), a mallet ("smash": overhead, at the cursor or the window you stand on) and a bouncy ball in your pocket ("throw" at the cursor, "bounce" to play). [state] says what you have and where. If the person took something, you can ask for it back.',
+      'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
+      'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling).',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
       ...(this.puppet ? BODY_GUIDE : []),
       ...DRAW_GUIDE,

@@ -14,7 +14,7 @@ interface MemoryView { summary: string; notes: Note[]; tally: Record<string, num
 interface ItemsView { kinds: { id: string; name: string; about: string; use: string; drawn: boolean }[]; list: { uid: number; id: string; name: string; where: 'belt' | 'hand' | 'world' | 'cursor'; slot: number; drawn: boolean }[] }
 interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView; items?: ItemsView }
 interface Stats {
-  name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number;
+  name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean;
   brain: { active: boolean; status: string; log: LogLine[] };
   mind?: { weigh: Weigh[]; thinking: boolean };
 }
@@ -143,6 +143,7 @@ shell.onStats((s) => {
   }
   $('label').textContent = s.asleep ? 'asleep' : s.label;
   $('doing').textContent = (DOING[s.doing] ?? s.doing) + (s.why ? ` — ${s.why}` : '');
+  $('moveInfo').textContent = s.windowsStuck ? "He tried to move a window and it didn't budge. On a Mac: System Settings → Privacy & Security → Accessibility, and switch on the app he runs in (Terminal or Electron). He'll try again in a few minutes." : '';
   $('winInfo').textContent = s.windows ? `He can see ${s.windows} window(s) and ${s.platforms} window top(s) to stand on.` : 'He can\'t see any windows yet. If this stays at zero, check the Terminal for lines starting with [windows].';
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
   if (s.brain) renderChat(s.brain.log, s.brain.status, s.brain.active);
@@ -208,6 +209,8 @@ $<HTMLInputElement>('color').addEventListener('input', (e) => set({ look: { colo
 $<HTMLInputElement>('name').addEventListener('input', (e) => set({ name: (e.target as HTMLInputElement).value }));
 $<HTMLInputElement>('mischief').addEventListener('change', (e) => set({ mischief: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('windows').addEventListener('change', (e) => set({ windows: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>('moveWindows').addEventListener('change', (e) => set({ moveWindows: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>('knockCursor').addEventListener('change', (e) => set({ knockCursor: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('sfx').addEventListener('change', (e) => set({ sfx: (e.target as HTMLInputElement).checked }));
@@ -263,6 +266,8 @@ function render(c: PetConfig) {
   $<HTMLInputElement>('sfx').checked = c.sfx;
   $<HTMLInputElement>('windows').checked = c.windows;
   $<HTMLInputElement>('mischief').checked = c.mischief;
+  $<HTMLInputElement>('moveWindows').checked = c.moveWindows;
+  $<HTMLInputElement>('knockCursor').checked = c.knockCursor;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.checked = r.value === c.mind;
   const persona = $<HTMLTextAreaElement>('persona'), model = $<HTMLInputElement>('model');
   if (document.activeElement !== persona) persona.value = c.persona;

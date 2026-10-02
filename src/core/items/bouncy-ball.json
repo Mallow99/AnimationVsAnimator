@@ -1,0 +1,15 @@
+{
+  "id": "bouncy-ball",
+  "name": "Bouncy ball",
+  "about": "A rubber ball he keeps in his pocket. He throws it at your cursor, or bounces it off walls and catches it.",
+  "use": "throw",
+  "length": 7,
+  "grip": 0,
+  "belt": "pocket",
+  "hit": 0.6,
+  "bounce": 0.82,
+  "shape": [
+    { "pts": [[3.5, 0], [3.5, 0]], "color": "#e8434f", "width": 7.5 },
+    { "pts": [[2.2, -1.6], [2.4, -1.4]], "color": "#ffb3b8", "width": 2 }
+  ]
+}

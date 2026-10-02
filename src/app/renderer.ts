@@ -18,6 +18,7 @@ interface PetShell {
   onWindows(cb: (wins: WinRect[]) => void): void;
   pressed(): void;
   moveCursor(x: number, y: number): void;
+  moveWindow(id: number, x: number, y: number, w: number, h: number): void;
   ask(req: BrainRequest): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
   loadMemory(): Promise<string | null>;
   saveMemory(json: string): void;
@@ -70,7 +71,8 @@ if (shell) {
   shell.onConfig((c) => pet.applyConfig(c));
   shell.onCommand((cmd) => pet.command(cmd));
   shell.onWindows((wins) => pet.setWindows(wins)); // other apps' windows become platforms
-  pet.onMoveCursor = (x, y) => shell.moveCursor(x, y); // mischief mode
+  pet.onMoveCursor = (x, y) => shell.moveCursor(x, y); // mischief mode, and knocking it flying
+  pet.onMoveWindow = (id, x, y, w, h) => shell.moveWindow(id, x, y, w, h); // he pushes your windows around
   // AI brain: the desktop shell makes the actual call (it holds the API key).
   pet.brain.ask = async (req) => {
     const r = await shell.ask(req);
@@ -203,6 +205,11 @@ if (!shell) {
   fakeWins.push({ id: 1, x: W * 0.08, y: H - 210, w: Math.min(360, W * 0.3), h: 260 });
   fakeWins.push({ id: 2, x: W * 0.55, y: H - 330, w: Math.min(420, W * 0.35), h: 380 });
   pet.setWindows(fakeWins);
+  // He can push the fake windows around too.
+  pet.onMoveWindow = (id, x, y) => {
+    const w = fakeWins.find((f) => f.id === id);
+    if (w) { w.x = x; w.y = y; pet.setWindows(fakeWins); }
+  };
 }
 function drawFakeWindows() {
   for (const w of fakeWins) {

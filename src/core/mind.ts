@@ -16,14 +16,21 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
+  Brawl, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number }
   | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number }
-  | { type: 'bonked'; speed: number }; // a ball hit him
+  | { type: 'bonked'; speed: number } // a ball hit him
+  | { type: 'hitCursor'; power: number; by: string } // he hit your cursor (and maybe sent it flying)
+  | { type: 'cursorFreed' }   // you took your cursor back mid-flight
+  | { type: 'parried' }       // he blocked your smack
+  | { type: 'windowStuck' };  // he tried to move a window and it wouldn't budge
 
 interface Option { name: string; score: number; why: string; make: () => Skill }
+
+const cur0 = (w: { cursor: Vec | null }) => w.cursor !== null;
 
 /** One step of a plan (from his AI brain): done in order. */
 export type PlanStep =
@@ -108,6 +115,16 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   frontflip: { boredom: -0.25, happiness: 0.04, energy: -0.03 },
   roll: { boredom: -0.1 },
   pickup: { boredom: -0.05 },
+  spar: { boredom: -0.4, happiness: 0.07, energy: -0.05 },
+  brawl: { annoyance: -0.3, energy: -0.05 },
+  throw: { boredom: -0.25, happiness: 0.04, annoyance: -0.08 },
+  bounce: { boredom: -0.25, happiness: 0.03 },
+  smash: { boredom: -0.25, annoyance: -0.25 },
+  pushwindow: { boredom: -0.3, happiness: 0.04, energy: -0.05 },
+  kickwindow: { boredom: -0.3, annoyance: -0.2, happiness: 0.03 },
+  surf: { boredom: -0.45, happiness: 0.08 },
+  knock: { boredom: -0.15 },
+  ledgesit: { energy: 0.05, boredom: 0.02, happiness: 0.03 },
 };
 
 /** Things you can tell him to do from the settings window. */
@@ -123,6 +140,10 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'drawball', label: 'Draw a ball (and kick it)' }, { name: 'drawbox', label: 'Draw a box (and vault it)' }, { name: 'drawledge', label: 'Draw a ledge (and get on it)' },
   { name: 'drawsword', label: 'Draw a sword' }, { name: 'kick', label: 'Kick the ball' }, { name: 'getonit', label: 'Get on what he drew' },
   { name: 'swing', label: 'Swing his sword' }, { name: 'slash', label: 'Attack the cursor' },
+  { name: 'spar', label: 'Spar with the cursor' }, { name: 'brawl', label: 'Fight the cursor (for real)' },
+  { name: 'throw', label: 'Throw his ball at the cursor' }, { name: 'bounce', label: 'Bounce his ball' }, { name: 'smash', label: 'Smash with his mallet' },
+  { name: 'pushwindow', label: 'Push a window' }, { name: 'kickwindow', label: 'Kick a window' }, { name: 'surf', label: 'Surf on a window' },
+  { name: 'knock', label: 'Knock on a window' }, { name: 'ledgesit', label: 'Sit on the edge' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
@@ -148,6 +169,9 @@ export class Mind {
   private lastCursorSeen = 0;
   /** When you last took one of his things. */
   private takenAt = -100;
+  /** When he last swatted your cursor off him, and last messed with a window. */
+  private swatAt = -100;
+  private windowPrankAt = -100;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
   /** While the AI brain is deciding what he does next, instinct waits until this time. */
@@ -214,6 +238,23 @@ export class Mind {
       this.takenAt = w.time;
       this.interrupt(c, new AskBack(taken));
       this.why = `wants his ${taken.def.name.toLowerCase()} back`;
+    }
+    // Your cursor parked right on him: he swats it away (or boops it, or just glares at it).
+    if (cur0(w) && w.time - w.cursorMovedAt > 2.2 && w.time > this.swatAt && lazing && !this.queued && (ch.ready || ch.mode === 'sit') && ch.useHand && !m.asleep) {
+      const cur = w.cursor!, j = ch.body.j;
+      const onHim = ch.hitTest(cur.x, cur.y, 12) !== null || Math.hypot(cur.x - j.head.x, cur.y - (j.head.y - ch.d.headR - 8 * ch.scale)) < 26 * ch.scale;
+      if (onHim) {
+        this.swatAt = w.time + rand(12, 25);
+        const L2 = m.label;
+        if (L2 !== 'sad' && L2 !== 'sleepy' && L2 !== 'scared') {
+          const above = cur.y < j.head.y - ch.d.headR;
+          this.interrupt(c, L2 === 'angry' ? new Sequence('swat', [{ face: 'cursor' }, { say: pick(['MOVE.', 'get off', 'ugh']) }, { gesture: 'punch', atCursor: true }])
+            : L2 === 'playful' ? new Sequence('boop', [{ face: 'cursor' }, { gesture: above ? 'swat' : 'pokeBack', atCursor: true }, { say: pick(['boop', 'hehe', 'tag!']) }])
+              : new Sequence('swat', [{ face: 'cursor' }, { wait: 0.4 }, { say: pick(['shoo', 'do you mind?', 'personal space']) }, { gesture: 'swat', atCursor: true }]));
+          this.why = 'your cursor was sitting on him';
+          if (ch.mode === 'sit') ch.standUp();
+        }
+      }
     }
     const away = w.time - w.cursorMovedAt;
     if (away > 300) { m.s.boredom += dt / 300; m.s.happiness -= dt / 1200; } // ignored for 5+ min: lonely
@@ -339,7 +380,9 @@ export class Mind {
       { name: 'sit', score: 0.3 + (1 - s.energy) * 0.9, why: s.energy < 0.4 ? 'tired' : 'resting', make: () => new SitFor(rand(8, 20)) },
       { name: 'sleep', score: s.energy < 0.25 && s.annoyance < 0.5 && s.fear < 0.3 ? 2 + (0.25 - s.energy) * 8 : 0, why: 'worn out', make: () => new Sleep() },
       { name: 'chase', score: cursorActive && L === 'playful' ? 1.2 * s.trust + s.boredom : 0, why: 'wants to play with you', make: () => new ChaseCursor(rand(4, 8), false) },
-      { name: 'hunt', score: cursorActive && L === 'angry' ? 1.5 : 0, why: "mad at you", make: () => new ChaseCursor(4, true) },
+      { name: 'brawl', score: cursorActive && L === 'angry' && ch.legCount === 2 && ch.useHand ? 1.5 : 0, why: 'mad at you: fists up', make: () => new Brawl(rand(5, 9), true) },
+      { name: 'spar', score: cursorActive && near && ch.legCount === 2 && ch.useHand ? (L === 'playful' ? 0.6 + s.trust * 0.4 : L === 'bored' ? 0.3 : 0.05) : 0,
+        why: 'wants to spar with your cursor', make: () => new Brawl(rand(6, 10), false) },
       { name: 'avoid', score: near && (L === 'scared' || s.trust < 0.3) ? 2 : 0, why: s.fear > 0.3 ? 'scared of you' : "doesn't trust you", make: () => new AvoidCursor(4) },
       { name: 'dance', score: L === 'playful' ? 0.7 : 0, why: 'in a great mood', make: presets.dance },
       { name: 'hop', score: 0.05 + s.energy * 0.15 + (L === 'playful' ? 0.35 : 0), why: 'full of energy', make: () => presets.hop(s.energy) },
@@ -349,6 +392,7 @@ export class Mind {
       { name: 'stretch', score: 0.08 + (1 - s.energy) * 0.3, why: 'stiff', make: presets.stretch },
       { name: 'sigh', score: L === 'bored' ? 0.6 : 0, why: 'bored', make: presets.sigh },
       ...this.windowOptions(c),
+      ...this.windowPranks(c),
       ...this.itemOptions(c),
       ...this.parkourOptions(c),
       ...this.liveDrawingOptions(c),
@@ -408,6 +452,19 @@ export class Mind {
       opts.push({ name: 'swing', why: 'practicing his sword moves', score: L === 'playful' ? 0.35 : L === 'bored' ? 0.25 + s.boredom * 0.2 : 0.05, make: () => new SwordSwing(2, false) });
       opts.push({ name: 'slash', why: 'going after your cursor with his sword', score: L === 'angry' && near ? 1.3 : 0, make: () => new SwordSwing(2, true) });
     }
+    const mallet = c.items.find('smash');
+    if (mallet && (mallet.where === 'belt' || mallet.where === 'hand') && ch.useHand) {
+      const onWin = ch.supportPlatform()?.win !== undefined && c.canMoveWindows;
+      opts.push({ name: 'smash', why: near ? 'going after your cursor with his mallet' : onWin ? 'bonking the window he\'s on' : 'practicing with his mallet',
+        score: L === 'angry' ? (near ? 1.1 : 0.3) : L === 'playful' ? (onWin ? 0.3 : 0.12) : L === 'bored' ? 0.2 : 0.03, make: () => new SwordSwing(near ? 2 : 3, near, 'smash') });
+    }
+    const ball = c.items.find('throw');
+    if (ball && ball.where !== 'cursor' && ch.useHand && ch.legCount === 2) {
+      const active = !!cur && w.time - w.cursorMovedAt < 8;
+      opts.push({ name: 'throw', why: L === 'angry' ? 'throwing things at you' : 'playing catch with your cursor',
+        score: !active ? 0 : L === 'angry' ? 0.8 : L === 'playful' ? 0.45 : L === 'bored' ? 0.25 : 0.04, make: () => new ThrowItem(true, L === 'angry' ? 2 : 1) });
+      opts.push({ name: 'bounce', why: 'bouncing his ball', score: L === 'bored' ? 0.35 : L === 'playful' ? 0.25 : L === 'content' ? 0.08 : 0, make: () => new ThrowItem(false, Math.floor(rand(2, 5))) });
+    }
     // His things lying around (you dropped them, or he did): pick them up and put them back on his belt.
     const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
     const lying = c.items.list.find((it) => it.where === 'world' && it.def.belt !== 'none' && it.at.y > feet - 60 * ch.scale && Math.abs(it.at.y - feet) < 120 * ch.scale);
@@ -416,6 +473,42 @@ export class Mind {
     const taken = c.items.carried;
     if (taken && w.time - this.takenAt > 15 && ch.useHand) {
       opts.push({ name: 'askback', why: `wants his ${taken.def.name.toLowerCase()} back`, score: L === 'sad' || L === 'scared' ? 0.3 : 2.2 + s.boredom * 0.5, make: () => { this.takenAt = w.time; return new AskBack(taken); } });
+    }
+    return opts;
+  }
+
+  /**
+   * Messing with your windows: pushing, kicking, surfing on them, knocking on them, and sitting
+   * on their edges. Not too often, and not the window you're busy in (unless he's mad).
+   */
+  private windowPranks(c: Ctx): Option[] {
+    const s = c.mood.s, L = c.mood.label, ch = c.char, w = c.world, opts: Option[] = [];
+    if (ch.support >= 0 && ch.whole) {
+      opts.push({ name: 'ledgesit', why: L === 'sad' ? 'sitting on the edge, feeling down' : 'sitting on the edge, legs dangling',
+        score: 0.2 + (1 - s.energy) * 0.45 + s.boredom * 0.2 + (L === 'sad' ? 0.4 : 0), make: () => new LedgeSit(rand(8, 20)) });
+    }
+    if (!ch.whole || L === 'sleepy' || L === 'sad' || L === 'scared' || s.energy < 0.3) return opts;
+    const fresh = w.time - this.windowPrankAt > (L === 'angry' ? 25 : 50);
+    const cur = w.cursor;
+    // The window you're working in right now (cursor inside it, moving): leave it alone.
+    const busy = (id?: number) => {
+      const r = w.windows.find((x) => x.id === id);
+      return !!r && !!cur && w.time - w.cursorMovedAt < 4 && cur.x >= r.x && cur.x <= r.x + r.w && cur.y >= r.y && cur.y <= r.y + r.h && L !== 'angry';
+    };
+    const sides = windowSidesAtHand(c).filter((x) => Math.abs(x.x - ch.x) < 600);
+    const side = sides.find((x) => !busy(x.win));
+    const prank = (name: string, why: string, score: number, make: () => Skill) =>
+      opts.push({ name, why, score: fresh ? score : 0, make: () => { this.windowPrankAt = w.time; return make(); } });
+    if (side) {
+      prank('knock', 'curious what\'s inside that window', L === 'bored' ? 0.3 : L === 'playful' ? 0.15 : 0.08, () => new KnockWindow(side));
+      if (c.canMoveWindows) {
+        prank('pushwindow', 'rearranging your windows', L === 'bored' ? 0.35 : L === 'playful' ? 0.25 : L === 'angry' ? 0.2 : 0.05, () => new PushWindow(side));
+        prank('kickwindow', L === 'angry' ? 'taking it out on a window' : 'practicing kicks on a window', L === 'angry' ? 0.7 : L === 'playful' ? 0.2 : L === 'bored' ? 0.12 : 0.02, () => new KickWindow(side));
+      }
+    }
+    const on = ch.supportPlatform();
+    if (on?.win !== undefined && c.canMoveWindows && !busy(on.win)) {
+      prank('surf', 'surfing on your window', L === 'playful' ? 0.55 : L === 'bored' ? 0.4 : 0.06, () => new WindowSurf());
     }
     return opts;
   }
@@ -646,6 +739,28 @@ export class Mind {
 
       case 'hitWall':
         if (chance(0.3)) c.say(pick(['oof', 'wall.']), 1);
+        return;
+
+      case 'hitCursor': {
+        m.nudge({ annoyance: -0.06, happiness: 0.03, boredom: -0.1 });
+        if (this.skill instanceof Brawl) this.skill.landed();
+        if (c.world.time > this.quipAt && chance(e.power > 0.6 ? 0.6 : 0.3)) {
+          this.quipAt = c.world.time + 2.5;
+          c.say(e.power > 0.8 ? pick(['HOME RUN', 'BOOM', 'POW!', 'and STAY out']) : pick(['ha!', 'pow', 'bap', 'hyah']), 1);
+        }
+        return;
+      }
+      case 'cursorFreed':
+        if (c.world.time > this.quipAt && chance(0.35)) { this.quipAt = c.world.time + 3; c.say(pick(['aw', 'hey, I was playing with that', 'fine']), 1.2); }
+        return;
+      case 'parried':
+        m.nudge({ annoyance: -0.04, happiness: 0.05, boredom: -0.2 });
+        this.why = 'blocked your smack';
+        c.say(pick(['BLOCKED', 'nice try', 'parry!', 'too slow']), 1.2);
+        return;
+      case 'windowStuck':
+        this.why = "your windows won't move for him (needs permission?)";
+        c.say(pick(["huh. it won't move", 'stuck?', '...heavy']), 1.6);
         return;
     }
   }

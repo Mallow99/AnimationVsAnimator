@@ -667,7 +667,8 @@ function yankHand(pet: Pet, speed = 3200) {
   pet.mind.onEvent = (c, e) => { if (e.type !== 'step') got.push(e.type); orig(c, e); };
   pet.mind.command(pet.ctx, 'walljump');
   petFor(8, pet);
-  check('parkour: wall jump off the screen edge', got.includes('wallJump') && !got.includes('crashed') && ['ground', 'sit'].includes(pet.char.mode), got.join(','));
+  // (He lands it; what he does after that is up to him.)
+  check('parkour: wall jump off the screen edge', got.includes('wallJump') && !got.includes('crashed') && got.indexOf('landed', got.indexOf('wallJump')) > 0, got.join(','));
 }
 { // Vault onto a low ledge.
   const c = new Character(bounds, 500);
@@ -754,7 +755,7 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
   const pet = calmPet();
   let hits = 0;
   const orig = pet.ctx.hitCursor!;
-  pet.ctx.hitCursor = (x, y, d) => { hits++; orig(x, y, d); };
+  pet.ctx.hitCursor = (x, y, vx, vy, p) => { hits++; orig(x, y, vx, vy, p); };
   const j = pet.char.body.j;
   pet.cursor(pet.char.x + 45, j.neck.y - 5, 0, 0);
   pet.mind.command(pet.ctx, 'slash');
@@ -786,7 +787,13 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
   pet.items.give('pen', pet.char);
   const copy = new Pet(bounds);
   copy.load(pet.save());
-  check('items are saved', copy.items.list.length === 3 && copy.items.list.filter((x) => x.def.id === 'pen').length === 2, copy.items.list.map((x) => x.def.id + '@' + x.where).join(','));
+  check('items are saved', copy.items.list.length === 5 && copy.items.list.filter((x) => x.def.id === 'pen').length === 2, copy.items.list.map((x) => x.def.id + '@' + x.where).join(','));
+  // An older save (just his pen and sword) gets the newer things handed to him once.
+  const old = new Pet(bounds);
+  old.load(JSON.stringify({ v: 1, items: [{ id: 'pen', slot: 1 }, { id: 'sword', slot: 2 }] }));
+  const ids = old.items.list.map((x) => x.def.id).sort().join(',');
+  const again = new Pet(bounds); again.items.remove(again.items.list.find((x) => x.def.id === 'hammer')!); again.load(again.save());
+  check('older saves get his new things; things you removed stay gone', ids === 'bouncy-ball,hammer,pen,sword' && !again.items.list.some((x) => x.def.id === 'hammer'), ids);
 }
 
 // ───── his drawings come to life ─────
@@ -795,12 +802,14 @@ function calmPet() { const pet = new Pet(bounds); pet.paused = true; petFor(3, p
   pet.mind.command(pet.ctx, 'drawball');
   let ball: import('../src/core/props').Ball | undefined, x0 = 0, maxMove = 0, kicks = 0;
   const orig = pet.onSound; pet.onSound = (n) => { if (n === 'kick') kicks++; };
-  petFor(25, pet, () => {
+  const DBG: string[] = []; let lastN = '';
+  petFor(25, pet, (t) => {
     if (!ball && pet.props.balls[0]) { ball = pet.props.balls[0]; x0 = ball.x; }
     if (ball) maxMove = Math.max(maxMove, Math.abs(ball.x - x0));
+    const n = (pet.mind.skill?.name ?? '-') + '/' + pet.char.mode; if (n !== lastN) { DBG.push(n + '@' + t.toFixed(1) + (ball ? ':' + ball.x.toFixed(0) : '')); lastN = n; }
   });
   pet.onSound = orig;
-  check('drawn ball comes to life and he kicks it', !!ball && kicks >= 1 && maxMove > 120, `ball=${!!ball} kicks=${kicks} moved=${maxMove.toFixed(0)}`);
+  check('drawn ball comes to life and he kicks it', !!ball && kicks >= 1 && maxMove > 120, `ball=${!!ball} kicks=${kicks} moved=${maxMove.toFixed(0)} ${DBG.join(' ')}`);
 }
 { // Draws a box on the floor, it turns solid, he vaults onto it.
   const pet = calmPet();
@@ -887,6 +896,267 @@ function throwHim(pet: Pet) {
   pet.memory.tally.thrown = 3;
   petFor(0.5, pet);
   check('memory: offline tidy-up sums things up', pet.memory.notes.length < 10 && pet.memory.summary.includes('thrown me 3 times'), `notes=${pet.memory.notes.length} ${pet.memory.summary}`);
+}
+
+
+// ───── hitting your cursor (it goes flying) ─────
+/** A pet on a pretend desktop: the cursor moves when he moves it (and the desktop echoes the move back, like Windows does). */
+function desktopPet(opts: { wins?: import('../src/core/world').WinRect[]; stuck?: boolean } = {}) {
+  const pet = calmPet();
+  const moves: { x: number; y: number }[] = [];
+  let echo: { x: number; y: number } | null = null;
+  pet.onMoveCursor = (x, y) => { moves.push({ x, y }); echo = { x, y }; };
+  const wins = (opts.wins ?? []).map((w) => ({ ...w }));
+  const winMoves: number[] = [];
+  let pending: import('../src/core/world').WinRect[] | null = null;
+  if (opts.wins) {
+    pet.setWindows(wins);
+    pet.paused = true; petFor(0.3, pet); pet.paused = false;
+    pet.onMoveWindow = (id, x, y) => {
+      winMoves.push(id);
+      if (opts.stuck) return;
+      const w = wins.find((v) => v.id === id); if (w) { w.x = x; w.y = y; }
+      pending = wins.map((v) => ({ ...v }));
+    };
+  }
+  const step = (seconds: number, each?: (t: number) => void) => petFor(seconds, pet, (t) => {
+    if (echo) { const e = echo; echo = null; pet.cursor(e.x, e.y, 3000, 0); } // our own move coming back
+    if (pending) { pet.setWindows(pending); pending = null; } // the window helper reports where they are now
+    else if (opts.wins && Math.round(t * 60) % 6 === 0) pet.setWindows(wins.map((v) => ({ ...v })));
+    each?.(t);
+  });
+  return { pet, moves, wins, winMoves, step };
+}
+function events(pet: Pet) {
+  const got: string[] = [];
+  const orig = pet.mind.onEvent.bind(pet.mind);
+  pet.mind.onEvent = (c, e) => { if (e.type !== 'step') got.push(e.type); orig(c, e); };
+  return got;
+}
+{ // A punch in reach knocks the cursor flying; the pointer follows; the desktop's echo of our own move isn't "you".
+  const { pet, moves, step } = desktopPet();
+  pet.config.smacking = true;
+  const got = events(pet);
+  const n = pet.char.body.j.neck, start = { x: pet.char.x + 34 * pet.char.scale, y: n.y - 4 };
+  pet.cursor(start.x, start.y, 0, 0);
+  pet.char.facing = 1;
+  pet.char.doGesture('punch', start);
+  let far = 0;
+  step(2.5, () => { const c = pet.ctx.world.cursor!; far = Math.max(far, Math.hypot(c.x - start.x, c.y - start.y)); });
+  check('punch: knocks your cursor flying, the real pointer follows', got.includes('hitCursor') && moves.length > 20 && far > 150 && !got.includes('smacked'), `moves=${moves.length} far=${far.toFixed(0)} ${got.join(',')}`);
+}
+{ // Move the mouse yourself mid-flight: it's yours again at once.
+  const { pet, moves, step } = desktopPet();
+  const n = pet.char.body.j.neck;
+  pet.cursor(pet.char.x + 30, n.y, 0, 0);
+  pet.knockCursor({ x: pet.char.x + 30, y: n.y }, 1200, -400, 1, 'fist');
+  step(0.2);
+  const before = moves.length;
+  pet.cursor(100, 100, -800, 0);
+  step(0.5);
+  check('you grab the mouse mid-flight: it stops flying', !pet.cursorBody.flying && moves.length <= before + 1 && pet.ctx.world.cursor!.x === 100, `moves ${before} → ${moves.length}`);
+}
+{ // "He can hit your cursor" off: sparks, but the pointer stays where it is.
+  const { pet, moves, step } = desktopPet();
+  pet.config.knockCursor = false;
+  pet.knockCursor({ x: 500, y: 500 }, 1200, -400, 1, 'fist');
+  step(1);
+  check('cursor hits off: the pointer is left alone', moves.length === 0);
+}
+{ // Sparring: he goes after your cursor and lands hits.
+  const { pet, step } = desktopPet();
+  const got = events(pet);
+  const home = { x: pet.char.x + 160, y: pet.char.body.j.neck.y - 10 };
+  pet.cursor(home.x, home.y, 0, 0);
+  pet.mind.command(pet.ctx, 'spar');
+  let hits = 0;
+  step(12, () => { if (!pet.cursorBody.flying && Math.round(pet.ctx.world.time * 60) % 120 === 0) pet.cursor(pet.char.x + pet.char.facing * 60, pet.char.body.j.neck.y - 5, 0, 0); hits = got.filter((e) => e === 'hitCursor').length; });
+  check('spar: he fights your cursor and lands hits', hits >= 1 && !got.includes('crashed') && !got.includes('tripped'), `hits=${hits} ${[...new Set(got)].join(',')}`);
+}
+{ // Cursor above his head: a jumping punch gets it.
+  const { pet, step } = desktopPet();
+  const got = events(pet);
+  const j = pet.char.body.j, at = { x: pet.char.x + 20, y: j.head.y - 70 * pet.char.scale };
+  pet.cursor(at.x, at.y, 0, 0);
+  pet.char.jumpPunch(at);
+  step(2);
+  check('jump punch: hits a cursor above his head, lands fine', got.includes('hitCursor') && got.includes('landed') && !got.includes('crashed'), got.join(','));
+}
+{ // A high kick at hip height.
+  const { pet, step } = desktopPet();
+  const got = events(pet);
+  const j = pet.char.body.j, at = { x: pet.char.x + (pet.char.d.thigh + pet.char.d.shin) * 0.85, y: j.hip.y - 2 };
+  pet.cursor(at.x, at.y, 0, 0);
+  pet.char.facing = 1;
+  pet.paused = true;
+  pet.char.doGesture('highkick', at);
+  step(2);
+  check('high kick: kicks your cursor, stays on his feet', got.includes('hitCursor') && pet.char.mode === 'ground' && !got.includes('tripped'), got.join(','));
+}
+{ // Park your cursor on his head: he swats it away.
+  const { pet, step } = desktopPet();
+  const got = events(pet);
+  pet.command('mood:calm');
+  const h = pet.char.body.j.head;
+  pet.cursor(h.x, h.y - pet.char.d.headR - 6, 0, 0);
+  // You leave the mouse sitting there (it doesn't move; he may wander under it).
+  step(8, () => { if (!pet.cursorBody.busy(pet.ctx.world.time) && !got.includes('hitCursor')) pet.ctx.world.cursor = { x: pet.char.body.j.head.x, y: pet.char.body.j.head.y - pet.char.d.headR - 6 }; });
+  check('cursor parked on his head: he swats it off', got.includes('hitCursor'), `${got.join(',')} why=${pet.mind.why}`);
+}
+{ // His sword knocks it flying too.
+  const { pet, moves, step } = desktopPet();
+  const j = pet.char.body.j;
+  pet.cursor(pet.char.x + 45, j.neck.y - 5, 0, 0);
+  pet.mind.command(pet.ctx, 'slash');
+  const got = events(pet);
+  step(5);
+  check('sword slash: sends the cursor flying', got.includes('hitCursor') && moves.length > 10, `${got.join(',')} moves=${moves.length}`);
+}
+{ // His mallet: an overhead smash.
+  const { pet, step } = desktopPet();
+  const got = events(pet);
+  const j = pet.char.body.j;
+  pet.cursor(pet.char.x + 40, j.hip.y + 6, 0, 0);
+  pet.mind.command(pet.ctx, 'smash');
+  let out = false;
+  step(6, () => { if (pet.items.find('smash')!.where === 'hand') out = true; });
+  check('mallet: smashes the cursor, then it goes back on his belt', out && got.includes('hitCursor') && pet.items.find('smash')!.where === 'belt', `out=${out} ${got.join(',')}`);
+}
+{ // Swipe at him while his sword is out: he blocks it.
+  const { pet, step } = desktopPet();
+  pet.config.smacking = true;
+  const got = events(pet);
+  pet.paused = true;
+  const sword = pet.items.find('swing')!;
+  pet.items.toHand(sword, pet.char.useHand!);
+  let parried = false;
+  for (let k = 0; k < 12 && !parried; k++) {
+    const y = pet.char.body.j.neck.y + 10, x0 = pet.char.x + 120;
+    pet.char.facing = 1;
+    pet.cursor(x0, y, 0, 0); step(0.6);
+    for (let i = 0; i < 12; i++) { pet.cursor(x0 - i * 22, y, -2000, 0); pet.update(1 / 120); }
+    step(0.6);
+    parried = got.includes('parried');
+  }
+  check('parry: with his sword out he blocks your smack', parried, got.join(','));
+}
+
+// ───── his ball ─────
+{ // He throws his bouncy ball at your cursor (it hits), then fetches it back to his pocket.
+  const { pet, step } = desktopPet();
+  const got = events(pet);
+  const ball = pet.items.find('throw')!;
+  pet.cursor(pet.char.x + 260, pet.char.body.j.neck.y - 40, 0, 0);
+  pet.mind.command(pet.ctx, 'throw');
+  let flew = false;
+  const DBG: string[] = []; let lastS = '';
+  step(16, (t) => {
+    if (ball.where === 'world' && ball.speed > 300) flew = true;
+    const sk = pet.mind.skill as unknown as { name: string; phase?: string; sub?: { name: string; phase?: string } } | null;
+    const st = `${sk?.name ?? '-'}:${sk?.phase ?? ''}${sk?.sub ? '>' + sk.sub.name + ':' + sk.sub.phase : ''} ${ball.where}`;
+    if (st !== lastS) { DBG.push(`${t.toFixed(1)} ${st} b=${ball.at.x.toFixed(0)},${ball.at.y.toFixed(0)} him=${pet.char.x.toFixed(0)}/${pet.char.mode}`); lastS = st; }
+  });
+  check('ball: thrown at the cursor, hits it, goes back in his pocket', flew && got.includes('hitCursor') && ball.where === 'belt' && ball.slot === 3, `flew=${flew} where=${ball.where} ${got.join(',')}\n${DBG.join('\n')}`);
+}
+{ // Just playing: bounce it off the floor and catch it.
+  const pet = calmPet();
+  const ball = pet.items.find('throw')!;
+  pet.mind.command(pet.ctx, 'bounce');
+  let left = 0, caught = 0, wasOut = false;
+  petFor(25, pet, () => { if (ball.where === 'world') { if (!wasOut) left++; wasOut = true; } else if (wasOut && ball.where === 'hand') { caught++; wasOut = false; } });
+  check('ball: bounces it and catches it', left >= 2 && caught >= 1 && ball.where === 'belt', `throws=${left} caught=${caught} where=${ball.where}`);
+}
+
+// ───── your windows ─────
+const W1 = () => [{ id: 7, x: 700, y: 380, w: 420, h: 420 }];
+{ // Push a window along: it really moves (the desktop helper reports it moved).
+  const { pet, wins, winMoves, step } = desktopPet({ wins: W1() });
+  pet.mind.command(pet.ctx, 'pushwindow');
+  let pushing = false;
+  step(12, () => { if (pet.char.pushAt !== null) pushing = true; });
+  check('push a window: he pushes and it slides along', pushing && winMoves.length > 20 && wins[0].x > 740 && pet.char.pushAt === null, `x=${wins[0].x.toFixed(0)} moves=${winMoves.length}`);
+}
+{ // Kick a window: it shoots off and slides to a stop.
+  const { pet, wins, step } = desktopPet({ wins: W1() });
+  pet.mind.command(pet.ctx, 'kickwindow');
+  step(10);
+  check('kick a window: it slides away', wins[0].x > 800 && !pet.windowMoving(7), `x=${wins[0].x.toFixed(0)}`);
+}
+{ // Surf: standing on a window, he shoves off and rides it.
+  const { pet, wins, step } = desktopPet({ wins: [{ id: 7, x: 300, y: 560, w: 420, h: 240 }] });
+  pet.paused = true;
+  pet.char.body.translate(500 - pet.char.x, 560 - 800); pet.char.mode = 'air';
+  step(2); pet.paused = false;
+  const onIt = pet.char.supportPlatform()?.win === 7;
+  pet.mind.command(pet.ctx, 'surf');
+  const got = events(pet);
+  let rode = 0, stayed = true;
+  step(6, () => {
+    const surfing = pet.mind.skill?.name === 'surf';
+    if (pet.char.supportPlatform()?.win === 7) rode = Math.max(rode, wins[0].x - 300);
+    else if (surfing && pet.char.surf) stayed = false;
+  });
+  check('surf: he rides the window across the screen', onIt && rode > 200 && stayed && !got.includes('crashed'), `onIt=${onIt} rode=${rode.toFixed(0)} stayed=${stayed} ${got.join(',')}`);
+}
+{ // Knock knock: the window wobbles and settles back where it was.
+  const { pet, wins, winMoves, step } = desktopPet({ wins: W1() });
+  const got: string[] = [];
+  const orig = pet.onSound; pet.onSound = (n, v) => { got.push(n); orig?.(n, v); };
+  pet.mind.command(pet.ctx, 'knock');
+  step(8);
+  check('knock on a window: three knocks, it wobbles and settles back', got.filter((n) => n === 'knock').length === 3 && winMoves.length > 3 && wins[0].x === 700, `knocks=${got.filter((n) => n === 'knock').length} x=${wins[0].x}`);
+}
+{ // Moving windows not allowed (no permission): he notices, and stops trying.
+  const { pet, step } = desktopPet({ wins: W1(), stuck: true });
+  const got = events(pet);
+  pet.mind.command(pet.ctx, 'kickwindow');
+  step(8);
+  check("windows won't move: he notices and stops trying", got.includes('windowStuck') && !pet.ctx.canMoveWindows && pet.stats().windowsStuck === true, got.join(','));
+}
+{ // He leaves alone the window you're working in.
+  const { pet } = desktopPet({ wins: W1() });
+  pet.command('mood:playful');
+  pet.cursor(900, 600, 30, 0);
+  const names = pet.mind.weigh(pet.ctx).filter((o) => o.score > 0).map((o) => o.name);
+  check('the window you are using is off limits', !names.includes('pushwindow') && !names.includes('kickwindow'), names.join(','));
+}
+{ // A drawing on a window sticks to it when the window moves.
+  const { pet, wins, step } = desktopPet({ wins: W1() });
+  pet.paused = true;
+  const d = { strokes: [[{ x: 800, y: 500 }, { x: 820, y: 520 }]], color: '#000', born: pet.ctx.world.time, done: true, cx: 810, cy: 510, size: 30 };
+  pet.ctx.doodles.push(d);
+  step(0.2);
+  wins[0].x += 100; pet.setWindows(wins.map((v) => ({ ...v })));
+  step(1);
+  check('a drawing on a window moves with the window', d.cx > 905 && d.strokes[0][0].x > 895, `cx=${d.cx.toFixed(0)}`);
+}
+{ // Sitting on a window's edge with his legs dangling over, then getting up.
+  const pet = calmPet();
+  pet.setWindows([{ id: 3, x: 500, y: 560, w: 300, h: 240 }]);
+  pet.paused = true;
+  pet.char.body.translate(700 - pet.char.x, 560 - 800); pet.char.mode = 'air';
+  petFor(2, pet); pet.paused = false;
+  pet.mind.command(pet.ctx, 'ledgesit');
+  let dangling = false, upAfter = false;
+  petFor(30, pet, () => {
+    const j = pet.char.body.j;
+    if (pet.char.onLedge && j.footL.y > 565 && j.footR.y > 565 && j.hip.y < 562) dangling = true;
+    else if (dangling && pet.char.mode === 'ground' && pet.char.support >= 0) upAfter = true;
+  });
+  check('ledge sit: legs dangle over the edge, then he gets up', dangling && upAfter, `dangling=${dangling} up=${upAfter} mode=${pet.char.mode} support=${pet.char.support}`);
+}
+{ // A long life on a desktop with windows he can move and a cursor he can hit: he stays sane.
+  const { pet, wins, step } = desktopPet({ wins: [{ id: 1, x: 150, y: 520, w: 380, h: 280 }, { id: 2, x: 800, y: 350, w: 450, h: 450 }] });
+  const seen = new Set<string>();
+  let out = 0, t0 = 0;
+  step(600, (t) => {
+    if (pet.mind.skill) seen.add(pet.mind.skill.name);
+    const j = pet.char.body.j;
+    if (j.hip.x < -5 || j.hip.x > 1405 || j.hip.y > 805) out++;
+    if (t - t0 > 7) { t0 = t; pet.cursor(200 + Math.random() * 1000, 300 + Math.random() * 450, 400, 0); }
+  });
+  const onScreen = wins.every((w) => w.x >= -1 && w.x + w.w <= 1401 && w.y >= -1);
+  check('10 minutes with windows and cursor: stays on screen, windows too', out === 0 && onScreen, `out=${out} wins=${wins.map((w) => `${w.x.toFixed(0)},${w.y.toFixed(0)}`).join(' ')} did=${[...seen].join(',')}`);
 }
 
 console.log(failures ? `\n${failures} failing` : '\nall good');

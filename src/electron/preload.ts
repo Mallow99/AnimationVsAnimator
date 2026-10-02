@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('petShell', {
   onWindows: on('world:windows'),
   pressed: () => ipcRenderer.send('pet:pressed'),
   moveCursor: (x: number, y: number) => ipcRenderer.send('pet:moveCursor', x, y),
+  moveWindow: (id: number, x: number, y: number, w: number, h: number) => ipcRenderer.send('pet:moveWindow', id, x, y, w, h),
   ask: (req: unknown) => ipcRenderer.invoke('brain:ask', req),
   loadMemory: () => ipcRenderer.invoke('memory:load'),
   getItemDefs: () => ipcRenderer.invoke('items:defs'),
