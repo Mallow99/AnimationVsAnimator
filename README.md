@@ -93,6 +93,14 @@ His mood is saved between runs. The **Settings** window shows his mood live and 
 his name, size, look (presets or every number by hand) and how he moves.
 
 ## Commands
+
+Recent additions: a larger pen, optional mace, canvas painting, desk, and an offline board game you
+can play with him. Drop the props in from Settings → Items, then use **Paint** or **Play together**.
+Full AI mode has a thinking-interval control for lower free-tier usage. His persona and body look
+remain the same. See [docs/HANDOFF.md](docs/HANDOFF.md) for verified changes and hardware checks.
+
+For a portable Windows copy that friends can run without Node, see [docs/WINDOWS.md](docs/WINDOWS.md).
+
 | Command | What it does |
 |---|---|
 | `npm start` | Build and launch the pet |
@@ -100,5 +108,8 @@ his name, size, look (presets or every number by hand) and how he moves.
 | `npm run sim` | Headless physics tests |
 | `npm run lab` | Design lab: compare looks side by side |
 | `npm run typecheck` | Check the TypeScript for errors |
+| `npm run checks` | Focused regression checks for saves, AI, items and activities |
+| `npm run browsercheck` | Functional preview check (requires Chromium) |
+| `npm run package:win` | Build a portable Windows x64 app |
 
 See `CLAUDE.md` for the architecture and roadmap.

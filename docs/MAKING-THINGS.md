@@ -150,6 +150,13 @@ body or items, the same way items are files now.
 
 ## 4. For the curious: how it works
 
+New examples include `mace.json`, `canvas.json`, `desk.json` and `board-game.json`. A canvas uses
+`"use": "canvas"` and a `screen` rectangle for the painting area. A board game uses `"use": "game"`;
+today that starts the same offline tic-tac-toe activity. Defining a new game needs code.
+See `src/core/board-game.ts` and `src/core/skills/props.ts`. Canvas pictures are saved with the pet.
+The mace uses `smash`; existing mallets still work. Customized copies of the older examples are
+preserved when bundled examples improve.
+
 - Items live in `src/core/items.ts`. The example files are in `src/core/items/`.
 - Props live in `src/core/props.ts` (the same physics as his drawings coming to life). The
   example files are in `src/core/props/`.

@@ -1,5 +1,10 @@
 # AnimationVsAnimator — project brief
 
+**Latest continuation:** read [docs/HANDOFF.md](docs/HANDOFF.md) and [AGENTS.md](AGENTS.md) first.
+They record the current reliability/item work, tests, Windows distribution steps, and the owner's
+stop point before preparing multiple characters. The original vision and historical handoff below
+remain useful context; the latest owner instructions take priority.
+
 A desktop pet: a procedural stick figure living in a transparent, always-on-top,
 click-through overlay. Inspired by Alan Becker's *Animator vs. Animation*.
 No pre-baked animations — all motion comes from physics + procedural controllers.
