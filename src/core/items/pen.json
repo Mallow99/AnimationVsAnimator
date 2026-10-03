@@ -3,13 +3,13 @@
   "name": "Pen",
   "about": "His own pen. He draws with it (not with your cursor).",
   "use": "draw",
-  "length": 13,
-  "grip": 4,
+  "length": 18,
+  "grip": 5,
   "belt": "side",
   "hit": 0,
   "shape": [
-    { "pts": [[-4, 0], [11, 0]], "color": "#2a2c44", "width": 2.6 },
-    { "pts": [[11, 0], [13, 0]], "color": "#14151f", "width": 1.6 },
-    { "pts": [[-4, 0], [-1, 1.6]], "color": "#c9ccd8", "width": 1.2 }
+    {"pts": [[-5, 0], [15, 0]], "color": "#2a2c44", "width": 3.2},
+    {"pts": [[15, 0], [18, 0]], "color": "#14151f", "width": 1.8},
+    {"pts": [[-4, 1.8], [3, 1.8]], "color": "#c9ccd8", "width": 1.4}
   ]
 }

@@ -17,6 +17,9 @@ import chairDef from './props/chair.json';
 import couchDef from './props/couch.json';
 import tvDef from './props/tv.json';
 import scooterDef from './props/scooter.json';
+import canvasDef from './props/canvas.json';
+import deskDef from './props/desk.json';
+import gameDef from './props/board-game.json';
 import type { WinRect } from './world';
 
 /** Platform ids for drawn things start here, far from any window's. */
@@ -63,7 +66,7 @@ export type ThingKind = 'box' | 'ledge' | 'ramp' | 'bridge' | 'prop';
 export interface PropDef {
   id: string; name: string; about: string;
   /** What he does with it: sit on it, watch it, ride it, or just stand on it. */
-  use: 'seat' | 'tv' | 'ride' | 'none';
+  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'game' | 'none';
   /** Its solid shape: points around its edge, clockwise on screen. Edges facing up are things to stand on. */
   outline: [number, number][];
   /** Where his bottom goes when he sits on it. */
@@ -75,6 +78,20 @@ export interface PropDef {
   /** How grippy it is on the floor (0.6 = stays put, 0.01 = rolls). */
   friction: number;
   shape: { pts: [number, number][]; color: string; width: number }[];
+}
+
+/** Saved canvas pictures are bounded just like custom item files. */
+export function parseCanvasArt(raw: unknown): Thing['art'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (!Array.isArray(o.shape)) return null;
+  const shape = o.shape.slice(0, 16).flatMap((stroke) => {
+    if (!Array.isArray(stroke)) return [];
+    const pts = stroke.slice(0, 80).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y))
+      .map((p) => ({ x: Math.max(-0.5, Math.min(0.5, p.x)), y: Math.max(-0.5, Math.min(0.5, p.y)) }));
+    return pts.length >= 2 ? [pts] : [];
+  });
+  return shape.length ? { shape, color: typeof o.color === 'string' && /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : '#2a2c44', title: typeof o.title === 'string' ? o.title.slice(0, 40) : 'drawing' } : null;
 }
 
 /** Check a prop definition (from a file). Returns null if it's unusable. */
@@ -99,7 +116,7 @@ export function parsePropDef(raw: unknown): PropDef | null {
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 160) : '',
-    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' ? o.use : 'none',
+    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' || o.use === 'game' ? o.use : 'none',
     outline, seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
     wheels: Array.isArray(o.wheels) ? o.wheels.filter((i): i is number => Number.isInteger(i) && i >= 0 && i < outline.length) : undefined,
     wheel: num(o.wheel, 4, 1, 20), friction: num(o.friction, 0.6, 0, 1),
@@ -163,6 +180,8 @@ export class Thing {
   friction = 0.6;
   /** A TV: switched on (he's watching). */
   on = false;
+  channel = 0;
+  art: { shape: Vec[][]; color: string; title: string } | null = null;
   /** Size it was made at (props scale with him). */
   scale = 1;
 
@@ -316,9 +335,19 @@ export class Thing {
       const [sx, sy, sw, sh] = def.screen;
       const c = [this.toWorld(sx, sy), this.toWorld(sx + sw, sy), this.toWorld(sx + sw, sy + sh), this.toWorld(sx, sy + sh)];
       ctx.beginPath(); c.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath();
-      ctx.fillStyle = this.on ? '#1d2b4a' : '#22232c';
+      ctx.fillStyle = def.use === 'canvas' ? '#fff8e8' : this.on ? '#1d2b4a' : '#22232c';
       ctx.fill();
-      if (this.on) { ctx.save(); ctx.clip(); this.drawShow(ctx, sx, sy, sw, sh, now); ctx.restore(); }
+      if (this.on && def.use === 'tv') { ctx.save(); ctx.clip(); this.drawShow(ctx, sx, sy, sw, sh, now); ctx.restore(); }
+      if (this.art && def.use === 'canvas') {
+        ctx.save(); ctx.clip(); ctx.strokeStyle = this.art.color; ctx.lineWidth = 2 * this.scale;
+        const size = Math.min(sw, sh) * 0.8;
+        for (const stroke of this.art.shape) {
+          ctx.beginPath();
+          stroke.forEach((p, i) => { const q = this.toWorld(sx + sw / 2 + p.x * size, sy + sh / 2 + p.y * size); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
     for (const st of def.shape) {
       ctx.strokeStyle = st.color; ctx.lineWidth = st.width * this.scale;
@@ -331,7 +360,7 @@ export class Thing {
 
   /** What's on TV: a few little shows that take turns (a stick figure running about, a bouncing ball, static, color bars). */
   private drawShow(ctx: CanvasRenderingContext2D, sx: number, sy: number, sw: number, sh: number, now: number) {
-    const show = Math.floor(now / 7) % 4, t = now % 7;
+    const show = (Math.floor(now / 7) + this.channel) % 4, t = now % 7;
     const at = (u: number, v: number) => this.toWorld(sx + u * sw, sy + v * sh);
     const line = (pts: [number, number][], color: string, w = 1.6) => {
       ctx.strokeStyle = color; ctx.lineWidth = w * this.scale; ctx.beginPath();
@@ -497,7 +526,7 @@ export function rampSlopeId(n: number, up: 1 | -1) { return PROP_ID + n * 64 + (
 export const reserveThing = () => nextProp++;
 
 /** The props that come with him (in his inventory; none are out until you drop them in). */
-export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef].map((d) => parsePropDef(d)!);
+export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef, gameDef].map((d) => parsePropDef(d)!);
 
 export class Props {
   balls: Ball[] = [];
@@ -545,16 +574,17 @@ export class Props {
   addDefs(list: unknown[]) { for (const raw of list) { const d = parsePropDef(raw); if (d) this.defs.set(d.id, d); } }
   get placed() { return this.things.filter((t) => t.def); }
   /** Drop a prop in, its middle at x, falling from y. */
-  spawn(id: string, x: number, y: number, scale: number) {
+  spawn(id: string, x: number, y: number, scale: number, art?: unknown) {
     const def = this.defs.get(id);
     if (!def) return null;
     const w = Math.max(...def.outline.map((p) => p[0])) * scale;
     const t = makeProp(def, x - w / 2, y, scale);
+    t.art = parseCanvasArt(art);
     this.add(t);
     return t;
   }
   /** Which props are where (saved between runs). */
-  savePlaced() { return this.placed.map((t) => ({ id: t.def!.id, x: Math.round(t.center.x) })); }
+  savePlaced() { return this.placed.map((t) => ({ id: t.def!.id, x: Math.round(t.center.x), ...(t.art ? { art: t.art } : {}) })); }
 
   get platforms() { return [...this.things.flatMap((t) => t.platforms), ...this.wet.values()]; }
   /** Things he can get on top of (for "get on what he drew"). */

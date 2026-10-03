@@ -339,11 +339,13 @@ export class Brain {
     else if (has('sit')) { say = 'ok'; plan = [{ do: 'sit' }]; }
     else if (has('sleep', 'nap', 'rest')) { say = 'zzz'; plan = [{ do: 'sleep' }]; }
     else if (has('wake')) { say = '!'; plan = [{ do: 'wake' }]; }
-    else if (has('draw', 'doodle', 'paint')) { say = 'one sec'; plan = [{ do: 'doodle' }]; }
+    else if (has('play a game', 'playgame', 'board game', 'tic.?tac', 'noughts')) { say = 'you go first'; plan = [{ do: 'playgame' }]; }
+    else if (has('paint', 'canvas')) { say = 'one sec'; plan = [{ do: 'paint' }]; }
+    else if (has('draw', 'doodle')) { say = 'one sec'; plan = [{ do: 'doodle' }]; }
     else if (has('climb')) { say = 'on it'; plan = [{ do: 'climb' }]; }
     else if (has('sword', 'swing', 'slash')) { say = m.label === 'angry' ? 'oh it is ON' : 'en garde!'; plan = [{ do: m.label === 'angry' ? 'slash' : 'swing' }]; }
     else if (has('fight', 'punch', 'spar', 'box', 'attack', 'hit me')) { say = m.label === 'angry' ? 'you asked for it' : 'put em up!'; plan = [{ do: m.label === 'angry' ? 'brawl' : 'spar' }]; }
-    else if (has('mallet', 'hammer', 'smash', 'bonk')) { say = 'BONK time'; plan = [{ do: 'smash' }]; }
+    else if (has('mallet', 'hammer', 'mace', 'smash', 'bonk')) { say = 'BONK time'; plan = [{ do: 'smash' }]; }
     else if (has('throw', 'catch', 'ball')) { say = has('catch') ? 'heads up!' : 'catch!'; plan = [{ do: has('bounce') ? 'bounce' : 'throw' }]; }
     else if (has('surf')) { say = "surf's up"; plan = [{ do: 'surf' }]; }
     else if (has('knock')) { say = 'knock knock'; plan = [{ do: 'knock' }]; }

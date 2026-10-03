@@ -9,6 +9,9 @@ import { parseItemDef } from '../src/core/items';
 import { parsePropDef, makeBridge } from '../src/core/props';
 import { WindowAccess } from '../src/core/window-access';
 import { writeAtomic } from '../src/electron/storage';
+import { unchangedExample } from '../src/electron/builtin-files';
+import { BoardGame, chooseGameMove, gameResult, type Mark } from '../src/core/board-game';
+import { Item, BUILTIN_ITEMS } from '../src/core/items';
 
 let passed = 0;
 async function test(name: string, fn: () => void | Promise<void>) { await fn(); passed++; console.log(`PASS ${name}`); }
@@ -88,5 +91,62 @@ await test('repeated atomic saves preserve the last complete file', () => {
     assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { i: 99, notes: ['kept'] });
     assert(!fs.existsSync(file + '.tmp'));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+await test('board opponent wins, blocks, and never changes the input board', () => {
+  const b: Mark[] = ['O', 'O', '', 'X', 'X', '', '', '', ''];
+  assert.equal(chooseGameMove(b), 2); assert.equal(b[2], '');
+  assert.equal(chooseGameMove(['X', 'X', '', '', 'O', '', '', '', '']), 2);
+  assert.equal(gameResult(['X', 'O', 'X', 'X', 'O', 'O', 'O', 'X', 'X']), 'draw');
+});
+await test('board game rejects double moves, waits its turn, and closes', () => {
+  const g = new BoardGame(); g.invite(); g.accept();
+  assert(g.play(0, 1)); assert(!g.play(1, 1)); assert(!g.play(-1, 1));
+  g.update(1.5); assert.equal(g.board.filter(Boolean).length, 1);
+  g.update(1.7); assert.equal(g.board.filter(Boolean).length, 2); assert.equal(g.turn, 'you');
+  assert(!g.play(0, 2)); g.close(); assert(!g.play(1, 2));
+});
+await test('he can offer a game and removing the board cancels it', () => {
+  const p = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
+  p.paused = true; for (let i = 0; i < 360; i++) p.update(1 / 120);
+  p.mind.reset(p.ctx);
+  const table = p.props.spawn('board-game', p.char.x + 38 * p.char.scale, bounds.floor - 18 * p.char.scale - 2, p.char.scale)!;
+  for (let i = 0; i < 240; i++) p.update(1 / 120);
+  p.paused = false; p.command('do:playgame');
+  for (let i = 0; i < 1800 && p.game.state === 'closed'; i++) p.update(1 / 120);
+  assert.equal(p.game.state, 'invite'); p.game.accept(); p.props.remove(table); p.update(1 / 60);
+  assert.equal(p.game.state, 'closed');
+});
+await test('he paints with the pen, and the canvas picture survives saving', () => {
+  const p = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
+  p.paused = true; for (let i = 0; i < 360; i++) p.update(1 / 120);
+  p.mind.reset(p.ctx);
+  const canvas = p.props.spawn('canvas', p.char.x + 40 * p.char.scale, bounds.floor - 68 * p.char.scale - 2, p.char.scale)!;
+  for (let i = 0; i < 240; i++) p.update(1 / 120);
+  p.paused = false; p.command('do:paint');
+  for (let i = 0; i < 3600 && !canvas.art; i++) p.update(1 / 120);
+  assert(canvas.art, `painting never completed: ${p.mind.skill?.name}, ${p.char.mode}`);
+  const save = p.save(), restored = new Pet(bounds); restored.load(save);
+  assert.deepEqual(restored.props.placed.find((t) => t.def?.id === 'canvas')?.art, canvas.art);
+});
+await test('an untouched shipped example upgrades while a custom one is preserved', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ava-example-'));
+  try {
+    const file = path.join(dir, 'pen.json'), original = { id: 'pen', length: 13 };
+    fs.writeFileSync(file, JSON.stringify(original, null, 2)); assert(unchangedExample(file, [original]));
+    fs.writeFileSync(file, JSON.stringify({ ...original, length: 25 })); assert(!unchangedExample(file, [original]));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+await test('a fast weapon swing registers the cursor between frames', () => {
+  const item = new Item(BUILTIN_ITEMS.find((d) => d.id === 'sword')!);
+  item.at = { x: 0, y: 0, z: 0 }; item.dir = { x: 1, y: 0, z: 0 }; item.measure(1 / 30);
+  item.dir = { x: 0, y: 1, z: 0 }; item.measure(1 / 30);
+  assert(item.distTo(15, 15) > 10); assert(item.sweptDistTo(15, 15) < 1);
+});
+await test('bad saved moves, pictures, positions and frame times cannot poison the pet', () => {
+  const p = pet();
+  p.load('{"moves":[null,{"name":"broken"}],"gallery":[null,{"shape":[null]}],"props":[{"id":"canvas","x":1e999}],"lessons":{"safeDrop":1e999}}');
+  assert.equal(p.brain.savedMoves.length, 0); assert.equal(p.gallery.length, 0); assert.equal(p.props.placed.length, 0);
+  const time = p.ctx.world.time; p.update(NaN); p.update(-1); assert.equal(p.ctx.world.time, time);
+  p.update(1/60); assert(Number.isFinite(p.char.x));
 });
 console.log(`${passed} regression checks passed`);

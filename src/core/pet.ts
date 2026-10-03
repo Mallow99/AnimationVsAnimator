@@ -11,14 +11,15 @@ import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowSides, windowWalls, type WinRect } from './world';
 import { beltParts, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
 import { drawItem, itemFromDrawing, Items, type Item } from './items';
-import { Props, type Ball, type Thing } from './props';
+import { Props, parseCanvasArt, type Ball, type Thing } from './props';
 import type { Doodle } from './doodles';
 import type { Platform } from './physics';
 import type { LooseLimb } from './limbs';
 import { limbOf } from './body';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
-import { Brain, splitSpeech } from './brain';
+import { Brain, parseMove, splitSpeech } from './brain';
 import { WindowAccess } from './window-access';
+import { BoardGame } from './board-game';
 import { distToSegment, type Vec } from './math';
 import { Memory } from './memory';
 import { CursorBody, drawCursorFlight } from './cursor';
@@ -54,6 +55,7 @@ export class Pet {
   readonly mood = new Mood();
   readonly mind = new Mind();
   readonly brain = new Brain();
+  readonly game = new BoardGame();
   /** His notes and summary (milestone 5). */
   readonly memory = new Memory();
   /** Called with his memory file's contents when it changes (the app writes it to disk). */
@@ -131,7 +133,7 @@ export class Pet {
   private uiSeen: { id: number; x: number; y: number; w: number; h: number }[] = [];
   private uiNext = 0;
   /** Saved props whose definition (one of your files) hasn't arrived yet. */
-  private pendingProps: { id: string; x: number }[] = [];
+  private pendingProps: { id: string; x: number; art?: unknown }[] = [];
   /** Moving windows didn't work (no permission?): don't try again until this time. */
   private windowAccess = new WindowAccess();
   /** The desktop helper's latest word on moving windows ("moved a window", "no permission yet"...). */
@@ -145,6 +147,7 @@ export class Pet {
     this.char.mode = 'air';
     const pet = this;
     this.ctx = {
+      game: this.game,
       get cursorPlay() { return pet.config.knockCursor; },
       get windowMoves() {
         return !pet.config.moveWindows || !pet.config.windows ? 'off' as const : !pet.onMoveWindow ? 'unsupported' as const
@@ -191,8 +194,10 @@ export class Pet {
 
   /** Advance by real elapsed seconds (any frame rate). */
   update(dt: number) {
+    if (!Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, 0.1); // after a stall (laptop asleep), don't try to catch up forever
     this.ctx.world.time += dt;
+    this.game.update(this.ctx.world.time);
     this.ctx.canGrabCursor = this.config.mischief && !!this.onMoveCursor;
     if (this.freeze > 0) { this.freeze -= dt; dt = 0; }
     this.acc += dt;
@@ -327,7 +332,7 @@ export class Pet {
     const extras: DepthPart[] = [...beltParts(this.char, '#3a2a22'), ...this.items.onHim.filter((it) => !(it.where === 'belt' && it.slot === 3)).map((it) => this.itemPart(it))];
     if (look.pixel > 1) {
       this.pixels.draw(ctx, this.char, look, extras);
-      for (const it of this.items.list) if (it.where === 'world' || it.where === 'cursor') this.pixels.paint(ctx, [it.butt, it.tip], 6 * this.char.scale, { ...look, outline: false }, (g) => drawItem(g, it));
+      for (const it of this.items.list) if (it.where === 'world' || it.where === 'cursor') this.pixels.paint(ctx, [it.butt, it.tip], it.drawPadding + 3 * this.char.scale, { ...look, outline: false }, (g) => drawItem(g, it));
     } else {
       drawCharacter(ctx, this.char, look, extras);
       for (const piece of this.char.loosePieces) drawLooseLimb(ctx, piece, look, this.char.scale);
@@ -1318,7 +1323,8 @@ export class Pet {
       const x = Math.min(b.right - 80, Math.max(b.left + 80, this.char.x + side * (130 + Math.random() * 200)));
       const t = this.props.spawn(id, x, b.top + 10, this.char.scale);
       if (t) { this.sound('poof', 0.7); this.emit({ type: 'propSpawned', id: t.def!.id, name: t.def!.name }); }
-    } else if (verb === 'remove') { const t = this.props.placed[Number(id)]; if (t) { this.props.remove(t); this.sound('poof', 0.4); } }
+    } else if (verb === 'channel') { const t = this.props.placed[Number(id)]; if (t?.def?.use === 'tv') { t.channel = (t.channel + 1) % 4; this.sound('click', 0.5); } }
+    else if (verb === 'remove') { const t = this.props.placed[Number(id)]; if (t) { this.props.remove(t); this.sound('poof', 0.4); } }
     else if (verb === 'clear') for (const t of this.props.placed) this.props.remove(t);
   }
 
@@ -1332,7 +1338,7 @@ export class Pet {
     for (const p of waiting) {
       const def = this.props.defs.get(p.id);
       if (!def) continue;
-      this.props.spawn(p.id, p.x, this.ctx.world.bounds.floor - Math.max(...def.outline.map((q) => q[1])) * this.char.scale - 2, this.char.scale);
+      this.props.spawn(p.id, p.x, this.ctx.world.bounds.floor - Math.max(...def.outline.map((q) => q[1])) * this.char.scale - 2, this.char.scale, p.art);
     }
     this.onCollections?.();
   }
@@ -1364,18 +1370,26 @@ export class Pet {
     try {
       const d = JSON.parse(json);
       this.mood.load(d.mood);
-      if (typeof d.lessons?.safeDrop === 'number') this.ctx.lessons.safeDrop = d.lessons.safeDrop;
-      if (Array.isArray(d.gallery)) this.gallery = d.gallery.slice(-40);
+      if (Number.isFinite(d.lessons?.safeDrop)) this.ctx.lessons.safeDrop = Math.max(40, Math.min(600, d.lessons.safeDrop));
+      if (Array.isArray(d.gallery)) this.gallery = d.gallery.slice(-40).flatMap((g: unknown) => {
+        const art = parseCanvasArt(g);
+        return art ? [{ ...art, at: Number.isFinite((g as { at?: number }).at) ? (g as { at: number }).at : Date.now() }] : [];
+      });
       // Same array object the brain and mind already hold: fill it in place.
-      if (Array.isArray(d.moves)) this.brain.savedMoves.splice(0, Infinity, ...d.moves.slice(-30));
+      if (Array.isArray(d.moves)) this.brain.savedMoves.splice(0, Infinity, ...d.moves.slice(-30).flatMap((m: unknown) => {
+        if (!m || typeof m !== 'object') return [];
+        const move = m as { name?: unknown; frames?: unknown };
+        const frames = parseMove(move.frames);
+        return frames && typeof move.name === 'string' && move.name.trim() ? [{ name: move.name.trim().slice(0, 40), frames }] : [];
+      }));
       if (Array.isArray(d.items)) this.items.load(d.items, this.char, d.itemsKnown);
       // His furniture, back where it was (standing on the floor).
       if (Array.isArray(d.props)) for (const p of d.props.slice(0, 12)) {
-        if (!p || typeof p.id !== 'string' || typeof p.x !== 'number') continue;
+        if (!p || typeof p.id !== 'string' || !Number.isFinite(p.x)) continue;
         const def = this.props.defs.get(p.id);
         if (!def) { this.pendingProps.push(p); continue; } // one of yours: its file loads a moment later
         const h = Math.max(...def.outline.map((q) => q[1])) * this.char.scale;
-        this.props.spawn(p.id, p.x, this.ctx.world.bounds.floor - h - 2, this.char.scale);
+        this.props.spawn(p.id, p.x, this.ctx.world.bounds.floor - h - 2, this.char.scale, p.art);
       }
     } catch { /* corrupt save: start fresh */ }
   }

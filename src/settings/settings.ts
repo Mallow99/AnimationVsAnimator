@@ -239,11 +239,18 @@ function showKey(k: KeyStatus) {
   $('keyInfo').textContent = k.saved ? `Saved (${k.hint}). Stored on this computer only.` : `No ${PROVIDERS[k.provider].label} key yet.`;
 }
 $('findModels').addEventListener('click', async () => {
+  const provider = providerSel.value;
+  const button = $<HTMLButtonElement>('findModels');
+  button.disabled = true;
   $('modelInfo').textContent = 'Asking…';
-  const r = await shell.listModels();
-  if (!r.ok) { $('modelInfo').textContent = r.error; return; }
-  $('modelList').replaceChildren(...r.models.map((m) => new Option(m, m)));
-  $('modelInfo').textContent = `${r.models.length} model(s) available. Click the Model box to pick one.`;
+  try {
+    const r = await shell.listModels();
+    if (provider !== providerSel.value) return;
+    if (!r.ok) { $('modelInfo').textContent = r.error; return; }
+    $('modelList').replaceChildren(...r.models.map((m) => new Option(m, m)));
+    $('modelInfo').textContent = r.models.length ? `${r.models.length} model(s) available. Click the Model box to pick one.` : 'No matching models returned. Try again later or choose another service.';
+  } catch { if (provider === providerSel.value) $('modelInfo').textContent = 'Could not load models. Try again.'; }
+  finally { button.disabled = false; }
 });
 $('keyForm').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -392,7 +399,12 @@ function renderItems(v: ItemsView) {
 function renderProps(v: PropsView) {
   $('propKinds').replaceChildren(...v.kinds.map((k) => moveRow(k.name, 0, [['Drop it in', () => shell.command(`prop:spawn:${k.id}`)]], k.about)));
   $('propPlaced').replaceChildren(...(v.placed.length
-    ? [...v.placed.map((p) => moveRow(p.name, 0, [['Put away', () => shell.command(`prop:remove:${p.i}`)]], 'on the desktop')),
+    ? [...v.placed.map((p) => moveRow(p.name, 0, [
+        ...(p.id === 'tv' ? [['Change channel', () => shell.command(`prop:channel:${p.i}`)] as [string, () => void]] : []),
+        ...(p.id === 'canvas' ? [['Paint', () => shell.command('do:paint')] as [string, () => void]] : []),
+        ...(p.id === 'board-game' ? [['Play together', () => shell.command('do:playgame')] as [string, () => void]] : []),
+        ['Put away', () => shell.command(`prop:remove:${p.i}`)]
+      ], 'on the desktop')),
       moveRow('All of them', 0, [['Put everything away', () => shell.command('prop:clear')]], '')]
     : [emptyNote('Nothing out on the desktop yet.')]));
 }

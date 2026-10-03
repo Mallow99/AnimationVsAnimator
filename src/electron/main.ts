@@ -13,6 +13,8 @@ import { watchWindows, type UiReport, type WindowWatcher } from './windows';
 import * as llm from './llm';
 import type { BrainRequest } from '../core/brain';
 import { writeAtomic } from './storage';
+import { unchangedExample } from './builtin-files';
+import builtinHistory from '../../assets/builtin-history.json';
 
 let win: BrowserWindow | null = null;
 let settingsWin: BrowserWindow | null = null;
@@ -80,7 +82,8 @@ function readItemDefs(): unknown[] {
     if (fs.existsSync(examples)) {
       for (const f of fs.readdirSync(examples)) {
         const to = path.join(dir, f);
-        if (f.endsWith('.md') || (!copied.includes(f) && !fs.existsSync(to))) fs.copyFileSync(path.join(examples, f), to);
+        const old = (builtinHistory as Record<string, unknown[]>)[f] ?? [];
+        if (f.endsWith('.md') || (!copied.includes(f) && !fs.existsSync(to)) || unchangedExample(to, old)) fs.copyFileSync(path.join(examples, f), to);
         if (!copied.includes(f)) copied.push(f);
       }
       fs.writeFileSync(marker, JSON.stringify(copied));

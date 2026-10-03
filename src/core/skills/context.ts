@@ -8,6 +8,7 @@ import type { Props } from '../props';
 import type { Vec } from '../math';
 import type { Memory } from '../memory';
 import type { Items } from '../items';
+import type { BoardGame } from '../board-game';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none' | 'target';
 
@@ -83,6 +84,7 @@ export interface Ctx {
   windowMoves?: 'ok' | 'off' | 'unsupported' | 'stuck';
   /** Drawings that came to life: balls, boxes, ledges. */
   props?: Props;
+  game?: BoardGame;
   /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
   onBecome?: (d: Doodle) => void;
 }
@@ -103,4 +105,3 @@ export function arrive(c: Ctx, x: number, tol = 8) {
   ch.walkTo(x, Math.abs(x - ch.x) > 200);
   return false;
 }
-

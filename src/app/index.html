@@ -20,6 +20,16 @@
     #talk .x { background: #fff; color: var(--ink, #232a6b); border-left: 0; }
     #talk::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 9px; height: 9px; background: var(--ink, #232a6b);
       clip-path: polygon(0 0, 100% 0, 50% 100%); }
+    #gamePanel { position: fixed; width: 206px; box-sizing: border-box; padding: 12px; color: #1b1d2e; background: #fff8e8;
+      border: 3px solid var(--ink, #232a6b); box-shadow: 3px 3px 0 #0006; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+    #gamePanel p { margin: 8px 0; min-height: 36px; }
+    .game-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+    .game-grid[hidden] { display: none; }
+    #gamePanel button { font: inherit; cursor: pointer; border: 2px solid var(--ink, #232a6b); background: #fff; color: #1b1d2e; padding: 6px; }
+    #gamePanel button:focus-visible { outline: 3px solid #e79524; outline-offset: 2px; }
+    #gamePanel button:disabled { cursor: default; color: #51546b; }
+    .game-grid button { height: 45px; font-size: 24px !important; }
+    .game-actions { display: flex; gap: 8px; margin-top: 10px; }
   </style>
 </head>
 <body>

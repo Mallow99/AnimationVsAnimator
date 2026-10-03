@@ -16,7 +16,7 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  Chain, routeTo, Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, RideScooter, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
+  Chain, routeTo, Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, RideScooter, PlayBoardGame, PaintCanvas, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
@@ -180,6 +180,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'ropebridge', label: 'Draw a rope bridge' },
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'ride', label: 'Ride the scooter' },
+  { name: 'paint', label: 'Paint on his canvas' }, { name: 'playgame', label: 'Play a board game together' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
@@ -215,6 +216,7 @@ export class Mind {
   /** Why he can't do each thing you asked for (said instead of "?"). */
   private cant: Record<string, string> = {};
   private windowPrankAt = -100;
+  private gameAskedAt = -300;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
   /** While the AI brain is deciding what he does next, instinct waits until this time. */
@@ -645,19 +647,25 @@ export class Mind {
     const s = c.mood.s, E = c.mood.emotion, L = c.mood.label, ch = c.char, opts: Option[] = [];
     if (!ch.whole || ch.support >= 0 && !c.props?.thingOf(ch.support)) {
       // (Up on a window: he'd have to get down first. Keep it simple: props are for when he's on the floor.)
-      if (this.forced) for (const n of ['sitdown', 'watchtv', 'ride']) this.cant[n] = !ch.whole ? 'not like this' : 'I need to get down first';
+      if (this.forced) for (const n of ['sitdown', 'watchtv', 'ride', 'paint', 'playgame']) this.cant[n] = !ch.whole ? 'not like this' : 'I need to get down first';
       return opts;
     }
     const seat = propsOf(c, 'seat')[0], tv = propsOf(c, 'tv')[0], scooter = propsOf(c, 'ride')[0];
+    const canvas = propsOf(c, 'canvas')[0], game = propsOf(c, 'game')[0];
     if (this.forced) {
       if (!seat) this.cant.sitdown = 'nothing to sit on (drop in a chair!)';
       if (!tv) this.cant.watchtv = 'no TV (drop one in from my inventory)';
       if (!scooter) this.cant.ride = 'no scooter';
+      if (!canvas) this.cant.paint = 'no canvas (drop one in from my inventory)';
+      if (!game) this.cant.playgame = 'no board game (drop one in from my inventory)';
     }
     if (seat) opts.push({ name: 'sitdown', why: s.energy < 0.5 ? 'tired: having a sit on the ' + seat.def!.name.toLowerCase() : 'taking a seat',
       score: 0.15 + (1 - s.energy) * 0.7 + (L === 'sad' ? 0.3 : 0), make: () => new SitOnProp(seat) });
     if (tv) opts.push({ name: 'watchtv', why: 'watching TV', score: L === 'bored' ? 0.9 : E === 'lonely' || L === 'sad' ? 0.6 : L === 'sleepy' ? 0.3 : 0.25, make: () => new WatchTV(tv) });
     if (scooter && ch.legCount === 2 && ch.useHand) opts.push({ name: 'ride', why: 'scooter time', score: E === 'excited' ? 1 : L === 'playful' ? 0.7 : L === 'bored' ? 0.5 : 0.08, make: () => new RideScooter(scooter) });
+    if (canvas && c.items.find('draw') && ch.useHand) opts.push({ name: 'paint', why: 'painting on his canvas', score: L === 'bored' ? 0.5 : L === 'playful' ? 0.3 : 0.05, make: () => new PaintCanvas(canvas) });
+    if (game && c.game) opts.push({ name: 'playgame', why: 'asking you to play a game', score: c.world.time - this.gameAskedAt >= 300 && (L === 'bored' || L === 'playful') ? 0.35 : 0,
+      make: () => { this.gameAskedAt = c.world.time; return new PlayBoardGame(game); } });
     return opts;
   }
 

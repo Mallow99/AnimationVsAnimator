@@ -6,7 +6,7 @@ import type { Character, Gesture, Keyframe } from './character';
 import { GRAVITY, type Platform } from './physics';
 import { surfaceBelow, type Wall } from './world';
 import { SHAPES, type Becomes, type Doodle } from './doodles';
-import { makeBridge, makeRamp, rampSlopeId, reserveThing, type Ball } from './props';
+import { makeBridge, makeRamp, rampSlopeId, reserveThing, type Ball, type Thing } from './props';
 import { platY } from './physics';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
 import type { LimbId } from './body';
@@ -14,7 +14,7 @@ import { preferredSlots, type Item, type ItemUse } from './items';
 
 import { Skill, arrive, type Ctx, type LookMode } from './skills/context';
 export { Skill, DEFAULT_LESSONS, type Ctx, type World, type Lessons, type LookMode } from './skills/context';
-export { propsOf, SitOnProp, WatchTV, RideScooter } from './skills/props';
+export { propsOf, SitOnProp, WatchTV, RideScooter, PlayBoardGame } from './skills/props';
 
 /** Do some skills one after the other (each one is made when its turn comes). */
 export class Chain extends Skill {
@@ -650,7 +650,7 @@ export class DoodleSkill extends Skill {
    * `shape`: strokes in a box from -0.5 to 0.5 (y down). Left out = one of his usual pictures.
    * `becomes`: it comes to life when it's done (a ball, a box, a ledge, an item).
    */
-  constructor(private shape?: Vec[][], private title = '', private opts: { becomes?: Becomes; place?: DrawPlace } = {}) { super(); }
+  constructor(private shape?: Vec[][], private title = '', private opts: { becomes?: Becomes; place?: DrawPlace; surface?: Thing } = {}) { super(); }
   private doodle: Doodle | null = null;
   private plan: Vec[][] = [];
   private si = 0; private pi = 0; private along = 0;
@@ -669,9 +669,14 @@ export class DoodleSkill extends Skill {
     const shape0 = this.shape ?? SHAPES[name];
     const shape = this.opts.becomes === 'ramp' && ch.facing < 0 ? shape0.map((st) => st.map((p) => ({ x: -p.x, y: p.y }))) : shape0;
     const place = this.opts.place ?? 'front', floor = Math.max(j.footL.y, j.footR.y) + 2;
-    const size = (place === 'air' ? 64 : place === 'floor' ? 50 : 46) * sc;
-    const cx = ch.x + ch.facing * (place === 'front' ? 40 : place === 'floor' ? 36 : 50) * sc;
-    const cy = place === 'floor' ? floor - size * 0.47 : place === 'air' ? floor - 100 * sc : j.neck.y + 8 * sc;
+    let size = (place === 'air' ? 64 : place === 'floor' ? 50 : 46) * sc;
+    let cx = ch.x + ch.facing * (place === 'front' ? 40 : place === 'floor' ? 36 : 50) * sc;
+    let cy = place === 'floor' ? floor - size * 0.47 : place === 'air' ? floor - 100 * sc : j.neck.y + 8 * sc;
+    const surface = this.opts.surface, screen = surface?.def?.screen;
+    if (surface && screen) {
+      const center = surface.toWorld(screen[0] + screen[2] / 2, screen[1] + screen[3] / 2);
+      cx = center.x; cy = center.y; size = Math.min(screen[2], screen[3]) * surface.scale * 0.8;
+    }
     this.plan = shape.map((st) => st.map((p) => ({ x: cx + p.x * size, y: cy + p.y * size })));
     this.doodle = { strokes: [], color: c.inkColor, born: c.world.time, done: false, shape, title: this.title || (this.shape ? 'made up' : name), becomes: this.opts.becomes, cx, cy, size, dir: ch.facing > 0 ? 1 : -1 };
     c.doodles.push(this.doodle);
@@ -729,6 +734,10 @@ export class DoodleSkill extends Skill {
     const stroke = this.plan[this.si];
     if (!stroke) { // all done: admire it, put the pen away
       d.done = true;
+      if (this.opts.surface && d.shape) {
+        this.opts.surface.art = { shape: d.shape, color: d.color, title: d.title ?? 'drawing' };
+        d.alive = true; // the canvas now owns the picture, so it moves with the prop
+      }
       ch.handTarget = null;
       pen.aim = null;
       c.onDrawn?.(d);
@@ -768,6 +777,28 @@ export class DoodleSkill extends Skill {
   }
 }
 
+/** Approach his easel, then draw with the same pen controller used for doodles. */
+export class PaintCanvas extends Skill {
+  readonly name = 'paint';
+  private sub: DoodleSkill | null = null;
+  private center: Vec | null = null;
+  constructor(private canvas: Thing) { super(); }
+  update(c: Ctx, dt: number) {
+    if (!c.props?.things.includes(this.canvas) || this.canvas.held || Math.abs(this.canvas.tilt) > 0.35) return true;
+    const at = this.canvas.center;
+    if (!this.sub) {
+      if (this.t > 15) return true;
+      if (!arrive(c, at.x - 40 * c.char.scale, 5)) return false;
+      c.char.facing = 1;
+      this.center = { ...at };
+      this.sub = new DoodleSkill(undefined, '', { surface: this.canvas }); this.sub.start(c);
+    }
+    if (this.center && Math.hypot(at.x - this.center.x, at.y - this.center.y) > 10 * c.char.scale) return true;
+    this.sub.t += dt; return this.sub.update(c, dt);
+  }
+  stop(c: Ctx) { this.sub?.stop(c); }
+}
+
 /** How each kind of swing goes (angles in degrees: 0 = straight ahead, 90 = straight up, negative = down). */
 const SWINGS = {
   // A sword: wound up high behind him, a diagonal cut down through the front.
@@ -789,7 +820,7 @@ export class SwordSwing extends Skill {
   private swings = 0;
   private hit = false;
   private from = -70;
-  private k: (typeof SWINGS)[keyof typeof SWINGS];
+  private k: { top: number; bottom: number; windup: number; cut: number; follow: number; lead: number; bounce: number; what: string };
   constructor(private times = 2, private atCursor = true, use: 'swing' | 'smash' = 'swing') {
     super();
     this.name = use === 'smash' ? 'smash' : 'swing';
@@ -810,7 +841,7 @@ export class SwordSwing extends Skill {
   /** Did the swing go through your cursor? (Once per swing.) */
   private checkHit(c: Ctx) {
     const it = this.tool.item!, cur = c.world.cursor, ch = c.char;
-    if (this.hit || !cur || it.tipSpeed < 200 || it.distTo(cur.x, cur.y) > (this.name === 'smash' ? 12 : 9) * ch.scale) return;
+    if (this.hit || !cur || it.tipSpeed < 200 || it.sweptDistTo(cur.x, cur.y) > (this.name === 'smash' ? 12 : 9) * ch.scale) return;
     this.hit = true;
     c.hitCursor?.(cur.x, cur.y, it.tipVel.x * 0.8, it.tipVel.y * 0.8 - (this.name === 'smash' ? 0 : 260), Math.max(0.6, it.def.hit));
   }
@@ -818,12 +849,16 @@ export class SwordSwing extends Skill {
   update(c: Ctx, dt: number) {
     const ch = c.char, cur = c.world.cursor;
     this.pt += dt;
+    if (this.phase !== 'tool' && this.phase !== 'stow' && this.tool.item?.where !== 'hand') return true;
     switch (this.phase) {
       case 'tool': {
         if (!ch.ready) return this.t > 20;
         const r = this.tool.fetch(c, dt);
         if (r === 'none') { missingTool(c, this.tool, this.k.what); return true; }
-        if (r === 'ready') { this.phase = 'approach'; this.pt = 0; }
+        if (r === 'ready') {
+          if (this.tool.item?.def.id === 'mace') this.k = { ...SWINGS.smash, windup: 0.65, cut: 0.18, follow: 0.45, bounce: 10, what: 'mace' };
+          this.phase = 'approach'; this.pt = 0;
+        }
         return false;
       }
       case 'approach': {

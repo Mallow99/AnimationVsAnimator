@@ -6,6 +6,7 @@ import type { Bounds } from '../core/physics';
 import type { WinRect } from '../core/world';
 import type { BrainRequest } from '../core/brain';
 import { playBlip, playSfx } from './sfx';
+import { createGamePanel } from './game-panel';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -113,6 +114,7 @@ const talk = document.getElementById('talk') as HTMLFormElement;
 const talkText = document.getElementById('talkText') as HTMLInputElement;
 let talkOpen = false, talkIdle = 0;
 function openTalk() {
+  pet.game.close();
   talkOpen = true;
   talk.classList.add('open');
   talk.style.setProperty('--ink', pet.config.look.color);
@@ -151,6 +153,7 @@ const overTalk = (x: number, y: number) => {
   const r = talk.getBoundingClientRect();
   return x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 12;
 };
+const gamePanel = createGamePanel(pet, (on) => { if (on) closeTalk(); shell?.setTyping(on || talkOpen); });
 
 // ── click-through ──
 // The window ignores the mouse (clicks fall through to your desktop) except
@@ -158,7 +161,7 @@ const overTalk = (x: number, y: number) => {
 // or you're carrying one of his things (then a click anywhere drops it).
 let ignoring = true;
 function updateClickThrough(x: number, y: number) {
-  const want = !(pet.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y));
+  const want = !(pet.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y) || gamePanel.over(x, y));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);
@@ -182,12 +185,13 @@ window.addEventListener('mousemove', (e) => {
 });
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  if (gamePanel.over(e.clientX, e.clientY)) return;
   if (pet.contextMenu(e.clientX, e.clientY)) shell?.pressed();
   updateClickThrough(e.clientX, e.clientY);
 });
 window.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
-  if (overTalk(e.clientX, e.clientY)) return; // typing to him
+  if (overTalk(e.clientX, e.clientY) || gamePanel.over(e.clientX, e.clientY)) return;
   if (talkOpen && !pet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
   if (pet.pointerDown(e.clientX, e.clientY, performance.now())) {
     canvas.style.cursor = 'grabbing';
@@ -232,6 +236,8 @@ function frame(now: number) {
   // The mouse may sit still while held; decay its velocity so he isn't "thrown" on release.
   if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; pet.pointerMove(last.x, last.y, vel.x, vel.y, now); }
   pet.update(dt);
+  gamePanel.update();
+  updateClickThrough(last.x, last.y);
   if (talkOpen) { placeTalk(); if (now - talkIdle > 45000 && document.activeElement !== talkText) closeTalk(); }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   if (fakeWins.length) drawFakeWindows();

@@ -1,0 +1,16 @@
+{
+  "id": "mace",
+  "name": "Mace",
+  "about": "A toy metal mace. A slower wind-up and a heavy overhead bonk, different from his wooden sword.",
+  "use": "smash",
+  "length": 27,
+  "grip": 4,
+  "belt": "back",
+  "hit": 1.6,
+  "shape": [
+    {"pts": [[-4, 0], [21, 0]], "color": "#6b4426", "width": 3},
+    {"pts": [[20, -5], [25, -5], [28, 0], [25, 5], [20, 5], [17, 0], [20, -5]], "color": "#939bab", "width": 5},
+    {"pts": [[22, -5], [22, -9]], "color": "#d0d5df", "width": 2},
+    {"pts": [[22, 5], [22, 9]], "color": "#d0d5df", "width": 2}
+  ]
+}

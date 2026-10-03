@@ -9,6 +9,16 @@ import { FLOOR, type Platform } from '../src/core/physics';
 import { windowPlatforms } from '../src/core/world';
 
 const DT = 1 / 120;
+// Print a reproducible seed so a timing/randomness failure can be investigated, not retried blindly.
+const seed = Number(process.env.SIM_SEED ?? 1);
+if (!Number.isSafeInteger(seed)) throw new Error('SIM_SEED must be an integer');
+let randomState = seed >>> 0;
+Math.random = () => {
+  let t = randomState += 0x6D2B79F5;
+  t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
+console.log(`Simulation seed: ${seed}`);
 const bounds: Bounds = { left: 0, right: 1400, top: 0, floor: 800 };
 let failures = 0;
 

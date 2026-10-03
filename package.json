@@ -11,9 +11,12 @@
     "lab": "node scripts/build.mjs lab && node scripts/preview.mjs dist/lab/index.html",
     "sim": "node scripts/build.mjs sim && node .build/sim.mjs",
     "typecheck": "tsc --noEmit",
-    "checks": "node scripts/build.mjs checks && node .build/checks.mjs"
+    "checks": "node scripts/build.mjs checks && node .build/checks.mjs",
+    "package:win": "node scripts/build.mjs && node scripts/package-win.mjs",
+    "browsercheck": "node scripts/build.mjs && node scripts/browser-check.mjs"
   },
   "devDependencies": {
+    "@electron/packager": "20.3.0",
     "electron": "^44.5.1",
     "esbuild": "^0.28.2",
     "typescript": "^6.0.2"

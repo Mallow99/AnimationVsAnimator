@@ -15,6 +15,7 @@ import penDef from './items/pen.json';
 import swordDef from './items/wooden-sword.json';
 import hammerDef from './items/hammer.json';
 import ballDef from './items/bouncy-ball.json';
+import maceDef from './items/mace.json';
 
 /** What he does with it: draw (a pen), swing (a sword), smash (a hammer, overhead), throw (a ball), none (just carries it). */
 export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'none';
@@ -82,7 +83,7 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, hammerDef, ballDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, hammerDef, ballDef, maceDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
 export const SLOT_NAMES = ['left hip', 'right hip', 'back', 'pocket'];
@@ -110,6 +111,7 @@ export class Item {
   tipSpeed = 0;
   tipVel: Vec = { x: 0, y: 0 };
   private lastTip: V3 | null = null;
+  private previousTip: V3 | null = null;
   /** He threw it (it's flying at something): when, so it only counts as a throw for a moment. */
   thrownAt = -10;
 
@@ -145,11 +147,12 @@ export class Item {
   }
 
   /** Forget how it was moving (after it jumps somewhere new, like from his belt to your cursor). */
-  resetMotion() { this.lastTip = null; this.tipSpeed = 0; this.tipVel = { x: 0, y: 0 }; }
+  resetMotion() { this.lastTip = null; this.previousTip = null; this.tipSpeed = 0; this.tipVel = { x: 0, y: 0 }; }
 
   /** Keep track of how fast the tip moves (for hits). */
   measure(dt: number) {
     const tip = this.tip;
+    this.previousTip = this.lastTip;
     if (this.lastTip && dt > 0) this.tipVel = { x: (tip.x - this.lastTip.x) / dt, y: (tip.y - this.lastTip.y) / dt };
     else this.tipVel = { x: 0, y: 0 };
     this.tipSpeed = Math.hypot(this.tipVel.x, this.tipVel.y);
@@ -170,6 +173,16 @@ export class Item {
     const t = clamp(((x - p.x) * dx + (y - p.y) * dy) / l2, 0, 1);
     return Math.hypot(x - (p.x + dx * t), y - (p.y + dy * t));
   }
+
+  /** Fast swings can cross a cursor between frames. Include the path of the tip. */
+  sweptDistTo(x: number, y: number) {
+    if (!this.previousTip) return this.distTo(x, y);
+    const a = this.previousTip, b = this.tip, dx = b.x - a.x, dy = b.y - a.y;
+    const u = clamp(((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+    return Math.min(this.distTo(x, y), Math.hypot(x - a.x - dx * u, y - a.y - dy * u));
+  }
+
+  get drawPadding() { return Math.max(6, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.abs(p[1]) + s.width / 2))) * this.scale; }
 }
 
 /** Everything he owns (and what you took), where it is, and moving it between places. */

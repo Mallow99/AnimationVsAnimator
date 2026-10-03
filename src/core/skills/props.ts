@@ -1,10 +1,10 @@
 // Furniture activities, separated from combat and climbing.
 import { Skill, arrive, type Ctx } from './context';
-import type { Thing } from '../props';
+import type { Thing, PropDef } from '../props';
 import { chance, pick, rand } from '../math';
 
 /** The props of a kind (seat, tv, ride) that are standing up on the floor, nearest first. */
-export function propsOf(c: Ctx, use: 'seat' | 'tv' | 'ride'): Thing[] {
+export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
   const ch = c.char;
   return (c.props?.placed ?? []).filter((t) => t.def!.use === use && Math.abs(t.tilt) < 0.35 && !t.held)
     .sort((a, b) => Math.abs(a.center.x - ch.x) - Math.abs(b.center.x - ch.x));
@@ -141,7 +141,7 @@ export class RideScooter extends Skill {
       if (Math.abs(speed) < 8) {
         ch.handTarget = null;
         this.phase = 'off'; this.t = 0;
-        ch.walkTo(deck.x1 - this.dir * 25 * ch.scale, false, true);
+        ch.walkTo(this.dir > 0 ? deck.x2 + 25 * ch.scale : deck.x1 - 25 * ch.scale, false, true);
         if (chance(0.5)) c.say(pick(['again!', 'nice', 'that was fun']), 1.2);
       }
       return this.t > 6;
@@ -151,3 +151,29 @@ export class RideScooter extends Skill {
   stop(c: Ctx) { c.char.handTarget = null; }
 }
 
+/** He offers a game; the person chooses whether to join. Interruptions close it cleanly. */
+export class PlayBoardGame extends Skill {
+  readonly name = 'playgame';
+  private offered = false;
+  private reacted = false;
+  constructor(private table: Thing) { super(); }
+  update(c: Ctx) {
+    if (!c.game || !c.props?.things.includes(this.table) || this.table.held || Math.abs(this.table.tilt) > 0.6 || !c.char.ready) return true;
+    c.look = 'target'; c.lookTarget = this.table.center;
+    if (!this.offered) {
+      if (this.t > 15) return true;
+      if (!arrive(c, this.table.center.x - 38 * c.char.scale, 8)) return false;
+      if (!c.game.invite()) return true;
+      this.offered = true; this.t = 0;
+      c.say('wanna play a round?', 2);
+    }
+    if (c.game.state === 'finished' && !this.reacted) {
+      this.reacted = true;
+      c.say(c.game.result === 'X' ? 'rematch?' : c.game.result === 'O' ? 'ha! got you' : 'draw. again?', 2);
+      c.mood.nudge({ boredom: -0.15, happiness: 0.03 });
+    }
+    if (c.game.state === 'playing') this.reacted = false;
+    return c.game.state === 'closed' || this.t > (c.game.state === 'invite' ? 20 : 300);
+  }
+  stop(c: Ctx) { if (this.offered) c.game?.close(); }
+}

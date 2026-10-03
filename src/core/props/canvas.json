@@ -1,0 +1,14 @@
+{
+  "type": "prop",
+  "id": "canvas",
+  "name": "Canvas",
+  "about": "An easel for his pen. Ask him to paint; the picture stays on the canvas and is saved.",
+  "use": "canvas",
+  "outline": [[0, 0], [48, 0], [48, 68], [0, 68]],
+  "screen": [4, 4, 40, 46],
+  "shape": [
+    {"pts": [[0, 0], [48, 0], [48, 54], [0, 54], [0, 0]], "color": "#a8703c", "width": 3},
+    {"pts": [[10, 54], [3, 68]], "color": "#6b4426", "width": 3},
+    {"pts": [[38, 54], [45, 68]], "color": "#6b4426", "width": 3}
+  ]
+}
