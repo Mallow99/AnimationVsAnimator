@@ -72,8 +72,13 @@ func moveWindow(_ id: Int, _ p: CGPoint) {
   }
   var pt = p
   guard let v = AXValueCreate(.cgPoint, &pt) else { return }
-  let err = AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, v)
-  if err != .success { axCache[id] = nil; note("set\(err.rawValue)", "move: the window refused to move (AX error \(err.rawValue))") }
+  var err = AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, v)
+  // Apps recreate Accessibility elements. Discard the stale handle and retry once.
+  if err == .invalidUIElement {
+    axCache[id] = nil
+    if let fresh = axWindow(id) { err = AXUIElementSetAttributeValue(fresh, kAXPositionAttribute as CFString, v) }
+  }
+  if err != .success { axCache[id] = nil; note("set\(id)-\(err.rawValue)", "move: window \(id) refused to move (AX error \(err.rawValue)); other windows can still work") }
   else { note("ok", "move: moved a window, Accessibility works") }
 }
 

@@ -29,6 +29,8 @@ export interface PetConfig {
   model: string;
   /** Let the AI move his body directly (make up its own poses and moves), not just pick from his skills. */
   puppet: boolean;
+  /** Seconds between unsolicited AI thoughts. Direct conversation is always immediate. */
+  aiInterval: number;
   /** Swiping the cursor through him fast smacks him. Off by default so it doesn't happen by accident. */
   smacking: boolean;
   /** Stand on, climb and get carried by the windows on screen. */
@@ -70,6 +72,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   provider: 'gemini',
   model: PROVIDERS.gemini.model,
   puppet: true,
+  aiInterval: 40,
   smacking: false,
   windows: true,
   mischief: false,
@@ -90,6 +93,7 @@ const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 80, provider
 
 /** Every adjustable number: its limits, and how the settings window labels it. */
 export const RANGES: Record<string, Range> = {
+  'aiInterval': { min: 40, max: 300, step: 10, label: 'AI thinking interval', hint: 'Full mode: seconds between his own ideas (higher uses fewer calls)' },
   'scale': { min: 0.6, max: 2.5, step: 0.05, label: 'Size', hint: 'How big he is on screen' },
   'volume': { min: 0, max: 1, step: 0.05, label: 'Volume', hint: 'His voice and sound effects' },
   'look.lineWidth': { min: 2, max: 10, step: 0.5, label: 'Line thickness', hint: 'Limb thickness' },
@@ -118,7 +122,7 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   const merge = (target: Record<string, unknown>, src: unknown, prefix: string) => {
     if (!src || typeof src !== 'object') return;
     for (const [k, v] of Object.entries(src as Record<string, unknown>)) {
-      if (!(k in target)) continue;
+      if (!Object.hasOwn(target, k)) continue;
       const cur = target[k], key = prefix + k;
       if (typeof cur === 'number' && typeof v === 'number' && Number.isFinite(v)) target[k] = clamp(v, RANGES[key]);
       else if (typeof cur === 'string' && typeof v === 'string') target[k] = v.slice(0, TEXT_LIMITS[key] ?? 40);
@@ -138,7 +142,7 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   if (!['offline', 'chat', 'full'].includes(out.mind)) out.mind = 'offline';
   if (!/^#[0-9a-f]{6}$/i.test(out.look.color)) out.look.color = base.look.color;
   if (!out.name.trim()) out.name = base.name;
-  if (!(out.provider in PROVIDERS)) out.provider = base.provider;
+  if (!Object.hasOwn(PROVIDERS, out.provider)) out.provider = base.provider;
   // A bad model name, or one left over from before he had a choice of services: use the service's default.
   if (!/^[a-z0-9._:/-]+$/i.test(out.model) || /^claude-/.test(out.model)) out.model = PROVIDERS[out.provider].model;
   return out;

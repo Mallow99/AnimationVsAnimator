@@ -48,7 +48,7 @@ public static class PetWindows {
     var t = new StringBuilder(256); GetWindowText(h, t, 256);
     string app = "";
     try { app = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; } catch { }
-    return "{\"ui\":{\"app\":" + Json(app) + ",\"title\":" + Json(t.ToString()) + ",\"win\":" + (h.ToInt64() & 0x7fffffff) + ",\"trusted\":true,\"els\":[]}}";
+    return "{\"ui\":{\"app\":" + Json(app) + ",\"title\":" + Json(t.ToString()) + ",\"win\":" + h.ToInt64() + ",\"trusted\":true,\"els\":[]}}";
   }
   public static void ListenForCursor() {
     var t = new Thread(() => {
@@ -90,7 +90,7 @@ public static class PetWindows {
       int w = r.R - r.L, hh = r.B - r.T;
       if (w < 80 || hh < 40) return true;
       if (!first) sb.Append(","); first = false;
-      sb.Append("{\"id\":").Append(h.ToInt64() & 0x7fffffff).Append(",\"x\":").Append(r.L).Append(",\"y\":").Append(r.T)
+      sb.Append("{\"id\":").Append(h.ToInt64()).Append(",\"x\":").Append(r.L).Append(",\"y\":").Append(r.T)
         .Append(",\"w\":").Append(w).Append(",\"h\":").Append(hh).Append("}");
       return true;
     }, IntPtr.Zero);

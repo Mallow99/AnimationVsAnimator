@@ -52,28 +52,36 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
   let stopped = false;
   let failures = 0;
   let seenAny = false;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let fakeTimer: ReturnType<typeof setInterval> | undefined;
+  const send = (line: string) => {
+    if (!stopped && child?.stdin?.writable && !child.stdin.destroyed) child.stdin.write(line);
+  };
 
   const launch = async () => {
     if (stopped) return;
     // For testing without real windows: PET_FAKE_WINDOWS='[{"id":1,"x":100,"y":500,"w":400,"h":300}]'
     if (process.env.PET_FAKE_WINDOWS) {
       const fake = JSON.parse(process.env.PET_FAKE_WINDOWS) as WinRect[];
-      const timer = setInterval(() => (stopped ? clearInterval(timer) : onUpdate(fake)), 500);
+      fakeTimer = setInterval(() => onUpdate(fake), 500);
       return;
     }
     if (process.platform === 'darwin') {
       const bin = await macHelper(log);
       if (!bin || stopped) return;
       child = spawn(bin, [String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'] });
-      if (uiOn) child.stdin?.write('ui on\n');
     } else if (process.platform === 'win32') {
       child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
         path.join(nativeDir, 'windows-win.ps1'), '-SelfPid', String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-      if (uiOn) child.stdin?.write('ui on\n');
     } else {
       log('window awareness is only available on macOS and Windows');
       return;
     }
+    const running = child;
+    running.once('spawn', () => { if (uiOn) send('ui on\n'); });
+    // A helper that can't spawn, or a pipe closed while moving a window, should not crash the pet.
+    running.on('error', (err) => log(`could not start window helper: ${err.message}`));
+    running.stdin?.on('error', (err) => log(`window helper input closed: ${err.message}`));
     let buf = '';
     child.stdout!.setEncoding('utf8');
     child.stdout!.on('data', (chunk: string) => {
@@ -93,21 +101,21 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
     });
     child.stderr!.setEncoding('utf8');
     child.stderr!.on('data', (d: string) => log(d.trim()));
-    child.on('exit', (code) => {
-      child = null;
+    child.on('close', (code) => {
+      if (child === running) child = null;
       if (stopped) return;
       onUpdate([]);
       if (++failures > 5) { log(`window helper keeps exiting (code ${code}); giving up`); return; }
-      setTimeout(launch, 2000 * failures); // try again, waiting a bit longer each time
+      retry = setTimeout(() => { launch().catch((e) => log(String(e))); }, 2000 * failures);
     });
   };
   launch().catch((e) => log(String(e)));
 
   return {
-    stop() { stopped = true; child?.kill(); },
-    refocus() { if (process.platform === 'darwin') child?.stdin?.write('refocus\n'); },
-    moveCursor(x, y) { child?.stdin?.write(`cursor ${Math.round(x)} ${Math.round(y)}\n`); },
-    moveWindow(id, x, y) { child?.stdin?.write(`win ${Math.round(id)} ${Math.round(x)} ${Math.round(y)}\n`); },
-    setUi(on) { uiOn = on; child?.stdin?.write(on ? 'ui on\n' : 'ui off\n'); },
+    stop() { stopped = true; clearTimeout(retry); clearInterval(fakeTimer); child?.kill(); },
+    refocus() { if (process.platform === 'darwin') send('refocus\n'); },
+    moveCursor(x, y) { if ([x, y].every(Number.isFinite)) send(`cursor ${Math.round(x)} ${Math.round(y)}\n`); },
+    moveWindow(id, x, y) { if ([id, x, y].every(Number.isFinite)) send(`win ${Math.round(id)} ${Math.round(x)} ${Math.round(y)}\n`); },
+    setUi(on) { uiOn = on; send(on ? 'ui on\n' : 'ui off\n'); },
   };
 }

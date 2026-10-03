@@ -3,102 +3,18 @@
 // it never moves joints directly.
 
 import type { Character, Gesture, Keyframe } from './character';
-import type { Mood } from './mood';
-import { GRAVITY, type Bounds, type Platform } from './physics';
+import { GRAVITY, type Platform } from './physics';
 import { surfaceBelow, type Wall } from './world';
 import { SHAPES, type Becomes, type Doodle } from './doodles';
-import { makeBridge, makeRamp, rampSlopeId, reserveThing, type Ball, type Props, type Thing } from './props';
+import { makeBridge, makeRamp, rampSlopeId, reserveThing, type Ball } from './props';
 import { platY } from './physics';
 import { chance, clamp, pick, rand, sign, type Vec } from './math';
-import type { Memory } from './memory';
 import type { LimbId } from './body';
-import { preferredSlots, type Item, type Items, type ItemUse } from './items';
-import type { WinRect } from './world';
+import { preferredSlots, type Item, type ItemUse } from './items';
 
-export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none' | 'target';
-
-export interface World {
-  bounds: Bounds;
-  cursor: Vec | null;
-  cursorMovedAt: number; // world.time when the cursor last moved
-  time: number;          // seconds since start
-  platforms: Platform[]; // window tops he can stand on
-  walls: Wall[];         // window sides and screen edges he can climb
-  windows: WinRect[];    // the windows on screen (front-most first), where they are right now
-  sides: Wall[];         // every visible window side, at any height (for pushing and kicking them)
-  /** What you're doing: the app in front, its window's title, since when (world.time). Null if he can't tell. */
-  screen?: { app: string; title: string; since: number } | null;
-  /** Things in your front window he can stand on (text, buttons, chat messages): their top edges. */
-  uiTops?: Platform[];
-}
-
-/** Things he has learned from experience. Saved between runs. */
-export interface Lessons {
-  /** Biggest drop (px, at size 1) he's willing to jump down. Shrinks when a jump down hurts him. */
-  safeDrop: number;
-}
-export const DEFAULT_LESSONS: Lessons = { safeDrop: 420 };
-
-/** Everything a skill can see and touch. */
-export interface Ctx {
-  char: Character;
-  mood: Mood;
-  world: World;
-  look: LookMode;
-  lessons: Lessons;
-  say(text: string, secs?: number): void;
-  /** Drawings on screen (shared with the renderer). */
-  doodles: Doodle[];
-  /** Ink color for his pen. */
-  inkColor: string;
-  /** Move the real mouse cursor (only in mischief mode on a desktop). Returns false if not allowed. */
-  moveCursor(x: number, y: number): boolean;
-  /** Set when you yank the cursor back while he's holding it. */
-  cursorEscaped: boolean;
-  /** Mischief mode is on and this desktop can move the cursor. */
-  canGrabCursor: boolean;
-  /** He finished a drawing (the pet keeps it in his gallery). */
-  onDrawn?: (d: Doodle) => void;
-  /** Moves he learned (made up by his AI brain, kept by you). He can show them off on his own. */
-  savedMoves?: { name: string; frames: Keyframe[] }[];
-  /** His notes about you and his life (milestone 5). */
-  memory: Memory;
-  /** What he looks at when `look` is 'target'. */
-  lookTarget?: Vec | null;
-  /** His belt and everything on it (and anything you took). */
-  items: Items;
-  /** A sound effect (the app plays it). */
-  sound?: (name: string, strength?: number) => void;
-  /** His sword (or hammer, or ball) hit your cursor, moving at (vx, vy) px/s. `power` 0..1+. */
-  hitCursor?: (x: number, y: number, vx: number, vy: number, power: number) => void;
-  /** He's allowed to move your windows (setting on, desktop, and it's been working). */
-  canMoveWindows?: boolean;
-  /** Shove a window (px/s). `spring`: it wobbles and settles back where it was (a knock, a stomp). */
-  shoveWindow?: (id: number, vx: number, vy: number, spring?: boolean) => boolean;
-  /** Keep a window sliding at vx px/s right now (he's pushing it). */
-  pushWindow?: (id: number, vx: number) => boolean;
-  /** Is this window still moving (he shoved it)? */
-  windowMoving?: (id: number) => boolean;
-  /** Grab onto your cursor with his front hand and hang from it (if it's right there). */
-  hangOnCursor?: () => boolean;
-  /** He's allowed to play with your cursor (hit it, hang off it): the "He can hit your cursor" setting. */
-  cursorPlay?: boolean;
-  /** Can he move windows right now, and if not, why not. */
-  windowMoves?: 'ok' | 'off' | 'unsupported' | 'stuck';
-  /** Drawings that came to life: balls, boxes, ledges. */
-  props?: Props;
-  /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
-  onBecome?: (d: Doodle) => void;
-}
-
-export abstract class Skill {
-  abstract readonly name: string;
-  t = 0;
-  start(_c: Ctx) {}
-  /** Called every frame. Return true when finished. */
-  abstract update(c: Ctx, dt: number): boolean;
-  stop(_c: Ctx) {}
-}
+import { Skill, arrive, type Ctx, type LookMode } from './skills/context';
+export { Skill, DEFAULT_LESSONS, type Ctx, type World, type Lessons, type LookMode } from './skills/context';
+export { propsOf, SitOnProp, WatchTV, RideScooter } from './skills/props';
 
 /** Do some skills one after the other (each one is made when its turn comes). */
 export class Chain extends Skill {
@@ -1279,7 +1195,7 @@ export function bridgePlan(c: Ctx, target: Platform) {
   if (!dir) return null;
   const from = dir > 0 ? sp.x2 : sp.x1, to = dir > 0 ? target.x1 : target.x2, gap = Math.abs(to - from);
   if (gap < 30 * sc || gap > 380 * sc) return null;
-  return { dir, from, to, y1: sp.y, y2: target.y };
+  return { dir, from, to, y1: sp.y, y2: target.y, fromWin: sp.win, toWin: target.win };
 }
 
 /**
@@ -1340,7 +1256,11 @@ export class BridgeTo extends Skill {
           c.props?.setWet(this.wetId, null);
           const d = this.doodle!;
           d.alive = true; d.done = true;
-          c.props?.add(makeBridge(d, p.from - p.dir * 2, p.y1, p.to + p.dir * 2, p.y2, 1.03));
+          const bridge = makeBridge(d, p.from - p.dir * 2, p.y1, p.to + p.dir * 2, p.y2, 1.03);
+          const from = c.world.windows.find((w) => w.id === p.fromWin), to = c.world.windows.find((w) => w.id === p.toWin);
+          if (from) bridge.attachWindow(0, from);
+          if (to) bridge.attachWindow(bridge.points.length - 1, to);
+          c.props?.add(bridge);
           c.sound?.('poof', 0.5);
           this.phase = 'stow'; this.pt = 0;
         }
@@ -1361,154 +1281,6 @@ export class BridgeTo extends Skill {
 }
 
 // ───────────── props: furniture and toys ─────────────
-
-/** The props of a kind (seat, tv, ride) that are standing up on the floor, nearest first. */
-export function propsOf(c: Ctx, use: 'seat' | 'tv' | 'ride'): Thing[] {
-  const ch = c.char;
-  return (c.props?.placed ?? []).filter((t) => t.def!.use === use && Math.abs(t.tilt) < 0.35 && !t.held)
-    .sort((a, b) => Math.abs(a.center.x - ch.x) - Math.abs(b.center.x - ch.x));
-}
-
-/** Sit down on a chair or a couch for a while (lean back on a couch). He falls off if you tip it over. */
-export class SitOnProp extends Skill {
-  readonly name = 'sitdown';
-  private phase: 'go' | 'sit' = 'go';
-  constructor(private seat: Thing, private dur = rand(10, 25), private face: 1 | -1 | 0 = 0, readonly why = '') { super(); }
-  start(c: Ctx) { c.look = 'default'; }
-  update(c: Ctx) {
-    const ch = c.char, at = this.seat.seatAt;
-    if (!at || !c.props?.things.includes(this.seat)) return true;
-    if (this.phase === 'go') {
-      if (this.t > 12) return true;
-      if (!arrive(c, at.x, 5)) return false;
-      const lounge = this.seat.def!.id === 'couch' && chance(0.5);
-      if (!ch.sitOn(at, this.face || (chance(0.5) ? 1 : -1), lounge)) return true;
-      this.phase = 'sit'; this.t = 0;
-      if (chance(0.5)) c.say(pick(this.seat.def!.id === 'couch' ? ['ahh', 'comfy', '*flop*'] : ['ahh', 'nice chair', 'much better']), 1.4);
-      return false;
-    }
-    if (ch.mode !== 'sit' || !ch.seat) return true;
-    // The seat moved: so does he. Tipped over or yanked away: he falls off.
-    const prev = ch.seat;
-    if (Math.abs(this.seat.tilt) > 0.6 || Math.hypot(at.x - prev.x, at.y - prev.y) > 18 * ch.scale) {
-      ch.standUp(); ch.poke('hip', (at.x - prev.x) * 20, -100);
-      c.say(pick(['WHOA', 'hey!', 'my seat!']), 1.2);
-      return true;
-    }
-    ch.seat = at;
-    if (this.t > this.dur) { ch.standUp(); return true; }
-    return false;
-  }
-  stop(c: Ctx) { if (c.char.mode === 'sit' && c.char.seat) c.char.standUp(); }
-}
-
-/** TV time: on the couch (or a chair) if there's one near the TV, else on the floor in front of it. Switches it on, watches, reacts. */
-export class WatchTV extends Skill {
-  readonly name = 'watchtv';
-  private sub: SitOnProp | null = null;
-  private phase: 'go' | 'watch' = 'go';
-  private next = 2;
-  private dur = rand(20, 40);
-  constructor(private tv: Thing) { super(); }
-  start(c: Ctx) {
-    const tvx = this.tv.center.x;
-    const seat = propsOf(c, 'seat').filter((s) => Math.abs(s.center.x - tvx) < 320 && Math.abs(s.center.x - tvx) > 40)
-      .sort((a, b) => (b.def!.id === 'couch' ? 1 : 0) - (a.def!.id === 'couch' ? 1 : 0))[0];
-    if (seat) { this.sub = new SitOnProp(seat, this.dur, Math.sign(tvx - seat.center.x) as 1 | -1); this.sub.start(c); }
-    c.look = 'target';
-  }
-  update(c: Ctx, dt: number) {
-    const ch = c.char, tv = this.tv;
-    if (!c.props?.things.includes(tv) || Math.abs(tv.tilt) > 0.6) { tv.on = false; return true; }
-    c.lookTarget = tv.center;
-    if (this.sub) {
-      this.sub.t += dt;
-      if (this.sub.update(c)) { tv.on = false; return true; }
-      if (ch.mode === 'sit') this.watch(c);
-      return false;
-    }
-    const spot = tv.center.x + (ch.x < tv.center.x ? -1 : 1) * 70 * ch.scale;
-    if (this.phase === 'go') {
-      if (this.t > 12) return true;
-      if (!arrive(c, spot, 8)) return false;
-      ch.facing = Math.sign(tv.center.x - ch.x) as 1 | -1;
-      ch.sit();
-      this.phase = 'watch'; this.t = 0;
-      return false;
-    }
-    if (ch.mode !== 'sit') { tv.on = false; return true; }
-    this.watch(c);
-    if (this.t > this.dur) { tv.on = false; ch.standUp(); return true; }
-    return false;
-  }
-  /** On, and reacting to what's on now and then. */
-  private watch(c: Ctx) {
-    const tv = this.tv;
-    if (!tv.on) { tv.on = true; c.sound?.('click', 0.5); }
-    if (this.t > this.next) {
-      this.next = this.t + rand(5, 10);
-      c.say(pick(['haha', 'ooh', 'no way', 'lol', 'run, little guy!', 'this show is weird', 'he looks like me', '♪', 'again?', 'classic']), 1.6);
-      c.mood.nudge({ boredom: -0.12, happiness: 0.02 });
-    }
-  }
-  stop(c: Ctx) { this.tv.on = false; this.sub?.stop(c); if (!this.sub && c.char.mode === 'sit') c.char.standUp(); }
-}
-
-/** Scooter time: hop on, hold the handlebar, kick off a few times, roll across the screen, brake, hop off. */
-export class RideScooter extends Skill {
-  readonly name = 'ride';
-  private phase: 'go' | 'ride' | 'brake' | 'off' = 'go';
-  private next = 0;
-  private kicks = 0;
-  private dir: 1 | -1 = 1;
-  constructor(private sc: Thing) { super(); }
-  private deck() { return this.sc.platforms.reduce<import('./physics').Platform | null>((a, p) => (!a || p.x2 - p.x1 > a.x2 - a.x1 ? p : a), null); }
-  update(c: Ctx) {
-    const ch = c.char, s = this.sc, deck = this.deck();
-    if (!deck || !c.props?.things.includes(s)) return true;
-    const speed = (s.points[0].x - s.points[0].px) * 120;
-    if (this.phase === 'go') {
-      if (this.t > 12) return true;
-      if (ch.support === deck.id) {
-        const b = c.world.bounds;
-        this.dir = b.right - deck.x2 > deck.x1 - b.left ? 1 : -1;
-        ch.facing = this.dir;
-        this.phase = 'ride'; this.t = 0; this.next = 0.3;
-        c.say(pick(['wheee', 'zoom', 'beep beep', "let's ride"]), 1.2);
-        return false;
-      }
-      if (!arrive(c, (deck.x1 + deck.x2) / 2, 4)) return false;
-      return false;
-    }
-    if (ch.support !== deck.id) return this.t > 0.5 ? (ch.handTarget = null, true) : false; // fell off
-    const bar = s.def?.bar ? s.toWorld(s.def.bar[0], s.def.bar[1]) : null;
-    ch.handTarget = bar;
-    const b = c.world.bounds, room = this.dir > 0 ? b.right - deck.x2 : deck.x1 - b.left;
-    if (this.phase === 'ride') {
-      if (this.t > this.next && this.kicks < 5 && room > 220) {
-        // A kick off the floor: the scooter speeds up (and he goes with it).
-        this.next = this.t + 1.1; this.kicks++;
-        const v = Math.min(Math.abs(speed) + 150, 380) * this.dir;
-        for (const p of s.points) p.px = p.x - v / 120;
-        c.sound?.('step', 1);
-      }
-      if (room < 220 || (this.kicks >= 5 && Math.abs(speed) < 40)) { this.phase = 'brake'; this.t = 0; }
-      return this.t > 20;
-    }
-    if (this.phase === 'brake') {
-      for (const p of s.points) p.px += (p.x - p.px) * 0.08;
-      if (Math.abs(speed) < 8) {
-        ch.handTarget = null;
-        this.phase = 'off'; this.t = 0;
-        ch.walkTo(deck.x1 - this.dir * 25 * ch.scale, false, true);
-        if (chance(0.5)) c.say(pick(['again!', 'nice', 'that was fun']), 1.2);
-      }
-      return this.t > 6;
-    }
-    return this.t > 1.5 || (ch.ready && ch.support !== deck.id);
-  }
-  stop(c: Ctx) { c.char.handTarget = null; }
-}
 
 // ───────────── fighting your cursor ─────────────
 
@@ -1756,13 +1528,6 @@ const sideNow = (c: Ctx, w: Wall) => c.world.sides.find((x) => x.id === w.id) ??
  * Walking up to a spot for a window trick: true once he's there. If something stopped him
  * on the way (he tripped, got up somewhere else), he sets off again.
  */
-function arrive(c: Ctx, x: number, tol = 8) {
-  const ch = c.char;
-  if (!ch.ready || ch.walking) return false;
-  if (Math.abs(ch.x - x) <= tol * ch.scale) return true;
-  ch.walkTo(x, Math.abs(x - ch.x) > 200);
-  return false;
-}
 
 /** Walk up to a window's side, put both hands on it, and push it along (it really moves). */
 export class PushWindow extends Skill {

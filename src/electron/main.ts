@@ -12,6 +12,7 @@ import type { WinRect } from '../core/world';
 import { watchWindows, type UiReport, type WindowWatcher } from './windows';
 import * as llm from './llm';
 import type { BrainRequest } from '../core/brain';
+import { writeAtomic } from './storage';
 
 let win: BrowserWindow | null = null;
 let settingsWin: BrowserWindow | null = null;
@@ -25,6 +26,13 @@ let lastWins: WinRect[] = [];
 const configPath = () => path.join(app.getPath('userData'), 'pet.json');
 let config: PetConfig = structuredClone(DEFAULT_CONFIG);
 let saveTimer: NodeJS.Timeout | undefined;
+let configDirty = false;
+
+function saveConfig() {
+  if (!configDirty) return;
+  try { writeAtomic(configPath(), JSON.stringify(config, null, 2)); configDirty = false; }
+  catch (err) { console.error('[save] could not save settings:', (err as Error).message); }
+}
 
 function loadConfig() {
   try { config = mergeConfig(DEFAULT_CONFIG, JSON.parse(fs.readFileSync(configPath(), 'utf8'))); }
@@ -33,8 +41,9 @@ function loadConfig() {
 
 function setConfig(patch: unknown) {
   config = mergeConfig(config, patch);
+  configDirty = true;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => fs.writeFile(configPath(), JSON.stringify(config, null, 2), () => {}), 300);
+  saveTimer = setTimeout(saveConfig, 300);
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send('config:changed', config);
   buildTrayMenu();
   settingsWin?.setTitle(`${config.name} — Settings`);
@@ -47,9 +56,8 @@ function setConfig(patch: unknown) {
 const memoryPath = () => path.join(app.getPath('userData'), 'memory.json');
 function saveMemory(json: string) {
   if (typeof json !== 'string' || json.length > 2_000_000) return;
-  const tmp = memoryPath() + '.tmp';
-  // Write to a temporary file first, then swap it in, so a crash mid-write can't wipe his memories.
-  fs.writeFile(tmp, json, (err) => { if (!err) fs.rename(tmp, memoryPath(), () => {}); });
+  try { JSON.parse(json); writeAtomic(memoryPath(), json); }
+  catch (err) { console.error('[save] could not save memories:', (err as Error).message); }
 }
 
 // ───────────── item definition files ─────────────
@@ -65,7 +73,10 @@ function readItemDefs(): unknown[] {
     // up too, without bringing back any you deleted. (The guide is always the newest.)
     const examples = path.join(__dirname, '../items'), marker = path.join(dir, '.copied.json');
     let copied: string[] = [];
-    try { copied = JSON.parse(fs.readFileSync(marker, 'utf8')); } catch { copied = fs.readdirSync(dir); }
+    try {
+      const saved = JSON.parse(fs.readFileSync(marker, 'utf8'));
+      copied = Array.isArray(saved) ? saved.filter((f): f is string => typeof f === 'string') : fs.readdirSync(dir);
+    } catch { copied = fs.readdirSync(dir); }
     if (fs.existsSync(examples)) {
       for (const f of fs.readdirSync(examples)) {
         const to = path.join(dir, f);
@@ -75,7 +86,7 @@ function readItemDefs(): unknown[] {
       fs.writeFileSync(marker, JSON.stringify(copied));
     }
     for (const f of fs.readdirSync(dir)) {
-      if (!f.endsWith('.json')) continue;
+      if (!f.endsWith('.json') || f.startsWith('.')) continue;
       try { out.push(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); }
       catch (e) { console.log(`[items] couldn't read ${f}: ${(e as Error).message}`); }
     }
@@ -105,7 +116,7 @@ function toScreen(x: number, y: number, w = 1, h = 1) {
 
 // The helper runs whenever he needs it: to see windows, or to move your cursor (mischief, knocking it around).
 function updateWatcher() {
-  const need = config.windows || config.mischief || config.knockCursor;
+  const need = config.windows || config.mischief || config.knockCursor || config.screenAware;
   if (need && !watcher) {
     watcher = watchWindows((wins) => {
       lastWins = config.windows ? toOverlay(wins) : [];
@@ -116,7 +127,7 @@ function updateWatcher() {
     watcher = null;
   }
   if (!config.windows && lastWins.length) { lastWins = []; win?.webContents.send('world:windows', []); }
-  watcher?.setUi(config.screenAware && config.windows);
+  watcher?.setUi(config.screenAware);
   if (!config.screenAware) win?.webContents.send('world:ui', null);
 }
 
@@ -257,7 +268,7 @@ ipcMain.on('pet:typing', (_e, on: boolean) => {
 ipcMain.on('memory:save', (_e, json: string) => saveMemory(json));
 // The AI brain: the overlay asks, main calls the AI service with the saved key.
 ipcMain.handle('brain:ask', (_e, req: BrainRequest) => llm.ask(config.provider, config.model, req));
-ipcMain.handle('brain:keyStatus', (_e, provider: ProviderId) => llm.keyStatus(provider in PROVIDERS ? provider : config.provider));
+ipcMain.handle('brain:keyStatus', (_e, provider: ProviderId) => llm.keyStatus(Object.hasOwn(PROVIDERS, provider) ? provider : config.provider));
 ipcMain.handle('brain:models', () => llm.listModels(config.provider));
 ipcMain.on('brain:setKey', (_e, key: string) => {
   llm.setKey(config.provider, String(key ?? ''));
@@ -291,5 +302,5 @@ app.whenReady().then(() => {
   createTray();
   updateWatcher();
 });
-app.on('will-quit', () => watcher?.stop());
+app.on('will-quit', () => { clearTimeout(saveTimer); saveConfig(); watcher?.stop(); });
 app.on('window-all-closed', () => app.quit());

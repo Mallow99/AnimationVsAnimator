@@ -263,7 +263,10 @@
         <div class="card">
           <label class="radio"><input type="radio" name="mind" value="offline" /><span><span class="row-label">Offline</span><small>Instinct and moods only. No internet, no AI.</small></span></label>
           <label class="radio"><input type="radio" name="mind" value="chat" /><span><span class="row-label">Chat</span><small>AI only when you talk to him. He can also do what you ask.</small></span></label>
-          <label class="radio"><input type="radio" name="mind" value="full" /><span><span class="row-label">Full</span><small>AI also decides what he does every ~40 s and comments on what happens to him. Uses the most API calls.</small></span></label>
+          <label class="radio"><input type="radio" name="mind" value="full" /><span><span class="row-label">Full</span><small>AI also picks his own ideas and comments on events. Use the interval below to reduce calls.</small></span></label>
+          <label for="aiInterval" class="row-label">How often he thinks on his own</label>
+          <select id="aiInterval"><option value="40">Every 40 seconds (original)</option><option value="120">Every 2 minutes</option><option value="300">Every 5 minutes</option></select>
+          <small class="note">Only affects Full mode. He still answers when you talk to him and keeps playing offline between thoughts. Event comments also slow down.</small>
         </div>
         <div class="card">
           <span class="row-label">AI service</span>

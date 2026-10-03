@@ -270,6 +270,22 @@ export class Brain {
   persona = '';
   /** May the AI make up its own moves (move his body directly)? */
   puppet = true;
+  autoEvery = AUTO_EVERY;
+  private revision = 0;
+
+  /** Ignore replies from an earlier mode/provider; they must not act after switching Offline. */
+  configure(settings: { mode: MindMode; name: string; persona: string; puppet: boolean; autoEvery: number }, identity: string) {
+    if (settings.mode !== this.mode || identity !== this.identity || settings.persona !== this.persona) {
+      this.revision++;
+      this.heard = [];
+      this.reactPending = null;
+      this.status = '';
+    }
+    if (settings.autoEvery !== this.autoEvery) this.nextAuto = 0;
+    this.identity = identity;
+    Object.assign(this, settings);
+  }
+  private identity = '';
   /** The conversation so far, for the settings window. */
   log: LogLine[] = [];
   /** "thinking…", an error, or empty. */
@@ -381,17 +397,20 @@ export class Brain {
     } else if (this.mode === 'full' && this.reactPending && now >= this.nextReact) {
       const what = this.reactPending;
       this.reactPending = null;
-      this.nextReact = now + REACT_EVERY;
+      this.nextReact = now + Math.max(REACT_EVERY, this.autoEvery / 3);
       this.think(c, mind, `Something just happened: ${what}. React if you want (a few words), or stay quiet.`, 'event');
     } else if (this.mode === 'full' && now >= this.nextAuto && mind.idle && c.char.ready) {
-      this.nextAuto = now + AUTO_EVERY;
+      this.nextAuto = now + this.autoEvery;
       mind.holdUntil = now + 8; // give the brain a few seconds to decide before instinct takes over
       this.think(c, mind, 'Nobody said anything. Pick what to do next. Usually stay quiet; only speak if you have something worth saying.', 'auto');
     }
   }
 
   /** The stable part of the prompt: who he is, how he talks, what he can do, what he remembers. */
-  systemPrompt(memory?: Memory) {
+  systemPrompt(memory?: Memory, request = '') {
+    // Keep conversation cheap; detailed coordinates are only useful when making something.
+    const bodyGuide = this.puppet && /move|pose|handstand|float|levitat|flip|spin|weird|invent|body|acrobat/i.test(request);
+    const drawGuide = /draw|doodle|paint|sketch|art|picture|pen|canvas/i.test(request);
     const actions = COMMANDS.map((x) => `${x.name} (${x.label.toLowerCase()})`).join(', ');
     const saved = this.savedMoves.map((m) => `"${m.name}"`).join(', ');
     return [
@@ -423,8 +442,8 @@ export class Brain {
       'DRAWING YOUR WAY: "ramp" draws a ramp up onto a window and walks up it; "bridge" draws a bridge across a gap to a window; "drawramp" draws one to jump off. Your drawings are solid and have weight.',
       'PROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "ride" (the scooter). Only if they\'re out.',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
-      ...(this.puppet ? BODY_GUIDE : []),
-      ...DRAW_GUIDE,
+      ...(bodyGuide ? BODY_GUIDE : []),
+      ...(drawGuide ? DRAW_GUIDE : []),
       '',
       'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust. {} if nothing changed.',
       '',
@@ -486,21 +505,24 @@ export class Brain {
     }
     this.calls.push(now);
     const user: BrainTurn = { role: 'user', text: `${this.stateBlock(c, mind)}\n${prompt}` };
-    const req: BrainRequest = { system: this.systemPrompt(c.memory), messages: [...this.history, user] };
+    const req: BrainRequest = { system: this.systemPrompt(c.memory, prompt), messages: [...this.history, user] };
+    const revision = this.revision;
     this.busy = true;
     this.status = 'thinking…';
     this.ask!(req).then((text) => {
+      if (revision !== this.revision || !this.active) return;
       const reply = parseReply(text, this.savedMoves);
       if (!reply) throw new Error('The AI answered in a form he couldn\'t read.');
       this.status = '';
       this.history.push(user, { role: 'assistant', text: JSON.stringify({ say: reply.say, feel: reply.feel, plan: reply.plan.map(summarizeStep), ...(reply.remember.length ? { remember: reply.remember } : {}) }) });
       while (this.history.length > HISTORY) this.history.splice(0, 2);
       this.apply(c, mind, reply, why);
-    }, (err: unknown) => {
+    }).catch((err: unknown) => {
+      if (revision !== this.revision || !this.active) return;
       this.status = err instanceof Error ? err.message : String(err);
       this.addLog('note', this.status, c);
       if (why === 'you') c.say('?', 1.2);
-    }).finally(() => { this.busy = false; });
+    }).finally(() => { this.busy = false; if (why === 'auto') mind.holdUntil = 0; });
   }
 
   private apply(c: Ctx, mind: Mind, reply: BrainReply, why: 'you' | 'event' | 'auto') {
@@ -537,10 +559,12 @@ export class Brain {
     this.nextTidy = now + 120;
     this.busy = true;
     this.status = 'tidying his memories…';
+    const revision = this.revision;
     this.ask!(c.memory.tidyRequest(this.name)).then((text) => {
+      if (revision !== this.revision || !this.active) return;
       if (!c.memory.applyTidy(text)) c.memory.tidyOffline();
       this.status = '';
-    }, () => { c.memory.tidyOffline(); this.status = ''; }).finally(() => { this.busy = false; });
+    }).catch(() => { if (revision === this.revision) { c.memory.tidyOffline(); this.status = ''; } }).finally(() => { this.busy = false; });
   }
 
   private addLog(who: LogLine['who'], text: string, c: Ctx, acts = '') {

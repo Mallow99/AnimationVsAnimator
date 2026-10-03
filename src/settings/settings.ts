@@ -223,6 +223,7 @@ $<HTMLTextAreaElement>('persona').addEventListener('input', (e) => set({ persona
 $<HTMLInputElement>('model').addEventListener('change', (e) => set({ model: (e.target as HTMLInputElement).value.trim() }));
 $<HTMLInputElement>('outline').addEventListener('change', (e) => set({ look: { outline: (e.target as HTMLInputElement).checked } }));
 $<HTMLInputElement>('puppet').addEventListener('change', (e) => set({ puppet: (e.target as HTMLInputElement).checked }));
+$<HTMLSelectElement>('aiInterval').addEventListener('change', (e) => set({ aiInterval: Number((e.target as HTMLSelectElement).value) }));
 
 // ── AI service + key (kept by the desktop shell; this page only ever sees the last 4 characters) ──
 const providerSel = $<HTMLSelectElement>('provider');
@@ -279,6 +280,12 @@ function render(c: PetConfig) {
   providerSel.value = c.provider;
   $<HTMLAnchorElement>('keyLink').href = PROVIDERS[c.provider].keyUrl;
   $<HTMLInputElement>('puppet').checked = c.puppet;
+  const interval = $<HTMLSelectElement>('aiInterval');
+  for (const o of [...interval.options]) if (o.dataset.custom) o.remove();
+  if (![...interval.options].some((o) => Number(o.value) === c.aiInterval)) {
+    const option = new Option(`Every ${c.aiInterval} seconds`, String(c.aiInterval)); option.dataset.custom = 'true'; interval.add(option);
+  }
+  interval.value = String(c.aiInterval);
   $<HTMLInputElement>('outline').checked = c.look.outline;
   for (const [input, out, key] of sliders) {
     const [a, b] = key.split('.');

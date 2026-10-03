@@ -10,7 +10,8 @@
     "preview": "node scripts/build.mjs && node scripts/preview.mjs",
     "lab": "node scripts/build.mjs lab && node scripts/preview.mjs dist/lab/index.html",
     "sim": "node scripts/build.mjs sim && node .build/sim.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "checks": "node scripts/build.mjs checks && node .build/checks.mjs"
   },
   "devDependencies": {
     "electron": "^44.5.1",

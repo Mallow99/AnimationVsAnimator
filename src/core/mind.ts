@@ -601,7 +601,7 @@ export class Mind {
       const r = w.windows.find((x) => x.id === id);
       return !!r && !!cur && w.time - w.cursorMovedAt < 4 && cur.x >= r.x && cur.x <= r.x + r.w && cur.y >= r.y && cur.y <= r.y + r.h && L !== 'angry';
     };
-    const sides = windowSidesAtHand(c).filter((x) => forced || Math.abs(x.x - ch.x) < 600);
+    const sides = windowSidesAtHand(c).filter((x) => (forced || Math.abs(x.x - ch.x) < 600) && (x.win === undefined || c.canMoveWindow?.(x.win) !== false));
     const side = sides.find((x) => !busy(x.win));
     if (forced) {
       const why = c.windowMoves === 'off' ? '(moving windows is off in settings)' : c.windowMoves === 'stuck' ? "they won't budge. permission?"
@@ -621,7 +621,7 @@ export class Mind {
       }
     }
     const on = ch.supportPlatform();
-    if (on?.win !== undefined && c.canMoveWindows && !busy(on.win)) {
+    if (on?.win !== undefined && c.canMoveWindows && c.canMoveWindow?.(on.win) !== false && !busy(on.win)) {
       prank('surf', 'surfing on your window', L === 'playful' ? 0.55 : L === 'bored' ? 0.4 : 0.06, () => new WindowSurf());
     }
     return opts;
@@ -960,7 +960,7 @@ export class Mind {
         c.say(pick(['BLOCKED', 'nice try', 'parry!', 'too slow']), 1.2);
         return;
       case 'windowStuck':
-        this.why = "your windows won't move for him (needs permission?)";
+        this.why = "that window won't move for him; giving it a break";
         c.say(pick(["huh. it won't move", 'stuck?', '...heavy']), 1.6);
         return;
     }

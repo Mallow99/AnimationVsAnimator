@@ -18,6 +18,7 @@ import type { LooseLimb } from './limbs';
 import { limbOf } from './body';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, splitSpeech } from './brain';
+import { WindowAccess } from './window-access';
 import { distToSegment, type Vec } from './math';
 import { Memory } from './memory';
 import { CursorBody, drawCursorFlight } from './cursor';
@@ -132,7 +133,7 @@ export class Pet {
   /** Saved props whose definition (one of your files) hasn't arrived yet. */
   private pendingProps: { id: string; x: number }[] = [];
   /** Moving windows didn't work (no permission?): don't try again until this time. */
-  windowsStuckUntil = -1;
+  private windowAccess = new WindowAccess();
   /** The desktop helper's latest word on moving windows ("moved a window", "no permission yet"...). */
   moveNote = '';
 
@@ -147,9 +148,10 @@ export class Pet {
       get cursorPlay() { return pet.config.knockCursor; },
       get windowMoves() {
         return !pet.config.moveWindows || !pet.config.windows ? 'off' as const : !pet.onMoveWindow ? 'unsupported' as const
-          : pet.ctx.world.time <= pet.windowsStuckUntil ? 'stuck' as const : 'ok' as const;
+          : !pet.windowAccess.anyAvailable(pet.winShown.map((w) => w.id), pet.ctx.world.time) ? 'stuck' as const : 'ok' as const;
       },
-      get canMoveWindows() { return pet.config.moveWindows && pet.config.windows && !!pet.onMoveWindow && pet.ctx.world.time > pet.windowsStuckUntil; },
+      get canMoveWindows() { return pet.config.moveWindows && pet.config.windows && !!pet.onMoveWindow && pet.windowAccess.anyAvailable(pet.winShown.map((w) => w.id), pet.ctx.world.time); },
+      canMoveWindow: (id: number) => pet.windowAccess.canMove(id, pet.ctx.world.time),
       char: this.char,
       mood: this.mood,
       world: { bounds, cursor: null, cursorMovedAt: -100, time: 0, platforms: [], walls: windowWalls([], bounds), windows: [], sides: [] },
@@ -201,7 +203,7 @@ export class Pet {
       // Standing on something he drew: his weight pushes on it (a bridge sags under him).
       const under = this.props.thingOf(this.char.support);
       if (under && (this.char.mode === 'ground' || this.char.mode === 'sit')) under.carry(this.char.support, this.char.x);
-      this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.uiPlats.length ? [...this.windowPlats, ...this.uiPlats] : this.windowPlats);
+      this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.uiPlats.length ? [...this.windowPlats, ...this.uiPlats] : this.windowPlats, this.ctx.world.windows);
       this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms);
       this.ballContact();
       this.acc -= STEP;
@@ -361,7 +363,7 @@ export class Pet {
   applyConfig(cfg: PetConfig) {
     const resized = this.config.scale !== cfg.scale;
     (this as { config: PetConfig }).config = structuredClone(cfg);
-    Object.assign(this.brain, { mode: cfg.mind, name: cfg.name, persona: cfg.persona, puppet: cfg.puppet });
+    this.brain.configure({ mode: cfg.mind, name: cfg.name, persona: cfg.persona, puppet: cfg.puppet, autoEvery: cfg.aiInterval }, `${cfg.provider}:${cfg.model}`);
     this.mind.biases = { ...cfg.biases };
     if (resized && this.ctx) {
       const old = this.char;
@@ -399,6 +401,8 @@ export class Pet {
    */
   setWindows(wins: WinRect[]) {
     const now = this.ctx.world.time;
+    this.windowAccess.retain(wins.map((w) => w.id));
+    for (const id of this.winReported.keys()) if (!wins.some((w) => w.id === id)) { this.winReported.delete(id); this.winQuiet.delete(id); }
     for (const w of wins) this.winReported.set(w.id, { ...w });
     // A window he's moving: we know better where it is than the (slightly late) report.
     this.winTarget = wins.map((w) => {
@@ -413,7 +417,7 @@ export class Pet {
 
   /** Give a window a shove (px/s). `spring`: it wobbles back to where it was. False if he can't. */
   shoveWindow(id: number, vx: number, vy: number, spring = false) {
-    if (!this.ctx.canMoveWindows) return false;
+    if (!this.ctx.canMoveWindows || !this.ctx.canMoveWindow?.(id)) return false;
     const m = this.motionFor(id);
     if (!m) return false;
     if (spring && !m.home) m.home = { x: m.x, y: m.y };
@@ -423,7 +427,7 @@ export class Pet {
 
   /** He's pushing a window along: keep it moving at vx (px/s) this frame. */
   pushWindow(id: number, vx: number) {
-    if (!this.ctx.canMoveWindows) return false;
+    if (!this.ctx.canMoveWindows || !this.ctx.canMoveWindow?.(id)) return false;
     const m = this.motionFor(id);
     if (!m) return false;
     m.home = undefined;
@@ -467,11 +471,11 @@ export class Pet {
       // Did the window really move? If the desktop still reports it where it started, moving windows isn't working.
       const rep = this.winReported.get(id);
       if (rep && now - m.t0 > 0.8 && Math.hypot(m.x - m.from.x, m.y - m.from.y) > 25 && Math.hypot(rep.x - m.from.x, rep.y - m.from.y) < 2) {
-        this.windowsStuckUntil = now + 600;
-        this.winMotion.clear(); this.winQuiet.clear();
-        if (this.winTarget) this.setWindows([...this.winReported.values()].filter((w) => this.winTarget!.some((x) => x.id === w.id)));
+        this.windowAccess.refuse(id, now);
+        this.winMotion.delete(id); this.winQuiet.delete(id);
+        if (t) { t.x = rep.x; t.y = rep.y; }
         this.emit({ type: 'windowStuck' });
-        return;
+        continue;
       }
       const still = Math.hypot(m.vx, m.vy) < 8 && (!m.home || Math.hypot(m.x - m.home.x, m.y - m.home.y) < 0.6);
       if (still) {
@@ -1185,7 +1189,7 @@ export class Pet {
       why: this.mind.why,
       recent: this.mind.recent.slice(-8),
       windows: this.winShown.length,
-      windowsStuck: this.ctx.world.time < this.windowsStuckUntil,
+      windowsStuck: this.windowAccess.anyBlocked(this.ctx.world.time),
       moveNote: this.moveNote,
       platforms: this.ctx.world.platforms.length,
       brain: { active: this.brain.active, status: this.brain.status, log: this.brain.log.slice(-20) },

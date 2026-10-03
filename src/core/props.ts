@@ -17,6 +17,7 @@ import chairDef from './props/chair.json';
 import couchDef from './props/couch.json';
 import tvDef from './props/tv.json';
 import scooterDef from './props/scooter.json';
+import type { WinRect } from './world';
 
 /** Platform ids for drawn things start here, far from any window's. */
 const PROP_ID = 1_000_000_000;
@@ -90,10 +91,11 @@ export function parsePropDef(raw: unknown): PropDef | null {
   const shape = (Array.isArray(o.shape) ? o.shape : []).slice(0, 30).flatMap((st) => {
     const s = st as Record<string, unknown>;
     const pts = (Array.isArray(s?.pts) ? s.pts : []).slice(0, 40).map(pt).filter((p): p is [number, number] => !!p);
-    return pts.length >= 2 ? [{ pts, color: color(s.color), width: typeof s.width === 'number' ? Math.max(0.5, Math.min(12, s.width)) : 3 }] : [];
+    return pts.length >= 2 ? [{ pts, color: color(s.color), width: typeof s.width === 'number' && Number.isFinite(s.width) ? Math.max(0.5, Math.min(12, s.width)) : 3 }] : [];
   });
   const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
-  const scr = Array.isArray(o.screen) && o.screen.length === 4 && o.screen.every((v) => typeof v === 'number') ? o.screen as [number, number, number, number] : undefined;
+  const scr = Array.isArray(o.screen) && o.screen.length === 4 && o.screen.every(Number.isFinite) && o.screen[2] > 0 && o.screen[3] > 0
+    ? o.screen.map((v) => Math.max(-200, Math.min(400, v))) as [number, number, number, number] : undefined;
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 160) : '',
@@ -118,6 +120,31 @@ export class Thing {
   stuck = false;
   /** Which points are the stuck ones (all of them for a ledge, the two ends for a bridge). */
   pins: number[] = [];
+  private anchors = new Map<number, { win: number; dx: number; dy: number }>();
+
+  /** A bridge end is attached to a window, rather than to a fixed screen position. */
+  attachWindow(index: number, win: WinRect) {
+    const p = this.points[index];
+    if (p && this.pins.includes(index)) this.anchors.set(index, { win: win.id, dx: p.x - win.x, dy: p.y - win.y });
+  }
+
+  followWindows(wins: WinRect[]) {
+    if (!this.stuck) { this.anchors.clear(); return; }
+    for (const [i, a] of this.anchors) {
+      const w = wins.find((w) => w.id === a.win), p = this.points[i];
+      if (!w) {
+        p.invMass = 1; this.anchors.delete(i); this.pins = this.pins.filter((n) => n !== i);
+        if (!this.pins.length) this.stuck = false;
+        continue;
+      }
+      p.x = p.px = w.x + a.dx; p.y = p.py = w.y + a.dy;
+    }
+    // Pulling the windows farther apart than the rope reaches tears it loose.
+    if (this.kind === 'bridge' && this.pins.length === 2) {
+      const [a, b] = this.pins.map((i) => this.points[i]);
+      if (Math.hypot(a.x - b.x, a.y - b.y) > this.sticks.reduce((sum, s) => sum + s.len, 0) * 1.1) this.unstick();
+    }
+  }
   /** You're holding it by one point. */
   held: { idx: number; x: number; y: number; vx: number; vy: number; from: Vec } | null = null;
   /** The drawing, in the thing's own frame (so it turns and moves with it). */
@@ -540,11 +567,12 @@ export class Props {
    * One physics step for everything. `world` = window tops (things land on them, and on each other).
    * Returns true if any platform moved (so his ground gets updated).
    */
-  update(dt: number, now: number, bounds: Bounds, world: Platform[]) {
+  update(dt: number, now: number, bounds: Bounds, world: Platform[], wins?: WinRect[]) {
     const before = this.things.length;
     this.things = this.things.filter((t) => t.forever || now - t.doodle.born < DOODLE_LIFE);
     this.balls = this.balls.filter((b) => now - b.doodle.born < DOODLE_LIFE);
     const moved = this.things.length !== before || this.things.length > 0;
+    if (wins) for (const t of this.things) t.followWindows(wins);
     // Everything steps every time: there are only ever a few, and a thing resting on a window
     // has to notice when the window moves out from under it. All of them are solved together,
     // so things resting on things settle properly.
