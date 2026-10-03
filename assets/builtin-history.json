@@ -178,6 +178,157 @@
           "width": 1.5
         }
       ]
+    },
+    {
+      "type": "prop",
+      "id": "tv",
+      "name": "TV",
+      "about": "An old TV on little legs. He sits down in front of it (on the couch, if there is one) and watches cartoons.",
+      "use": "tv",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          56,
+          0
+        ],
+        [
+          56,
+          38
+        ],
+        [
+          52,
+          46
+        ],
+        [
+          4,
+          46
+        ],
+        [
+          0,
+          38
+        ]
+      ],
+      "screen": [
+        5,
+        5,
+        46,
+        28
+      ],
+      "shape": [
+        {
+          "pts": [
+            [
+              1,
+              1
+            ],
+            [
+              55,
+              1
+            ],
+            [
+              55,
+              37
+            ],
+            [
+              1,
+              37
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "color": "#3a3a48",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              8,
+              38
+            ],
+            [
+              4,
+              46
+            ]
+          ],
+          "color": "#3a3a48",
+          "width": 2.5
+        },
+        {
+          "pts": [
+            [
+              48,
+              38
+            ],
+            [
+              52,
+              46
+            ]
+          ],
+          "color": "#3a3a48",
+          "width": 2.5
+        },
+        {
+          "pts": [
+            [
+              20,
+              0
+            ],
+            [
+              12,
+              -12
+            ]
+          ],
+          "color": "#55556a",
+          "width": 1.5
+        },
+        {
+          "pts": [
+            [
+              36,
+              0
+            ],
+            [
+              44,
+              -12
+            ]
+          ],
+          "color": "#55556a",
+          "width": 1.5
+        },
+        {
+          "pts": [
+            [
+              50,
+              10
+            ],
+            [
+              51,
+              10
+            ]
+          ],
+          "color": "#c9ccd8",
+          "width": 2.5
+        },
+        {
+          "pts": [
+            [
+              50,
+              20
+            ],
+            [
+              51,
+              20
+            ]
+          ],
+          "color": "#c9ccd8",
+          "width": 2.5
+        }
+      ]
     }
   ],
   "scooter.json": [
@@ -289,6 +440,714 @@
           ],
           "color": "#2a2c44",
           "width": 9
+        }
+      ]
+    },
+    {
+      "type": "prop",
+      "id": "scooter",
+      "name": "Scooter",
+      "about": "A kick scooter. He hops on, holds the handlebar, kicks off, and rolls across the screen.",
+      "use": "ride",
+      "outline": [
+        [
+          4,
+          32
+        ],
+        [
+          34,
+          32
+        ],
+        [
+          39,
+          0
+        ],
+        [
+          41,
+          38
+        ],
+        [
+          5,
+          38
+        ]
+      ],
+      "wheels": [
+        3,
+        4
+      ],
+      "wheel": 4.5,
+      "bar": [
+        39,
+        1
+      ],
+      "friction": 0.01,
+      "shape": [
+        {
+          "pts": [
+            [
+              3,
+              32
+            ],
+            [
+              35,
+              32
+            ]
+          ],
+          "color": "#2f7fd8",
+          "width": 3.5
+        },
+        {
+          "pts": [
+            [
+              35,
+              32
+            ],
+            [
+              39,
+              2
+            ]
+          ],
+          "color": "#9aa4b4",
+          "width": 2.5
+        },
+        {
+          "pts": [
+            [
+              35,
+              2
+            ],
+            [
+              43,
+              2
+            ]
+          ],
+          "color": "#2a2c44",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              41,
+              38
+            ],
+            [
+              41.2,
+              38
+            ]
+          ],
+          "color": "#2a2c44",
+          "width": 9
+        },
+        {
+          "pts": [
+            [
+              5,
+              38
+            ],
+            [
+              5.2,
+              38
+            ]
+          ],
+          "color": "#2a2c44",
+          "width": 9
+        },
+        {
+          "pts": [
+            [
+              9,
+              30
+            ],
+            [
+              26,
+              30
+            ]
+          ],
+          "color": "#c9ccd8",
+          "width": 1.2
+        },
+        {
+          "pts": [
+            [
+              39,
+              5
+            ],
+            [
+              39,
+              12
+            ]
+          ],
+          "color": "#2f7fd8",
+          "width": 3
+        }
+      ]
+    }
+  ],
+  "board-game.json": [
+    {
+      "type": "prop",
+      "id": "board-game",
+      "name": "Board game",
+      "about": "Noughts and crosses (tic-tac-toe). He can ask to play; join in the little board above him. Works offline.",
+      "use": "game",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          52,
+          0
+        ],
+        [
+          52,
+          18
+        ],
+        [
+          0,
+          18
+        ]
+      ],
+      "shape": [
+        {
+          "pts": [
+            [
+              0,
+              0
+            ],
+            [
+              52,
+              0
+            ],
+            [
+              52,
+              18
+            ],
+            [
+              0,
+              18
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "color": "#a8703c",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              18,
+              2
+            ],
+            [
+              18,
+              16
+            ]
+          ],
+          "color": "#4a2e1a",
+          "width": 1.5
+        },
+        {
+          "pts": [
+            [
+              34,
+              2
+            ],
+            [
+              34,
+              16
+            ]
+          ],
+          "color": "#4a2e1a",
+          "width": 1.5
+        },
+        {
+          "pts": [
+            [
+              2,
+              6
+            ],
+            [
+              50,
+              6
+            ]
+          ],
+          "color": "#4a2e1a",
+          "width": 1.5
+        },
+        {
+          "pts": [
+            [
+              2,
+              12
+            ],
+            [
+              50,
+              12
+            ]
+          ],
+          "color": "#4a2e1a",
+          "width": 1.5
+        }
+      ]
+    }
+  ],
+  "canvas.json": [
+    {
+      "type": "prop",
+      "id": "canvas",
+      "name": "Canvas",
+      "about": "An easel for his pen. Ask him to paint; the picture stays on the canvas and is saved.",
+      "use": "canvas",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          48,
+          0
+        ],
+        [
+          48,
+          68
+        ],
+        [
+          0,
+          68
+        ]
+      ],
+      "screen": [
+        4,
+        4,
+        40,
+        46
+      ],
+      "shape": [
+        {
+          "pts": [
+            [
+              0,
+              0
+            ],
+            [
+              48,
+              0
+            ],
+            [
+              48,
+              54
+            ],
+            [
+              0,
+              54
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "color": "#a8703c",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              10,
+              54
+            ],
+            [
+              3,
+              68
+            ]
+          ],
+          "color": "#6b4426",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              38,
+              54
+            ],
+            [
+              45,
+              68
+            ]
+          ],
+          "color": "#6b4426",
+          "width": 3
+        }
+      ]
+    }
+  ],
+  "chair.json": [
+    {
+      "type": "prop",
+      "id": "chair",
+      "name": "Chair",
+      "about": "A wooden chair. He sits on it when he's tired, and drags it over to watch TV.",
+      "use": "seat",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          5,
+          24
+        ],
+        [
+          30,
+          24
+        ],
+        [
+          30,
+          44
+        ],
+        [
+          0,
+          44
+        ]
+      ],
+      "seat": [
+        16,
+        23
+      ],
+      "shape": [
+        {
+          "pts": [
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              44
+            ]
+          ],
+          "color": "#8a5a30",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              2,
+              24
+            ],
+            [
+              29,
+              24
+            ]
+          ],
+          "color": "#a8703c",
+          "width": 4
+        },
+        {
+          "pts": [
+            [
+              28,
+              24
+            ],
+            [
+              28,
+              44
+            ]
+          ],
+          "color": "#8a5a30",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              2,
+              6
+            ],
+            [
+              2,
+              16
+            ]
+          ],
+          "color": "#6e4424",
+          "width": 4
+        }
+      ]
+    }
+  ],
+  "couch.json": [
+    {
+      "type": "prop",
+      "id": "couch",
+      "name": "Couch",
+      "about": "A comfy couch. He flops onto it, and it's the best seat for watching TV.",
+      "use": "seat",
+      "outline": [
+        [
+          0,
+          8
+        ],
+        [
+          10,
+          8
+        ],
+        [
+          10,
+          20
+        ],
+        [
+          80,
+          20
+        ],
+        [
+          80,
+          8
+        ],
+        [
+          90,
+          8
+        ],
+        [
+          90,
+          38
+        ],
+        [
+          0,
+          38
+        ]
+      ],
+      "seat": [
+        44,
+        19
+      ],
+      "shape": [
+        {
+          "pts": [
+            [
+              4,
+              2
+            ],
+            [
+              86,
+              2
+            ]
+          ],
+          "color": "#a8504a",
+          "width": 7
+        },
+        {
+          "pts": [
+            [
+              5,
+              10
+            ],
+            [
+              5,
+              34
+            ]
+          ],
+          "color": "#c4625a",
+          "width": 9
+        },
+        {
+          "pts": [
+            [
+              85,
+              10
+            ],
+            [
+              85,
+              34
+            ]
+          ],
+          "color": "#c4625a",
+          "width": 9
+        },
+        {
+          "pts": [
+            [
+              10,
+              25
+            ],
+            [
+              80,
+              25
+            ]
+          ],
+          "color": "#d9786e",
+          "width": 10
+        },
+        {
+          "pts": [
+            [
+              10,
+              33
+            ],
+            [
+              80,
+              33
+            ]
+          ],
+          "color": "#a8504a",
+          "width": 6
+        },
+        {
+          "pts": [
+            [
+              45,
+              21
+            ],
+            [
+              45,
+              29
+            ]
+          ],
+          "color": "#a8504a",
+          "width": 1.5
+        },
+        {
+          "pts": [
+            [
+              6,
+              37
+            ],
+            [
+              6,
+              39
+            ]
+          ],
+          "color": "#4a2e1a",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              84,
+              37
+            ],
+            [
+              84,
+              39
+            ]
+          ],
+          "color": "#4a2e1a",
+          "width": 3
+        }
+      ]
+    }
+  ],
+  "desk.json": [
+    {
+      "type": "prop",
+      "id": "desk",
+      "name": "Desk",
+      "about": "A little wooden desk. A sturdy surface for his things and somewhere to perch.",
+      "use": "none",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          0
+        ],
+        [
+          80,
+          44
+        ],
+        [
+          0,
+          44
+        ]
+      ],
+      "shape": [
+        {
+          "pts": [
+            [
+              0,
+              2
+            ],
+            [
+              80,
+              2
+            ]
+          ],
+          "color": "#a8703c",
+          "width": 5
+        },
+        {
+          "pts": [
+            [
+              5,
+              5
+            ],
+            [
+              5,
+              44
+            ]
+          ],
+          "color": "#6b4426",
+          "width": 4
+        },
+        {
+          "pts": [
+            [
+              75,
+              5
+            ],
+            [
+              75,
+              44
+            ]
+          ],
+          "color": "#6b4426",
+          "width": 4
+        },
+        {
+          "pts": [
+            [
+              47,
+              8
+            ],
+            [
+              70,
+              8
+            ],
+            [
+              70,
+              20
+            ],
+            [
+              47,
+              20
+            ],
+            [
+              47,
+              8
+            ]
+          ],
+          "color": "#a8703c",
+          "width": 2
+        },
+        {
+          "pts": [
+            [
+              56,
+              13
+            ],
+            [
+              61,
+              13
+            ]
+          ],
+          "color": "#2a2c44",
+          "width": 2
         }
       ]
     }

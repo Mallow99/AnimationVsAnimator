@@ -4,12 +4,60 @@
   "name": "Desk",
   "about": "A little wooden desk. A sturdy surface for his things and somewhere to perch.",
   "use": "none",
-  "outline": [[0, 0], [80, 0], [80, 44], [0, 44]],
-  "shape": [
-    {"pts": [[0, 2], [80, 2]], "color": "#a8703c", "width": 5},
-    {"pts": [[5, 5], [5, 44]], "color": "#6b4426", "width": 4},
-    {"pts": [[75, 5], [75, 44]], "color": "#6b4426", "width": 4},
-    {"pts": [[47, 8], [70, 8], [70, 20], [47, 20], [47, 8]], "color": "#a8703c", "width": 2},
-    {"pts": [[56, 13], [61, 13]], "color": "#2a2c44", "width": 2}
-  ]
+  "outline": [
+    [
+      0,
+      0
+    ],
+    [
+      80,
+      0
+    ],
+    [
+      80,
+      44
+    ],
+    [
+      0,
+      44
+    ]
+  ],
+  "shape": [],
+  "sprite": {
+    "x": -2,
+    "y": -2,
+    "pixel": 2,
+    "palette": {
+      "d": "#563b35",
+      "h": "#edb978",
+      "l": "#be8550",
+      "o": "#29232d",
+      "w": "#835339"
+    },
+    "rows": [
+      "oooooooooooooooooooooooooooooooooooooooooo",
+      "ohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhho",
+      "ollllllllllllllllllllllllllllllllllllllllo",
+      "ollllllllllllllllllllllllllllllllllllllllo",
+      "oooooooooooooooooooooooooooooooooooooooooo",
+      "..owwo.................oooooooooooooowwo..",
+      "..owwo.................ollllllllllllowwo..",
+      "..owwo.................owwwwwwwwwwwwowwo..",
+      "..owwo.................owwwwoooowwwwowwo..",
+      "..owwo.................owwwwoooowwwwowwo..",
+      "..owwo.................owwwwwwwwwwwwowwo..",
+      "..owwo.................owwwwwwwwwwwwowwo..",
+      "..owwo.................owwwwwwwwwwwwowwo..",
+      "..dddd.................ooooooooooooodddd..",
+      "..owwo..............................owwo..",
+      "..owwo..............................owwo..",
+      "..owwo..............................owwo..",
+      "..owwo..............................owwo..",
+      "..owwo..............................owwo..",
+      "..owwo..............................owwo..",
+      "..owwo..............................owwo..",
+      "..owwo..............................owwo..",
+      "..oooo..............................oooo.."
+    ]
+  }
 }

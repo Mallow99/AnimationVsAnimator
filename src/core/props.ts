@@ -21,6 +21,8 @@ import canvasDef from './props/canvas.json';
 import deskDef from './props/desk.json';
 import gameDef from './props/board-game.json';
 import type { WinRect } from './world';
+import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
+import { PixelLayer, DEFAULT_LOOK, type Ctx2D } from './render';
 
 /** Platform ids for drawn things start here, far from any window's. */
 const PROP_ID = 1_000_000_000;
@@ -71,6 +73,8 @@ export interface PropDef {
   outline: [number, number][];
   /** Where his bottom goes when he sits on it. */
   seat?: [number, number];
+  /** A second stool on the other side of a game table, for approaching from either direction. */
+  seatRight?: [number, number];
   /** The TV screen: x, y, width, height. */
   screen?: [number, number, number, number];
   /** Which outline points are wheels (they roll), how big, and where he holds on. */
@@ -78,6 +82,7 @@ export interface PropDef {
   /** How grippy it is on the floor (0.6 = stays put, 0.01 = rolls). */
   friction: number;
   shape: { pts: [number, number][]; color: string; width: number }[];
+  sprite?: PixelSprite;
 }
 
 /** Saved canvas pictures are bounded just like custom item files. */
@@ -113,14 +118,16 @@ export function parsePropDef(raw: unknown): PropDef | null {
   const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
   const scr = Array.isArray(o.screen) && o.screen.length === 4 && o.screen.every(Number.isFinite) && o.screen[2] > 0 && o.screen[3] > 0
     ? o.screen.map((v) => Math.max(-200, Math.min(400, v))) as [number, number, number, number] : undefined;
+  const sprite = parseSprite(o.sprite);
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 160) : '',
     use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' || o.use === 'game' ? o.use : 'none',
-    outline, seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
+    outline, seat: pt(o.seat) ?? undefined, seatRight: pt(o.seatRight) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
     wheels: Array.isArray(o.wheels) ? o.wheels.filter((i): i is number => Number.isInteger(i) && i >= 0 && i < outline.length) : undefined,
     wheel: num(o.wheel, 4, 1, 20), friction: num(o.friction, 0.6, 0, 1),
-    shape: shape.length ? shape : [{ pts: [...outline, outline[0]], color: '#2a2c44', width: 3 }],
+    sprite,
+    shape: shape.length ? shape : sprite ? [] : [{ pts: [...outline, outline[0]], color: '#2a2c44', width: 3 }],
   };
 }
 
@@ -325,11 +332,16 @@ export class Thing {
     this.refresh();
   }
 
-  private drawProp(ctx: CanvasRenderingContext2D, alpha: number, now: number) {
+  private drawProp(ctx: Ctx2D, alpha: number, now: number) {
     const def = this.def!;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (def.sprite) {
+      const at = this.toWorld(0, 0);
+      ctx.save(); ctx.translate(at.x, at.y); ctx.rotate(this.tilt); ctx.scale(this.scale, this.scale);
+      drawSprite(ctx, def.sprite); ctx.restore();
+    }
     // A TV: the screen (dark when off; cartoons when he's watching).
     if (def.screen) {
       const [sx, sy, sw, sh] = def.screen;
@@ -359,7 +371,7 @@ export class Thing {
   }
 
   /** What's on TV: a few little shows that take turns (a stick figure running about, a bouncing ball, static, color bars). */
-  private drawShow(ctx: CanvasRenderingContext2D, sx: number, sy: number, sw: number, sh: number, now: number) {
+  private drawShow(ctx: Ctx2D, sx: number, sy: number, sw: number, sh: number, now: number) {
     const show = (Math.floor(now / 7) + this.channel) % 4, t = now % 7;
     const at = (u: number, v: number) => this.toWorld(sx + u * sw, sy + v * sh);
     const line = (pts: [number, number][], color: string, w = 1.6) => {
@@ -429,8 +441,18 @@ export class Thing {
   /** Is it moving? (Platforms need updating every step while it is.) */
   get moving() { return this.points.some((p) => Math.abs(p.x - p.px) + Math.abs(p.y - p.py) > 0.02) || this.held !== null; }
 
+  private pixels = new PixelLayer();
   draw(ctx: CanvasRenderingContext2D, alpha: number, now = 0) {
-    if (this.def) { this.drawProp(ctx, alpha, now); return; }
+    if (this.def) {
+      if (this.def.sprite) {
+        const s = this.def.sprite, w = s.rows[0].length * s.pixel, h = s.rows.length * s.pixel;
+        const corners = [[s.x, s.y], [s.x + w, s.y], [s.x + w, s.y + h], [s.x, s.y + h]].map(([x, y]) => this.toWorld(x, y));
+        ctx.save(); ctx.globalAlpha *= alpha;
+        this.pixels.paint(ctx, corners, 2, { ...DEFAULT_LOOK, pixel: 2, outline: false }, (g) => this.drawProp(g, 1, now));
+        ctx.restore();
+      } else this.drawProp(ctx, alpha, now);
+      return;
+    }
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = this.doodle.color;
@@ -577,8 +599,10 @@ export class Props {
   spawn(id: string, x: number, y: number, scale: number, art?: unknown) {
     const def = this.defs.get(id);
     if (!def) return null;
-    const w = Math.max(...def.outline.map((p) => p[0])) * scale;
-    const t = makeProp(def, x - w / 2, y, scale);
+    // Save/load uses Thing.center (mean of outline points). Use the same center here;
+    // otherwise asymmetric furniture slides a little every time the app restarts.
+    const centerX = def.outline.reduce((sum, p) => sum + p[0], 0) / def.outline.length * scale;
+    const t = makeProp(def, x - centerX, y, scale);
     t.art = parseCanvasArt(art);
     this.add(t);
     return t;

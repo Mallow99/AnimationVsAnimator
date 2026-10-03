@@ -1,0 +1,33 @@
+{
+  "id": "boots",
+  "name": "Boots",
+  "about": "A pair of sturdy little boots. They follow his feet; drop them in or put them away any time.",
+  "use": "none",
+  "wear": "feet",
+  "length": 14,
+  "grip": 6,
+  "belt": "none",
+  "hit": 0,
+  "bounce": 0.2,
+  "shape": [],
+  "sprite": {
+    "x": -6,
+    "y": -10,
+    "pixel": 2,
+    "palette": {
+      "h": "#edb978",
+      "l": "#be8550",
+      "o": "#29232d",
+      "w": "#835339"
+    },
+    "rows": [
+      ".ooooo....",
+      ".olllo....",
+      ".owwwo....",
+      ".ohhho....",
+      ".ooooooooo",
+      ".owwwwlllo",
+      "oooooooooo"
+    ]
+  }
+}

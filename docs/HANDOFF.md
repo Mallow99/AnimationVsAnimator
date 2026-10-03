@@ -1,7 +1,7 @@
 # Current handoff
 
-Start here after reading the project vision in `CLAUDE.md`. This batch follows the reliability and
-cleanup roadmap, with item/activity improvements added by the owner. It deliberately stops before
+Start here after reading the project vision in `CLAUDE.md`. This branch includes the reliability and
+cleanup roadmap, followed by the owner-approved pixel-prop/Othello polish pass. It deliberately stops before
 the multiple-character stage. The existing persona, body design and look presets are preserved.
 
 ## What changed
@@ -29,37 +29,66 @@ the multiple-character stage. The existing persona, body design and look presets
   a slower overhead wind-up; the old mallet remains in inventory/saves. Wide loose items render
   without clipping. The scooter exits on the correct side. TV has channel controls and small detail
   improvements; scooter details are slightly clearer.
-- New props: a sturdy desk, an easel canvas he can paint on, and a tic-tac-toe board. Canvas pictures
-  move with the easel and survive saving. The game is offline, beatable, and uses a small panel above
-  him. He can invite you when bored/playful, at most once per five minutes; you can decline. Removing
-  the board, interrupting him, or closing the panel cancels the session. It adds no second pet system.
-- Unedited shipped pen/TV/scooter files upgrade automatically. `assets/builtin-history.json` records
-  their earlier defaults; customized versions are preserved. New examples appear once each.
+- Props now have solid, shaded pixel sprites: chair, couch, CRT TV, scooter, desk, easel and an
+  Othello table. Their physics and existing uses remain. Sprites are editable JSON rows/palette in
+  `pixel-art.ts`, with bounded validation; custom line drawings still work. No new dependencies.
+- Othello replaces tic-tac-toe. He chooses the nearest stool, faces the table, reaches toward the
+  board when pieces change, invites you, and reacts to the result. Rules include eight-direction
+  captures, legal-move hints, automatic passes, score, ties, and rematches. A casual offline opponent
+  favors corners but is beatable. No model is called to choose a move.
+- The game has an independent green-and-wood panel, anchored initially beside the table and then
+  draggable by its title bar. Chat stays open alongside it; the input leaves room for his speech
+  bubble. Normal Offline/AI conversation cannot accidentally replace the seated match with a wave
+  or another incidental action. A direct activity request can interrupt. Removing/dragging/tipping
+  the table, grabbing him, closing the game, or 15 minutes without game activity ends the session.
+  An unanswered invitation expires after 45 seconds. A game is not saved between app restarts.
+- Optional helmet and boots are cosmetic equipment: `wear: head`/`feet`, with `where: worn`.
+  They use no hands/belt slots, follow head/feet in depth order and persist as equipped or unequipped.
+  Give/Wear reuses existing gear; a different piece in the same equipment location drops the old one.
+  Fetching loose gear puts it on. Take, drop, return and put-away work through existing item controls.
+  No armor, damage reduction, health or death behavior was added.
+- Inventory cards show actual item/prop art, descriptions and clearly labeled actions. Settings has
+  tighter corners, a warmer light palette and scrolling tabs. Character look presets/persona are
+  unchanged. Typing 's' into preview chat no longer switches on smacking.
+- Asymmetric props no longer drift sideways across save/load cycles. Their spawn and save now use
+  the same center. Unedited shipped examples upgrade via `assets/builtin-history.json`, including
+  furniture from both earlier revisions; customized versions are preserved.
 - Windows portable packaging is available. The recipient extracts the full folder and opens the EXE;
   no Node or terminal is needed. See `WINDOWS.md`.
 
 ## Trying the additions
 
-Run `npm start`. Settings → Items contains the mace and the Canvas, Desk and Board game props.
-Drop in the canvas, wait for it to land, then use **Paint** or tell him “paint on your canvas”.
-Drop in the board, then use **Play together** or say “play a board game”. Join the invitation; you
-are X and he is O. Change the TV channel from its row in Items. To try the mace, give it to him;
-put away the mallet if both are equipped and he keeps choosing it.
+Run `npm start`. Settings → Items shows sprite previews. [Preview image](images/othello-preview.png). Drop in the **Othello table**, wait for it
+to land, then choose **Play Othello** under the placed prop or say “play Othello”. He sits at the
+nearest stool. Accept **Play Othello**: you are black and go first. Marked squares are legal; the
+most discs wins. **Talk to him** opens his usual chat without ending the match. Drag the game's
+title bar to move it; Escape while the game has focus closes it. Arrow keys navigate the board;
+Enter places a disc. **How to play** explains the rules.
+
+Helmet and boots are in Inventory: **Wear** equips them; **Drop it in** lets him fetch them. Use
+**Take** or **Put away** in “With him”, or his right-click menu, to remove gear. He starts with just
+his pen. For canvas painting, drop in the easel and use **Paint**. TV has **Change channel**. The
+mace remains optional alongside the old mallet; put the mallet away to encourage using the mace.
 
 ## Checks actually run in this cloud machine
 
-- TypeScript, normal build, 150 existing simulation checks and 15 focused regressions pass.
-- Full simulation passed with seeds 1–8. One earlier unseeded run reported three falls in the
+- TypeScript, normal build, 150 existing simulation checks and 22 focused regressions pass.
+- The earlier reliability batch passed full simulation with seeds 1–8; this polish revision passed
+  seeds 1 and 2. One earlier unseeded run reported three falls in the
   “left alone 20 minutes” check. This was not reproduced with those full-suite seeds or 100 isolated
   two-minute lives each for the original and current code. It is not claimed fixed. Investigate a
   future occurrence using the printed seed; keep the assertion. No character behavior was disabled
   to make the test pass.
-- Actual Chromium preview: paints a canvas, invites a game, accepts a button click, responds with
-  its own move, renders accessible board buttons, keeps the panel on screen and closes cleanly.
-  `npm run browsercheck` reproduces this and writes `.build/browser-smoke.png`. Chromium is a system
-  prerequisite, not an app dependency. The browser uses disposable data and a temporary local server.
-- Actual Electron under Xvfb: overlay renderer, preload bridge, fake window updates, settings,
-  live AI-interval changes, memory persistence and quit-time settings flush pass. Reproduce with:
+- Actual Chromium preview: canvas painting, seated Othello invitation, human mouse/keyboard moves,
+  flipped discs, pet reply, simultaneous chat, 64 accessible board buttons, equipment attachments,
+  draggable panel, viewport bounds (including a smaller viewport), and clean closing. No browser
+  exceptions. `npm run browsercheck` writes `.build/browser-smoke.png`. Chromium is a system
+  prerequisite, not an app dependency; data is disposable and the server is local.
+- Actual Electron under Xvfb: overlay/preload/fake helper, sprite inventory cards, Wear command,
+  opening Othello and chat together, closing game while chat keeps keyboard focus, closing chat
+  returning the overlay to non-focusable, live AI-interval config, memory save and quit-time flush.
+  The initial desktop test caught a focus-order bug that a plain browser could not expose; fixed
+  by enabling overlay typing before focusing the board. Run:
 
   ```sh
   npm run build
@@ -68,9 +97,9 @@ put away the mallet if both are equipped and he keeps choosing it.
   ```
 
   Start Xvfb on display 91 first. In this machine its binary is
-  `/workspace/.cloud-tools/xvfb/usr/bin/Xvfb`. The cloud-only sandbox flag is needed by this container;
-  normal Mac/Windows `npm start` does not use it. The smoke check uses disposable app data and fake
-  windows; it does not demonstrate real OS window movement.
+  `/workspace/.cloud-tools/xvfb/usr/bin/Xvfb`. The sandbox flag is only for this container.
+  Disposable app data and fake windows do not establish real Mac/Windows mouse/focus behavior.
+  The smoke check also writes `.build/settings-smoke.png`.
 - A Windows x64 portable build was produced and inspected for its executable, built pages, items,
   native PowerShell helper and start guide. Source maps, development dependencies, user data and
   keys are excluded. It was **not launched on Windows**. ARM packaging is available but untested.
@@ -100,6 +129,9 @@ The owner supplied this Mac log: the helper saw two windows and successfully mov
 Accessibility, then reported AX error -25202 and could not find another app's window. This establishes
 that compilation and permission worked on that run. It does not establish that every window is movable.
 
+This work is pushed on `codex/reliability-and-items`, based on `claude/stoic-cray-wft87a`.
+Fetch/Pull that branch in GitHub Desktop; `npm ci`, then `npm start`.
+
 Next, test this revision on the Mac: move a normal Finder/browser window, try a protected/stubborn
 window, then confirm the normal window still works. Check cursor hand-back, game/talk keyboard focus,
 right-click, saved canvas pictures and sound. The stale-handle Swift retry has not been compiled in
@@ -112,8 +144,20 @@ Stop here until the owner resumes the multiple-character stage. No shared pet re
 ownership, pet-versus-pet attacks, health, killing, death or respawning system was added.
 
 The gun idea and a game machine/computer remain for a later item milestone; the first playable activity
-is the board game. Additional canvas/gallery tools and a dedicated desk activity can build on this work.
+is Othello. Additional canvas/gallery tools and a dedicated desk activity can build on this work.
 The wider `CLAUDE.md` list remains: full box side collisions, ramps between more surface types, props
 on window tops, multi-monitor support, further file splitting, textures and easier signed distribution.
 Screen vision or real clicking needs its own explicit control and owner approval. Do not treat ideas
 in the old roadmap as authorization for a character/personality redesign.
+
+## Main files for this polish pass
+
+- `core/pixel-art.ts`: sprite parsing and painting; furniture/items JSON holds the art.
+- `core/board-game.ts`: pure Othello rules and session/opponent; `skills/props.ts`: seated activity.
+- `app/game-panel.ts` / `game.css`: independent board UI; `app/renderer.ts`: shared typing/click-through.
+- `core/items.ts`: worn gear attachment poses, drawing parts and saves; `settings/item-card.ts`: previews.
+- `scripts/checks.ts`: rule, pass, session/chat, equipment, migration and save-position regressions.
+
+Keep prop sprites at two screen points per rendered pixel; do not change the character's presets to
+make furniture match. The legacy line-definition path remains useful for his own drawings and custom
+items. Future multi-character preparation is still paused at the owner's boundary.

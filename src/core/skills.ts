@@ -615,6 +615,12 @@ export class Tool {
     if (!it || it.where !== 'hand') { ch.handTarget = null; return true; }
     this.stowT += dt;
     it.aim = null;
+    if (it.def.wear) {
+      const at = ch.body.j[it.def.wear === 'head' ? 'head' : 'hip'];
+      ch.handTarget = { x: at.x, y: at.y };
+      if (this.stowT < 0.4) return false;
+      c.items.stow(it); ch.handTarget = null; c.sound?.('pickup'); return true;
+    }
     const slot = preferredSlots(it.def).find((s) => !c.items.belt[s]);
     if (slot === undefined) { ch.handTarget = null; return true; } // belt's full: he just keeps holding it
     const at = c.items.slotPose(ch, slot).at;
@@ -929,7 +935,7 @@ export class FetchItem extends Skill {
   update(c: Ctx, dt: number) {
     const ch = c.char, it = this.item, hand = ch.useHand;
     c.lookTarget = { x: it.at.x, y: it.at.y };
-    if (it.where === 'belt') return true;
+    if (it.where === 'belt' || it.where === 'worn') return true;
     if (it.where === 'cursor' || !hand) return true;
     if (this.phase === 'stow') return this.tool.stow(c, dt) || this.t > 15;
     if (it.where === 'hand') { this.phase = 'stow'; return false; }

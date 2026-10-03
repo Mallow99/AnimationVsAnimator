@@ -5,14 +5,15 @@ import { PROVIDERS, RANGES, type PetConfig, type ProviderId } from '../core/conf
 import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
 import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
+import { thingCard, type ThingPreview } from './item-card';
 
 interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
 interface Weigh { name: string; score: number; why: string; bias?: number }
 interface Drawing { title: string; shape: { x: number; y: number }[][]; color: string; at: number }
 interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at: number; by: 'him' | 'ai' | 'you'; weight: number }
 interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
-interface PropsView { kinds: { id: string; name: string; about: string }[]; placed: { i: number; id: string; name: string }[] }
-interface ItemsView { kinds: { id: string; name: string; about: string; use: string; drawn: boolean }[]; list: { uid: number; id: string; name: string; where: 'belt' | 'hand' | 'world' | 'cursor'; slot: number; drawn: boolean }[] }
+interface PropsView { kinds: ThingPreview[]; placed: { i: number; id: string; name: string }[] }
+interface ItemsView { kinds: (ThingPreview & { use: string; wear?: 'head' | 'feet'; drawn: boolean })[]; list: { uid: number; id: string; name: string; where: 'belt' | 'hand' | 'worn' | 'world' | 'cursor'; slot: number; drawn: boolean }[] }
 interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView; items?: ItemsView; props?: PropsView }
 interface Stats {
   name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
@@ -383,26 +384,26 @@ shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); if (c.items) 
 // ── Items tab ──
 const SLOTS = ['left hip', 'right hip', 'back', 'pocket'];
 function renderItems(v: ItemsView) {
-  const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `on his belt (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'world' ? 'lying around' : 'you have it';
+  const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `on his belt (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'worn' ? 'wearing it' : it.where === 'world' ? 'lying around' : 'you have it';
   $('itemList').replaceChildren(...(v.list.length ? v.list.map((it) => moveRow(it.name + (it.drawn ? ' (drawn)' : ''), 0, [
-    ...(it.where === 'belt' || it.where === 'hand' ? [['Take', () => shell.command(`item:take:${it.uid}`)] as [string, () => void]] : []),
+    ...(it.where === 'belt' || it.where === 'hand' || it.where === 'worn' ? [['Take', () => shell.command(`item:take:${it.uid}`)] as [string, () => void]] : []),
     ...(it.where === 'cursor' || it.where === 'world' ? [['Give back', () => shell.command(`item:return:${it.uid}`)] as [string, () => void]] : []),
-    ['Throw away', () => shell.command(`item:remove:${it.uid}`)],
+    ['Put away', () => shell.command(`item:remove:${it.uid}`)],
   ], where(it))) : [emptyNote('He has nothing. Give him something below.')]));
   // His inventory: every kind of thing there is. Drop one in (it falls from the top of the screen and he
   // goes to get it), or put it straight on his belt.
-  $('itemKinds').replaceChildren(...v.kinds.filter((k) => !k.drawn).map((k) => moveRow(k.name, 0, [
+  $('itemKinds').replaceChildren(...v.kinds.filter((k) => !k.drawn).map((k) => thingCard(k, [
     ['Drop it in', () => shell.command(`item:spawn:${k.id}`)],
-    ['Give him', () => shell.command(`item:give:${k.id}`)],
-  ], k.about)));
+    [k.wear ? 'Wear' : 'Give him', () => shell.command(`item:give:${k.id}`)],
+  ])));
 }
 function renderProps(v: PropsView) {
-  $('propKinds').replaceChildren(...v.kinds.map((k) => moveRow(k.name, 0, [['Drop it in', () => shell.command(`prop:spawn:${k.id}`)]], k.about)));
+  $('propKinds').replaceChildren(...v.kinds.map((k) => thingCard(k, [['Drop it in', () => shell.command(`prop:spawn:${k.id}`)]])));
   $('propPlaced').replaceChildren(...(v.placed.length
     ? [...v.placed.map((p) => moveRow(p.name, 0, [
         ...(p.id === 'tv' ? [['Change channel', () => shell.command(`prop:channel:${p.i}`)] as [string, () => void]] : []),
         ...(p.id === 'canvas' ? [['Paint', () => shell.command('do:paint')] as [string, () => void]] : []),
-        ...(p.id === 'board-game' ? [['Play together', () => shell.command('do:playgame')] as [string, () => void]] : []),
+        ...(p.id === 'board-game' ? [['Play Othello', () => shell.command('do:playgame')] as [string, () => void]] : []),
         ['Put away', () => shell.command(`prop:remove:${p.i}`)]
       ], 'on the desktop')),
       moveRow('All of them', 0, [['Put everything away', () => shell.command('prop:clear')]], '')]

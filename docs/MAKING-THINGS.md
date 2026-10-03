@@ -132,6 +132,33 @@ around 45 tall looks right next to him.
 
 ---
 
+## Pixel sprites and removable gear
+
+Items and props can use a `sprite` instead of line strokes. Copy a shipped example to start:
+
+```json
+"sprite": {
+  "x": 0, "y": 0, "pixel": 2,
+  "palette": { "o": "#29232d", "w": "#be8550" },
+  "rows": ["oooo", "owwo", "oooo"]
+}
+```
+
+Every character is one pixel; `.` is transparent. Rows must have the same width, up to 128 columns
+and 128 rows. Palette colors are six-digit hex values. `pixel` is the local pixel size, before scaling
+with him. `x`/`y` locate the sprite in the same coordinates as the object's drawing. Props are rendered
+on a crisp two-screen-point grid. You can also keep `shape` strokes for details or older custom art.
+Sprites supply art; `outline`, `seat`, `screen` and wheels still supply the physical interaction.
+
+For equipment, copy `helmet.json` or `boots.json`. Set `"wear": "head"` or `"wear": "feet"`,
+`"use": "none"`, `"belt": "none"`, and `"hit": 0`. The helmet follows his head; the boot sprite is
+attached to each present foot and mirrored when he turns left. Take/drop/give-back work like tools.
+Only one item can occupy each equipment location; a replacement drops the previous one. This is
+cosmetic clothing, with no armor or health system.
+
+An Othello table can supply `seat` and `seatRight` (both `[x, y]`) so he approaches the closest side.
+This is furniture for the existing pet. The game panel and speech remain separate.
+
 ## 3. Making your own version of him
 
 You can already change a lot in his settings without any files: his **name**, his **color**,
@@ -150,9 +177,9 @@ body or items, the same way items are files now.
 
 ## 4. For the curious: how it works
 
-New examples include `mace.json`, `canvas.json`, `desk.json` and `board-game.json`. A canvas uses
+New examples include `mace.json`, `helmet.json`, `boots.json`, `canvas.json`, `desk.json` and `board-game.json`. A canvas uses
 `"use": "canvas"` and a `screen` rectangle for the painting area. A board game uses `"use": "game"`;
-today that starts the same offline tic-tac-toe activity. Defining a new game needs code.
+today that starts the offline Othello activity. Defining a new game needs code.
 See `src/core/board-game.ts` and `src/core/skills/props.ts`. Canvas pictures are saved with the pet.
 The mace uses `smash`; existing mallets still work. Customized copies of the older examples are
 preserved when bundled examples improve.

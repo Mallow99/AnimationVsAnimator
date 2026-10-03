@@ -4,12 +4,71 @@
   "name": "Chair",
   "about": "A wooden chair. He sits on it when he's tired, and drags it over to watch TV.",
   "use": "seat",
-  "outline": [[0, 0], [5, 0], [5, 24], [30, 24], [30, 44], [0, 44]],
-  "seat": [16, 23],
-  "shape": [
-    { "pts": [[2, 0], [2, 44]], "color": "#8a5a30", "width": 3 },
-    { "pts": [[2, 24], [29, 24]], "color": "#a8703c", "width": 4 },
-    { "pts": [[28, 24], [28, 44]], "color": "#8a5a30", "width": 3 },
-    { "pts": [[2, 6], [2, 16]], "color": "#6e4424", "width": 4 }
-  ]
+  "outline": [
+    [
+      0,
+      0
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      5,
+      24
+    ],
+    [
+      30,
+      24
+    ],
+    [
+      30,
+      44
+    ],
+    [
+      0,
+      44
+    ]
+  ],
+  "seat": [
+    16,
+    23
+  ],
+  "shape": [],
+  "sprite": {
+    "x": 0,
+    "y": 0,
+    "pixel": 2,
+    "palette": {
+      "h": "#edb978",
+      "l": "#be8550",
+      "o": "#29232d",
+      "w": "#835339"
+    },
+    "rows": [
+      "oooo............",
+      "oooo............",
+      "ooho............",
+      "ooho............",
+      "ooho............",
+      "ooho............",
+      "ooho............",
+      "ooho............",
+      "oolo............",
+      "oolo............",
+      "oooo............",
+      "oooooooooooooooo",
+      "ohhhhhhhhhhhhhho",
+      "ollllllllllllllo",
+      "oooooooooooooooo",
+      "olwo........owo.",
+      "olwo........owo.",
+      "olwo........owo.",
+      "olwo........owo.",
+      "olwo........owo.",
+      "olwo........owo.",
+      "oloo........owo.",
+      "............ooo."
+    ]
+  }
 }

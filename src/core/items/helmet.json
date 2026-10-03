@@ -1,0 +1,37 @@
+{
+  "id": "helmet",
+  "name": "Helmet",
+  "about": "A little steel helmet with a brass stripe. Give it to him to wear; take it off whenever you like.",
+  "use": "none",
+  "wear": "head",
+  "length": 16,
+  "grip": 16,
+  "belt": "none",
+  "hit": 0,
+  "bounce": 0.2,
+  "shape": [],
+  "sprite": {
+    "x": -16,
+    "y": -15,
+    "pixel": 2,
+    "palette": {
+      "S": "#e0e2e7",
+      "a": "#df9b38",
+      "c": "#738fa1",
+      "o": "#29232d",
+      "s": "#b0b7c4"
+    },
+    "rows": [
+      "....oooooooo....",
+      "..oooooooooooo..",
+      ".osSSSaaSSSSsso.",
+      ".osSSSaaSSSSsso.",
+      ".ossssaasssssso.",
+      ".occccaacccccco.",
+      ".occcccccccccco.",
+      "osssssssssssssso",
+      "oooooooooooooooo",
+      "..ooo......ooo.."
+    ]
+  }
+}

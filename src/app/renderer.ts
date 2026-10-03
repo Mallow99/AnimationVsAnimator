@@ -40,7 +40,9 @@ if (!shell) {
   const hint = document.createElement('div');
   hint.className = 'hint';
   hint.textContent = 'Preview mode — click to poke, drag to pick up, fling to throw. Press S to toggle smack mode.';
-  window.addEventListener('keydown', (e) => { if (e.key === 's') pet.config.smacking = !pet.config.smacking; });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 's' && !e.ctrlKey && !e.metaKey && !((e.target as Element).closest('input, textarea, button, summary, [contenteditable]'))) pet.config.smacking = !pet.config.smacking;
+  });
   document.body.appendChild(hint);
 }
 
@@ -112,13 +114,13 @@ resize();
 // Double-click him (or pick "Talk" from his right-click menu): a little text box pops up over his head.
 const talk = document.getElementById('talk') as HTMLFormElement;
 const talkText = document.getElementById('talkText') as HTMLInputElement;
-let talkOpen = false, talkIdle = 0;
+let talkOpen = false, talkIdle = 0, gameTyping = false;
+const syncTyping = () => shell?.setTyping(talkOpen || gameTyping);
 function openTalk() {
-  pet.game.close();
   talkOpen = true;
   talk.classList.add('open');
   talk.style.setProperty('--ink', pet.config.look.color);
-  shell?.setTyping(true); // the desktop window has to accept typing for a moment
+  syncTyping(); // the desktop window has to accept typing for a moment
   pet.listening = true;
   talkIdle = performance.now();
   placeTalk();
@@ -130,12 +132,21 @@ function closeTalk() {
   talk.classList.remove('open');
   talkText.blur();
   pet.listening = false;
-  shell?.setTyping(false);
+  syncTyping();
 }
 function placeTalk() {
   const a = pet.talkAnchor();
-  talk.style.left = `${Math.min(Math.max(a.x, 160), window.innerWidth - 160)}px`;
-  talk.style.top = `${Math.max(a.y - 14, 50)}px`;
+  const width = talk.offsetWidth, height = talk.offsetHeight;
+  // Leave his speech bubble its own space above his head, even while the input is open.
+  const bubbleSpace = pet.speaking ? 80 : 14;
+  let x = Math.min(Math.max(a.x, width / 2 + 8), window.innerWidth - width / 2 - 8), bottom = Math.max(a.y - bubbleSpace, height + 8);
+  const game = gamePanel.rect();
+  if (game && x + width / 2 > game.left - 8 && x - width / 2 < game.right + 8 && bottom > game.top - 8 && bottom - height < game.bottom + 8) {
+    if (game.left >= width + 16) x = game.left - width / 2 - 10;
+    else if (window.innerWidth - game.right >= width + 16) x = game.right + width / 2 + 10;
+    else bottom = game.top > height + 18 ? game.top - 10 : Math.min(window.innerHeight - 8, game.bottom + height + 10);
+  }
+  talk.style.left = `${x}px`; talk.style.top = `${bottom}px`;
 }
 pet.onTalk = openTalk;
 talk.addEventListener('submit', (e) => {
@@ -153,7 +164,7 @@ const overTalk = (x: number, y: number) => {
   const r = talk.getBoundingClientRect();
   return x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 12;
 };
-const gamePanel = createGamePanel(pet, (on) => { if (on) closeTalk(); shell?.setTyping(on || talkOpen); });
+const gamePanel = createGamePanel(pet, (on) => { gameTyping = on; syncTyping(); }, openTalk);
 
 // ── click-through ──
 // The window ignores the mouse (clicks fall through to your desktop) except
@@ -161,7 +172,7 @@ const gamePanel = createGamePanel(pet, (on) => { if (on) closeTalk(); shell?.set
 // or you're carrying one of his things (then a click anywhere drops it).
 let ignoring = true;
 function updateClickThrough(x: number, y: number) {
-  const want = !(pet.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y) || gamePanel.over(x, y));
+  const want = !(pet.dragging || gamePanel.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y) || gamePanel.over(x, y));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);

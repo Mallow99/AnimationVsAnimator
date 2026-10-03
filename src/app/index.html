@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
   <title>AnimationVsAnimator</title>
+  <link rel="stylesheet" href="game.css" />
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; user-select: none; }
     canvas { display: block; width: 100vw; height: 100vh; }
@@ -15,26 +16,16 @@
     #talk.open { display: flex; }
     #talk input, #talk button { font: 15px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #1b1d2e; background: #fff;
       border: 3px solid var(--ink, #232a6b); border-radius: 0; padding: 7px 9px; outline: none; }
-    #talk input { width: 230px; border-right: 0; }
+    #talk input { width: min(230px, calc(100vw - 125px)); border-right: 0; }
     #talk button { background: var(--ink, #232a6b); color: #fff; cursor: pointer; padding: 7px 10px; }
     #talk .x { background: #fff; color: var(--ink, #232a6b); border-left: 0; }
     #talk::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 9px; height: 9px; background: var(--ink, #232a6b);
       clip-path: polygon(0 0, 100% 0, 50% 100%); }
-    #gamePanel { position: fixed; width: 206px; box-sizing: border-box; padding: 12px; color: #1b1d2e; background: #fff8e8;
-      border: 3px solid var(--ink, #232a6b); box-shadow: 3px 3px 0 #0006; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; }
-    #gamePanel p { margin: 8px 0; min-height: 36px; }
-    .game-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
-    .game-grid[hidden] { display: none; }
-    #gamePanel button { font: inherit; cursor: pointer; border: 2px solid var(--ink, #232a6b); background: #fff; color: #1b1d2e; padding: 6px; }
-    #gamePanel button:focus-visible { outline: 3px solid #e79524; outline-offset: 2px; }
-    #gamePanel button:disabled { cursor: default; color: #51546b; }
-    .game-grid button { height: 45px; font-size: 24px !important; }
-    .game-actions { display: flex; gap: 8px; margin-top: 10px; }
   </style>
 </head>
 <body>
   <canvas id="stage"></canvas>
-  <form id="talk" autocomplete="off"><input id="talkText" maxlength="300" placeholder="say something…" spellcheck="false" /><button type="submit">↵</button><button class="x" type="button" id="talkClose" title="Close (Esc)">✕</button></form>
+  <form id="talk" autocomplete="off"><input id="talkText" maxlength="300" aria-label="Talk to him" placeholder="say something…" spellcheck="false" /><button type="submit" aria-label="Send message">↵</button><button class="x" type="button" id="talkClose" aria-label="Close chat" title="Close (Esc)">✕</button></form>
   <script src="renderer.js"></script>
 </body>
 </html>

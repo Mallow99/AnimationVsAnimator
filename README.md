@@ -4,10 +4,12 @@ A stick-figure desktop pet inspired by Alan Becker's *Animator vs. Animation*.
 He lives on top of your screen, has his own physics and moods, and you can poke,
 grab, and throw him.
 
+[See the pixel furniture and Othello preview](docs/images/othello-preview.png).
+
 ## Run it (macOS or Windows)
 1. Install [Node.js](https://nodejs.org) (LTS).
 2. Get this repo (GitHub Desktop → Clone), then open a terminal in its folder.
-3. `npm install` (first time only — downloads Electron, ~250 MB)
+3. `npm ci` (first run and after dependency changes — downloads Electron, ~250 MB)
 4. `npm start`
 
 **Settings and Quit:** click his little stick-figure icon in the menu bar (macOS, top right)
@@ -28,12 +30,12 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
 - **Mischief mode** (Settings → General, off by default): Desktop Goose style, he grabs your cursor
   and drags it around for a moment. Move your mouse to take it back. He also doodles on your screen.
 - **Settings tabs**: Chat (talk to him), Mood (his feelings + make him do things), Mind (his neurons, personality, moves
-  he made up, drawings, memories), Items (his belt), Look, Movement, General.
+  he made up, drawings, memories), Items (tools, equipment and furniture), Look, Movement, General.
 - **Talk to him** (AI brain, free): Settings → General → Brain. Pick a service (Google Gemini is the default), click
   "Get a free key", make the key on their site (no credit card), paste it, and pick **Chat** (AI only when you talk
-  to him) or **Full** (he also decides what to do and comments on things). Type to him in Settings → Control →
+  to him) or **Full** (he also decides what to do and comments on things). Type to him in Settings → Chat →
   Talk to him, or pick "Talk to Blurp…" from the tray icon. Ask him for weird stuff ("do a handstand", "float"):
-  with "Let the AI move his body" on, the AI makes up the move itself. Edit who he is under Mood → Personality.
+  with "Let the AI move his body" on, the AI makes up the move itself. Edit who he is under Mind → Personality.
   Free services have daily limits; Offline mode needs no internet and no key.
 - **Talk to him right on the desktop**: double-click him, or right-click → Talk. A little text box pops up over his
   head. Even with his brain Offline he understands simple things ("dance", "sit down", "draw something", "fight me",
@@ -44,8 +46,13 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   **Give him** to put it on his belt. Take something from him (right-click) and it dangles from your cursor: press and hold
   to swing it, let go to drop or throw it, let go on him to hand it back. He asks for his things back, and picks them up
   when they're lying around.
-- **Props**: a chair, a couch, a TV and a scooter (Settings → Items → Props). He sits on the chair and couch, watches TV
+- **Props**: pixel-art chair, couch, CRT TV, scooter, desk, canvas and Othello table (Settings → Items → Props). He sits on the chair and couch, watches TV
   (from the couch if it's near), rides the scooter across the screen. Drag them around; tip his chair and he falls off.
+- **Othello together**: drop in the Othello table and select **Play Othello**. He takes a stool;
+  you play black, he plays white. The board has its own draggable window, legal-move hints and score.
+  **Talk to him** keeps the match running while you chat. Works offline, with no AI calls for moves.
+- **Optional gear**: helmet and boots in Items → Inventory. **Wear** puts them on; **Drop it in**
+  lets him fetch them. Take them back or **Put away** whenever you like.
 - **Make your own items and props**: it's just a text file. See [docs/MAKING-THINGS.md](docs/MAKING-THINGS.md)
   (also in the items folder: Settings → Items → Open items folder).
 - **He's 3D now**: he really turns, spins and flips, and his arms and legs pass in front of and behind each other.
@@ -94,8 +101,9 @@ his name, size, look (presets or every number by hand) and how he moves.
 
 ## Commands
 
-Recent additions: a larger pen, optional mace, canvas painting, desk, and an offline board game you
-can play with him. Drop the props in from Settings → Items, then use **Paint** or **Play together**.
+Recent additions: solid pixel-art furniture, seated Othello with independent chat, removable helmet
+and boots, a larger pen, optional mace and canvas painting. Drop props in from Settings → Items,
+then use **Paint** or **Play Othello**.
 Full AI mode has a thinking-interval control for lower free-tier usage. His persona and body look
 remain the same. See [docs/HANDOFF.md](docs/HANDOFF.md) for verified changes and hardware checks.
 

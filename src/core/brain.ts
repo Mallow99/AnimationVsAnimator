@@ -24,10 +24,12 @@ import type { Ctx } from './skills';
 import type { Memory, NoteKind } from './memory';
 
 const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+// Ordinary conversation during a match should not replace the seated game skill.
+const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
 
 /** What he has and where, in words: "pen (on your belt), wooden sword (the person took it)". */
 function itemsText(c: Ctx) {
-  const where = { belt: 'on your belt', hand: 'in your hand', world: 'lying on the ground', cursor: 'the person took it' } as const;
+  const where = { belt: 'on your belt', hand: 'in your hand', worn: 'wearing it', world: 'lying on the ground', cursor: 'the person took it' } as const;
   return c.items.list.map((it) => `${it.def.name.toLowerCase()} (${where[it.where]})`).join(', ') || 'nothing';
 }
 
@@ -339,7 +341,7 @@ export class Brain {
     else if (has('sit')) { say = 'ok'; plan = [{ do: 'sit' }]; }
     else if (has('sleep', 'nap', 'rest')) { say = 'zzz'; plan = [{ do: 'sleep' }]; }
     else if (has('wake')) { say = '!'; plan = [{ do: 'wake' }]; }
-    else if (has('play a game', 'playgame', 'board game', 'tic.?tac', 'noughts')) { say = 'you go first'; plan = [{ do: 'playgame' }]; }
+    else if (has('play a game', 'playgame', 'board game', 'othello', 'reversi')) { say = 'you go first'; if (!c.game || c.game.state === 'closed') plan = [{ do: 'playgame' }]; }
     else if (has('paint', 'canvas')) { say = 'one sec'; plan = [{ do: 'paint' }]; }
     else if (has('draw', 'doodle')) { say = 'one sec'; plan = [{ do: 'doodle' }]; }
     else if (has('climb')) { say = 'on it'; plan = [{ do: 'climb' }]; }
@@ -364,9 +366,10 @@ export class Brain {
     } else if (has('love', 'good boy', 'cute', 'awesome', 'cool')) { say = pickOne([':)', 'aw', 'I know']); m.nudge({ happiness: 0.08, trust: 0.02 }); plan = [{ do: 'laugh' }]; }
     else if (has('stupid', 'dumb', 'hate', 'ugly', 'useless')) { say = pickOne(['rude.', 'wow.', 'hmph']); m.nudge({ happiness: -0.1, annoyance: 0.2, trust: -0.03 }); plan = [{ do: 'stomp' }]; }
     else { say = pickOne(['?', 'huh?', '...what?']); plan = [{ do: 'shrug' }]; }
-    if (plan.length) mind.perform(c, plan, 'you asked');
+    let did = '';
+    if (plan.length && (!c.game || c.game.state === 'closed' || asksForActivity(text)) && mind.perform(c, plan, 'you asked')) did = describePlan(plan);
     this.onSpeak(say);
-    this.addLog('him', say, c, plan.length ? describePlan(plan) : '');
+    this.addLog('him', say, c, did);
     if (!this.notedOffline) {
       this.notedOffline = true;
       this.addLog('note', 'His brain is Offline, so he only knows a few simple words. Turn on Chat or Full under General → Brain for real conversation.', c);
@@ -490,6 +493,7 @@ export class Brain {
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,
+      ...(c.game && c.game.state !== 'closed' ? [`game: Othello at your table (${c.game.state}); black/person ${c.game.score.you}, white/you ${c.game.score.him}. You can talk while staying seated. Keep plan empty unless the person explicitly asks for another activity. The board handles your moves offline; never claim a move you did not make.`] : []),
       ...(c.world.screen ? [`the person is using: ${c.world.screen.app}${c.world.screen.title ? ` — "${c.world.screen.title}"` : ''} (for ${Math.max(1, Math.round((c.world.time - c.world.screen.since) / 60))} min)`] : []),
       ...(ch.whole ? [] : [`body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`]),
       `cursor: ${cursor}`,
@@ -516,9 +520,11 @@ export class Brain {
       const reply = parseReply(text, this.savedMoves);
       if (!reply) throw new Error('The AI answered in a form he couldn\'t read.');
       this.status = '';
-      this.history.push(user, { role: 'assistant', text: JSON.stringify({ say: reply.say, feel: reply.feel, plan: reply.plan.map(summarizeStep), ...(reply.remember.length ? { remember: reply.remember } : {}) }) });
+      const interruptGame = why === 'you' && asksForActivity(prompt.replace(/^You hear: "|"$/g, ''));
+      const recordedPlan = c.game && c.game.state !== 'closed' && !interruptGame ? reply.plan.filter((step) => 'say' in step) : reply.plan;
+      this.history.push(user, { role: 'assistant', text: JSON.stringify({ say: reply.say, feel: reply.feel, plan: recordedPlan.map(summarizeStep), ...(reply.remember.length ? { remember: reply.remember } : {}) }) });
       while (this.history.length > HISTORY) this.history.splice(0, 2);
-      this.apply(c, mind, reply, why);
+      this.apply(c, mind, reply, why, interruptGame);
     }).catch((err: unknown) => {
       if (revision !== this.revision || !this.active) return;
       this.status = err instanceof Error ? err.message : String(err);
@@ -527,10 +533,11 @@ export class Brain {
     }).finally(() => { this.busy = false; if (why === 'auto') mind.holdUntil = 0; });
   }
 
-  private apply(c: Ctx, mind: Mind, reply: BrainReply, why: 'you' | 'event' | 'auto') {
+  private apply(c: Ctx, mind: Mind, reply: BrainReply, why: 'you' | 'event' | 'auto', interruptGame = false) {
     if (Object.keys(reply.feel).length) c.mood.nudge(reply.feel);
     for (const r of reply.remember) c.memory.add(r, noteKind(r), 'ai', 2);
-    const plan = this.puppet ? reply.plan : reply.plan.filter((st) => !('move' in st));
+    const playing = c.game && c.game.state !== 'closed';
+    const plan = playing && !interruptGame ? [] : this.puppet ? reply.plan : reply.plan.filter((st) => !('move' in st));
     for (const st of plan) {
       if ('move' in st && !this.savedMoves.some((m) => m.frames === st.move)) {
         this.recentMoves.push({ name: st.name || 'made-up move', frames: st.move });
@@ -543,7 +550,8 @@ export class Brain {
     if (plan.length && mind.perform(c, plan, why === 'you' ? 'you asked (AI)' : 'his own idea (AI)')) did = describePlan(plan);
     if (why === 'auto') mind.holdUntil = 0;
     if (reply.say) this.onSpeak(reply.say);
-    const said = [reply.say, ...plan.flatMap((st) => ('say' in st ? [st.say] : []))].filter(Boolean).join(' … ');
+    if (playing && !interruptGame) for (const step of reply.plan) if ('say' in step) this.onSpeak(step.say);
+    const said = [reply.say, ...reply.plan.flatMap((st) => ('say' in st ? [st.say] : []))].filter(Boolean).join(' … ');
     if (said || did || why === 'you') this.addLog('him', said, c, did);
   }
 

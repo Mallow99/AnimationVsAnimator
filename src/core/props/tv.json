@@ -4,15 +4,84 @@
   "name": "TV",
   "about": "An old TV on little legs. He sits down in front of it (on the couch, if there is one) and watches cartoons.",
   "use": "tv",
-  "outline": [[0, 0], [56, 0], [56, 38], [52, 46], [4, 46], [0, 38]],
-  "screen": [5, 5, 46, 28],
-  "shape": [
-    {"pts": [[1, 1], [55, 1], [55, 37], [1, 37], [1, 1]], "color": "#3a3a48", "width": 3},
-    {"pts": [[8, 38], [4, 46]], "color": "#3a3a48", "width": 2.5},
-    {"pts": [[48, 38], [52, 46]], "color": "#3a3a48", "width": 2.5},
-    {"pts": [[20, 0], [12, -12]], "color": "#55556a", "width": 1.5},
-    {"pts": [[36, 0], [44, -12]], "color": "#55556a", "width": 1.5},
-    {"pts": [[50, 10], [51, 10]], "color": "#c9ccd8", "width": 2.5},
-    {"pts": [[50, 20], [51, 20]], "color": "#c9ccd8", "width": 2.5}
-  ]
+  "outline": [
+    [
+      0,
+      0
+    ],
+    [
+      56,
+      0
+    ],
+    [
+      56,
+      38
+    ],
+    [
+      52,
+      46
+    ],
+    [
+      4,
+      46
+    ],
+    [
+      0,
+      38
+    ]
+  ],
+  "screen": [
+    6,
+    8,
+    36,
+    22
+  ],
+  "shape": [],
+  "sprite": {
+    "x": -2,
+    "y": -12,
+    "pixel": 2,
+    "palette": {
+      "a": "#df9b38",
+      "c": "#738fa1",
+      "d": "#563b35",
+      "h": "#edb978",
+      "k": "#151b28",
+      "o": "#29232d",
+      "s": "#b0b7c4",
+      "w": "#835339"
+    },
+    "rows": [
+      ".......o.............o........",
+      ".......o.............o........",
+      "........s...........s.........",
+      "........s...........s.........",
+      ".........o.........o..........",
+      ".........o.........o..........",
+      "oooooooooooooooooooooooooooooo",
+      "ohhhhhhhhhhhhhhhhhhhhhhhhhhhho",
+      "owoooooooooooooooooooooowwwwwo",
+      "owoccccccccccccccccccccowwwwwo",
+      "owockkkkkkkkkkkkkkkkkkcowooowo",
+      "owockkkkkkkkkkkkkkkkkkcowosowo",
+      "owockkkkkkkkkkkkkkkkkkcowooowo",
+      "owockkkkkkkkkkkkkkkkkkcowwwwwo",
+      "owockkkkkkkkkkkkkkkkkkcowwwwwo",
+      "owockkkkkkkkkkkkkkkkkkcowooowo",
+      "owockkkkkkkkkkkkkkkkkkcowoaowo",
+      "owockkkkkkkkkkkkkkkkkkcowooowo",
+      "owockkkkkkkkkkkkkkkkkkcowwwwwo",
+      "owockkkkkkkkkkkkkkkkkkcowwwwwo",
+      "owockkkkkkkkkkkkkkkkkkcowdddwo",
+      "owoccccccccccccccccccccowwwwwo",
+      "owoooooooooooooooooooooowdddwo",
+      "owwwwwwwwwwwwwwwwwwwwwwwwwwwwo",
+      "owwwwwwwwwwwwwwwwwwwwwwwwdddwo",
+      "oooooooooooooooooooooooooooooo",
+      "...ooo..................ooo...",
+      "...ooo..................ooo...",
+      "...ooo..................ooo...",
+      "...ooo..................ooo..."
+    ]
+  }
 }

@@ -4,11 +4,79 @@
   "name": "Canvas",
   "about": "An easel for his pen. Ask him to paint; the picture stays on the canvas and is saved.",
   "use": "canvas",
-  "outline": [[0, 0], [48, 0], [48, 68], [0, 68]],
-  "screen": [4, 4, 40, 46],
-  "shape": [
-    {"pts": [[0, 0], [48, 0], [48, 54], [0, 54], [0, 0]], "color": "#a8703c", "width": 3},
-    {"pts": [[10, 54], [3, 68]], "color": "#6b4426", "width": 3},
-    {"pts": [[38, 54], [45, 68]], "color": "#6b4426", "width": 3}
-  ]
+  "outline": [
+    [
+      0,
+      0
+    ],
+    [
+      48,
+      0
+    ],
+    [
+      48,
+      68
+    ],
+    [
+      0,
+      68
+    ]
+  ],
+  "screen": [
+    4,
+    4,
+    40,
+    46
+  ],
+  "shape": [],
+  "sprite": {
+    "x": -2,
+    "y": -2,
+    "pixel": 2,
+    "palette": {
+      "e": "#f9efd9",
+      "h": "#edb978",
+      "l": "#be8550",
+      "o": "#29232d",
+      "w": "#835339"
+    },
+    "rows": [
+      "oooooooooooooooooooooooooo",
+      "ohhhhhhhhhhhhhhhhhhhhhhhho",
+      "oloooooooooooooooooooooowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "oloeeeeeeeeeeeeeeeeeeeeowo",
+      "owoooooooooooooooooooooowo",
+      "ollllllllllllllllllllllllo",
+      "oooooooooooooooooooooooooo",
+      "oooooooooooooooooooooooooo",
+      "....olo............olo....",
+      "....olo............olo....",
+      "....olo............olo....",
+      "....olo............olo....",
+      "....olo............olo....",
+      "....ooo............ooo...."
+    ]
+  }
 }

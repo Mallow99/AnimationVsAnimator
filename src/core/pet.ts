@@ -10,7 +10,7 @@ import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowSides, windowWalls, type WinRect } from './world';
 import { beltParts, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
-import { drawItem, itemFromDrawing, Items, type Item } from './items';
+import { drawItem, itemParts, itemFromDrawing, Items, type Item } from './items';
 import { Props, parseCanvasArt, type Ball, type Thing } from './props';
 import type { Doodle } from './doodles';
 import type { Platform } from './physics';
@@ -329,7 +329,10 @@ export class Pet {
     // Squash and stretch (drawing only): scale him about his feet for a moment.
     const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
-    const extras: DepthPart[] = [...beltParts(this.char, '#3a2a22'), ...this.items.onHim.filter((it) => !(it.where === 'belt' && it.slot === 3)).map((it) => this.itemPart(it))];
+    const extras: DepthPart[] = [
+      ...beltParts(this.char, '#3a2a22'),
+      ...this.items.onHim.filter((it) => !(it.where === 'belt' && it.slot === 3)).flatMap((it) => itemParts(it, this.char)),
+    ];
     if (look.pixel > 1) {
       this.pixels.draw(ctx, this.char, look, extras);
       for (const it of this.items.list) if (it.where === 'world' || it.where === 'cursor') this.pixels.paint(ctx, [it.butt, it.tip], it.drawPadding + 3 * this.char.scale, { ...look, outline: false }, (g) => drawItem(g, it));
@@ -844,6 +847,7 @@ export class Pet {
   get menuOpen() { return !!this.menu; }
   /** Just above his head (where the talk box goes). */
   talkAnchor() { const h = this.char.body.j.head; return { x: h.x, y: h.y - this.char.d.headR }; }
+  get speaking() { return !!this.bubble; }
   closeMenu() { this.menu = null; }
 
   private menuLayout() {
@@ -1172,12 +1176,6 @@ export class Pet {
     };
   }
 
-  /** How one of the things on him is drawn, in depth order with his limbs. */
-  private itemPart(it: Item): DepthPart {
-    const a = it.butt, b = it.tip;
-    return { z: (a.z + b.z) / 2 + (it.where === 'hand' ? 0.5 : -0.3), pts: [a, b], draw: (g) => drawItem(g, it) };
-  }
-
   get dragging() { return this.press !== null; }
 
   // ── for the settings window ──
@@ -1210,11 +1208,11 @@ export class Pet {
       recentMoves: this.brain.recentMoves.map((m) => ({ name: m.name, poses: m.frames.length })),
       savedMoves: this.brain.savedMoves.map((m) => ({ name: m.name, poses: m.frames.length })),
       items: {
-        kinds: [...this.items.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about, use: d.use, drawn: !!d.drawn })),
+        kinds: [...this.items.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about, use: d.use, wear: d.wear, sprite: d.sprite, shape: d.shape, drawn: !!d.drawn })),
         list: this.items.list.map((it) => ({ uid: it.uid, id: it.def.id, name: it.def.name, where: it.where, slot: it.slot, drawn: !!it.def.drawn })),
       },
       props: {
-        kinds: [...this.props.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about })),
+        kinds: [...this.props.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about, sprite: d.sprite, shape: d.shape })),
         placed: this.props.placed.map((t, i) => ({ i, id: t.def!.id, name: t.def!.name })),
       },
       memory: { summary: this.memory.summary, notes: this.memory.notes, tally: this.memory.tally, firstMet: this.memory.firstMet, summarizedAt: this.memory.summarizedAt },
@@ -1304,7 +1302,7 @@ export class Pet {
         if (made) { this.sound('poof', 0.6); this.emit({ type: 'itemSpawned', name: made.def.name.toLowerCase(), uid: made.uid }); }
         break;
       }
-      case 'take': if (it && (it.where === 'belt' || it.where === 'hand')) this.takeItem(it); break;
+      case 'take': if (it && (it.where === 'belt' || it.where === 'hand' || it.where === 'worn')) this.takeItem(it); break;
       case 'return': if (it) this.giveBack(it); break;
       case 'drop': if (it) this.items.drop(it, 0, 0); break;
       case 'remove': if (it) this.items.remove(it); break;

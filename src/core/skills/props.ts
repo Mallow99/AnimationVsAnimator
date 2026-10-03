@@ -14,10 +14,11 @@ export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
 export class SitOnProp extends Skill {
   readonly name = 'sitdown';
   private phase: 'go' | 'sit' = 'go';
-  constructor(private seat: Thing, private dur = rand(10, 25), private face: 1 | -1 | 0 = 0, readonly why = '') { super(); }
+  constructor(private seat: Thing, private dur = rand(10, 25), private face: 1 | -1 | 0 = 0, readonly why = '', private useRightSeat = false) { super(); }
   start(c: Ctx) { c.look = 'default'; }
   update(c: Ctx) {
-    const ch = c.char, at = this.seat.seatAt;
+    const ch = c.char, right = this.seat.def?.seatRight;
+    const at = this.useRightSeat && right ? this.seat.toWorld(...right) : this.seat.seatAt;
     if (!at || !c.props?.things.includes(this.seat)) return true;
     if (this.phase === 'go') {
       if (this.t > 12) return true;
@@ -156,24 +157,57 @@ export class PlayBoardGame extends Skill {
   readonly name = 'playgame';
   private offered = false;
   private reacted = false;
+  private seat: SitOnProp | null = null;
+  private rightSeat = false;
+  private revision = -1;
+  private activeAt = 0;
+  private reachUntil = 0;
   constructor(private table: Thing) { super(); }
-  update(c: Ctx) {
-    if (!c.game || !c.props?.things.includes(this.table) || this.table.held || Math.abs(this.table.tilt) > 0.6 || !c.char.ready) return true;
+  start(c: Ctx) {
+    this.rightSeat = !!this.table.def?.seatRight && c.char.x > this.table.toWorld(86, 0).x;
+    this.seat = this.table.seatAt ? new SitOnProp(this.table, 3600, this.rightSeat ? -1 : 1, '', this.rightSeat) : null;
+    this.seat?.start(c);
+  }
+  update(c: Ctx, dt: number) {
+    if (!c.game || !c.props?.things.includes(this.table) || this.table.held || Math.abs(this.table.tilt) > 0.6) return true;
+    if (this.seat) {
+      this.seat.t += dt;
+      if (this.seat.update(c)) return true;
+    }
     c.look = 'target'; c.lookTarget = this.table.center;
     if (!this.offered) {
       if (this.t > 15) return true;
-      if (!arrive(c, this.table.center.x - 38 * c.char.scale, 8)) return false;
+      if (this.seat) { if (c.char.mode !== 'sit') return false; }
+      else {
+        if (!arrive(c, this.table.center.x - 38 * c.char.scale, 8)) return false;
+        c.char.sit();
+      }
       if (!c.game.invite()) return true;
       this.offered = true; this.t = 0;
       c.say('wanna play a round?', 2);
     }
+    if (c.char.mode !== 'sit') return true;
+    c.game.anchor = this.table.def?.sprite ? this.table.toWorld(86, 0) : this.table.center;
+    if (this.revision !== c.game.revision) {
+      this.revision = c.game.revision; this.activeAt = c.world.time;
+      if (c.game.lastMove >= 0) {
+        this.reachUntil = c.world.time + 0.35;
+        c.sound?.('click', 0.35);
+      }
+    }
+    c.char.handTarget = c.world.time < this.reachUntil ? this.table.toWorld(this.rightSeat ? 122 : 50, 6) : null;
     if (c.game.state === 'finished' && !this.reacted) {
       this.reacted = true;
-      c.say(c.game.result === 'X' ? 'rematch?' : c.game.result === 'O' ? 'ha! got you' : 'draw. again?', 2);
+      c.say(c.game.result === 'you' ? 'rematch?' : c.game.result === 'him' ? 'ha! got you' : 'draw. again?', 2);
       c.mood.nudge({ boredom: -0.15, happiness: 0.03 });
     }
     if (c.game.state === 'playing') this.reacted = false;
-    return c.game.state === 'closed' || this.t > (c.game.state === 'invite' ? 20 : 300);
+    return c.game.state === 'closed' || c.world.time - this.activeAt > (c.game.state === 'invite' ? 45 : 900);
   }
-  stop(c: Ctx) { if (this.offered) c.game?.close(); }
+  stop(c: Ctx) {
+    if (this.offered) c.game?.close();
+    c.char.handTarget = null;
+    this.seat?.stop(c);
+    if (!this.seat && c.char.mode === 'sit') c.char.standUp();
+  }
 }

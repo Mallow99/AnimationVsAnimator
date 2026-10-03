@@ -1977,7 +1977,9 @@ export class Character {
     const fL = foot('L'), fR = foot('R');
     const B = basis(this.yaw);
     const knee = (k: 'L' | 'R', f: V3) => twoBoneIK3(hip, f, d.thigh, d.shin, this.kneePole(B, k));
-    const hand = (k: 'L' | 'R') => this.lounge ? this.off(neck, -4 * sc, 4 * sc, sideOf(k) * 9 * sc) : this.off(knee(k, k === 'L' ? fL : fR), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
+    const hand = (k: 'L' | 'R') => this.handTarget && k === this.useHand
+      ? this.pt(this.handTarget.x, this.handTarget.y, neck.z)
+      : this.lounge ? this.off(neck, -4 * sc, 4 * sc, sideOf(k) * 9 * sc) : this.off(knee(k, k === 'L' ? fL : fR), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
     this.fillLimbs(t, hip, neck, (this.lounge ? -0.1 : 0.1) + P.hunch * 0.6, 0, hand('L'), hand('R'), fL, fR);
     t.kneeL = knee('L', fL); t.kneeR = knee('R', fR);
     Object.assign(s, { hip: 0.4, neck: 0.25, head: 0.25, kneeL: 0.2, kneeR: 0.2, footL: 0.12, footR: 0.12, elbowL: 0.08, elbowR: 0.08, handL: 0.1, handR: 0.1 });

@@ -3,7 +3,9 @@
 **Latest continuation:** read [docs/HANDOFF.md](docs/HANDOFF.md) and [AGENTS.md](AGENTS.md) first.
 They record the current reliability/item work, tests, Windows distribution steps, and the owner's
 stop point before preparing multiple characters. The original vision and historical handoff below
-remain useful context; the latest owner instructions take priority.
+remain useful context; the latest owner instructions take priority. The owner has since approved
+solid pixel-art props, a seated Othello table with independent chat, removable helmet/boots and GUI
+polish. These are now implemented on `codex/reliability-and-items`; multiple characters remain paused.
 
 A desktop pet: a procedural stick figure living in a transparent, always-on-top,
 click-through overlay. Inspired by Alan Becker's *Animator vs. Animation*.

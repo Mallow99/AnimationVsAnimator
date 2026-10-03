@@ -7,7 +7,7 @@
   <style>
     /* Layout: a compact control panel. Header with his live mood, tabs, one column of controls. */
     :root {
-      --bg: #eef0f6; --panel: #f8f9fc; --ink: #1b1d2e; --muted: #5b5f78; --line: #d3d6e5;
+      --bg: #eee9df; --panel: #faf6eb; --ink: #29232d; --muted: #686073; --line: #d2c8b6;
       --accent: #4450d6; --accent-ink: #fff; --track: #dfe2ee;
       --good: #2f9e6a; --warn: #c98a1c; --bad: #d1495b;
       --ui: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
@@ -25,15 +25,15 @@
     .mood-chip { font: 600 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 5px 8px; border-radius: 99px;
                  background: var(--accent); color: var(--accent-ink); }
     .doing { margin: 4px 0 12px; color: var(--muted); font-size: 13px; }
-    nav { display: flex; gap: 2px; }
-    nav button { font: 600 13px/1 var(--ui); color: var(--muted); background: none; border: 0; padding: 10px 12px; border-bottom: 2px solid transparent; cursor: pointer; }
+    nav { display: flex; gap: 2px; overflow-x: auto; }
+    nav button { white-space: nowrap; font: 600 13px/1 var(--ui); color: var(--muted); background: none; border: 0; padding: 10px 8px; border-bottom: 2px solid transparent; cursor: pointer; }
     nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
     main { padding: 18px; display: grid; gap: 22px; }
     section { display: grid; gap: 22px; }
     section[hidden] { display: none !important; }
     .group { display: grid; gap: 10px; }
     h2 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
-    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; display: grid; gap: 10px; }
     .bar { display: grid; grid-template-columns: 112px 1fr 38px; align-items: center; gap: 10px; }
     .bar input[type="range"] { margin: 0; }
     .bar .fill { display: block; width: 0; height: 100%; border-radius: 99px; background: var(--accent); transition: width .35s ease; }
@@ -42,7 +42,7 @@
     .note { color: var(--muted); font-size: 13px; margin: 0; }
     .recent { font: 12px/1.6 var(--mono); color: var(--muted); }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .chip { font: 600 13px/1 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+    .chip { font: 600 13px/1 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; cursor: pointer; }
     .chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
     .chip .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
     .bundle { text-align: left; display: grid; gap: 3px; padding: 10px 12px; }
@@ -54,11 +54,11 @@
     .slider .top span:last-child { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
     .slider small { color: var(--muted); font-size: 12px; }
     input[type="range"] { width: 100%; accent-color: var(--accent); }
-    input[type="text"] { font: 15px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
-    textarea { font: 14px/1.45 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; min-height: 110px; resize: vertical; }
-    select { font: 14px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+    input[type="text"] { font: 15px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; }
+    textarea { font: 14px/1.45 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; min-height: 110px; resize: vertical; }
+    select { font: 14px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; }
     a { color: var(--accent); }
-    input[type="password"] { font: 14px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+    input[type="password"] { font: 14px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; }
     .chat { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
     .chat.tall { max-height: 52vh; min-height: 200px; align-content: start; }
     .chat .acts { justify-self: start; color: var(--muted); font-size: 12px; font-style: italic; padding: 0 10px; margin-top: -4px; }
@@ -68,21 +68,29 @@
     .list .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .list .row small { color: var(--muted); }
     .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
-    .gallery figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; display: grid; gap: 4px; }
+    .gallery figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px; display: grid; gap: 4px; }
     .gallery canvas { width: 100%; aspect-ratio: 1; background: #fff; border-radius: 4px; image-rendering: pixelated; }
     .gallery figcaption { font-size: 12px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .gallery .btns { justify-content: center; gap: 4px; }
+    .thing-card { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .thing-card:last-child { border-bottom: 0; }
+    .thing-card canvas { width: 64px; height: 64px; image-rendering: pixelated; background: var(--bg); border: 1px solid var(--line); }
+    .thing-info { display: grid; gap: 5px; align-content: start; }
+    .thing-info p { font-size: 12px; color: var(--muted); margin: 0; }
+    .list .row { flex-wrap: wrap; padding: 5px 0; }
+    .list .row span { min-width: 120px; }
+    textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .btn.small { padding: 5px 8px; font-size: 12px; }
     .notes .row { align-items: flex-start; }
     .notes .kind { flex: 0 0 auto !important; font: 600 10px/1.8 var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent); min-width: 62px; }
     .notes .text { flex: 1; white-space: normal !important; overflow-wrap: anywhere; cursor: text; border-radius: 4px; padding: 0 3px; }
     .notes .text:focus { outline: 1px solid var(--accent); background: var(--bg); }
     .notes small { white-space: nowrap; }
-    .chat p { margin: 0; padding: 7px 10px; border-radius: 10px; max-width: 85%; overflow-wrap: anywhere; }
+    .chat p { margin: 0; padding: 7px 10px; border-radius: 4px; max-width: 85%; overflow-wrap: anywhere; }
     .chat .you { justify-self: end; background: var(--accent); color: var(--accent-ink); }
     .chat .him { justify-self: start; background: var(--track); }
     .chat .note { justify-self: center; color: var(--muted); font-size: 12px; text-align: center; }
-    input[type="color"] { width: 44px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 2px; }
+    input[type="color"] { width: 44px; height: 32px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); padding: 2px; }
     .inline { display: flex; align-items: center; gap: 10px; }
     .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .switch input { width: 18px; height: 18px; accent-color: var(--accent); }
@@ -90,7 +98,7 @@
     .radio input { margin-top: 3px; accent-color: var(--accent); }
     .radio small { display: block; color: var(--muted); }
     .radio.off { opacity: .55; }
-    .btn { font: 600 13px/1 var(--ui); color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 8px; padding: 9px 12px; cursor: pointer; }
+    .btn { font: 600 13px/1 var(--ui); color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 4px; padding: 9px 12px; cursor: pointer; }
     .btn.ghost { color: var(--ink); background: none; border: 1px solid var(--line); }
     .btns { display: flex; flex-wrap: wrap; gap: 8px; }
     button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -196,20 +204,20 @@
 
     <section data-panel="items" hidden>
       <div class="group">
-        <h2>His belt</h2>
+        <h2>With him</h2>
         <div class="card"><div id="itemList" class="list"></div></div>
-        <p class="note">He wears a belt with slots on his hips, his back, and a pocket. He starts with just his pen (he draws with it). Right-click him on the desktop to take something; it dangles from your cursor. Press and hold to grab it, swing it (at him, if you're feeling mean), and let go to drop it or throw it. Let go on top of him to hand it back. Things lying around: just press on them, drag, and let go. He'll ask for his things back, and pick them up if they're lying around.</p>
+        <p class="note">His tools and worn gear. Right-click him to take something, then drag it or drop it back onto him. <b>Put away</b> returns it to the inventory below. Helmet and boots are optional; he starts with just his pen.</p>
       </div>
       <div class="group">
         <h2>Inventory</h2>
         <div class="card"><div class="list" id="itemKinds"></div></div>
-        <p class="note">Everything he could have. <b>Drop it in</b> drops it from the top of the screen near him and he goes to get it; <b>Give him</b> puts it straight on his belt. Your own items (below) show up here too.</p>
+        <p class="note">Everything he could have. <b>Drop it in</b> drops it from the top of the screen near him and he goes to get it; <b>Give him</b> puts it on his belt; <b>Wear</b> equips his helmet or boots. Your own items (below) show up here too.</p>
       </div>
       <div class="group">
         <h2>Props</h2>
         <div class="card"><div class="list" id="propKinds"></div></div>
         <div class="card"><div class="list" id="propPlaced"></div></div>
-        <p class="note">Furniture and toys for his desktop. Drop one in and he'll try it out: he sits on chairs and couches, watches TV (on the couch if it's near), and rides the scooter. You can drag them around (he falls off if you tip his chair over). Make your own the same way as items: see the how-to below.</p>
+        <p class="note">Drag furniture to arrange his desktop. He can sit, watch TV, ride, paint, and play Othello at his table. The game has its own movable window; <b>Talk to him</b> opens chat while the match continues.</p>
       </div>
       <div class="group">
         <h2>Make your own</h2>

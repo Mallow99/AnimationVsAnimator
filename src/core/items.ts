@@ -16,6 +16,10 @@ import swordDef from './items/wooden-sword.json';
 import hammerDef from './items/hammer.json';
 import ballDef from './items/bouncy-ball.json';
 import maceDef from './items/mace.json';
+import helmetDef from './items/helmet.json';
+import bootsDef from './items/boots.json';
+import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
+import type { DepthPart } from './render';
 
 /** What he does with it: draw (a pen), swing (a sword), smash (a hammer, overhead), throw (a ball), none (just carries it). */
 export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'none';
@@ -30,6 +34,8 @@ export interface ItemDef {
   /** How bouncy it is when it hits the floor or a wall (0 = a thud, 0.9 = a super ball). */
   bounce: number;
   shape: ItemStroke[];
+  sprite?: PixelSprite;
+  wear?: 'head' | 'feet';
   /** Made from one of his drawings (not a file). */
   drawn?: boolean;
 }
@@ -53,14 +59,16 @@ export function parseItemDef(raw: unknown): ItemDef | null {
       if (pts.length >= 2) shape.push({ pts, color: color(s.color, color(o.color, '#2a2c44')), width: num(s.width, 2.5, 0.5, 8) });
     }
   }
-  if (!shape.length) shape = [{ pts: [[-grip, 0], [length, 0]], color: color(o.color, '#2a2c44'), width: 2.5 }];
+  const sprite = parseSprite(o.sprite);
+  if (!shape.length && !sprite) shape = [{ pts: [[-grip, 0], [length, 0]], color: color(o.color, '#2a2c44'), width: 2.5 }];
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 140) : '',
     use: o.use === 'draw' || o.use === 'swing' || o.use === 'smash' || o.use === 'throw' ? o.use : 'none',
     length, grip,
     belt: o.belt === 'side' || o.belt === 'back' || o.belt === 'pocket' ? o.belt : o.belt === 'none' ? 'none' : 'side',
-    hit: num(o.hit, 0, 0, 3), bounce: num(o.bounce, 0.3, 0, 0.92), shape,
+    hit: num(o.hit, 0, 0, 3), bounce: num(o.bounce, 0.3, 0, 0.92), shape, sprite,
+    wear: o.wear === 'head' || o.wear === 'feet' ? o.wear : undefined,
   };
 }
 
@@ -83,7 +91,7 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, hammerDef, ballDef, maceDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, hammerDef, ballDef, maceDef, helmetDef, bootsDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
 export const SLOT_NAMES = ['left hip', 'right hip', 'back', 'pocket'];
@@ -93,10 +101,12 @@ const PREFER: Record<BeltSpot, number[]> = { side: [1, 0, 2], back: [2, 1, 0], p
 export const preferredSlots = (d: ItemDef) => PREFER[d.belt];
 
 let nextUid = 1;
+export interface ItemPose { at: V3; dir: V3; scale: number; mirror?: boolean }
 
 export class Item {
   readonly uid = nextUid++;
-  where: 'belt' | 'hand' | 'world' | 'cursor' = 'world';
+  where: 'belt' | 'hand' | 'worn' | 'world' | 'cursor' = 'world';
+  poses: ItemPose[] = [];
   slot = -1;
   hand: 'L' | 'R' = 'R';
   /** Where his hand (or your cursor) grips it, and which way it points (unit vector), right now. */
@@ -169,6 +179,17 @@ export class Item {
 
   /** Distance from (x, y) to the item on screen. */
   distTo(x: number, y: number) {
+    if (this.def.sprite) {
+      const s = this.def.sprite;
+      return Math.min(...(this.where === 'worn' ? this.poses : [this]).map((pose) => {
+        const dx = x - pose.at.x, dy = y - pose.at.y;
+        const length = Math.hypot(pose.dir.x, pose.dir.y) || 1;
+        const ux = pose.dir.x / length, uy = pose.dir.y / length;
+        const localX = (dx * ux + dy * uy) / pose.scale * ('mirror' in pose && pose.mirror ? -1 : 1), localY = (-dx * uy + dy * ux) / pose.scale;
+        const right = s.x + s.rows[0].length * s.pixel, bottom = s.y + s.rows.length * s.pixel;
+        return Math.hypot(Math.max(s.x - localX, 0, localX - right), Math.max(s.y - localY, 0, localY - bottom)) * pose.scale;
+      }));
+    }
     const p = this.butt, q = this.tip, dx = q.x - p.x, dy = q.y - p.y, l2 = dx * dx + dy * dy || 1e-9;
     const t = clamp(((x - p.x) * dx + (y - p.y) * dy) / l2, 0, 1);
     return Math.hypot(x - (p.x + dx * t), y - (p.y + dy * t));
@@ -182,7 +203,11 @@ export class Item {
     return Math.min(this.distTo(x, y), Math.hypot(x - a.x - dx * u, y - a.y - dy * u));
   }
 
-  get drawPadding() { return Math.max(6, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.abs(p[1]) + s.width / 2))) * this.scale; }
+  get drawPadding() {
+    const s = this.def.sprite;
+    const spritePad = s ? Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.x + s.rows[0].length * s.pixel), Math.abs(s.y + s.rows.length * s.pixel)) : 0;
+    return Math.max(6, spritePad, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.abs(p[1]) + s.width / 2))) * this.scale;
+  }
 }
 
 /** Everything he owns (and what you took), where it is, and moving it between places. */
@@ -207,6 +232,10 @@ export class Items {
   give(defId: string | ItemDef, ch: Character): Item | null {
     const def = typeof defId === 'string' ? this.defs.get(defId) : defId;
     if (!def) return null;
+    if (def.wear) {
+      const owned = this.list.find((it) => it.def.id === def.id);
+      if (owned) { if (owned.where !== 'worn') this.stow(owned); return owned; }
+    }
     const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale);
     this.list.push(it);
     if (!this.stow(it)) { it.where = 'world'; it.at = { x: ch.x + ch.facing * 20, y: ch.body.j.hip.y, z: 0 }; it.loosen(ch.facing * 60, -150); }
@@ -222,6 +251,12 @@ export class Items {
 
   /** Put it in a belt slot (its favorite free one). False if the belt is full or it doesn't go on a belt. */
   stow(it: Item): boolean {
+    if (it.def.wear) {
+      const other = this.list.find((x) => x !== it && x.where === 'worn' && x.def.wear === it.def.wear);
+      if (other) this.drop(other, 0, -60);
+      this.unslot(it); it.where = 'worn'; it.aim = null;
+      this.onChange?.(); return true;
+    }
     if (it.def.belt === 'none') return false;
     if (it.where === 'belt') return true;
     const slot = preferredSlots(it.def).find((s) => !this.belt[s]);
@@ -267,10 +302,10 @@ export class Items {
   /** The item your cursor is carrying, if any. */
   get carried() { return this.list.find((x) => x.where === 'cursor') ?? null; }
   /** Things on him (belt or hands). */
-  get onHim() { return this.list.filter((x) => x.where === 'belt' || x.where === 'hand'); }
+  get onHim() { return this.list.filter((x) => x.where === 'belt' || x.where === 'hand' || x.where === 'worn'); }
   /** The first item of his that does this (on him first, then lying around, then with you). */
   find(use: ItemUse) {
-    const order = { hand: 0, belt: 1, world: 2, cursor: 3 } as const;
+    const order = { hand: 0, belt: 1, worn: 1, world: 2, cursor: 3 } as const;
     return this.list.filter((x) => x.def.use === use).sort((a, b) => order[a.where] - order[b.where])[0] ?? null;
   }
 
@@ -323,7 +358,11 @@ export class Items {
     const j = ch.body.j;
     for (const it of this.list) {
       it.scale = ch.scale;
-      if (it.where === 'belt') {
+      if (it.where === 'worn') {
+        it.poses = equipmentPoses(it, ch);
+        const pose = it.poses[0];
+        if (pose) { it.at = pose.at; it.dir = pose.dir; }
+      } else if (it.where === 'belt') {
         const p = this.slotPose(ch, it.slot);
         it.at = p.at; it.dir = p.dir;
       } else if (it.where === 'hand') {
@@ -367,7 +406,7 @@ export class Items {
 
   // ── saving: what he owns and where (anything lying around or with you goes back on his belt) ──
   save() {
-    return this.list.filter((it) => !it.def.drawn || it.where !== 'world').map((it) => ({ id: it.def.id, slot: it.where === 'belt' ? it.slot : -1, def: it.def.drawn ? it.def : undefined }));
+    return this.list.filter((it) => !it.def.drawn || it.where !== 'world').map((it) => ({ id: it.def.id, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', def: it.def.drawn ? it.def : undefined }));
   }
   /**
    * `known`: the built-ins he'd been given when this was saved. Missing (an older save) means
@@ -379,13 +418,15 @@ export class Items {
     this.list = []; this.belt = [null, null, null, null];
     for (const d of data.slice(0, 12)) {
       if (!d || typeof d !== 'object') continue;
-      const o = d as { id?: string; slot?: number; def?: unknown };
+      const o = d as { id?: string; slot?: number; worn?: boolean; def?: unknown };
       const def = o.def ? parseItemDef(o.def) : this.defs.get(String(o.id));
       if (!def) continue;
       if (o.def) def.drawn = true;
       const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale);
       this.list.push(it);
-      if (typeof o.slot === 'number' && o.slot >= 0 && o.slot < SLOTS && !this.belt[o.slot] && def.belt !== 'none') { this.belt[o.slot] = it; it.slot = o.slot; it.where = 'belt'; }
+      if (def.wear && o.worn === false) {
+        it.where = 'world'; it.at = { x: ch.x + ch.facing * 30 * ch.scale, y: ch.bounds.floor - 22 * ch.scale, z: 0 }; it.loosen();
+      } else if (typeof o.slot === 'number' && o.slot >= 0 && o.slot < SLOTS && !this.belt[o.slot] && def.belt !== 'none') { this.belt[o.slot] = it; it.slot = o.slot; it.where = 'belt'; }
       else if (!this.stow(it)) { it.where = 'world'; it.at = { x: ch.x + 20, y: ch.body.j.hip.y, z: 0 }; it.loosen(); }
     }
     this.giveStarter(ch);
@@ -393,23 +434,59 @@ export class Items {
 }
 
 /** Draw an item along its current direction. Smooth lines (the pixel layer can pixelate it). */
-export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, it: Item, alpha = 1) {
-  const sc = it.scale, d = it.dir;
+export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, it: Item, alpha = 1, pose: ItemPose = it) {
+  const sc = pose.scale, d = pose.dir;
   // "across" = sideways to the item on screen.
   let ax = -d.y, ay = d.x;
   const al = Math.hypot(ax, ay) || 1; ax /= al; ay /= al;
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (it.def.sprite) {
+    const mirror = pose.mirror ? -1 : 1;
+    ctx.save(); ctx.translate(pose.at.x, pose.at.y); ctx.transform(d.x * sc * mirror, d.y * sc * mirror, ax * sc, ay * sc, 0, 0);
+    drawSprite(ctx, it.def.sprite); ctx.restore();
+  }
   for (const st of it.def.shape) {
     ctx.strokeStyle = st.color;
     ctx.lineWidth = st.width * sc;
     ctx.beginPath();
     st.pts.forEach(([along, across], i) => {
-      const x = it.at.x + d.x * along * sc + ax * across * sc, y = it.at.y + d.y * along * sc + ay * across * sc;
+      const x = pose.at.x + d.x * along * sc + ax * across * sc, y = pose.at.y + d.y * along * sc + ay * across * sc;
       if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
     });
     ctx.stroke();
   }
   ctx.restore();
+}
+
+/** Current attachment frames, shared by physics/input and drawing. */
+export function equipmentPoses(it: Item, ch: Character): ItemPose[] {
+  const j = ch.body.j;
+  if (it.def.wear === 'head') {
+    const up = norm3(sub3(j.head, j.neck));
+    return [{ at: { x: j.head.x, y: j.head.y, z: j.head.z + 0.5 }, dir: { x: -up.y, y: up.x, z: 0 }, scale: ch.d.headR / 11.25 }];
+  }
+  return (['L', 'R'] as const).filter((side) => ch.hasLimb(side === 'L' ? 'legL' : 'legR')).map((side) => {
+    const foot = j[side === 'L' ? 'footL' : 'footR'], knee = j[side === 'L' ? 'kneeL' : 'kneeR'];
+    const down = norm3(sub3(foot, knee));
+    return { at: { x: foot.x, y: foot.y, z: foot.z + 0.2 }, dir: { x: down.y, y: -down.x, z: 0 }, scale: ch.scale, mirror: ch.facing < 0 };
+  });
+}
+
+/** Worn gear gets one depth-sorted part per attachment (one helmet, two boots). */
+export function itemParts(it: Item, ch?: Character): DepthPart[] {
+  const poses = it.where === 'worn' ? ch ? equipmentPoses(it, ch) : it.poses : [it];
+  return poses.map((pose) => {
+    const pad = it.drawPadding * pose.scale / it.scale;
+    return {
+      z: (it.where === 'worn' ? pose.at.z : (it.butt.z + it.tip.z) / 2) + (it.where === 'hand' ? 0.5 : it.where === 'belt' ? -0.3 : 0),
+      pts: [
+        { x: pose.at.x - pad, y: pose.at.y - pad },
+        { x: pose.at.x + pad, y: pose.at.y + pad },
+        { x: pose.at.x + pose.dir.x * it.def.length * pose.scale, y: pose.at.y + pose.dir.y * it.def.length * pose.scale },
+      ],
+      draw: (g) => drawItem(g, it, 1, pose),
+    };
+  });
 }
