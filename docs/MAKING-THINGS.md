@@ -4,7 +4,7 @@ Everything he can carry (**items**) and everything you can put on his desktop (*
 small text file in the JSON format. You can make new ones without touching any code.
 
 - **Where the files go:** open his settings → **Items** → **Open items folder**. The examples he
-  comes with are already in there (`pen.json`, `wooden-sword.json`, `hammer.json`,
+  comes with are already in there (`pen.json`, `wooden-sword.json`, `mace.json`,
   `bouncy-ball.json`, `chair.json`, `couch.json`, `tv.json`, `scooter.json`).
 - **After you save a file:** click **Reload items**. Your new thing shows up in the Inventory
   (items) or Props list, ready to drop in.
@@ -148,13 +148,12 @@ pixel art to keep in step. Add filled pieces to `shape`:
 - Pieces are painted in order, so list what's at the back first.
 - Add `"color"` and `"width"` to give a filled piece an edge line (usually you won't).
 - Keep every part at least 4 wide: thinner bits break up or vanish once he's pixelated.
-- A TV's `screen` is painted on top of the body, rounded, and shows his shows, his game, or your Othello board.
+- A TV's `screen` is painted on top of the body, rounded, and shows his shows or his game.
 - Pick whichever flat view reads best: furniture is front-on (couch, chair, desk, TV, easel); the scooter is
   side-on, because wheels only read from the side. Never a three-quarter or perspective view.
 
 Items can be flat too: give a stroke a `fill` and at least three points (in the item's `[along, across]`
-coordinates) and it becomes a filled shape. The helmet, boots and mace are made this way; boots flip with
-his feet when he turns around.
+coordinates) and it becomes a filled shape. The helmet, boots and mace are made this way.
 
 ## Pixel sprites and removable gear
 
@@ -177,11 +176,12 @@ Sprites supply art; `outline`, `seat`, `screen` and wheels still supply the phys
 For equipment, copy `helmet.json` or `boots.json`. Set `"wear": "head"` or `"wear": "feet"`,
 `"use": "none"`, `"belt": "none"`, and `"hit": 0`. The helmet follows his head (`along` runs across his
 head, `across` runs down the screen, `[0, 0]` is the middle of his head); boots are attached to each
-present foot (`[0, 0]` is the foot, `along` points the way he faces) and mirrored when he turns left. Take/drop/give-back work like tools.
+present foot (`[0, 0]` is the end of his leg, `across` runs up and down the shin, negative is up toward the
+knee, `along` is across the leg) and mirrored when he turns left. Take/drop/give-back work like tools.
 Only one item can occupy each equipment location; a replacement drops the previous one. This is
 cosmetic clothing, with no armor or health system.
 
-Games are played on the TV (its console is part of the TV): his own runner game, and Othello with you.
+Video games are played on the TV (its console is part of the TV).
 
 ## 3. Making your own version of him
 
@@ -203,9 +203,8 @@ body or items, the same way items are files now.
 
 New examples include `mace.json`, `helmet.json`, `boots.json`, `canvas.json` and `desk.json`. A canvas uses
 `"use": "canvas"` and a `screen` rectangle for the painting area. Any `"use": "tv"` prop can host his video
-game and Othello; defining a new game needs code. See `src/core/tv-game.ts`, `src/core/board-game.ts` and
-`src/core/skills/props.ts`. Canvas pictures are saved with the pet.
-The mace uses `smash`; existing mallets still work. Customized copies of the older examples are
+game; defining a new game needs code. See `src/core/tv-game.ts` and `src/core/skills/props.ts`. Canvas pictures are saved with the pet.
+The mace uses `smash` (the old mallet was retired). Customized copies of the older examples are
 preserved when bundled examples improve.
 
 - Items live in `src/core/items.ts`. The example files are in `src/core/items/`.

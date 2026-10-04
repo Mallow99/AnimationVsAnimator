@@ -22,7 +22,6 @@ import deskDef from './props/desk.json';
 import type { WinRect } from './world';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import { PixelLayer, DEFAULT_LOOK, type Ctx2D } from './render';
-import type { Disc } from './board-game';
 import { BLOCK_W, PLAYER_W, Runner } from './tv-game';
 
 /** Platform ids for drawn things start here, far from any window's. */
@@ -220,9 +219,8 @@ export class Thing {
   /** A TV: switched on (he's watching). */
   on = false;
   channel = 0;
-  /** A TV with its console on: what's on screen instead of a show (his own game, or the board you two are playing). */
+  /** A TV with its console on: his game is on screen instead of a show. */
   arcade: Runner | null = null;
-  board: readonly Disc[] | null = null;
   art: { shape: Vec[][]; color: string; title: string } | null = null;
   /** Size it was made at (props scale with him). */
   scale = 1;
@@ -403,7 +401,7 @@ export class Thing {
     ctx.restore();
   }
 
-  /** A TV's screen (dark when off; a show, his game or your board when on), or a canvas and its picture. */
+  /** A TV's screen (dark when off; a show or his game when on), or a canvas and its picture. */
   private drawScreen(ctx: Ctx2D, now: number, rounded: boolean) {
     const def = this.def!;
     if (!def.screen) return;
@@ -418,8 +416,7 @@ export class Thing {
     ctx.fill();
     if (this.on && def.use === 'tv') {
       ctx.save(); ctx.clip();
-      if (this.board) this.drawBoard(ctx, this.board, sx, sy, sw, sh);
-      else if (this.arcade) this.drawArcade(ctx, this.arcade, sx, sy, sw, sh);
+      if (this.arcade) this.drawArcade(ctx, this.arcade, sx, sy, sw, sh);
       else this.drawShow(ctx, sx, sy, sw, sh, now);
       ctx.restore();
     }
@@ -433,19 +430,6 @@ export class Thing {
       }
       ctx.restore();
     }
-  }
-
-  /** Your Othello game, on the TV: a green board with the discs, small enough to read from the couch. */
-  private drawBoard(ctx: Ctx2D, board: readonly Disc[], sx: number, sy: number, sw: number, sh: number) {
-    const size = Math.min(sw, sh) - 4, x0 = sx + (sw - size) / 2, y0 = sy + (sh - size) / 2, cell = size / 8;
-    ctx.beginPath(); this.roundRect(ctx, [x0 - 1, y0 - 1, size + 2, size + 2], 1.5);
-    ctx.fillStyle = '#2f7a55'; ctx.fill();
-    board.forEach((d, i) => {
-      if (!d) return;
-      const q = this.toWorld(x0 + (i % 8 + 0.5) * cell, y0 + (Math.floor(i / 8) + 0.5) * cell);
-      ctx.fillStyle = d === 'black' ? '#1b1d26' : '#f1ead8';
-      ctx.beginPath(); ctx.arc(q.x, q.y, cell * 0.42 * this.scale, 0, 7); ctx.fill();
-    });
   }
 
   /** His own game on the TV: a little guy hopping over blocks, and his score. */

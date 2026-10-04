@@ -1798,6 +1798,95 @@
           "oooooooooo"
         ]
       }
+    },
+    {
+      "id": "boots",
+      "name": "Boots",
+      "about": "A pair of sturdy little boots. They follow his feet; drop them in or put them away any time.",
+      "use": "none",
+      "wear": "feet",
+      "length": 14,
+      "grip": 6,
+      "belt": "none",
+      "hit": 0,
+      "bounce": 0.2,
+      "shape": [
+        {
+          "pts": [
+            [
+              -5,
+              -10
+            ],
+            [
+              4,
+              -10
+            ],
+            [
+              4,
+              -3
+            ],
+            [
+              11,
+              -3
+            ],
+            [
+              13.5,
+              0
+            ],
+            [
+              13.5,
+              3
+            ],
+            [
+              -5,
+              3
+            ]
+          ],
+          "fill": "#7a5a44"
+        },
+        {
+          "pts": [
+            [
+              -5.5,
+              -12
+            ],
+            [
+              4.5,
+              -12
+            ],
+            [
+              4.5,
+              -8.5
+            ],
+            [
+              -5.5,
+              -8.5
+            ]
+          ],
+          "fill": "#9b7a5e"
+        },
+        {
+          "pts": [
+            [
+              -5,
+              1
+            ],
+            [
+              13.5,
+              1
+            ],
+            [
+              13.5,
+              4
+            ],
+            [
+              -5,
+              4
+            ]
+          ],
+          "fill": "#4a3a30"
+        }
+      ]
     }
   ],
   "mace.json": [
@@ -1886,6 +1975,76 @@
           ],
           "color": "#d0d5df",
           "width": 2
+        }
+      ]
+    }
+  ],
+  "hammer.json": [
+    {
+      "id": "hammer",
+      "name": "Mallet",
+      "about": "A big wooden mallet. Overhead smashes: bonks your cursor into the floor, and windows he's standing on.",
+      "use": "smash",
+      "length": 24,
+      "grip": 3,
+      "belt": "side",
+      "hit": 1.5,
+      "shape": [
+        {
+          "pts": [
+            [
+              -3,
+              0
+            ],
+            [
+              17,
+              0
+            ]
+          ],
+          "color": "#8a5a30",
+          "width": 2.6
+        },
+        {
+          "pts": [
+            [
+              18,
+              -7
+            ],
+            [
+              18,
+              7
+            ]
+          ],
+          "color": "#6e4424",
+          "width": 9
+        },
+        {
+          "pts": [
+            [
+              18,
+              -7.5
+            ],
+            [
+              18,
+              -5.5
+            ]
+          ],
+          "color": "#4a2e1a",
+          "width": 9.4
+        },
+        {
+          "pts": [
+            [
+              18,
+              5.5
+            ],
+            [
+              18,
+              7.5
+            ]
+          ],
+          "color": "#4a2e1a",
+          "width": 9.4
         }
       ]
     }

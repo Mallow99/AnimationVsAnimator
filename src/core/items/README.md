@@ -11,7 +11,7 @@ folder ship with him. You can make your own: on the desktop, Settings → Items 
 | `id`    | a short unique name, letters and dashes (`pen`, `sword`, `wand`) |
 | `name`  | what it's called in menus |
 | `about` | one line describing it |
-| `use`   | what he does with it: `draw` (a pen), `swing` (a sword or bat), `smash` (a hammer: overhead, straight down), `throw` (a ball: he throws it at your cursor, or bounces and catches it), `none` (he just carries it) |
+| `use`   | what he does with it: `draw` (a pen), `swing` (a sword or bat), `smash` (a mace: overhead, straight down), `throw` (a ball: he throws it at your cursor, or bounces and catches it), `none` (he just carries it) |
 | `length`| pixels from where he holds it to the tip, at normal size |
 | `grip`  | pixels of handle behind his hand |
 | `belt`  | where it goes: `side` (a hip), `back`, `pocket` (small things, out of sight), or `none` (doesn't fit on the belt) |

@@ -8,7 +8,6 @@ import type { Props } from '../props';
 import type { Vec } from '../math';
 import type { Memory } from '../memory';
 import type { Items } from '../items';
-import type { BoardGame } from '../board-game';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none' | 'target';
 
@@ -64,7 +63,7 @@ export interface Ctx {
   items: Items;
   /** A sound effect (the app plays it). */
   sound?: (name: string, strength?: number) => void;
-  /** His sword (or hammer, or ball) hit your cursor, moving at (vx, vy) px/s. `power` 0..1+. */
+  /** His sword (or mace, or ball) hit your cursor, moving at (vx, vy) px/s. `power` 0..1+. */
   hitCursor?: (x: number, y: number, vx: number, vy: number, power: number) => void;
   /** He's allowed to move your windows (setting on, desktop, and it's been working). */
   canMoveWindows?: boolean;
@@ -84,7 +83,6 @@ export interface Ctx {
   windowMoves?: 'ok' | 'off' | 'unsupported' | 'stuck';
   /** Drawings that came to life: balls, boxes, ledges. */
   props?: Props;
-  game?: BoardGame;
   /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
   onBecome?: (d: Doodle) => void;
 }

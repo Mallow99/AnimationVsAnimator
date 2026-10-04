@@ -695,7 +695,7 @@ function yankHand(pet: Pet, speed = 3200) {
 /** A settled pet with all his things (a new one only has his pen; these tests use the rest too). */
 function calmPet() {
   const pet = new Pet(bounds);
-  for (const id of ['sword', 'hammer', 'bouncy-ball']) pet.items.give(id, pet.char);
+  for (const id of ['sword', 'mace', 'bouncy-ball']) pet.items.give(id, pet.char);
   pet.paused = true; petFor(3, pet); pet.paused = false;
   return pet;
 }
@@ -823,11 +823,11 @@ function calmPet() {
 { // Drop something in from his inventory: it falls from the top of the screen, he goes and gets it.
   const pet = new Pet(bounds); pet.paused = true; petFor(3, pet); pet.paused = false;
   const said: string[] = []; const o = pet.ctx.say; pet.ctx.say = (t, x) => { said.push(t); o(t, x); };
-  pet.command('item:spawn:hammer');
-  const it = pet.items.list.find((x) => x.def.id === 'hammer')!;
+  pet.command('item:spawn:mace');
+  const it = pet.items.list.find((x) => x.def.id === 'mace')!;
   let fell = false;
   petFor(20, pet, () => { if (it.where === 'world' && it.at.y > 700) fell = true; });
-  check('inventory: drop a mallet in, it falls, he picks it up', !!it && fell && it.where === 'belt' && said.some((t) => /ooh|what|for me|!/.test(t)), `where=${it?.where} said=${said.join(' | ')}`);
+  check('inventory: drop a mace in, it falls, he picks it up', !!it && fell && it.where === 'belt' && said.some((t) => /ooh|what|for me|!/.test(t)), `where=${it?.where} said=${said.join(' | ')}`);
 }
 
 // ───── his drawings come to life ─────
@@ -1224,7 +1224,7 @@ function events(pet: Pet) {
   step(5);
   check('sword slash: sends the cursor flying', got.includes('hitCursor') && moves.length > 10, `${got.join(',')} moves=${moves.length}`);
 }
-{ // His mallet: an overhead smash.
+{ // His mace: an overhead smash.
   const { pet, step } = desktopPet();
   const got = events(pet);
   const j = pet.char.body.j;
@@ -1232,7 +1232,7 @@ function events(pet: Pet) {
   pet.mind.command(pet.ctx, 'smash');
   let out = false;
   step(6, () => { if (pet.items.find('smash')!.where === 'hand') out = true; });
-  check('mallet: smashes the cursor, then it goes back on his belt', out && got.includes('hitCursor') && pet.items.find('smash')!.where === 'belt', `out=${out} ${got.join(',')}`);
+  check('mace: smashes the cursor, then it goes back on his belt', out && got.includes('hitCursor') && pet.items.find('smash')!.where === 'belt', `out=${out} ${got.join(',')}`);
 }
 { // Swipe at him while his sword is out: he blocks it.
   const { pet, step } = desktopPet();

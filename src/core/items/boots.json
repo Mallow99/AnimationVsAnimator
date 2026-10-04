@@ -1,7 +1,7 @@
 {
   "id": "boots",
   "name": "Boots",
-  "about": "A pair of sturdy little boots. They follow his feet; drop them in or put them away any time.",
+  "about": "A pair of sturdy little boots, snug around the bottom of each leg. Drop them in or put them away any time.",
   "use": "none",
   "wear": "feet",
   "length": 14,
@@ -13,32 +13,28 @@
     {
       "pts": [
         [
-          -5,
-          -10
+          -4.5,
+          -12
         ],
         [
-          4,
-          -10
+          4.5,
+          -12
         ],
         [
-          4,
-          -3
+          4.5,
+          2
         ],
         [
-          11,
-          -3
+          3,
+          4
         ],
         [
-          13.5,
-          0
+          -3,
+          4
         ],
         [
-          13.5,
-          3
-        ],
-        [
-          -5,
-          3
+          -4.5,
+          2
         ]
       ],
       "fill": "#7a5a44"
@@ -46,20 +42,20 @@
     {
       "pts": [
         [
-          -5.5,
-          -12
+          -5.2,
+          -13.5
         ],
         [
-          4.5,
-          -12
+          5.2,
+          -13.5
         ],
         [
-          4.5,
-          -8.5
+          5.2,
+          -9.5
         ],
         [
-          -5.5,
-          -8.5
+          -5.2,
+          -9.5
         ]
       ],
       "fill": "#9b7a5e"
@@ -67,20 +63,28 @@
     {
       "pts": [
         [
-          -5,
-          1
+          -4.5,
+          0.5
         ],
         [
-          13.5,
-          1
+          4.5,
+          0.5
         ],
         [
-          13.5,
+          4.5,
+          2
+        ],
+        [
+          3,
           4
         ],
         [
-          -5,
+          -3,
           4
+        ],
+        [
+          -4.5,
+          2
         ]
       ],
       "fill": "#4a3a30"

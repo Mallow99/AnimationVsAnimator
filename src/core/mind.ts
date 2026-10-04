@@ -16,7 +16,7 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  Chain, routeTo, Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PlayBoardGame, PaintCanvas, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
+  Chain, routeTo, Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PaintCanvas, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
@@ -174,14 +174,14 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'drawsword', label: 'Draw a sword' }, { name: 'kick', label: 'Kick the ball' }, { name: 'getonit', label: 'Get on what he drew' },
   { name: 'swing', label: 'Swing his sword' }, { name: 'slash', label: 'Attack the cursor' },
   { name: 'spar', label: 'Spar with the cursor' }, { name: 'brawl', label: 'Fight the cursor (for real)' },
-  { name: 'throw', label: 'Throw his ball at the cursor' }, { name: 'bounce', label: 'Bounce his ball' }, { name: 'smash', label: 'Smash with his mallet' },
+  { name: 'throw', label: 'Throw his ball at the cursor' }, { name: 'bounce', label: 'Bounce his ball' }, { name: 'smash', label: 'Smash with his mace' },
   { name: 'pushwindow', label: 'Push a window' }, { name: 'kickwindow', label: 'Kick a window' }, { name: 'surf', label: 'Surf on a window' },
   { name: 'knock', label: 'Knock on a window' }, { name: 'ledgesit', label: 'Sit on the edge' }, { name: 'hang', label: 'Hang off the cursor' },
   { name: 'ramp', label: 'Draw a ramp up to a window' }, { name: 'bridge', label: 'Draw a bridge to a window' }, { name: 'drawramp', label: 'Draw a ramp (and jump off it)' },
   { name: 'ropebridge', label: 'Draw a rope bridge' },
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'videogame', label: 'Play video games' }, { name: 'ride', label: 'Ride the scooter' },
-  { name: 'paint', label: 'Paint on his canvas' }, { name: 'playgame', label: 'Play Othello with you on the TV' },
+  { name: 'paint', label: 'Paint on his canvas' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
@@ -217,7 +217,6 @@ export class Mind {
   /** Why he can't do each thing you asked for (said instead of "?"). */
   private cant: Record<string, string> = {};
   private windowPrankAt = -100;
-  private gameAskedAt = -300;
   /** Why he's doing what he's doing (shown in settings). */
   why = '';
   /** While the AI brain is deciding what he does next, instinct waits until this time. */
@@ -558,10 +557,10 @@ export class Mind {
       opts.push({ name: 'swing', why: 'practicing his sword moves', score: L === 'playful' ? 0.35 : L === 'bored' ? 0.25 + s.boredom * 0.2 : 0.05, make: () => new SwordSwing(2, false) });
       opts.push({ name: 'slash', why: 'going after your cursor with his sword', score: L === 'angry' && near ? 1.3 : 0, make: () => new SwordSwing(2, true) });
     }
-    const mallet = c.items.find('smash');
-    if (mallet && (mallet.where === 'belt' || mallet.where === 'hand') && ch.useHand) {
+    const mace = c.items.find('smash');
+    if (mace && (mace.where === 'belt' || mace.where === 'hand') && ch.useHand) {
       const onWin = ch.supportPlatform()?.win !== undefined && c.canMoveWindows;
-      opts.push({ name: 'smash', why: near ? 'going after your cursor with his mallet' : onWin ? 'bonking the window he\'s on' : 'practicing with his mallet',
+      opts.push({ name: 'smash', why: near ? 'going after your cursor with his mace' : onWin ? 'bonking the window he\'s on' : 'practicing with his mace',
         score: L === 'angry' ? (near ? 1.1 : 0.3) : L === 'playful' ? (onWin ? 0.3 : 0.12) : L === 'bored' ? 0.2 : 0.03, make: () => new SwordSwing(near ? 2 : 3, near, 'smash') });
     }
     const ball = c.items.find('throw');
@@ -648,7 +647,7 @@ export class Mind {
     const s = c.mood.s, E = c.mood.emotion, L = c.mood.label, ch = c.char, opts: Option[] = [];
     if (!ch.whole || ch.support >= 0 && !c.props?.thingOf(ch.support)) {
       // (Up on a window: he'd have to get down first. Keep it simple: props are for when he's on the floor.)
-      if (this.forced) for (const n of ['sitdown', 'watchtv', 'videogame', 'ride', 'paint', 'playgame']) this.cant[n] = !ch.whole ? 'not like this' : 'I need to get down first';
+      if (this.forced) for (const n of ['sitdown', 'watchtv', 'videogame', 'ride', 'paint']) this.cant[n] = !ch.whole ? 'not like this' : 'I need to get down first';
       return opts;
     }
     const seat = propsOf(c, 'seat')[0], tv = propsOf(c, 'tv')[0], scooter = propsOf(c, 'ride')[0];
@@ -658,7 +657,6 @@ export class Mind {
       if (!tv) this.cant.watchtv = this.cant.videogame = 'no TV (drop one in from my inventory)';
       if (!scooter) this.cant.ride = 'no scooter';
       if (!canvas) this.cant.paint = 'no canvas (drop one in from my inventory)';
-      if (!tv) this.cant.playgame = 'no TV to play on (drop one in from my inventory)';
     }
     if (seat) opts.push({ name: 'sitdown', why: s.energy < 0.5 ? 'tired: having a sit on the ' + seat.def!.name.toLowerCase() : 'taking a seat',
       score: 0.15 + (1 - s.energy) * 0.7 + (L === 'sad' ? 0.3 : 0), make: () => new SitOnProp(seat) });
@@ -666,8 +664,6 @@ export class Mind {
     if (tv) opts.push({ name: 'videogame', why: 'playing video games', score: L === 'bored' ? 0.7 : L === 'playful' || E === 'excited' ? 0.5 : L === 'sleepy' || L === 'sad' ? 0.05 : 0.2, make: () => new PlayVideoGame(tv) });
     if (scooter && ch.legCount === 2 && ch.useHand) opts.push({ name: 'ride', why: 'scooter time', score: E === 'excited' ? 1 : L === 'playful' ? 0.7 : L === 'bored' ? 0.5 : 0.08, make: () => new RideScooter(scooter) });
     if (canvas && c.items.find('draw') && ch.useHand) opts.push({ name: 'paint', why: 'painting on his canvas', score: L === 'bored' ? 0.5 : L === 'playful' ? 0.3 : 0.05, make: () => new PaintCanvas(canvas) });
-    if (tv && c.game) opts.push({ name: 'playgame', why: 'asking you to play a game', score: c.world.time - this.gameAskedAt >= 300 && (L === 'bored' || L === 'playful') ? 0.35 : 0,
-      make: () => { this.gameAskedAt = c.world.time; return new PlayBoardGame(tv); } });
     return opts;
   }
 

@@ -40,7 +40,7 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
 - **Talk to him right on the desktop**: double-click him, or right-click → Talk. A little text box pops up over his
   head. Even with his brain Offline he understands simple things ("dance", "sit down", "draw something", "fight me",
   "throw the ball", "surf", "kick that window", "my name is ...").
-- **Right-click him**: talk, take his things (his pen, his wooden sword, his mallet, his ball), give them back, fix him up, settings.
+- **Right-click him**: talk, take his things (his pen, his wooden sword, his mace, his ball), give them back, fix him up, settings.
 - **His belt and inventory**: he starts with just his pen (he draws with it, so no pen = no drawing). Everything else is in
   his inventory (Settings → Items): **Drop it in** and it falls from the top of the screen and he goes to get it, or
   **Give him** to put it on his belt. Take something from him (right-click) and it dangles from your cursor: press and hold
@@ -50,9 +50,6 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   (from the couch if it's near), rides the scooter across the screen. Drag them around; tip his chair and he falls off.
 - **Video games**: with a TV out he grabs a controller and plays his own little runner game (from the couch if
   it's near), and takes losing personally. Settings → Items → the placed TV → **Video games**, or ask him.
-- **Othello together**: on the placed TV, choose **Play Othello** (or say "play Othello"). He picks up a controller
-  and invites you; you play black, he plays white. The board shows on the TV and in its own draggable window.
-  **Talk to him** keeps the match running while you chat. Works offline, with no AI calls for moves.
 - **Optional gear**: helmet and boots in Items → Inventory. **Wear** puts them on; **Drop it in**
   lets him fetch them. Take them back or **Put away** whenever you like.
 - **Make your own items and props**: it's just a text file. See [docs/MAKING-THINGS.md](docs/MAKING-THINGS.md)
@@ -62,16 +59,16 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   the ground, and a limb can come off. No gore, just sparks. He stares at the stump, goes and gets it (hopping on one leg,
   or dragging himself along if both legs are gone), and sticks it back on. Hold a limb up to his stump to help.
 - **Parkour**: he rolls out of big landings, does flips and wall jumps, and vaults onto low ledges.
-- **He hits your cursor** (on by default; Settings → General or the tray icon): his punches, kicks, sword, mallet and ball
+- **He hits your cursor** (on by default; Settings → General or the tray icon): his punches, kicks, sword, mace and ball
   send your real cursor flying across the screen. Move your mouse and it's yours again straight away.
   - When he's playful he spars with it ("fight me!"): fists up, punch combos, high kicks, jumping punches.
     Angry, it's a real brawl. Leave your cursor parked on his head and he swats it off.
   - Sometimes he jumps up, grabs your cursor and hangs off it, legs swinging, while you carry him around. Shake the
     mouse hard to fling him off (or click).
   - Swipe at him (Smack mode) while his sword is out and he might parry it and knock your cursor back.
-- **His things do stuff**: the **mallet** on his left hip comes down overhead (on your cursor, or on the window he's standing
+- **His things do stuff**: the **mace** comes down overhead (on your cursor, or on the window he's standing
   on, which dips and springs back). The **bouncy ball** in his pocket gets thrown at your cursor, or bounced off the floor and
-  caught. His sword and mallet whack his ball, things lying around, and the sides of windows. Throw one of his things at him
+  caught. His sword and mace whack his ball, things lying around, and the sides of windows. Throw one of his things at him
   and it bonks him.
 - **He moves your windows** (on by default; the first time, macOS asks you to allow it under Privacy & Security →
   Accessibility, for Terminal or Electron; if he says "they won't budge", Settings → General says what the helper reported): he walks up and pushes a window along, kicks one across the screen, and
@@ -104,8 +101,8 @@ his name, size, look (presets or every number by hand) and how he moves.
 ## Commands
 
 Recent additions: a flat, front-on couch and TV in his own style (pixelated with him), video games and
-Othello on the TV, removable helmet and boots, a larger pen, optional mace and canvas painting. Drop props
-in from Settings → Items, then use **Paint**, **Video games** or **Play Othello**.
+video games on the TV, removable helmet and boots, a larger pen, optional mace and canvas painting. Drop props
+in from Settings → Items, then use **Paint** or **Video games**.
 Full AI mode has a thinking-interval control for lower free-tier usage. His persona and body look
 remain the same. See [docs/HANDOFF.md](docs/HANDOFF.md) for verified changes and hardware checks.
 

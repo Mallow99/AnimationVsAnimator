@@ -76,28 +76,15 @@ try {
     p.props.spawn('tv', p.char.x + 160*sc, floor - 70*sc - 2, sc);
     p.items.give('helmet', p.char); p.items.give('boots', p.char);
     for (let i = 0; i < 240; i++) p.update(1/120);
-    p.paused = false; p.command('do:playgame');
-    for (let i = 0; i < 1800 && p.game.state === 'closed'; i++) p.update(1/120);
-    if (p.game.state !== 'invite') throw new Error('Game invitation did not appear');
+    p.paused = false; p.command('do:videogame');
+    for (let i = 0; i < 1800 && !p.props.placed.find(t => t.def.id === 'tv').arcade; i++) p.update(1/120);
+    if (!p.char.gamepad) throw new Error('He never picked up the controller');
   })()`);
-  await until(() => evaluate('!document.querySelector("#gamePanel").hidden'));
-  await evaluate('document.querySelector("#gamePanel .game-actions button").click()');
-  await until(() => evaluate('!document.querySelector(".game-grid").hidden'));
-  await evaluate('document.querySelectorAll(".game-grid button")[19].click()');
-  assert.equal(await evaluate('window.pet.game.board[19]'), 'black');
-  assert.equal(await evaluate('window.pet.game.board[27]'), 'black');
-  await until(() => evaluate('window.pet.game.turn === "you"'));
-  assert.equal(await evaluate('window.pet.game.board.filter(Boolean).length'), 6);
-  assert.equal(await evaluate('document.querySelectorAll(".game-grid button[aria-label]").length'), 64);
-  assert.equal(await evaluate('window.pet.char.mode'), 'sit');
-  // The board and chat must coexist, including after his ordinary reply.
-  await evaluate('document.querySelector("#gamePanel .game-actions button:last-child").click()');
+  // Chat opens while he plays, and his ordinary reply doesn't stop the game.
+  await evaluate('window.pet.onTalk()');
   assert(await evaluate('document.querySelector("#talk").classList.contains("open")'));
-  assert.equal(await evaluate('window.pet.game.state'), 'playing');
   await evaluate(`(() => { const input = document.querySelector('#talkText'); input.value = 'hello'; input.dispatchEvent(new Event('input')); document.querySelector('#talk').requestSubmit(); })()`);
   await until(() => evaluate('window.pet.brain.log.some(l => l.who === "him")'));
-  assert.equal(await evaluate('window.pet.game.state'), 'playing');
-  assert.equal(await evaluate('window.pet.char.mode'), 'sit');
   // Typing s in preview must not turn on smacking.
   const beforeSmack = await evaluate('window.pet.config.smacking');
   await send('Input.dispatchKeyEvent', {type:'keyDown',key:'s',code:'KeyS',text:'s'});
@@ -105,43 +92,15 @@ try {
   assert.equal(await evaluate('window.pet.config.smacking'), beforeSmack);
   // Gear follows both feet and can be removed and returned without occupying his belt.
   assert.deepEqual(await evaluate('window.pet.items.onHim.filter(i => i.where === "worn").map(i => [i.def.id, i.poses.length])'), [['helmet',1],['boots',2]]);
-  // Arrow navigation and keyboard play use the same validated rules as clicking.
-  const keyboardMove = await evaluate('window.pet.game.moves[0]');
-  await evaluate(`document.querySelectorAll('.game-grid button')[${keyboardMove % 8 < 7 ? keyboardMove + 1 : keyboardMove - 1}].focus()`);
-  const arrow = keyboardMove % 8 < 7 ? 'ArrowLeft' : 'ArrowRight';
-  await send('Input.dispatchKeyEvent', {type:'keyDown',key:arrow,code:arrow});
-  await send('Input.dispatchKeyEvent', {type:'keyUp',key:arrow,code:arrow});
-  assert.equal(await evaluate('Array.from(document.querySelectorAll(".game-grid button")).indexOf(document.activeElement)'), keyboardMove);
-  await send('Input.dispatchKeyEvent', {type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
-  await send('Input.dispatchKeyEvent', {type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
-  assert.equal(await evaluate(`window.pet.game.board[${keyboardMove}]`), 'black');
-  // Move the tabletop panel; it stays independent of his speech anchor.
-  const start = await evaluate(`(() => { const r = document.querySelector('.game-titlebar').getBoundingClientRect(); return {x:r.left+65,y:r.top+12}; })()`);
-  await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:start.x,y:start.y});
-  await send('Input.dispatchMouseEvent',{type:'mousePressed',x:start.x,y:start.y,button:'left',clickCount:1});
-  await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:start.x-40,y:start.y-20,button:'left',buttons:1});
-  await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:start.x-40,y:start.y-20,button:'left',clickCount:1});
-  const moved = await evaluate('document.querySelector(".game-titlebar").getBoundingClientRect().left');
-  assert(moved < start.x-65-20, 'game panel did not drag');
-  const rectangle = await evaluate(`(() => { const r = document.querySelector('#gamePanel').getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight}; })()`);
-  assert(rectangle.left >= 0 && rectangle.top >= 0 && rectangle.right <= rectangle.width && rectangle.bottom <= rectangle.height);
   mkdirSync(join(root, '.build'), { recursive: true });
-  await until(() => evaluate('window.pet.game.turn === "you"'));
-  await evaluate('document.querySelector("#talkText").value = ""; window.pet.say("your turn", 4)');
+  await evaluate('document.querySelector("#talkText").value = ""; window.pet.say("one more run", 4)');
   await pause(120);
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(join(root, '.build/browser-smoke.png'), Buffer.from(shot.data, 'base64'));
-  await evaluate('document.querySelector("#gamePanel .game-close").click()');
-  await until(() => evaluate('document.querySelector("#gamePanel").hidden'));
-  // Small screens keep a usable, scrollable board inside the viewport.
-  await evaluate('window.pet.paused = true; window.pet.game.invite(); window.pet.game.accept()');
-  await send('Emulation.setDeviceMetricsOverride', {width:480,height:640,deviceScaleFactor:2,mobile:false});
-  await pause(100);
-  const small = await evaluate(`(() => { const r = document.querySelector('#gamePanel').getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom}; })()`);
-  assert(small.left >= 0 && small.top >= 0 && small.right <= 480 && small.bottom <= 640);
-  await evaluate('document.querySelector(".game-close").click(); document.querySelector("#talkClose").click()');
+  await evaluate('document.querySelector("#talkClose").click()');
+  assert(!(await evaluate('document.querySelector("#talk").classList.contains("open")')));
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
-  console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close and rendering');
+  console.log('PASS browser: painting, video games on the couch, chat while playing, removable gear, keys, close and rendering');
   console.log('Screenshot: .build/browser-smoke.png');
 } finally {
   socket?.close(); browser.kill();

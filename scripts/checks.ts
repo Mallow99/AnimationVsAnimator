@@ -10,7 +10,6 @@ import { parsePropDef, makeBridge } from '../src/core/props';
 import { WindowAccess } from '../src/core/window-access';
 import { writeAtomic } from '../src/electron/storage';
 import { unchangedExample } from '../src/electron/builtin-files';
-import { BoardGame, chooseGameMove, gameResult, openingBoard, captures, legalMoves, type Disc } from '../src/core/board-game';
 import { Item, BUILTIN_ITEMS } from '../src/core/items';
 import { parseSprite } from '../src/core/pixel-art';
 import { Runner } from '../src/core/tv-game';
@@ -94,77 +93,20 @@ await test('repeated atomic saves preserve the last complete file', () => {
     assert(!fs.existsSync(file + '.tmp'));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
-await test('Othello opens correctly, flips trapped discs in all eight directions and never wraps a row', () => {
-  const b = openingBoard();
-  assert.deepEqual(legalMoves(b, 'black'), [19, 26, 37, 44]);
-  assert.deepEqual(legalMoves(b, 'white'), [20, 29, 34, 43]);
-  assert.deepEqual(captures(b, 19, 'black'), [27]);
-  const all = Array<Disc>(64).fill('');
-  for (const i of [18, 19, 20, 26, 28, 34, 35, 36]) all[i] = 'white';
-  for (const i of [9, 11, 13, 25, 29, 41, 43, 45]) all[i] = 'black';
-  assert.deepEqual(captures(all, 27, 'black').sort((a,b) => a-b), [18, 19, 20, 26, 28, 34, 35, 36]);
-  const edge = Array<Disc>(64).fill(''); edge[6] = 'black'; edge[7] = 'white';
-  assert.deepEqual(captures(edge, 8, 'black'), []);
-  assert.equal(b.filter(Boolean).length, 4);
-});
-await test('Othello rejects illegal/double moves, waits for him and scores completed games', () => {
-  const g = new BoardGame(); g.invite(); g.accept();
-  assert(!g.play(0, 1)); assert(!g.play(27, 1)); assert(!g.play(-1, 1)); assert(!g.play(19, NaN));
-  assert(g.play(19, 1)); assert.equal(g.board[27], 'black'); assert(!g.play(26, 1));
-  g.update(1.5); assert.equal(g.board.filter(Boolean).length, 5);
-  g.update(1.9); assert.equal(g.board.filter(Boolean).length, 6); assert.equal(g.turn, 'you');
-  g.close(); assert(!g.play(26, 2));
-  assert.equal(gameResult(Array<Disc>(64).fill('black')), 'you');
-  assert.equal(gameResult(Array.from({length:64}, (_,i) => i%2 ? 'white' : 'black')), 'draw');
-  const corner = Array<Disc>(64).fill('black'); corner[0] = ''; corner[2] = 'white';
-  const snapshot = [...corner]; assert.equal(chooseGameMove(corner), 0); assert.deepEqual(corner, snapshot);
-});
-await test('complete offline Othello matches terminate with valid scores and automatic passes', () => {
-  let passed = false;
-  for (let seed = 1; seed <= 20; seed++) {
-    const g = new BoardGame(() => (seed*13 % 97)/97); g.invite(); g.accept(); let now = 0, moves = 0;
-    while (g.state === 'playing' && moves < 65) {
-      const count = g.board.filter(Boolean).length;
-      if (g.turn === 'you') { const legal = g.moves; assert(legal.length); assert(g.play(legal[(seed + moves*7) % legal.length], now)); }
-      else g.update(now += 1);
-      assert.equal(g.board.filter(Boolean).length, count + 1);
-      if (g.notice) passed = true;
-      moves++; now += 1;
-    }
-    assert.equal(g.state, 'finished'); assert(g.result); assert.equal(g.result, gameResult(g.board));
-    assert.equal(g.score.you + g.score.him, g.board.filter(Boolean).length);
-    g.accept(); assert.equal(g.board.filter(Boolean).length, 4); assert.equal(g.turn, 'you');
-  }
-  assert(passed, 'no match exercised a passed turn');
-});
 const tvAt = (p: Pet, x: number) => p.props.spawn('tv', x, bounds.floor - 70 * p.char.scale - 2, p.char.scale)!;
-await test('he can offer Othello on the TV and removing the TV cancels it', () => {
-  const p = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
-  p.paused = true; for (let i = 0; i < 360; i++) p.update(1 / 120);
-  p.mind.reset(p.ctx);
-  const tv = tvAt(p, p.char.x + 160 * p.char.scale);
-  for (let i = 0; i < 240; i++) p.update(1 / 120);
-  p.paused = false; p.command('do:playgame');
-  for (let i = 0; i < 1800 && p.game.state === 'closed'; i++) p.update(1 / 120);
-  assert.equal(p.game.state, 'invite'); assert.equal(p.char.mode, 'sit'); assert(p.char.gamepad);
-  assert(tv.on); assert.equal(tv.board, p.game.board);
-  p.game.accept(); p.props.remove(tv); p.update(1 / 60);
-  assert.equal(p.game.state, 'closed'); assert(!p.char.gamepad);
-});
-await test('he takes the couch near the TV from either side, faces it, and the board shows on screen', () => {
+await test('he takes the couch near the TV from either side and faces it to play', () => {
   for (const side of [-1, 1]) {
     const p = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
     p.paused = true; for (let i = 0; i < 600; i++) p.update(1/120); p.mind.reset(p.ctx);
     const couch = p.props.spawn('couch', p.char.x + side * 120, bounds.floor - 56 * p.char.scale - 2, p.char.scale)!;
     const tv = tvAt(p, p.char.x + side * 300);
     for (let i = 0; i < 240; i++) p.update(1/120);
-    p.paused = false; p.command('do:playgame');
-    for (let i = 0; i < 1800 && p.game.state === 'closed'; i++) p.update(1/120);
-    assert.equal(p.game.state, 'invite'); assert.equal(p.char.mode, 'sit');
+    p.paused = false; p.command('do:videogame');
+    for (let i = 0; i < 1800 && !tv.arcade; i++) p.update(1/120);
+    assert(tv.arcade); assert.equal(p.char.mode, 'sit');
     assert(Math.abs(p.char.x - couch.seatAt!.x) < 6 * p.char.scale, 'not on the couch');
     assert.equal(p.char.facing, Math.sign(tv.center.x - couch.center.x));
-    p.game.accept(); for (let i = 0; i < 240; i++) p.update(1/120);
-    assert.equal(tv.board, p.game.board); assert(p.char.gamepad);
+    assert(p.char.gamepad);
   }
 });
 await test('video games: controller in hand, his game on the TV, and it all switches off when he stops', () => {
@@ -236,21 +178,6 @@ await test('asymmetric furniture keeps its position through repeated save/load c
   for (let i = 0; i < 10; i++) { const next = pet(); next.load(p.save()); p = next; }
   assert.equal(Math.round(p.props.placed[0].center.x), 700);
 });
-await test('chat and incidental AI plans leave the seated match running; an explicit activity interrupts', async () => {
-  const p = pet(); p.paused = true; for (let i = 0; i < 600; i++) p.update(1/120); p.mind.reset(p.ctx);
-  tvAt(p, p.char.x + 160 * p.char.scale);
-  for (let i = 0; i < 240; i++) p.update(1/120);
-  p.paused = false; p.command('do:playgame');
-  for (let i = 0; i < 1800 && p.game.state === 'closed'; i++) p.update(1/120);
-  assert.equal(p.game.state, 'invite'); p.game.accept();
-  let request = '';
-  p.brain.ask = async (req) => { request = req.messages.at(-1)!.text; return '{"say":"hi","plan":[{"do":"wave"}]}'; };
-  p.command('hear:hello'); await advance(p);
-  assert.equal(p.game.state, 'playing'); assert.equal(p.char.mode, 'sit'); assert.match(request, /game: Othello/);
-  assert(p.brain.log.some((l) => l.who === 'him' && l.text === 'hi'));
-  p.command('hear:please dance'); await advance(p);
-  assert.equal(p.game.state, 'closed');
-});
 await test('helmet and boots equip, replace, drop and restore without using hands or belt slots', () => {
   const p = pet(); const slots = [...p.items.belt];
   const helmet = p.items.give('helmet', p.char)!, boots = p.items.give('boots', p.char)!;
@@ -304,6 +231,20 @@ await test('an untouched shipped example upgrades while a custom one is preserve
     fs.writeFileSync(file, JSON.stringify(original, null, 2)); assert(unchangedExample(file, [original]));
     fs.writeFileSync(file, JSON.stringify({ ...original, length: 25 })); assert(!unchangedExample(file, [original]));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+await test('throwing one of his things never knocks your own cursor away', () => {
+  for (const id of ['sword', 'mace', 'bouncy-ball', 'pen']) {
+    const p = pet(); p.paused = true; for (let i = 0; i < 240; i++) p.update(1/120); p.paused = false;
+    const it = p.items.give(id, p.char)!; const hits: string[] = [];
+    const orig = p.mind.onEvent.bind(p.mind); p.mind.onEvent = (c, e) => { if (e.type === 'hitCursor') hits.push(e.type); orig(c, e); };
+    const x = p.char.x + 300, y = bounds.floor - 200;
+    p.cursor(x, y); p.command(`item:take:${it.uid}`); assert.equal(it.where, 'cursor');
+    p.pointerDown(x, y, 0);
+    for (let i = 0; i < 6; i++) { p.cursor(x + i * 15, y - i * 4, 1800, -500); p.update(1/120); }
+    p.pointerUp(x + 90, y - 24);
+    for (let i = 0; i < 240; i++) { p.cursor(x + 90 + i, y - 24, 120, 0); p.update(1/120); }
+    assert.equal(it.where === 'cursor', false); assert.deepEqual(hits, [], `${id} knocked the cursor`);
+  }
 });
 await test('a fast weapon swing registers the cursor between frames', () => {
   const item = new Item(BUILTIN_ITEMS.find((d) => d.id === 'sword')!);

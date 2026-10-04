@@ -16,18 +16,18 @@ characters are bright, flat and outline-free on top of it. He still turns to fac
 - `couch.json` and `tv.json` are redrawn in that style. The couch is sized so a seated Blurp's head just
   clears the backrest (as in the reference); its solid outline is armrests + seat (the backrest is behind
   him, not something to stand on). The TV sits on a cabinet with a console and a second controller.
-- **The Othello table is gone; games are on the TV.** `skills/props.ts` has one `AtTheTV` base (couch or
-  chair near the TV, else the floor; faces it) with `WatchTV`, `PlayVideoGame` (`videogame`: his solo runner
-  game, `tv-game.ts`, with fumbles that depend on mood, and reactions to crashes/records) and
-  `PlayBoardGame` (`playgame`: Othello with you; the board mirrors onto the TV). `Character.gamepad` /
+- **Othello is gone** (the owner asked; first the table, then the game itself). `skills/props.ts` has one
+  `AtTheTV` base (couch or chair near the TV, else the floor; faces it) with `WatchTV` and `PlayVideoGame`
+  (`videogame`: his solo runner game, `tv-game.ts`, with fumbles that depend on mood, and reactions to
+  crashes/records). `Character.gamepad` /
   `padMash` hold a controller in both hands (`render.ts` `controllerPart`).
-- Settings → placed TV has Watch TV / Video games / Play Othello / Change channel. Chat understands
-  "video games" and "play Othello"; the AI prompt lists `videogame` and `playgame`.
+- Settings → placed TV has Watch TV / Video games / Change channel. Chat understands "video games"; the AI
+  prompt lists `videogame`.
 - `builtin-history.json` now records the previous shipped tv/couch/table, so unedited copies in the items
   folder upgrade, and an unedited old `board-game.json` is removed (`main.ts`); edited ones are kept.
 - Every shipped prop and the helmet, boots and mace are now flat art ([all props](images/props-preview.png)).
   Chair, desk, easel are front-on; the scooter is side-on (wheels only read from the side). Items support
-  `fill` shapes (`items.ts`), mirrored for boots. Pen, sword, mallet and ball were already smooth strokes in
+  `fill` shapes (`items.ts`), mirrored for boots. Pen, sword and ball were already smooth strokes in
   his style and are unchanged. Settings cards draw flat art and screens (`settings/item-card.ts`).
 - Seating styles (`Character.seatStyle`: up / lounge / front / lie; he picks in `SitOnProp`, sprawling more
   when sleepy or sad). `front` turns him out to face you (three-quarters toward the way he faces);
@@ -43,6 +43,8 @@ game on/off, runner timing, flat-art parsing, couch poses, flat items), full sim
 The Electron/Xvfb check was updated for the TV but not re-run here. Not run on a Mac or PC.
 
 ## Previous round (Codex: reliability, items, polish)
+
+(Since changed: Othello, the table and the mallet are removed; furniture is flat art. Read the rest as history.)
 
 This branch includes the reliability and
 cleanup roadmap, followed by the owner-approved pixel-prop/Othello polish pass. It deliberately stops before

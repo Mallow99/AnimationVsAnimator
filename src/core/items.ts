@@ -13,7 +13,6 @@ import { collide, collidePlatforms, integrate, makePoint, solveSticks, type Boun
 import type { Character } from './character';
 import penDef from './items/pen.json';
 import swordDef from './items/wooden-sword.json';
-import hammerDef from './items/hammer.json';
 import ballDef from './items/bouncy-ball.json';
 import maceDef from './items/mace.json';
 import helmetDef from './items/helmet.json';
@@ -21,7 +20,7 @@ import bootsDef from './items/boots.json';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import type { DepthPart } from './render';
 
-/** What he does with it: draw (a pen), swing (a sword), smash (a hammer, overhead), throw (a ball), none (just carries it). */
+/** What he does with it: draw (a pen), swing (a sword), smash (a mace, overhead), throw (a ball), none (just carries it). */
 export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'none';
 export type BeltSpot = 'side' | 'back' | 'pocket' | 'none';
 /** A line through `pts`, or (with `fill`) a flat filled shape, optionally with an edge line. */
@@ -98,7 +97,7 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, hammerDef, ballDef, maceDef, helmetDef, bootsDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
 export const SLOT_NAMES = ['left hip', 'right hip', 'back', 'pocket'];
@@ -131,6 +130,8 @@ export class Item {
   private previousTip: V3 | null = null;
   /** He threw it (it's flying at something): when, so it only counts as a throw for a moment. */
   thrownAt = -10;
+  /** Who sent it flying. Something you threw never hits your own cursor (it leaves your hand right there). */
+  thrownBy: 'him' | 'you' = 'him';
 
   constructor(readonly def: ItemDef, at: Vec = { x: 0, y: 0 }, public scale = 1) {
     this.a = makePoint(at.x, at.y, 2);

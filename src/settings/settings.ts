@@ -404,7 +404,6 @@ function renderProps(v: PropsView) {
         ...(p.id === 'tv' ? [
           ['Watch TV', () => shell.command('do:watchtv')],
           ['Video games', () => shell.command('do:videogame')],
-          ['Play Othello', () => shell.command('do:playgame')],
           ['Change channel', () => shell.command(`prop:channel:${p.i}`)],
         ] as [string, () => void][] : []),
         ...(p.id === 'canvas' ? [['Paint', () => shell.command('do:paint')] as [string, () => void]] : []),

@@ -19,7 +19,6 @@ import { limbOf } from './body';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, parseMove, splitSpeech } from './brain';
 import { WindowAccess } from './window-access';
-import { BoardGame } from './board-game';
 import { controllerPart } from './render';
 import { distToSegment, type Vec } from './math';
 import { Memory } from './memory';
@@ -56,7 +55,6 @@ export class Pet {
   readonly mood = new Mood();
   readonly mind = new Mind();
   readonly brain = new Brain();
-  readonly game = new BoardGame();
   /** His notes and summary (milestone 5). */
   readonly memory = new Memory();
   /** Called with his memory file's contents when it changes (the app writes it to disk). */
@@ -148,7 +146,6 @@ export class Pet {
     this.char.mode = 'air';
     const pet = this;
     this.ctx = {
-      game: this.game,
       get cursorPlay() { return pet.config.knockCursor; },
       get windowMoves() {
         return !pet.config.moveWindows || !pet.config.windows ? 'off' as const : !pet.onMoveWindow ? 'unsupported' as const
@@ -198,7 +195,6 @@ export class Pet {
     if (!Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, 0.1); // after a stall (laptop asleep), don't try to catch up forever
     this.ctx.world.time += dt;
-    this.game.update(this.ctx.world.time);
     this.ctx.canGrabCursor = this.config.mischief && !!this.onMoveCursor;
     if (this.freeze > 0) { this.freeze -= dt; dt = 0; }
     this.acc += dt;
@@ -816,7 +812,7 @@ export class Pet {
     if (this.char.hitTest(x, y, 4) && sp < 700) { this.giveBack(it); return; }
     const k = sp > 2400 ? 2400 / sp : 1;
     this.items.drop(it, v.x * k, v.y * k);
-    it.thrownAt = w.time; // thrown hard enough, it can bonk him
+    it.thrownAt = w.time; it.thrownBy = 'you'; // thrown hard enough, it can bonk him (but not your cursor)
     this.sound(sp > 900 ? 'whoosh' : 'drop', 0.6);
     this.emit({ type: 'itemDropped', name: it.def.name.toLowerCase(), uid: it.uid });
   }
@@ -1017,7 +1013,7 @@ export class Pet {
   }
 
   /**
-   * Something swung in his hand (his sword, his mallet) whacks what it passes through:
+   * Something swung in his hand (his sword, his mace) whacks what it passes through:
    * his ball (batting practice), things lying around, loose limbs, and the sides of windows.
    */
   private bladeHits() {
@@ -1037,7 +1033,7 @@ export class Pet {
         if (other === it || other.where !== 'world' || !ready(other) || seg(other.at.x, other.at.y) > 7 * sc) continue;
         this.bladeCooldown.set(other, w.time + 0.3);
         other.push(v.x * 0.7, Math.min(v.y * 0.7, -120) - 150);
-        other.thrownAt = w.time;
+        other.thrownAt = w.time; other.thrownBy = 'him';
         this.sound('clang', 0.5);
       }
       for (const th of this.props.things) {
@@ -1096,7 +1092,7 @@ export class Pet {
       if (it.where !== 'world' || t - it.thrownAt > 2.5) continue;
       const v = { x: (it.a.x - it.a.px) * 120, y: (it.a.y - it.a.py) * 120 }, speed = Math.hypot(v.x, v.y);
       if (speed < 260) continue;
-      if (cur && it.distTo(cur.x, cur.y) < 9 * sc && (this.bladeCooldown.get(it) ?? -1) < t) {
+      if (cur && it.thrownBy === 'him' && it.distTo(cur.x, cur.y) < 9 * sc && (this.bladeCooldown.get(it) ?? -1) < t) {
         this.bladeCooldown.set(it, t + 0.4);
         this.knockCursor({ x: cur.x, y: cur.y }, v.x * 0.9, v.y * 0.9 - 200, Math.min(1, speed / 1200) * Math.max(0.4, it.def.hit), 'item');
         it.push(-v.x * 0.35, -Math.abs(v.y) * 0.3 - 120); // and it bounces off

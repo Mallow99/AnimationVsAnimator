@@ -95,7 +95,7 @@ abstract class AtTheTV extends Skill {
   }
   stop(c: Ctx) {
     const tv = this.tv;
-    tv.on = false; tv.arcade = null; tv.board = null;
+    tv.on = false; tv.arcade = null;
     c.char.gamepad = false; c.char.padMash = 0;
     this.sub?.stop(c);
     if (!this.sub && c.char.mode === 'sit') c.char.standUp();
@@ -136,7 +136,7 @@ export class PlayVideoGame extends AtTheTV {
     if (s === 'go') return false;
     const ch = c.char, tv = this.tv;
     if (!tv.on || !tv.arcade) {
-      tv.on = true; tv.board = null;
+      tv.on = true;
       // Better at it when he's on form; worse when he's sleepy or upset.
       const L = c.mood.label;
       tv.arcade = new Runner(L === 'sleepy' || L === 'sad' ? 0.45 : L === 'angry' ? 0.55 : 0.8);
@@ -167,53 +167,6 @@ export class PlayVideoGame extends AtTheTV {
       return true;
     }
     return this.played > this.dur + 20;
-  }
-}
-
-/**
- * Othello with you, on the TV's console. He asks; you choose whether to join in the game window.
- * The board shows on the TV too. Interruptions close it cleanly.
- */
-export class PlayBoardGame extends AtTheTV {
-  readonly name = 'playgame';
-  private offered = false;
-  private reacted = false;
-  private revision = -1;
-  private activeAt = 0;
-  private mashUntil = 0;
-  update(c: Ctx, dt: number) {
-    if (!c.game) return true;
-    const s = this.settle(c, dt);
-    if (s === 'gone') return true;
-    if (s === 'go') return !this.offered && this.t > 15;
-    const ch = c.char, tv = this.tv, game = c.game;
-    if (!this.offered) {
-      if (!game.invite()) return true;
-      this.offered = true; this.activeAt = c.world.time;
-      tv.on = true; tv.arcade = null; tv.board = game.board;
-      c.sound?.('click', 0.5);
-      c.say('wanna play a round?', 2);
-    }
-    ch.gamepad = true;
-    tv.on = true; tv.board = game.board;
-    game.anchor = tv.toWorld(tv.def!.screen ? tv.def!.screen[0] + tv.def!.screen[2] / 2 : 0, 0);
-    if (this.revision !== game.revision) {
-      this.revision = game.revision; this.activeAt = c.world.time;
-      // His move (or yours) lands: thumbs on the buttons for a moment.
-      if (game.lastMove >= 0) { this.mashUntil = c.world.time + 0.5; c.sound?.('click', 0.35); }
-    }
-    ch.padMash = c.world.time < this.mashUntil || (game.state === 'playing' && game.turn === 'him') ? 1 : 0.1;
-    if (game.state === 'finished' && !this.reacted) {
-      this.reacted = true;
-      c.say(game.result === 'you' ? 'rematch?' : game.result === 'him' ? 'ha! got you' : 'draw. again?', 2);
-      c.mood.nudge({ boredom: -0.15, happiness: 0.03 });
-    }
-    if (game.state === 'playing') this.reacted = false;
-    return game.state === 'closed' || c.world.time - this.activeAt > (game.state === 'invite' ? 45 : 900);
-  }
-  stop(c: Ctx) {
-    if (this.offered) c.game?.close();
-    super.stop(c);
   }
 }
 

@@ -14,7 +14,7 @@ import { preferredSlots, type Item, type ItemUse } from './items';
 
 import { Skill, arrive, type Ctx, type LookMode } from './skills/context';
 export { Skill, DEFAULT_LESSONS, type Ctx, type World, type Lessons, type LookMode } from './skills/context';
-export { propsOf, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PlayBoardGame } from './skills/props';
+export { propsOf, SitOnProp, WatchTV, PlayVideoGame, RideScooter } from './skills/props';
 
 /** Do some skills one after the other (each one is made when its turn comes). */
 export class Chain extends Skill {
@@ -809,12 +809,12 @@ export class PaintCanvas extends Skill {
 const SWINGS = {
   // A sword: wound up high behind him, a diagonal cut down through the front.
   swing: { top: 128, bottom: -48, windup: 0.38, cut: 0.13, follow: 0.3, lead: 0.45, bounce: -14, what: 'sword' },
-  // A mallet: right over his head and behind, then straight down into the floor in front. It bounces.
-  smash: { top: 165, bottom: -84, windup: 0.46, cut: 0.15, follow: 0.34, lead: 0.3, bounce: 20, what: 'mallet' },
+  // A mace: right over his head and behind, then straight down into the floor in front. It bounces.
+  smash: { top: 165, bottom: -84, windup: 0.46, cut: 0.15, follow: 0.34, lead: 0.3, bounce: 20, what: 'mace' },
 } as const;
 
 /**
- * Swinging his wooden sword (or smashing with his mallet): draw it from his belt, wind up
+ * Swinging his wooden sword (or smashing with his mace): draw it from his belt, wind up
  * (big and slow — that's the anticipation), cut (fast), follow through, then put it away.
  * At your cursor if it's close (when he's mad, or sparring), or just practicing.
  */
@@ -900,7 +900,7 @@ export class SwordSwing extends Skill {
         return false;
       }
       case 'follow': {
-        // Follow-through: carries on a little past the cut (a mallet bounces back up), then settles.
+        // Follow-through: carries on a little past the cut (a mace bounces back up), then settles.
         const u = Math.min(1, this.pt / this.k.follow);
         this.pose(c, this.k.bottom + Math.sin(Math.PI * u) * this.k.bounce);
         if (u < 0.4) this.checkHit(c); // (his hand catches up with the swing a moment after the cut)
@@ -1506,7 +1506,7 @@ export class ThrowItem extends Skill {
           vx = dx / T; vy = dy / T - 0.5 * GRAVITY * T;
         } else { vx = ch.facing * 140; vy = 520; } // down at the floor in front: it bounces back up
         c.items.drop(it, clamp(vx, -1700, 1700), clamp(vy, -1700, 1700));
-        it.thrownAt = c.world.time;
+        it.thrownAt = c.world.time; it.thrownBy = 'him';
         ch.handTarget = null;
         this.phase = this.atCursor ? 'watch' : 'catch'; this.pt = 0;
         return false;
