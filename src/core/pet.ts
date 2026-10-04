@@ -1,7 +1,7 @@
 // The Pet ties everything together: body + mood + mind + speech, and turns
 // raw mouse input into things that happen to him (poke, grab, throw, pet).
 
-import { Character, type AttackKind } from './character';
+import { Character } from './character';
 import { DEFAULT_CONFIG, type PetConfig } from './config';
 import type { JointName } from './body';
 import type { Bounds } from './physics';
@@ -22,6 +22,8 @@ import { WindowAccess } from './window-access';
 import { BoardGame } from './board-game';
 import { controllerPart } from './render';
 import { distToSegment, type Vec } from './math';
+import { HIT_HEIGHT, HITS, segDist, viewHitTest, type HitKind } from './fighting';
+import type { FighterView, Peer, PeerMsg } from './peer';
 import { Memory } from './memory';
 import { CursorBody, drawCursorFlight } from './cursor';
 
@@ -49,29 +51,11 @@ export { DEFAULT_CONFIG, friendConfig, type PetConfig } from './config';
 
 const STEP = 1 / 120; // physics runs at a fixed 120 steps per second
 
-/** What kind of hit landed on him (his friend's moves, a sword, something thrown). */
-export type HitKind = AttackKind | 'slash' | 'thrown';
-/**
- * How each kind of hit knocks him: push (px/s away from the hitter), up (px/s, negative = up),
- * launch (whole body flies), down (knocked off his feet), stun (seconds before he can hit back).
- */
-const KNOCK: Record<HitKind, { push: number; up: number; launch: boolean; down: boolean; stun: number }> = {
-  jab: { push: 240, up: 0, launch: false, down: false, stun: 0.22 },
-  cross: { push: 420, up: 0, launch: false, down: false, stun: 0.34 },
-  swat: { push: 320, up: 0, launch: false, down: false, stun: 0.28 },
-  kick: { push: 380, up: 0, launch: false, down: false, stun: 0.3 },
-  frontkick: { push: 760, up: -100, launch: false, down: false, stun: 0.45 },
-  roundhouse: { push: 560, up: -320, launch: true, down: false, stun: 0.6 },
-  uppercut: { push: 180, up: -720, launch: true, down: false, stun: 0.65 },
-  sweep: { push: 140, up: -240, launch: true, down: true, stun: 0.9 },
-  air: { push: 460, up: -220, launch: true, down: false, stun: 0.55 },
-  slash: { push: 480, up: -60, launch: false, down: false, stun: 0.4 },
-  thrown: { push: 300, up: -80, launch: false, down: false, stun: 0.3 },
-};
+export type { HitKind } from './fighting';
 const SMACK_SPEED = 1400; // cursor speed (px/s) that counts as a smack rather than a brush
 const TYPE_SPEED = 32;    // letters per second as his speech bubble types out
 
-export class Pet {
+export class Pet implements Peer {
   char: Character;
   readonly mood = new Mood();
   readonly mind = new Mind();
@@ -90,8 +74,15 @@ export class Pet {
   readonly props: Props;
   /** False for his friend: the main pet runs, draws and saves the furniture they share. */
   readonly ownsProps: boolean;
-  /** The other stick figures on screen (his friend). Set by the app. */
-  others: Pet[] = [];
+  /**
+   * The other stick figures on screen. Set by the app. Everything he knows about them, and everything he
+   * does to them, goes through `Peer` (a snapshot and messages), so later they can live in other apps.
+   */
+  others: Peer[] = [];
+  /** A knockout: everything runs in slow motion for this long (real seconds). The app slows every figure. */
+  slowmo = 0;
+  /** Just clashed blades: don't count another clash for a moment. */
+  private clashUntil = 0;
   /** Run through in a real fight: he stays down until this time. */
   private downUntil = 0;
   /** The fight he last asked his friend to join (so he only asks once per fight). */
@@ -207,12 +198,7 @@ export class Pet {
       hangOnCursor: () => this.hangOnCursor(),
       props: this.props,
       onBecome: (d) => this.becomeReal(d),
-      foe: () => {
-        const o = pet.others[0];
-        if (!o) return null;
-        const doing = o.mind.skill?.name;
-        return { char: o.char, name: o.config.name, busy: !!doing && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'duel', 'spar'].includes(doing) };
-      },
+      foe: () => pet.others[0]?.view() ?? null,
       get fightMode() { return pet.config.fightMode; },
     };
     if (shared) { const first = this.props.onPlatforms; this.props.onPlatforms = () => { first?.(); this.refreshPlatforms(); }; }
@@ -253,6 +239,8 @@ export class Pet {
       this.acc -= STEP;
     }
     this.items.update(this.char, dt, this.ctx.world.bounds, this.ctx.world.platforms, this.ctx.world.cursor);
+    this.trackSmear();
+    this.bumpOthers(dt);
     if (!this.cursorBody.busy(this.ctx.world.time)) this.itemHits();
     this.strikes();
     this.bladeHits();
@@ -274,12 +262,12 @@ export class Pet {
     const sk = this.mind.skill;
     if (sk && (sk.name === 'spar' || sk.name === 'brawl') && this.backupAsked !== sk) {
       this.backupAsked = sk;
-      for (const o of this.others) o.emit({ type: 'friendFighting', angry: sk.name === 'brawl' });
+      for (const o of this.others) o.receive({ type: 'backup', angry: sk.name === 'brawl' }, this);
     }
     // Squaring up to his friend: the friend squares up too (with the same weapons).
     if (sk && sk.name === 'duel' && this.backupAsked !== sk) {
       this.backupAsked = sk;
-      for (const o of this.others) if (o.mind.skill?.name !== 'duel') o.emit({ type: 'challenged', name: this.config.name, armed: (sk as { armed?: boolean }).armed ?? true });
+      for (const o of this.others) if (o.view().doing !== 'duel') o.receive({ type: 'challenge', armed: (sk as { armed?: boolean }).armed ?? true }, this);
     }
     if (this.bubble) this.typeOut(this.bubble, dt);
     if (this.bubble && this.bubble.t > this.bubble.ttl) this.bubble = null;
@@ -394,6 +382,7 @@ export class Pet {
       for (const it of this.items.list) if (it.where === 'world' || it.where === 'cursor') drawItem(ctx, it);
     }
     restore();
+    if (this.smear.length > 1) this.drawSmear(ctx);
     if (this.sparks.length) drawSparks(ctx, this.sparks, Math.max(1, Math.round(look.pixel)));
     if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
@@ -987,47 +976,168 @@ export class Pet {
     this.emit({ type: 'hitCursor', power, by });
   }
 
-  /** One of his hits reached his friend. Counts toward the duel if it landed. */
-  private hitFriend(o: Pet, joint: JointName, vx: number, vy: number, power: number, weapon: ItemDef | null, at: Vec, kind: HitKind = 'cross') {
-    if (!o.takeHit(this, joint, vx, vy, power, weapon, at, kind)) return;
-    const duel = this.mind.skill as { name: string; hits?: number } | null;
-    if (duel?.name === 'duel' && duel.hits !== undefined) duel.hits++;
+  /** One of his hits reached another figure: tell them (they work out what it does, and answer if it didn't land clean). */
+  private hitFriend(o: Peer, joint: JointName, vx: number, vy: number, power: number, weapon: ItemDef | null, at: Vec, kind: HitKind = 'cross') {
+    o.receive({ type: 'hit', joint, vx, vy, power, weapon: weapon ? { id: weapon.id, hit: weapon.hit, cuts: !!weapon.cuts } : null, at, kind }, this);
+  }
+
+  /** The sword in his hand, if he's holding one. */
+  private get swordInHand() { return this.items.list.find((it) => it.where === 'hand' && it.def.use === 'swing') ?? null; }
+
+  /** Where his blade's been for the last split second (a fast cut leaves a smear, like a cartoon's). */
+  private smear: { a: Vec; b: Vec; t: number }[] = [];
+  private trackSmear() {
+    const sword = this.swordInHand, now = this.ctx.world.time;
+    this.smear = this.smear.filter((s) => now - s.t < 0.09);
+    // (Only the cut itself smears, not the wind-up; outside a fight, any really fast swing does.)
+    const fp = this.char.fightPose;
+    if (!sword || (fp ? !fp.act : sword.tipSpeed < 900)) { if (!sword) this.smear = []; return; }
+    const a = sword.butt, b = sword.tip;
+    this.smear.push({ a: { x: a.x + (b.x - a.x) * 0.35, y: a.y + (b.y - a.y) * 0.35 }, b: { x: b.x, y: b.y }, t: now });
+  }
+  private drawSmear(ctx: CanvasRenderingContext2D) {
+    const now = this.ctx.world.time, look = this.config.look, list = this.smear;
+    const paint = (g: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) => {
+      g.fillStyle = shade(look.color, 0.72);
+      for (let i = 0; i + 1 < list.length; i++) {
+        // The older end tapers toward the tip: a crescent.
+        const p = list[i], q = list[i + 1], kp = Math.min(1, (now - p.t) / 0.09), kq = Math.min(1, (now - q.t) / 0.09);
+        const ap = { x: p.a.x + (p.b.x - p.a.x) * kp, y: p.a.y + (p.b.y - p.a.y) * kp }, aq = { x: q.a.x + (q.b.x - q.a.x) * kq, y: q.a.y + (q.b.y - q.a.y) * kq };
+        g.beginPath(); g.moveTo(ap.x, ap.y); g.lineTo(p.b.x, p.b.y); g.lineTo(q.b.x, q.b.y); g.lineTo(aq.x, aq.y); g.closePath(); g.fill();
+      }
+    };
+    if (look.pixel > 1) this.pixels.paint(ctx, list.flatMap((s) => [s.a, s.b]), 4, { ...look, outline: false }, paint);
+    else paint(ctx);
+  }
+
+  /** Standing right on top of another figure: shuffle apart (unless one of them is passing by in front). */
+  private bumpOthers(dt: number) {
+    const ch = this.char, sc = ch.scale, hip = ch.body.j.hip;
+    for (const o of this.others) {
+      const v = o.view(), oh = v.joints.hip;
+      if (!oh || v.mode !== 'ground' || Math.abs(oh.z - hip.z) > 14 * sc || Math.abs(oh.y - hip.y) > 30 * sc) continue;
+      const dx = hip.x - oh.x, gap = 18 * sc;
+      if (Math.abs(dx) < gap) ch.nudge((Math.sign(dx) || (this.config.name < v.name ? -1 : 1)) * (gap - Math.abs(dx)) * Math.min(1, dt * 8));
+    }
+  }
+
+  /** A snapshot of him, for the other figures (see peer.ts). */
+  view(): FighterView {
+    const ch = this.char, j = ch.body.j, sword = this.swordInHand;
+    const joints: FighterView['joints'] = {};
+    for (const n of Object.keys(j) as JointName[]) if (!ch.body.ghost.has(n)) joints[n] = { x: j[n].x, y: j[n].y, z: j[n].z };
+    const doing = this.mind.skill?.name ?? null;
+    const fp = ch.fightPose;
+    return {
+      name: this.config.name, color: this.config.look.color,
+      busy: !!doing && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'duel', 'spar'].includes(doing), doing,
+      x: ch.x, facing: ch.facing as 1 | -1, mode: ch.mode, legCount: ch.legCount, whole: ch.whole, scale: ch.scale,
+      joints, headR: ch.d.headR,
+      move: ch.attack, guard: ch.guard, block: fp?.block ?? null, parrying: !!fp?.parry,
+      hitstun: ch.hitstun, stagger: ch.stagger, hp: ch.hp, poise: ch.poise,
+      blade: sword ? { a: sword.butt, b: sword.tip, speed: sword.tipSpeed, id: sword.def.id } : null,
+      armed: this.items.list.some((it) => it.def.use === 'swing' && (it.where === 'hand' || it.where === 'belt')),
+    };
+  }
+
+  /** A message from another figure (see peer.ts). */
+  receive(m: PeerMsg, from: Peer) {
+    const ch = this.char, w = this.ctx.world, fv = from.view();
+    const dir = Math.sign(ch.x - fv.x) || 1;
+    switch (m.type) {
+      case 'hit': this.takeHit(m, from, fv); return;
+      case 'blocked': {
+        // My hit was blocked: I bounce off. Parried: thrown off balance, wide open (and maybe my sword goes flying).
+        const tip = this.swordInHand?.tip ?? ch.body.j.neck;
+        if (m.parried) {
+          ch.knock(dir * 320, 0, false, 0.5);
+          ch.poise = Math.max(0, ch.poise - 0.45);
+          ch.stumble(ch.poise <= 0 ? 0.9 : 0.5);
+          this.burstAt(tip.x, tip.y, 14);
+          this.sound('clang', 1);
+          this.freeze = Math.max(this.freeze, 0.1);
+          const sword = this.swordInHand;
+          if (m.disarm && sword) { this.items.drop(sword, dir * 220, -420); sword.thrownBy = 'him'; sword.thrownAt = w.time; this.emit({ type: 'disarmed', name: fv.name }); }
+          else this.emit({ type: 'wasParried', name: fv.name });
+        } else {
+          ch.knock(dir * m.push, 0, false, 0.18);
+          this.freeze = Math.max(this.freeze, 0.04);
+        }
+        return;
+      }
+      case 'clash': {
+        // Blades met mid-swing: both bounce back a step.
+        this.clashUntil = w.time + 0.3;
+        ch.knock(dir * m.push, 0, false, 0.22);
+        this.freeze = Math.max(this.freeze, 0.07);
+        this.sound('clang', 0.9);
+        return;
+      }
+      case 'challenge': this.emit({ type: 'challenged', name: fv.name, armed: m.armed }); return;
+      case 'backup': this.emit({ type: 'friendFighting', angry: m.angry }); return;
+      case 'ko': this.slowmo = Math.max(this.slowmo, 1.1); return;
+    }
   }
 
   /**
-   * His friend hit him (a punch, a kick, a sword, something thrown). Every hit knocks him back by what
-   * kind of hit it was (KNOCK): jabs and crosses make him skid back, a front kick shoves him away, an
-   * uppercut or a roundhouse launches him, a sweep takes his legs out, and anything that lands while
-   * he's in the air keeps him flying. He's stunned for a moment (can't hit back). Blocking (fists up or
-   * sword out, facing the attacker) soaks most of it and bounces the attacker back instead, except a
-   * sweep, which goes under a block. In a real fight a katana can take a limb off, and a hard hit to
-   * the body runs him through: down he goes for a few seconds. No blood: sparks. Returns false if blocked.
+   * Another figure's hit reached him (a punch, a kick, a sword move, something thrown). What it does is
+   * up to him: parried (it bounces off and the attacker is thrown off balance), blocked (fists up, or the
+   * sword held across: it takes poise instead of health, and a guard with no poise left cracks), or it
+   * lands: it takes health and poise, and knocks him by what kind of hit it was (HITS in fighting.ts).
+   * Most hits make him skid or fly, and he lands on his feet. He only goes down to a sweep, a big hit while
+   * he's staggered, or the knockout. In a real fight a katana can take a limb off or run him through.
    */
-  takeHit(from: Pet, joint: JointName, vx: number, vy: number, power: number, weapon: ItemDef | null, at: Vec, kind: HitKind = 'cross'): boolean {
+  private takeHit(m: Extract<PeerMsg, { type: 'hit' }>, from: Peer, fv: FighterView) {
     const ch = this.char, w = this.ctx.world, real = this.config.fightMode === 'real';
-    const dir = Math.sign(ch.x - from.char.x) || 1;
-    const k = KNOCK[kind], foam = !!weapon && !weapon.cuts && weapon.hit < 0.5, soft = foam ? 0.6 : 1;
-    const facingHim = Math.sign(from.char.x - ch.x) === ch.facing;
-    // Blocking: fists up (or sword out), facing the one swinging at him. A sweep goes under it.
-    const blade = this.items.list.find((it) => it.where === 'hand' && it.def.use === 'swing');
-    const blocking = ch.mode === 'ground' && facingHim && kind !== 'sweep' && (ch.guard || (!!blade && !!weapon && Math.random() < 0.35));
-    if (blocking) {
+    const { joint, vx, vy, power, weapon, at, kind } = m;
+    if (ch.hp <= 0) return; // already knocked out: the fight's over
+    const dir = Math.sign(ch.x - fv.x) || 1;
+    const k = HITS[kind], foam = !!weapon && !weapon.cuts && weapon.hit < 0.5, soft = foam ? 0.6 : 1;
+    const facingHim = Math.sign(fv.x - ch.x) === ch.facing;
+    const fp = ch.fightPose, low = kind === 'sweep', standing = ch.mode === 'ground';
+    // Parried: the blade (or fist) bounces off his, and the attacker reels.
+    if (fp?.parry && facingHim && standing && !low) {
+      this.burstAt(at.x, at.y, 16);
+      this.sound('clang', 1);
+      this.freeze = Math.max(this.freeze, 0.1);
+      from.receive({ type: 'blocked', parried: true, push: 0, disarm: kind === 'heavy' && Math.random() < 0.45 }, this);
+      this.emit({ type: 'blocked', name: fv.name });
+      return;
+    }
+    // Blocked: fists up, or his sword across the way it's coming (low for a sweep). On guard with a sword
+    // and not in the middle of a move, he gets it in the way some of the time too.
+    // A block has to be at the right height (one height off catches it half the time; a low block never stops a high cut).
+    const blade = !!this.swordInHand, comes = HIT_HEIGHT[kind] ?? 'mid';
+    const covered = !!fp?.block && (fp.block === comes || (fp.block !== 'low' && comes !== 'low' || fp.block === 'mid' && comes === 'low') && Math.random() < 0.5);
+    const blocks = standing && facingHim && (low ? fp?.block === 'low' : m.onBlade || ch.guard || covered || (blade && !!fp && !fp.move && !!weapon && Math.random() < 0.2));
+    if (blocks) {
+      ch.poise -= k.poise * (kind === 'heavy' ? 1.3 : 0.7);
       this.burstAt(at.x, at.y, weapon ? 8 : 4);
       this.sound(weapon ? 'clang' : 'thud', 0.7);
-      ch.knock(dir * k.push * 0.3 * soft, 0, false, 0.06);
-      from.char.knock(-dir * 160, 0, false, 0.22);
-      this.freeze = from.freeze = 0.05;
-      this.emit({ type: 'blocked', name: from.config.name });
-      return false;
+      if (ch.poise <= 0) {
+        // Guard broken: the block gives way and he stumbles back, open.
+        ch.poise = 0;
+        ch.knock(dir * k.push * 0.6, 0, false, 0.85);
+        ch.stumble(0.85);
+        this.sound('snap', 0.6);
+      } else ch.knock(dir * k.push * 0.3 * soft, 0, false, 0.08);
+      from.receive({ type: 'blocked', parried: false, push: 150, disarm: false }, this);
+      this.freeze = Math.max(this.freeze, 0.05);
+      this.emit({ type: 'blocked', name: fv.name });
+      return;
     }
     const sharp = real && !!weapon?.cuts;
     let cut = false, stabbed = false;
-    if (sharp && ch.destructible) {
+    ch.hp -= k.dmg * (sharp ? 1.6 : foam ? 2 : weapon ? 1.5 : 1) * (0.7 + 0.3 * Math.min(1.3, power));
+    ch.poise -= k.poise;
+    // (Only once he's been worn down a bit: a real fight builds up to the cut that decides it.)
+    if (sharp && ch.destructible && ch.hp < 0.8) {
       const limb = limbOf(joint);
-      if (limb && power > 0.6 && Math.random() < 0.45) {
+      const slashing = kind === 'cut' || kind === 'heavy' || kind === 'spin' || kind === 'dash' || kind === 'aircut' || kind === 'rising' || kind === 'slash';
+      if (limb && slashing && power > 0.8 && Math.random() < 0.2) {
         cut = !!ch.detach(limb, { x: vx * 0.35, y: vy * 0.35 - 140, z: (Math.random() - 0.5) * 400 });
-      } else if (!limb && power > 0.8 && Math.random() < 0.5) {
-        // Run through: the hit goes clean through his middle and he crumples.
+      } else if (!limb && (kind === 'thrust' || kind === 'dash') && power > 0.8 && Math.random() < 0.5) {
+        // Run through: the blade goes clean through his middle and he crumples.
         stabbed = true;
         ch.knock(dir * 700, -260, true, 1.2, true);
         ch.stayDown = true;
@@ -1038,21 +1148,76 @@ export class Pet {
         }
       }
     }
-    if (!stabbed) {
-      // How hard: the move's knockback, scaled by how well it connected; in the air, it keeps him going.
+    const ko = ch.hp <= 0 || stabbed;
+    if (ko) {
+      ch.hp = Math.min(ch.hp, 0);
+      if (!stabbed) ch.knock(dir * Math.max(k.push, 520) * 1.1, Math.min(k.up, -380), true, 1.5, true);
+      // The knockout: a moment of slow motion for everyone.
+      this.slowmo = Math.max(this.slowmo, 1.1);
+      from.receive({ type: 'ko' }, this);
+    } else {
+      // Hit while he's staggered (wide open) by something big: that one takes him off his feet.
+      const big = kind === 'heavy' || kind === 'spin' || kind === 'rising' || kind === 'aircut' || kind === 'dash' || kind === 'frontkick' || kind === 'roundhouse' || kind === 'uppercut';
+      const down = k.down || (ch.stagger > 0 && big);
       const scale = (0.65 + 0.35 * Math.min(1.2, power)) * soft, airborne = ch.mode === 'air' || ch.mode === 'ragdoll';
-      // A hard sword hit (or a big swing) sends him flying too.
-      // A follow-up while he's still reeling from the last one (a sword combo) knocks him off his feet.
-      const big = kind === 'slash' && (power > (weapon?.cuts ? 1.45 : 0.9) || ch.hitstun > 0.08);
-      const push = dir * k.push * scale * (big ? 1.2 : 1), up = (airborne || big ? Math.min(k.up, -260) : k.up) * scale;
-      ch.knock(push, up, k.launch || airborne || big, k.stun * soft, k.down);
-      this.burstAt(at.x, at.y, foam ? 3 : k.launch ? 10 : 6);
-      if (k.launch || k.down) for (let i = 0; i < 5; i++) this.puffs.push({ x: ch.x, y: w.bounds.floor - 2, vx: (Math.random() - 0.5) * 120 + dir * 60, vy: -Math.random() * 30, t: 0, life: 0.4, size: 4 * ch.scale });
+      ch.knock(dir * k.push * scale * (down ? 1.2 : 1), (airborne ? Math.min(k.up, -220) : k.up) * scale, k.launch || airborne || down, k.stun * soft, down);
+      if (ch.poise <= 0 && !down) { ch.poise = 0; ch.stumble(0.8); }
     }
+    this.burstAt(at.x, at.y, foam ? 3 : k.launch ? 10 : 6);
+    if (k.launch || k.down || ko) for (let i = 0; i < 5; i++) this.puffs.push({ x: ch.x, y: w.bounds.floor - 2, vx: (Math.random() - 0.5) * 120 + dir * 60, vy: -Math.random() * 30, t: 0, life: 0.4, size: 4 * ch.scale });
     this.sound(foam ? 'bonk' : stabbed ? 'crash' : cut ? 'snap' : weapon ? 'clang' : k.launch ? 'smack' : 'punch', Math.min(1, 0.4 + power * 0.6));
-    this.freeze = from.freeze = Math.max(this.freeze, 0.03 + 0.05 * Math.min(1, power) + (k.launch ? 0.03 : 0) + (stabbed || cut ? 0.06 : 0));
-    this.emit({ type: 'hitByFriend', name: from.config.name, power, cut, stabbed, play: !real });
-    return true;
+    this.freeze = Math.max(this.freeze, 0.03 + 0.05 * Math.min(1, power) + (k.launch ? 0.03 : 0) + (stabbed || cut || ko ? 0.06 : 0));
+    this.emit({ type: 'hitByFriend', name: fv.name, power, cut, stabbed, play: !real, ko });
+  }
+
+  /** Sword cuts that already landed (one hit per cut), by the move's hit id, and ones that got past a guard. */
+  private cutsLanded = new Set<number>();
+  private slipped = new Set<number>();
+  /**
+   * His blade against the other figures. Blade meets blade first: their parry throws him off, their block
+   * (or just their sword held in the way) stops it, and two cuts meeting mid-swing clash, both bouncing
+   * back. Otherwise the blade through any of their joints is a hit. In a sword move only the cutting part
+   * counts, once per cut; any other swing counts when it's fast, with a short cooldown.
+   */
+  private bladeOnOthers(it: Item, ready: (o: object) => boolean) {
+    const w = this.ctx.world, sc = this.char.scale, act = this.char.fightPose?.act ?? null;
+    if (this.char.fightPose && !act) return; // on guard: the blade's just held up
+    if (act && this.cutsLanded.has(act.id)) return;
+    const a = it.butt, b = it.tip, v = it.tipVel;
+    const power = act ? act.power * Math.max(0.5, it.def.hit) : Math.min(1.5, it.tipSpeed / 1200) * it.def.hit;
+    const kind: HitKind = act ? (act.kind as HitKind) : 'slash';
+    const landed = (o: Peer) => { if (act) { this.cutsLanded.add(act.id); if (this.cutsLanded.size > 64) { this.cutsLanded.clear(); this.slipped.clear(); } } else this.bladeCooldown.set(o, w.time + 0.4); };
+    for (const o of this.others) {
+      if (!act && !ready(o)) continue;
+      const ov = o.view(), theirs = ov.blade;
+      // (A sword just held on guard is only in the way some of the time; one held up to block, or swung to
+      // parry, always is. One that's winding up its own cut isn't guarding anything.)
+      const guarding = ov.block || ov.parrying || (!ov.move && Math.random() < 0.25) || (!!ov.move && !ov.move.windup);
+      if (theirs && guarding && !this.slipped.has(act?.id ?? -1) && segDist(a, b, theirs.a, theirs.b) < 3 * sc) {
+        const at = { x: (b.x + theirs.b.x + a.x + theirs.a.x) / 4, y: (b.y + theirs.b.y + a.y + theirs.a.y) / 4 };
+        landed(o);
+        if (ov.move && !ov.move.windup && !ov.parrying && w.time > this.clashUntil) {
+          // Both swinging: the blades meet and both bounce back.
+          const dir = Math.sign(this.char.x - ov.x) || 1;
+          this.clashUntil = w.time + 0.3;
+          this.burstAt(at.x, at.y, 14);
+          this.sound('clang', 1);
+          this.char.knock(dir * 260, 0, false, 0.22);
+          this.freeze = Math.max(this.freeze, 0.07);
+          o.receive({ type: 'clash', at, push: 260 }, this);
+          return;
+        }
+        const hand: JointName = ov.joints.handR && ov.joints.handL && Math.hypot(ov.joints.handR.x - theirs.a.x, ov.joints.handR.y - theirs.a.y) > Math.hypot(ov.joints.handL.x - theirs.a.x, ov.joints.handL.y - theirs.a.y) ? 'handL' : 'handR';
+        o.receive({ type: 'hit', joint: hand, vx: v.x * 0.5, vy: v.y * 0.5, power, weapon: { id: it.def.id, hit: it.def.hit, cuts: !!it.def.cuts }, at, kind, onBlade: true }, this);
+        return;
+      }
+      if (theirs && act && segDist(a, b, theirs.a, theirs.b) < 3 * sc) this.slipped.add(act.id); // past his guard: no second chance this cut
+      let hit: [string, { x: number; y: number }] | null = null;
+      for (const [n, q] of Object.entries(ov.joints)) if (q && it.sweptDistTo(q.x, q.y) < 5 * sc) { hit = [n, q]; break; }
+      if (!hit) continue;
+      landed(o);
+      this.hitFriend(o, hit[0] as JointName, v.x * 0.8, v.y * 0.8, power, it.def, { x: hit[1].x, y: hit[1].y }, kind);
+    }
   }
 
   /** He jumped up and grabbed your cursor: he hangs from it by his front hand, and goes where it goes. */
@@ -1095,8 +1260,8 @@ export class Pet {
     }
     // His friend: a punch or a kick that lands (checked along the fist's path, so a fast one can't skip him).
     for (const o of this.others) {
-      const mid = { x: (from.x + p.x) / 2, y: (from.y + p.y) / 2 };
-      const joint = o.char.hitTest(p.x, p.y, 4 * sc) ?? o.char.hitTest(mid.x, mid.y, 4 * sc);
+      const mid = { x: (from.x + p.x) / 2, y: (from.y + p.y) / 2 }, ov = o.view();
+      const joint = (viewHitTest(ov, p.x, p.y, 4 * sc) ?? viewHitTest(ov, mid.x, mid.y, 4 * sc)) as JointName | null;
       if (!joint) continue;
       const base = st.joint.startsWith('foot') ? this.char.body.j.hip : this.char.body.j.neck;
       const dx = p.x - base.x, dy = p.y - base.y, d = Math.hypot(dx, dy) || 1, speed = 700 + 1000 * st.power;
@@ -1151,6 +1316,9 @@ export class Pet {
    */
   private bladeHits() {
     const w = this.ctx.world, sc = this.char.scale;
+    // In a sword move, the cutting part counts however fast the tip happens to be going (a thrust is slow at the tip).
+    const sword = this.swordInHand;
+    if (sword && this.char.fightPose?.act && sword.tipSpeed < 420) this.bladeOnOthers(sword, (o) => (this.bladeCooldown.get(o) ?? -1) < w.time);
     for (const it of this.items.list) {
       if (it.where !== 'hand' || it.def.hit <= 0 || it.tipSpeed < 420) continue;
       const a = it.butt, b = it.tip, v = it.tipVel, power = Math.min(1.5, it.tipSpeed / 1200) * it.def.hit;
@@ -1169,14 +1337,7 @@ export class Pet {
         other.thrownAt = w.time; other.thrownBy = 'him';
         this.sound('clang', 0.5);
       }
-      // His friend: the blade passing through any of his joints.
-      for (const o of this.others) {
-        if (!ready(o)) continue;
-        const hit = (Object.entries(o.char.body.j) as [JointName, { x: number; y: number }][]).find(([, q]) => seg(q.x, q.y) < 5 * sc);
-        if (!hit) continue;
-        this.bladeCooldown.set(o, w.time + 0.4);
-        this.hitFriend(o, hit[0], v.x * 0.8, v.y * 0.8, power, it.def, { x: hit[1].x, y: hit[1].y }, 'slash');
-      }
+      this.bladeOnOthers(it, ready);
       for (const th of this.props.things) {
         if (!ready(th)) continue;
         const tip = it.tip, mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -1240,10 +1401,11 @@ export class Pet {
         continue;
       }
       // Into his friend (things he threw).
-      const o = it.thrownBy === 'him' && speed > 420 ? this.others.find((f) => f.char.hitTest(it.at.x, it.at.y, 3)) : undefined;
-      if (o && (this.bladeCooldown.get(it) ?? -1) < t) {
+      const target = it.thrownBy === 'him' && speed > 420 ? this.others.map((f) => [f, viewHitTest(f.view(), it.at.x, it.at.y, 3)] as const).find(([, jn]) => jn) : undefined;
+      if (target && (this.bladeCooldown.get(it) ?? -1) < t) {
+        const [o, jn] = target;
         this.bladeCooldown.set(it, t + 0.5);
-        this.hitFriend(o, o.char.hitTest(it.at.x, it.at.y, 3)!, v.x * 0.6, v.y * 0.6, Math.min(1, speed / 1200) * Math.max(0.3, it.def.hit), it.def, { x: it.at.x, y: it.at.y }, 'thrown');
+        this.hitFriend(o, jn as JointName, v.x * 0.6, v.y * 0.6, Math.min(1, speed / 1200) * Math.max(0.3, it.def.hit), it.def, { x: it.at.x, y: it.at.y }, 'thrown');
         it.push(-v.x * 0.3, -Math.abs(v.y) * 0.3 - 150);
         continue;
       }

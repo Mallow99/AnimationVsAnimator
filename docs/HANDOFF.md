@@ -2,7 +2,69 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest: two equal stick figures, real fights, and two bug fixes
+## Latest: sword fights rebuilt (stances, real moves, health instead of knockdowns), and the line between figures
+
+Owner's asks: fights felt flat, they knocked each other over again and again, didn't always draw their weapons,
+and the basic swing "looks so basic". Look at references and upgrade. Keep in mind: later Blurp and Leonard
+become separate apps that run at the same time and interact; ideally a "master" app makes new stick figures,
+produces an app for each to give to people, and all of them can interact.
+
+References used: Alan Becker's fights (big wind-ups, smear-fast cuts, holds after a hit, using the space),
+Nidhogg (three stance heights, thrusts, parries that throw you off balance, disarms), Sekiro (posture: blocks
+and parries wear you down until you're open), kendo/iaido (stances, overhead cut, the dash-through draw cut).
+
+- **Always swords** (`skills/duel.ts`): foam sword in play fights, katana in real ones (two-handed, `off: 'hilt'`).
+  He draws it with a twirl at the start; disarmed (a parried heavy cut), he goes and picks it up; only if you're
+  holding it does he fight with fists and feet. `Duel`'s old `armed` flag is ignored (always true).
+- **Moves** (`skills/swordplay.ts`): keyframed poses in his own frame (`MOVES`): cut, thrust (lunge), rising cut
+  (launches), heavy (two-handed overhead, breaks guards), smash (the mace), spin (a full turn through the front
+  view), flurry, dash (iai dash-through, passes in front in depth), aircut (jumping), parry, draw, twirl;
+  `STANCES` mid/high/low; blocks at three heights. `SwordMove` plays one; `guardPose` holds a guard. Body side
+  (`character.ts`): `FightPose` (grip, blade angle, off hand, lean, crouch, fencing `stance` spreading the feet,
+  `act` = the cutting part, `parry`, `block`), `fightVX`/`fightZ` (moves drive his feet and depth), shuffle
+  footwork, `spin()`, `leap()`, `stumble()`, `fightHands()`. Items got `aimLocal` (aimed in his frame).
+  The cursor swings (`SwordSwing`) use the same moves now; the old wind-up/slash/follow swing is gone.
+- **Health and poise instead of knockdown counting** (`fighting.ts` `HITS`, `Pet.takeHit`): clean hits take
+  `hp` and `poise`; blocks only poise; at 0 poise he staggers (open, not down). He goes down only to a sweep,
+  a big hit while staggered, or the knockout (hp 0: `slowmo` for everyone, renderer slows all figures).
+  Launched, he flips and lands on his feet (`knock` no longer ragdolls mid-air hits). Hit into the screen
+  edge, he bounces off it. A hit stops a lunge dead. Health isn't shown anywhere (AGENTS: no health bars).
+- **Blades meeting**: `Pet.bladeOnOthers`: both mid-cut = clash (both bounce, sparks); their parry = I'm thrown
+  off balance (maybe disarmed); their block (right height: `HIT_HEIGHT`) = blocked; a sword idly on guard is in
+  the way 25% of the time. Cuts land once per `act.id`. Real fights: limbs come off / run through only once the
+  target is worn down (hp < 0.8), so they build up.
+- **Fight AI rhythm**: tempo `circle` (blade tips just touching, guard height changes, depth drift, showing off)
+  → `press` (a string of moves from `STRINGS`, closing in fast) → `break` (hop/backflip out) → circle.
+  Defense reads `FighterView.move.hitIn`: misses the tell sometimes (slower = more), parries (timing),
+  blocks (guesses the height, 75% right), dodges, or trades. Punishes staggers with big moves, rising cut
+  against someone in the air, heavy/sweep/kick against a turtle, vaults over or dashes past when cornered.
+  Ends: knockout, a limb (real), the other one stopping (`foeGone`), or a 70-100 s limit.
+- **Look**: blade smears (only on the cutting part; crescent, pixelated, `Pet.trackSmear/drawSmear`), turned a
+  little to you on guard, whoever's nearer drawn in front (renderer sorts by hip depth), a soft push so they don't
+  stand inside each other (`bumpOthers`).
+- **The line between figures** (`src/core/peer.ts`): a figure only sees another as a `FighterView` (plain-data
+  snapshot) and only acts on it with `PeerMsg` messages (`hit`, `blocked`, `clash`, `challenge`, `backup`, `ko`);
+  the one being hit decides what the hit does. `Pet implements Peer`; `others: Peer[]`; `ctx.foe()` returns a
+  view. Nothing else crosses, so a figure in another app can be plugged in by sending these over a connection.
+  A check runs a whole fight with every snapshot and message going through JSON.
+
+Measured headless (scratch fight lab, 8-10 seeds each): play fights 24-77 s, all but one ending in a knockout,
+1-2 times off their feet including the knockout, sword in hand 96-99% of the fight, 5-46 blade clashes.
+Real fights 7-72 s (most 18-55): knockout, a limb, or run through. Checked: typecheck, 34 focused checks (new:
+play fight, real fight, fight over JSON), sim seeds 1 and 2, Chromium browser check, Electron check under Xvfb.
+Pictures: docs/images/sword-moves.png, docs/images/swordfight.png. Not run on a Mac or PC.
+
+### Toward separate apps (owner's plan, not built)
+1. **Transport**: each app finds the others on the same computer (a small local server on a fixed port range, or
+   a shared folder of "who's running" files) and sends `FighterView` ~30 times a second plus `PeerMsg`s. A remote
+   figure is drawn by the receiving app from its views (a "ghost" with the joints it sent), like a network game.
+2. **Shared screen**: furniture/props and windows are per app today (props are shared in-process); decide who
+   owns shared props, or keep each figure's props its own.
+3. **Studio app**: the current settings + a "make a figure" flow (name, color, look, persona, items), then
+   **Export** builds a packaged app with that figure baked in (electron-builder/packager, like package-win).
+4. **Different computers** (a friend's figure visiting yours) needs a relay server online; same-computer needs none.
+
+## Earlier: two equal stick figures, real fights, and two bug fixes
 
 Owner's asks: Blurp ragdolled a lot "in front of things"; legs showed through boots; fights were the same
 slash over and over with no knockback, kicks backwards, no fighting smarts; the friend should be a second

@@ -1,5 +1,6 @@
 // Skill contracts and shared movement helper. No platform APIs.
 import type { Character, Keyframe } from '../character';
+import type { FighterView } from '../peer';
 import type { Mood } from '../mood';
 import type { Bounds, Platform } from '../physics';
 import type { Wall, WinRect } from '../world';
@@ -85,8 +86,8 @@ export interface Ctx {
   /** Drawings that came to life: balls, boxes, ledges. */
   props?: Props;
   game?: BoardGame;
-  /** His friend (the other stick figure on screen), if there is one. */
-  foe?: () => { char: Character; name: string; busy: boolean } | null;
+  /** His friend (the other stick figure on screen), if there is one: a snapshot (see peer.ts). */
+  foe?: () => FighterView | null;
   /** How fights with his friend go: play (foam and wooden swords) or real (katanas that cut). */
   fightMode?: 'play' | 'real';
   /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */

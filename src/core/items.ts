@@ -125,6 +125,8 @@ export class Item {
   dir: V3 = { x: 0, y: 1, z: 0 };
   /** While it's in his hand, a skill can point it this way (else it follows his forearm). */
   aim: V3 | null = null;
+  /** Aimed in his own frame instead ([forward, up]): turns with him (a sword in a fight, through a spin). */
+  aimLocal: [number, number] | null = null;
   /** Physics for when it's lying around or dangling from your cursor: a = grip, b = tip. */
   readonly a: Point; readonly b: Point;
   private readonly sticks: Stick[];
@@ -267,7 +269,7 @@ export class Items {
     if (it.def.wear) {
       const other = this.list.find((x) => x !== it && x.where === 'worn' && x.def.wear === it.def.wear);
       if (other) this.drop(other, 0, -60);
-      this.unslot(it); it.where = 'worn'; it.aim = null;
+      this.unslot(it); it.where = 'worn'; it.aim = null; it.aimLocal = null;
       this.onChange?.(); return true;
     }
     if (it.def.belt === 'none') return false;
@@ -275,7 +277,7 @@ export class Items {
     const slot = preferredSlots(it.def).find((s) => !this.belt[s]);
     if (slot === undefined) return false;
     this.unslot(it);
-    this.belt[slot] = it; it.slot = slot; it.where = 'belt'; it.aim = null;
+    this.belt[slot] = it; it.slot = slot; it.where = 'belt'; it.aim = null; it.aimLocal = null;
     this.onChange?.();
     return true;
   }
@@ -287,14 +289,14 @@ export class Items {
     const other = this.inHand(hand);
     if (other && other !== it) this.drop(other, 0, 0);
     this.unslot(it);
-    it.where = 'hand'; it.hand = hand; it.aim = null;
+    it.where = 'hand'; it.hand = hand; it.aim = null; it.aimLocal = null;
     this.onChange?.();
   }
 
   /** Let go of it: it falls from where it is with this speed. */
   drop(it: Item, vx: number, vy: number) {
     this.unslot(it);
-    it.where = 'world'; it.aim = null;
+    it.where = 'world'; it.aim = null; it.aimLocal = null;
     it.loosen(vx, vy);
     this.onChange?.();
   }
@@ -302,7 +304,7 @@ export class Items {
   /** You take it: it dangles from your cursor. */
   toCursor(it: Item, at: Vec) {
     this.unslot(it);
-    it.where = 'cursor'; it.aim = null;
+    it.where = 'cursor'; it.aim = null; it.aimLocal = null;
     it.at = { x: at.x, y: at.y, z: 30 };
     it.dir = { x: 0, y: 1, z: 0 };
     this.lastCursor = null; this.cursorV = { x: 0, y: 0 };
@@ -383,7 +385,7 @@ export class Items {
         if (!ch.hasLimb(arm)) { this.drop(it, 0, -100); continue; } // the arm came off: it falls
         const hand = j[it.hand === 'L' ? 'handL' : 'handR'], elbow = j[it.hand === 'L' ? 'elbowL' : 'elbowR'];
         it.at = { x: hand.x, y: hand.y, z: hand.z };
-        it.dir = it.aim ? norm3(it.aim) : norm3(sub3(hand, elbow));
+        it.dir = it.aimLocal ? norm3(ch.dirToWorld(it.aimLocal[0], it.aimLocal[1])) : it.aim ? norm3(it.aim) : norm3(sub3(hand, elbow));
       } else if (it.where === 'world') {
         it.at = { x: it.a.x, y: it.a.y, z: it.a.z };
         it.dir = norm3(sub3(it.b, it.a));

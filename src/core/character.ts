@@ -66,6 +66,33 @@ export type AttackKind = 'jab' | 'cross' | 'swat' | 'uppercut' | 'frontkick' | '
 /** Gestures that are attacks: getting hit interrupts them. */
 export const ATTACKS: ReadonlySet<Gesture> = new Set(['punch', 'jab', 'swat', 'highkick', 'uppercut', 'frontkick', 'sweep', 'kick']);
 
+/**
+ * A sword-fighting pose, set every frame by the fight skill (see skills/swordplay.ts). Positions are in his
+ * own frame, in pixels at scale 1: grip = [forward, up] from his neck. The blade angle is in degrees in his
+ * forward/up plane (0 = pointing ahead, 90 = straight up, 180 = behind him, negative = down).
+ */
+export interface FightPose {
+  /** The hand holding the sword. */
+  hand: 'L' | 'R';
+  grip: [number, number];
+  blade: number;
+  /** The other hand: on the hilt below the sword hand (two-handed), up and back for balance, or out front as a guard. */
+  off: 'hilt' | 'back' | 'guard';
+  /** Torso tipped forward (px), hips lowered (px), feet apart front to back (0 = normal … 1 = deep lunge). */
+  lean: number;
+  crouch: number;
+  stance: number;
+  /** How hard his hands follow (0.2 = relaxed … 0.7 = a fast cut). */
+  snap: number;
+  /** The move he's in (for whoever's reading him), or null if he's just on guard. */
+  move: { name: string; u: number; windup: boolean; hitIn: number } | null;
+  /** The cutting part of a move: hits that land now count, once per id. */
+  act: { id: number; kind: string; power: number } | null;
+  /** Deflecting: a hit arriving now is parried. Blocking: it's soaked (low also stops sweeps). */
+  parry: boolean;
+  block: 'high' | 'mid' | 'low' | null;
+}
+
 /** How he holds his arms when he's just standing there (body language for his emotion). */
 export type IdleStyle = 'none' | 'crossed' | 'hips' | 'behind' | 'hug';
 export type SeatStyle = 'up' | 'lounge' | 'front' | 'lie';
@@ -203,6 +230,19 @@ export class Character {
   hitstun = 0;
   /** Sliding back from a hit: walking is paused and he skids to a stop. */
   private slide = 0;
+  /** Sword fighting: the pose the fight skill wants this frame (null = not holding a sword up). */
+  fightPose: FightPose | null = null;
+  /** Fight footwork: the fight skill drives his speed directly (lunges, dashes), and his depth (passing in front). */
+  fightVX: number | null = null;
+  fightZ: number | null = null;
+  /** In a fight: health (0 = knocked out) and poise (balance; it runs out from taking or blocking hits). */
+  hp = 1;
+  poise = 1;
+  /** Poise broken: stumbling, wide open, for this long (seconds). */
+  stagger = 0;
+  private fightDrop = 0;
+  /** A spin on the spot (a spinning slash): a full turn through the front view. */
+  private spinning: { t: number; dur: number; dir: number } | null = null;
   private gestureId = 0;
   private knocks = 0;
   /** Jumping at something to punch it: where (a skill keeps it pointed at the target). */
@@ -368,11 +408,12 @@ export class Character {
    * The attack he's in the middle of (for a fighter reading his opponent): which move, how far into it
    * (0..1), and whether it's still winding up (that's the moment to block or dodge). Null if he isn't.
    */
-  get attack(): { name: Gesture; u: number; windup: boolean } | null {
+  get attack(): { name: string; u: number; windup: boolean; hitIn: number } | null {
+    if (this.fightPose?.move && !this.gesture) return this.fightPose.move;
     const g = this.gesture;
-    if (!g || !ATTACKS.has(g.name)) return this.airPunch ? { name: 'punch', u: 0.5, windup: false } : null;
+    if (!g || !ATTACKS.has(g.name)) return this.airPunch ? { name: 'punch', u: 0.5, windup: false, hitIn: 0 } : null;
     const u = g.t / GESTURE_TIME[g.name];
-    return { name: g.name, u, windup: u < 0.32 };
+    return { name: g.name, u, windup: u < 0.32, hitIn: Math.max(0, 0.32 - u) * GESTURE_TIME[g.name] };
   }
   /** Any gesture at all in progress (attacks, waves...). */
   get busy() { return this.gesture !== null || this.jumpPrep !== null; }
@@ -803,7 +844,8 @@ export class Character {
     const fast = Math.hypot(vx, vy);
     if (!launch && this.mode === 'ground') {
       this.goalX = null;
-      this.rootVX = clamp(this.rootVX + vx, -900, 900);
+      // (Caught mid-lunge toward the hitter: the hit stops him dead and sends him back.)
+      this.rootVX = clamp(sign(this.rootVX) === sign(vx) ? this.rootVX + vx : vx, -900, 900);
       this.slide = 0.18 + Math.min(0.25, Math.abs(vx) / 2400);
       this.body.push('neck', vx * 0.5, -40, this.dt);
       this.body.push('head', vx * 0.7, -60, this.dt);
@@ -814,9 +856,14 @@ export class Character {
     this.goalX = null;
     this.body.launch(vx, vy, this.dt);
     this.stun = Math.max(this.stun, 0.25);
-    // A big hit (or another one while he's already flying) puts him on the floor.
-    if (down || fast > 560 || this.mode === 'ragdoll' || this.mode === 'air' && fast > 300) { if (this.mode !== 'ragdoll') { this.setMode('ragdoll'); this.events.push({ type: 'tripped' }); } }
-    else if (this.mode !== 'air') this.setMode('air');
+    // Knocked off his feet (a sweep, a knockout) or a truly huge hit: down he goes. Anything else
+    // sends him flying but he keeps control: he twists in the air (a backflip if it's high enough)
+    // and lands on his feet, skidding, the way fighters do in the cartoons.
+    if (down || fast > 1300 || this.mode === 'ragdoll') { if (this.mode !== 'ragdoll') { this.setMode('ragdoll'); this.events.push({ type: 'tripped' }); } }
+    else {
+      if (this.mode !== 'air') this.setMode('air');
+      if (vy < -560 && this.whole && !this.airFlip) this.airFlip = { t: 0, dur: 0.44, turns: (sign(vx) === this.facing ? 1 : -1) as 1 | -1 };
+    }
   }
 
   /** A shove at a joint, in pixels/second. */
@@ -830,6 +877,29 @@ export class Character {
       this.setMode('ragdoll');
       this.events.push({ type: 'tripped' });
     }
+  }
+
+  /** Spin on the spot (a spinning slash): one full turn, through the front view and back, over `dur` seconds. */
+  spin(dur: number) { this.spinning = { t: 0, dur, dir: this.facing }; }
+  get spinningNow() { return this.spinning !== null; }
+
+  /** Leave the ground right now with this speed (a move's jump: no crouch first, the move did that). */
+  leap(vx: number, vy: number) {
+    if (this.mode !== 'ground' || this.legCount === 0) return false;
+    this.goalX = null; this.jumpPrep = null;
+    this.body.launch(vx, vy, this.dt || 1 / 120);
+    this.setMode('air');
+    this.events.push({ type: 'jumped' });
+    return true;
+  }
+
+  /** Shuffle him sideways a little (bumping into another figure: they don't stand inside each other). */
+  nudge(dx: number) { if (this.mode === 'ground' && Math.abs(this.fightVX ?? 0) < 400) this.rootX += dx; }
+
+  /** Poise broken: he stumbles back, arms flung out, wide open for a moment. */
+  stumble(time: number) {
+    this.stagger = Math.max(this.stagger, time);
+    this.hitstun = Math.max(this.hitstun, time);
   }
 
   /** You grab him by a joint. `self`: no, HE grabbed onto your cursor with that hand (and hangs from it). */
@@ -923,6 +993,9 @@ export class Character {
     this.modeTime += dt;
     this.stun = Math.max(0, this.stun - dt);
     this.hitstun = Math.max(0, this.hitstun - dt);
+    this.stagger = Math.max(0, this.stagger - dt);
+    // Poise comes back while he isn't being hit (faster when he's not on guard against an attack).
+    if (this.stagger <= 0 && this.hitstun <= 0) this.poise = Math.min(1, this.poise + dt * (this.poise < 0.3 ? 0.35 : 0.2));
     this.strike = null;
     const t: Targets = {};
     const s: Strengths = {};
@@ -1039,8 +1112,20 @@ export class Character {
       const u = g.t / GESTURE_TIME[g.name];
       want = Math.max(want, (GESTURE_PRESENT[g.name] ?? 0) * clamp(u * 5, 0, 1) * clamp((1 - u) * 5, 0, 1));
     }
+    // On guard with a sword: turned a little toward you, so you see his chest and the blade (cheating to camera).
+    if (this.fightPose && this.mode === 'ground' && !g) want = Math.max(want, 0.22);
     this.present += (want - this.present) * (1 - Math.exp(-dt * 8));
     const target = base + (this.facing > 0 ? 1 : -1) * this.present * (Math.PI / 2);
+    // A spinning slash: one full turn, through facing you, his back to you, and round again.
+    const sp = this.spinning;
+    if (sp) {
+      sp.t += dt;
+      const u = clamp(sp.t / sp.dur, 0, 1);
+      this.turning = null;
+      this.yaw = target + sp.dir * 2 * Math.PI * smooth(u);
+      if (u >= 1 || this.mode !== 'ground' && this.mode !== 'air') { this.spinning = null; this.yaw = target; }
+      return;
+    }
     const tw = this.turning;
     if (tw && tw.base !== base) this.turning = null; // changed his mind mid-turn: start over from here
     if (!this.turning) {
@@ -1166,8 +1251,10 @@ export class Character {
         const headDown = j.head.grounded || j.neck.grounded; // hips on the floor is fine (rising from a sit)
         // Off balance = hips far from where they should be, for more than a moment.
         const off = tg ? dist3(j.hip, tg) : 0;
-        this.offBalance = off > 22 * this.scale + this.crouch ? this.offBalance + dt : 0;
-        if (headDown || this.offBalance > 0.12 || off > 45 * this.scale) {
+        // (Lunges and dashes run ahead of his hips.)
+        const give = this.fightPose || this.fightVX !== null ? 16 * this.scale + Math.abs(this.fightVX ?? 0) / 40 : 0;
+        this.offBalance = off > 22 * this.scale + this.crouch + give ? this.offBalance + dt : 0;
+        if (headDown || this.offBalance > 0.12 || off > 45 * this.scale + give) {
           this.setMode('ragdoll');
           this.events.push({ type: 'tripped' });
         }
@@ -1248,8 +1335,22 @@ export class Character {
    */
   private standFoot(k: 'L' | 'R', yaw = this.yaw, x = this.rootX): V3 {
     if (this.legCount === 1) return this.off(this.pt(x, this.groundY(x) - 2), 1 * this.scale, 0, sideOf(k) * 1.5 * this.scale, yaw);
-    const st = this.stanceHalf();
+    const st = this.stanceHalf(), fp = this.fightPose;
+    if (fp) {
+      // On guard: a fencer's stance. The foot on his sword side leads, the other one's back, a little apart sideways.
+      const w = st + fp.stance * (this.d.thigh + this.d.shin) * 0.26;
+      return this.off(this.pt(x, this.groundY(x) - 2), (k === fp.hand ? 1 : -1) * w, 0, sideOf(k) * st * 0.9, yaw);
+    }
     return this.off(this.pt(x, this.groundY(x) - 2), -sideOf(k) * st, 0, sideOf(k) * st, yaw);
+  }
+
+  /** How far his hips must come down for his feet to reach where they stand (a wide stance bends the knees). */
+  private stanceDrop() {
+    const fp = this.fightPose;
+    if (!fp || this.legCount < 2) return 0;
+    const L = (this.d.thigh + this.d.shin) * 0.985, st = this.stanceHalf();
+    const w = st + fp.stance * (this.d.thigh + this.d.shin) * 0.26, side = st * 0.9;
+    return Math.max(0, this.standHeight() - Math.sqrt(Math.max(L * L - w * w - side * side, L * L * 0.3))) + fp.crouch * this.scale;
   }
 
   private groundPose(dt: number, t: Targets, s: Strengths) {
@@ -1290,9 +1391,12 @@ export class Character {
       }
     }
     if (this.windup > 0) { this.windup -= dt; want = 0; this.crouch = Math.max(this.crouch, 7 * sc); }
+    // A fight move drives his feet directly: a lunge, a dash, a step back after a cut.
+    const driven = this.fightVX !== null && this.slide <= 0 && this.stagger <= 0;
+    if (driven) want = this.fightVX!;
     if (this.slide > 0) { this.slide -= dt; want = 0; }
     // Skidding back from a hit stops fast (a short slide, not a glide); walking speeds up gently.
-    const accel = this.slide > 0 ? 2600 : 450 * speedMul;
+    const accel = this.slide > 0 ? 2600 : driven ? 5000 : 450 * speedMul;
     this.rootVX += clamp(want - this.rootVX, -accel * dt, accel * dt);
     // Follow-through: arms swing on past when he stops short, and trail when he takes off.
     const acc = (this.rootVX - this.prevRootVX) / dt;
@@ -1300,8 +1404,9 @@ export class Character {
     spring(this.sway, clamp(-acc * 0.02, -9, 9) * sc, dt, 120, 9);
     spring(this.nodSpring, 0, dt, 90, 8);
     this.rootX += this.rootVX * dt;
-    // He drifts back to the middle of his depth band as he goes about his business.
-    this.rootZ += (0 - this.rootZ) * Math.min(1, dt * (Math.abs(this.rootVX) > 10 ? 1.5 : 0.4));
+    // He drifts back to the middle of his depth band as he goes about his business (or where a fight move puts him).
+    const zWant = this.fightZ !== null ? clamp(this.fightZ, -32 * sc, 32 * sc) : 0;
+    this.rootZ += (zWant - this.rootZ) * Math.min(1, dt * (this.fightZ !== null ? 7 : Math.abs(this.rootVX) > 10 ? 1.5 : 0.4));
     // Compliance: if something shoves his hips, his balance point follows a
     // little, so his feet stumble to catch up instead of him being glued in place.
     const off = j.hip.x - this.rootX, dead = 3 * sc;
@@ -1310,6 +1415,14 @@ export class Character {
     if (this.rootX < this.bounds.left + margin || this.rootX > this.bounds.right - margin) {
       this.rootX = clamp(this.rootX, this.bounds.left + margin, this.bounds.right - margin);
       if (this.goalX !== null) { this.goalX = null; this.events.push({ type: 'hitWall' }); }
+      // Knocked back into the edge of the screen hard: he bounces off it, up and back toward the middle.
+      if (this.slide > 0 && Math.abs(this.rootVX) > 380 && this.whole) {
+        const away = this.rootX < (this.bounds.left + this.bounds.right) / 2 ? 1 : -1;
+        this.rootVX = 0; this.slide = 0;
+        this.events.push({ type: 'hitWall' });
+        this.leap(away * 260, -420);
+        return;
+      }
       this.rootVX = 0;
     }
 
@@ -1332,16 +1445,19 @@ export class Character {
     const speed = Math.abs(this.rootVX), dir = sign(this.rootVX);
     const stepLen = B.stride * 26 * sc * (this.running ? 1.3 : 1);
     const track = 2.5 * sc; // walking, each foot lands a little to its own side
-    const ideal = (k: 'L' | 'R') => (moving ? this.off(root, 0, 0, sideOf(k) * track) : this.standFoot(k));
-    const stepT = moving ? clamp(stepLen / speed, 0.16, 0.5) : 0.22;
+    // On guard he shuffles: the feet keep their fencing stance and slide along with him (unless he really runs).
+    const shuffle = !!this.fightPose && moving && speed < 420;
+    const ideal = (k: 'L' | 'R') => (moving && !shuffle ? this.off(root, 0, 0, sideOf(k) * track) : this.standFoot(k));
+    const stepT = shuffle ? 0.13 : moving ? clamp(stepLen / speed, 0.16, 0.5) : 0.22;
     const landAt = (k: 'L' | 'R', remaining: number) => {
       const i = ideal(k);
+      if (shuffle) return { x: i.x + this.rootVX * (remaining + 0.08), z: i.z };
       return moving ? { x: this.rootX + this.rootVX * remaining + dir * stepLen * 0.5, z: i.z } : { x: i.x, z: i.z };
     };
     const swinging = this.feet.L.swinging ? 'L' : this.feet.R.swinging ? 'R' : null;
     if (!swinging && this.crouch < 6 * sc) {
       let k: 'L' | 'R', need: number, err: number;
-      if (moving) {
+      if (moving && !shuffle) {
         const behindL = (this.rootX - this.feet.L.x) * dir, behindR = (this.rootX - this.feet.R.x) * dir;
         k = behindL > behindR ? 'L' : 'R';
         err = Math.max(behindL, behindR);
@@ -1351,7 +1467,7 @@ export class Character {
         const eL = Math.hypot(iL.x - this.feet.L.x, iL.z - this.feet.L.z), eR = Math.hypot(iR.x - this.feet.R.x, iR.z - this.feet.R.z);
         k = eL > eR ? 'L' : 'R';
         err = Math.max(eL, eR);
-        need = 2.5 * sc;
+        need = (shuffle ? 6 : 2.5) * sc;
       }
       if (err > need) {
         const ft = this.feet[k];
@@ -1363,7 +1479,7 @@ export class Character {
       }
     }
     // Don't let the body outrun the feet: if the planted foot is trailing too far, ease off.
-    if (moving) {
+    if (moving && !shuffle && !driven) {
       for (const k of ['L', 'R'] as const) {
         const ft = this.feet[k];
         if (!ft.swinging && (this.rootX - ft.x) * dir > stepLen * 0.85) this.rootVX *= 0.92;
@@ -1376,6 +1492,7 @@ export class Character {
       const ft = this.feet[k];
       if (!ft.swinging) continue;
       if (moving) ft.dur = Math.min(ft.dur, stepT); // speeding up? hurry the step
+      if (shuffle) ft.lift = Math.min(ft.lift, 3 * sc); // a fencer's shuffle stays low
       ft.t += dt / ft.dur;
       const u = Math.min(ft.t, 1);
       const to = landAt(k, (1 - u) * ft.dur);
@@ -1407,12 +1524,14 @@ export class Character {
     const bob = moving
       ? Math.sin(Math.PI * swingT) * (0.4 + 2.5 * P.bounce) * sc * B.bob * G.bob
       : Math.sin(this.time * 2.1) * 0.6 * sc;
-    const hip = this.pt(this.rootX, floor - 2 - hipH + this.crouch + hunch * 2 * sc - bob + stoop * legLen * 0.62);
+    this.fightDrop += (this.stanceDrop() - this.fightDrop) * (1 - Math.exp(-dt * 14));
+    const hip = this.pt(this.rootX, floor - 2 - hipH + this.crouch + this.fightDrop + hunch * 2 * sc - bob + stoop * legLen * 0.62);
     this.hipTarget = hip;
 
     // Torso leans into motion; sadness hunches it, anger pitches it forward; reaching low, he bends over.
     const lean = (moving ? G.lean * sc : 0) + clamp(this.rootVX * this.facing * 0.05 * B.lean, -10 * sc, 10 * sc)
-      + (hunch * 5 + P.tension * 3) * sc + this.crouch * 0.5 + stoop * d.torso * 0.78 - (this.windup > 0 ? 5 * sc : 0);
+      + (hunch * 5 + P.tension * 3) * sc + this.crouch * 0.5 + stoop * d.torso * 0.78 - (this.windup > 0 ? 5 * sc : 0)
+      + (this.fightPose && !this.stagger ? this.fightPose.lean * sc : 0) - (this.stagger > 0 ? 7 * sc : 0);
     const neck = this.off(hip, lean, -Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)));
     // Head up by default; only a real mood drops it. nod = tipped forward, cock = tipped toward his left.
     let nod = hunch * 0.6 + (this.gait === 'sulk' && moving ? 0.3 : 0); // sulking: eyes on the floor
@@ -1773,9 +1892,22 @@ export class Character {
       nod += 0.3;
     }
 
+    // Sword fighting: both hands from the fight pose (sword hand on the grip, the other on the hilt or out
+    // for balance). Staggered: arms flung out, the sword drooping, leaning back.
+    const fp = this.fightPose;
+    let fought = false;
+    if (fp && !g && this.stagger <= 0) {
+      const h = this.fightHands(neckT, fp);
+      handL = h.L; handR = h.R; fought = true;
+    } else if (this.stagger > 0) {
+      const wob = Math.sin(this.time * 17) * 3 * sc;
+      handL = this.off(neckT, (frontIsR ? -10 : 12) * sc, -6 * sc + wob, 9 * sc);
+      handR = this.off(neckT, (frontIsR ? 12 : -10) * sc, -6 * sc - wob, -9 * sc);
+      nod -= 0.35; fought = true;
+    }
     // A skill is steering his front hand (drawing, grabbing the cursor, picking something up).
     const useHand = this.useHand;
-    const reachFor = this.handTarget && !g && useHand ? this.handTarget : null;
+    const reachFor = this.handTarget && !g && useHand && !fought ? this.handTarget : null;
     if (reachFor) {
       const hand = this.reachToward(neckT, reachFor, useHand!);
       if (useHand === 'R') handR = hand; else handL = hand;
@@ -1795,6 +1927,30 @@ export class Character {
     }
     if (this.pushAt !== null && !g) Object.assign(s, { handL: 0.35, handR: 0.35, elbowL: 0.2, elbowR: 0.2 });
     if (reachFor) Object.assign(s, useHand === 'R' ? { handR: 0.45, elbowR: 0.2 } : { handL: 0.45, elbowL: 0.2 });
+    if (fought && fp) {
+      const k = fp.snap, o = fp.off === 'hilt' ? k : k * 0.6;
+      Object.assign(s, fp.hand === 'R' ? { handR: k, elbowR: k * 0.5, handL: o, elbowL: o * 0.5 } : { handL: k, elbowL: k * 0.5, handR: o, elbowR: o * 0.5 });
+      s.neck = Math.max(s.neck ?? 0, 0.3); s.hip = Math.max(s.hip ?? 0, 0.3);
+    }
+  }
+
+  /**
+   * Where his hands go in a fight pose: the sword hand at the grip point (as far as his arm reaches), the
+   * other on the hilt just below it (two-handed), up and back (a fencer's balance), or out front (a guard).
+   */
+  private fightHands(neck: V3, fp: FightPose): Record<'L' | 'R', V3> {
+    const sc = this.scale, k = fp.hand, o: 'L' | 'R' = k === 'L' ? 'R' : 'L';
+    const want = this.off(neck, fp.grip[0] * sc, -fp.grip[1] * sc, sideOf(k) * 2 * sc);
+    const main = this.reachToward(neck, want, k);
+    // (reachToward keeps it within his arm, but loses the depth he's holding it at: put that back.)
+    main.z = want.z;
+    let other: V3;
+    if (fp.off === 'hilt') {
+      const r = (fp.blade * Math.PI) / 180, dir = this.dirToWorld(Math.cos(r), Math.sin(r));
+      other = { x: main.x - dir.x * 5 * sc, y: main.y - dir.y * 5 * sc, z: main.z - dir.z * 5 * sc + this.latZ(o, 1.5 * sc) };
+    } else if (fp.off === 'guard') other = this.off(neck, 10 * sc, 2 * sc, sideOf(o) * 4 * sc);
+    else other = this.off(neck, -15 * sc, -9 * sc, sideOf(o) * 6 * sc); // a fencer's back arm, raised behind him
+    return k === 'L' ? { L: main, R: other } : { L: other, R: main };
   }
 
   private stoopNow = 0;
@@ -2195,6 +2351,12 @@ export class Character {
     this.fillLimbs(t, hip, neck, 0.1, 0, hands.L, hands.R,
       this.off(hip, -4 * sc, legLen * (1 - tuck), 3 * sc), this.off(hip, 7 * sc, legLen * (1 - tuck), -3 * sc));
     for (const n of JOINTS) s[n] = n === 'hip' ? 0 : k;
+    // A sword move in the air (a jumping cut): his hands follow the fight pose.
+    if (this.fightPose && this.mode === 'air') {
+      const h = this.fightHands(neck, this.fightPose), k = this.fightPose.snap;
+      t.handL = h.L; t.handR = h.R;
+      Object.assign(s, { handL: k, handR: k, elbowL: k * 0.5, elbowR: k * 0.5 });
+    }
     // Jump-punching something above him (or reaching up to grab it): front hand up at it.
     const reachUp = this.airPunch ?? this.airReach;
     if (reachUp && this.mode === 'air') {

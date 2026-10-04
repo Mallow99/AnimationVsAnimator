@@ -12,6 +12,7 @@ import type { WinRect } from '../core/world';
 import type { BrainRequest } from '../core/brain';
 import { playBlip, playSfx } from './sfx';
 import { createGamePanel } from './game-panel';
+import { SwordMove, MOVES, STANCES, guardPose } from '../core/skills/swordplay';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -142,6 +143,7 @@ if (shell) {
 (window as unknown as { pet: Pet }).pet = pets[0]; // handy for poking at from DevTools
 Object.defineProperty(window, 'friend', { get: () => pets[1] ?? null }); // the second one, the same way
 Object.defineProperty(window, 'pets', { get: () => pets });
+(window as unknown as { swordplay: unknown }).swordplay = { SwordMove, MOVES, STANCES, guardPose }; // for trying sword moves from DevTools
 
 if (!shell) {
   document.body.classList.add('preview');
@@ -307,13 +309,16 @@ function frame(now: number) {
   prev = now;
   // The mouse may sit still while held; decay its velocity so nobody gets "thrown" on release.
   if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; for (const p of pets) p.pointerMove(last.x, last.y, vel.x, vel.y, now); }
-  for (const p of pets) p.update(dt);
+  // A knockout: everyone in slow motion for a moment.
+  const slow = pets.some((p) => p.slowmo > 0);
+  for (const p of pets) { p.slowmo = Math.max(0, p.slowmo - Math.min(dt, 0.1)); p.update(slow ? dt * 0.3 : dt); }
   gamePanel.update();
   updateClickThrough(last.x, last.y);
   if (talkOpen) { placeTalk(); if (now - talkIdle > 45000 && document.activeElement !== talkText) closeTalk(); }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   if (fakeWins.length) drawFakeWindows();
-  for (const p of pets) p.draw(ctx);
+  // Whoever's nearer to you is drawn in front (a dash passes in front of the other one).
+  for (const p of [...pets].sort((a, b) => a.char.body.j.hip.z - b.char.body.j.hip.z)) p.draw(ctx);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

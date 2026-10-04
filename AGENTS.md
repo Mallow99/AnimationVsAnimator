@@ -8,7 +8,9 @@ The user's latest instructions take priority over the historical roadmap.
 - Two equal stick figures: a second `Pet` in the same overlay, with its own config file, settings window,
   memory file and brain (see the handoff).
   The owner wants them split into separate apps that talk to each other later; keep them one app for now.
-  No health bars or permanent death: play fights, or real fights where limbs come off and go back on.
+  No visible health bars or permanent death: fights are decided by hidden health (a knockout), and in real
+  fights limbs come off and go back on. Figures only interact through `src/core/peer.ts` (snapshots and
+  messages), so they can be split into separate apps; keep it that way.
 - Keep `src/core` free of Node, Electron and OS imports. Put native integration behind the shell bridge.
 - Keep Windows distribution in working order. Package the PowerShell helper as a real file, retain
   the visible-pixel/DIP conversion, and never ship app-data files or provider keys.

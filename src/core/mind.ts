@@ -24,7 +24,9 @@ export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { t
   | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number }
   | { type: 'itemSpawned'; name: string; uid: number } // something new appeared (you dropped it in from his inventory)
   | { type: 'propSpawned'; id: string; name: string }   // a prop (a chair, a TV...) dropped in
-  | { type: 'hitByFriend'; name: string; power: number; cut: boolean; stabbed: boolean; play: boolean } // his friend hit him
+  | { type: 'hitByFriend'; name: string; power: number; cut: boolean; stabbed: boolean; play: boolean; ko?: boolean } // his friend hit him
+  | { type: 'wasParried'; name: string } // his friend parried his hit: he's off balance
+  | { type: 'disarmed'; name: string }   // ...and his sword went flying
   | { type: 'friendFighting'; angry: boolean } // his friend squared up to your cursor: back him up
   | { type: 'blocked'; name: string } // he blocked his friend's hit
   | { type: 'challenged'; name: string; armed: boolean } // his friend squared up to him

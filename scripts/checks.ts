@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Pet, DEFAULT_CONFIG, friendConfig } from '../src/core/pet';
+import type { Peer } from '../src/core/peer';
 import { mergeConfig } from '../src/core/config';
 import { parseItemDef } from '../src/core/items';
 import { parsePropDef, makeBridge } from '../src/core/props';
@@ -348,7 +349,7 @@ function duo(fightMode: 'play' | 'real' = 'play', seed = 7) {
   const seen = { a: [] as string[], b: [] as string[] };
   for (const [p, list] of [[a, seen.a], [b, seen.b]] as const) {
     const orig = p.mind.onEvent.bind(p.mind);
-    p.mind.onEvent = (c, e) => { if (e.type === 'hitByFriend') list.push(e.cut ? 'cut' : e.stabbed ? 'stab' : 'hit'); if (e.type === 'limbOff') list.push('limbOff'); if (e.type === 'tripped') list.push('down'); orig(c, e); };
+    p.mind.onEvent = (c, e) => { if (e.type === 'hitByFriend') list.push(e.cut ? 'cut' : e.stabbed ? 'stab' : e.ko ? 'ko' : 'hit'); if (e.type === 'limbOff') list.push('limbOff'); if (e.type === 'tripped') list.push('down'); orig(c, e); };
   }
   const run = (secs: number, until?: () => boolean) => { for (let i = 0; i < secs * 120 && !until?.(); i++) { a.update(1/120); b.update(1/120); } };
   return { a, b, seen, run };
@@ -365,54 +366,84 @@ await test('the second stick figure: own name and color, same mind mode; shares 
   a.props.spawn('chair', 500, 600, a.char.scale);
   assert.equal(JSON.parse(a.save()).props.length, 1); assert.equal(JSON.parse(b.save()).props, undefined);
 });
-await test('a play fight: both square up, hits land both ways and knock them back, someone goes down, nobody loses a limb', () => {
+await test('a play fight: foam swords out the whole time, real moves, blocks and clashes, hits push them apart, and it ends in a knockout', () => {
   const { a, b, seen, run } = duo('play');
   a.command('do:duel'); run(0.5);
   assert.equal(a.mind.skill?.name, 'duel'); assert.equal(b.mind.skill?.name, 'duel', 'his friend never squared up');
-  let pushedAway = 0, pushedToward = 0, faced = 0, backedOff = 0, frame = 0;
-  const pending: { victim: Pet; before: number; away: number; at: number }[] = [];
+  let pushedAway = 0, pushedToward = 0, faced = 0, backedOff = 0, frame = 0, armed = 0, fighting = 0, clashes = 0, blocks = 0;
+  const moves = new Set<string>(), pending: { victim: Pet; before: number; away: number; at: number; hp: number }[] = [];
   for (const [victim, hitter] of [[a, b], [b, a]] as const) {
-    const th = victim.takeHit.bind(victim);
-    victim.takeHit = (...args: Parameters<typeof th>) => {
-      const before = victim.char.x, away = Math.sign(victim.char.x - hitter.char.x), r = th(...args);
-      if (r) pending.push({ victim, before, away, at: frame + 18 });
-      return r;
+    const rc = victim.receive.bind(victim);
+    victim.receive = (m, from) => {
+      if (m.type === 'hit') pending.push({ victim, before: victim.char.x, away: Math.sign(victim.char.x - hitter.char.x), at: frame + 18, hp: victim.char.hp });
+      if (m.type === 'clash') clashes++;
+      if (m.type === 'blocked') blocks++;
+      rc(m, from);
     };
   }
   const xs: number[] = [];
-  run(45, () => {
+  run(120, () => {
     frame++;
     for (const h of pending.filter((q) => q.at === frame)) {
+      if (h.victim.char.hp >= h.hp) continue; // blocked or parried: no knockback to judge
       const moved = h.victim.char.x - h.before;
       if (Math.sign(moved) === h.away) pushedAway++; else if (Math.abs(moved) > 2) pushedToward++;
     }
     xs.push(a.char.x);
-    // Stepping back mid-fight, he keeps facing his opponent (he used to turn his back, and kick behind him).
+    const m = a.char.attack?.name; if (m) moves.add(m);
+    if (a.mind.skill?.name === 'duel' && frame > 240) { fighting++; if (a.items.list.some((it) => it.where === 'hand' && it.def.use === 'swing')) armed++; }
+    // Stepping back mid-fight, he keeps facing his opponent.
     if (a.char.mode === 'ground' && a.mind.skill?.name === 'duel' && Math.abs((a.char as unknown as { rootVX: number }).rootVX) > 30) {
       const toward = Math.sign(b.char.x - a.char.x), moving = Math.sign((a.char as unknown as { rootVX: number }).rootVX);
       if (moving === -toward) { backedOff++; if (a.char.facing === toward) faced++; }
     }
-    return seen.a.filter((x) => x === 'down').length + seen.b.filter((x) => x === 'down').length >= 3 && seen.a.includes('hit') && seen.b.includes('hit');
+    return a.mind.skill?.name !== 'duel' && b.mind.skill?.name !== 'duel';
   });
-  assert(seen.b.includes('hit'), 'his hits never landed'); assert(seen.a.includes('hit'), 'his friend never hit back');
-  assert([...seen.a, ...seen.b].includes('down'), 'nobody ever got knocked down');
+  assert(a.mind.skill?.name !== 'duel', 'the fight never ended');
+  assert(seen.b.includes('hit') && seen.a.includes('hit'), `hits didn't land both ways: ${seen.a.join(',')} / ${seen.b.join(',')}`);
+  assert([...seen.a, ...seen.b].includes('ko'), 'nobody got knocked out');
+  const downs = [...seen.a, ...seen.b].filter((x) => x === 'down').length;
+  assert(downs <= 5, `knocked over ${downs} times: they should mostly stay on their feet`);
+  assert(armed / fighting > 0.85, `sword in hand only ${Math.round(armed / fighting * 100)}% of the fight`);
+  assert(moves.size >= 3, `only these moves: ${[...moves].join(', ')}`);
+  assert(clashes + blocks > 0, 'no blade ever met a blade');
   assert(pushedAway > pushedToward * 3, `hits pushed them the wrong way (${pushedAway} away, ${pushedToward} toward)`);
   assert(Math.max(...xs) - Math.min(...xs) > 120 * a.char.scale, 'they barely moved');
   if (backedOff > 10) assert(faced / backedOff > 0.9, `turned his back while backing off (${faced}/${backedOff})`);
   assert(![...seen.a, ...seen.b].some((x) => x === 'cut' || x === 'stab' || x === 'limbOff'), 'a play fight hurt someone');
   assert(![...a.items.list, ...b.items.list].some((it) => it.def.id === 'katana'), 'a katana came out in a play fight');
+  assert.equal(a.char.fightPose, null); assert.equal(a.char.hp, 1, 'health not reset after the fight');
   Math.random = realRandom;
 });
-await test('a real fight: katanas, and sooner or later someone loses a limb or gets run through', () => {
+await test('a real fight: katanas in both hands, and it ends in a knockout, a lost limb or someone run through', () => {
   const { a, b, seen, run } = duo('real');
   a.command('do:duel');
+  let twoHanded = false;
   // A rematch whenever a fight ends without anything serious (and both are on their feet, whole).
   run(150, () => {
+    if (a.char.fightPose?.off === 'hilt') twoHanded = true;
     if (a.mind.skill?.name !== 'duel' && b.mind.skill?.name !== 'duel' && a.char.ready && b.char.ready && a.char.whole && b.char.whole) a.command('do:duel');
-    return [...seen.a, ...seen.b].some((x) => x === 'cut' || x === 'stab');
+    return [...seen.a, ...seen.b].some((x) => x === 'cut' || x === 'stab' || x === 'ko');
   });
   assert(a.items.list.some((it) => it.def.id === 'katana'), 'he never drew a katana');
-  assert([...seen.a, ...seen.b].some((x) => x === 'cut' || x === 'stab'), `nothing serious happened: ${seen.a.join(',')} / ${seen.b.join(',')}`);
+  assert(twoHanded, 'he never held the katana with both hands');
+  assert([...seen.a, ...seen.b].some((x) => x === 'cut' || x === 'stab' || x === 'ko'), `nothing decided it: ${seen.a.join(',')} / ${seen.b.join(',')}`);
+  Math.random = realRandom;
+});
+await test('figures only see each other through plain data: a fight works when every snapshot and message goes through JSON', () => {
+  const { a, b, seen, run } = duo('play', 11);
+  // Pretend each one is a separate app: the other end only ever gets JSON copies.
+  const wire = <T>(x: T): T => JSON.parse(JSON.stringify(x));
+  const remote = (p: Pet): Peer => ({ view: () => wire(p.view()), receive: (m, from) => p.receive(wire(m), from) });
+  const ra = remote(a), rb = remote(b);
+  a.others = [rb]; b.others = [ra];
+  const rcA = a.receive.bind(a), rcB = b.receive.bind(b);
+  a.receive = (m, from) => rcA(m, from === a ? ra : rb); b.receive = (m, from) => rcB(m, from === b ? rb : ra);
+  assert.deepEqual(wire(a.view()), a.view(), 'a snapshot changed going through JSON');
+  a.command('do:duel');
+  run(60, () => seen.a.includes('hit') && seen.b.includes('hit'));
+  assert.equal(b.mind.skill?.name === 'duel' || seen.b.length > 0, true, 'the challenge never arrived');
+  assert(seen.a.includes('hit') && seen.b.includes('hit'), `hits didn't cross: ${seen.a.join(',')} / ${seen.b.join(',')}`);
   Math.random = realRandom;
 });
 await test('squaring up to your cursor: his friend comes to back him up', () => {

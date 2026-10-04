@@ -13,6 +13,7 @@ import type { LimbId } from './body';
 import { preferredSlots, type Item, type ItemUse } from './items';
 
 import { Skill, arrive, type Ctx, type LookMode } from './skills/context';
+import { STANCES, SwordMove, type MoveName } from './skills/swordplay';
 export { Skill, DEFAULT_LESSONS, type Ctx, type World, type Lessons, type LookMode } from './skills/context';
 export { propsOf, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PlayBoardGame } from './skills/props';
 export { Duel } from './skills/duel';
@@ -806,28 +807,24 @@ export class PaintCanvas extends Skill {
   stop(c: Ctx) { this.sub?.stop(c); }
 }
 
-/** How each kind of swing goes (angles in degrees: 0 = straight ahead, 90 = straight up, negative = down). */
-const SWINGS = {
-  // A sword: wound up high behind him, a diagonal cut down through the front.
-  swing: { top: 128, bottom: -48, windup: 0.38, cut: 0.13, follow: 0.3, lead: 0.45, bounce: -14, what: 'sword' },
-  // A mace: right over his head and behind, then straight down into the floor in front. It bounces.
-  smash: { top: 165, bottom: -84, windup: 0.46, cut: 0.15, follow: 0.34, lead: 0.3, bounce: 20, what: 'mace' },
-} as const;
+/** How each kind of swing holds the weapon: the angle it makes with his arm (radians), and what he calls it. */
+const SWINGS = { swing: { lead: 0.45, what: 'sword' }, smash: { lead: 0.3, what: 'mace' } } as const;
 
 /**
- * Swinging his wooden sword (or smashing with his mace): draw it from his belt, wind up
- * (big and slow — that's the anticipation), cut (fast), follow through, then put it away.
+ * Swinging his sword (or smashing with his mace): draw it from his belt, then the real sword moves
+ * (a diagonal cut, a rising cut, a lunge, a spin: see swordplay.ts; a mace comes down overhead), then put it away.
  * At your cursor if it's close (when he's mad, or sparring), or just practicing.
  */
 export class SwordSwing extends Skill {
   readonly name: string;
-  private phase: 'tool' | 'approach' | 'windup' | 'slash' | 'follow' | 'stow' = 'tool';
+  private phase: 'tool' | 'approach' | 'windup' | 'slash' | 'stow' = 'tool';
   private tool: Tool;
+  private move: SwordMove | null = null;
+  private lastKey: { g: [number, number]; b: number } = STANCES.mid;
   private pt = 0;
   private swings = 0;
   private hit = false;
-  private from = -70;
-  private k: { top: number; bottom: number; windup: number; cut: number; follow: number; lead: number; bounce: number; what: string };
+  private k: { lead: number; what: string };
   /**
    * `opts.target`: swing at this instead of your cursor (his friend, in a duel). `opts.item`: with this
    * one (a foam sword, a katana). `opts.keepOut`: leave it in his hand afterwards (more swings coming).
@@ -843,15 +840,6 @@ export class SwordSwing extends Skill {
   /** What he's swinging at: your cursor, his friend, or nothing (practice). */
   private aim(c: Ctx) { return this.opts.target ? this.opts.target() : this.atCursor ? c.world.cursor : null; }
   start(c: Ctx) { c.look = this.opts.target ? 'none' : this.atCursor ? 'cursor' : 'none'; }
-
-  /** Arm and sword at angle phi (degrees: 0 = straight ahead, 90 = straight up, negative = down). */
-  private pose(c: Ctx, phi: number) {
-    const ch = c.char, it = this.tool.item!, j = ch.body.j, armLen = (ch.d.upperArm + ch.d.foreArm) * 0.85;
-    const r = (phi * Math.PI) / 180, lead = r + this.k.lead;
-    const arm = ch.dirToWorld(Math.cos(r), Math.sin(r));
-    ch.handTarget = { x: j.neck.x + arm.x * armLen, y: j.neck.y + arm.y * armLen };
-    it.aim = ch.dirToWorld(Math.cos(lead), Math.sin(lead));
-  }
 
   /** Did the swing go through your cursor? (Once per swing.) */
   private checkHit(c: Ctx) {
@@ -871,7 +859,7 @@ export class SwordSwing extends Skill {
         const r = this.tool.fetch(c, dt);
         if (r === 'none') { missingTool(c, this.tool, this.k.what); return true; }
         if (r === 'ready') {
-          if (this.tool.item?.def.id === 'mace') this.k = { ...SWINGS.smash, windup: 0.65, cut: 0.18, follow: 0.45, bounce: 10, what: 'mace' };
+          if (this.tool.item?.def.id === 'mace') this.k = SWINGS.smash;
           this.phase = 'approach'; this.pt = 0;
         }
         return false;
@@ -890,49 +878,51 @@ export class SwordSwing extends Skill {
         }
         ch.stop();
         if (cur) ch.facing = Math.sign(cur.x - ch.x) || ch.facing;
-        this.phase = 'windup'; this.pt = 0; this.from = -70;
+        ch.faceLock = ch.facing as 1 | -1;
+        this.phase = 'windup'; this.pt = 0;
         return false;
       }
       case 'windup': {
-        // Anticipation: pull way back and up, slowing into the top.
-        const u = Math.min(1, this.pt / this.k.windup);
-        this.pose(c, lerpN(this.from, this.k.top, 1 - (1 - u) ** 3));
-        if (u >= 1) { this.phase = 'slash'; this.pt = 0; this.hit = false; c.sound?.('whoosh'); }
+        // The real sword moves (see swordplay.ts): a different cut each swing; a mace comes down overhead.
+        const it = this.tool.item!;
+        const order: MoveName[] = this.name === 'smash' ? ['smash'] : ['cut', 'rising', 'thrust', 'spin'];
+        this.move = new SwordMove(order[this.swings % order.length], it, this.swings ? this.lastKey : STANCES.mid, !!it.def.cuts || this.name === 'smash');
+        this.phase = 'slash'; this.pt = 0; this.hit = false;
+        c.sound?.('whoosh');
         return false;
       }
       case 'slash': {
-        // Fast, accelerating into the cut.
-        const u = Math.min(1, this.pt / this.k.cut);
-        this.pose(c, lerpN(this.k.top, this.k.bottom, u * u));
-        this.checkHit(c);
-        if (u >= 1) { this.phase = 'follow'; this.pt = 0; if (this.name === 'smash') c.sound?.('thud', 0.8); }
-        return false;
-      }
-      case 'follow': {
-        // Follow-through: carries on a little past the cut (a mace bounces back up), then settles.
-        const u = Math.min(1, this.pt / this.k.follow);
-        this.pose(c, this.k.bottom + Math.sin(Math.PI * u) * this.k.bounce);
-        if (u < 0.4) this.checkHit(c); // (his hand catches up with the swing a moment after the cut)
-        if (u >= 1) {
-          this.swings++;
-          this.from = this.k.bottom;
-          if (this.swings < this.times) { this.phase = 'windup'; this.pt = 0; }
-          else if (this.opts.keepOut) { this.tool.item!.aim = null; ch.handTarget = null; return true; }
-          else { this.phase = 'stow'; this.pt = 0; if (!this.atCursor) c.say(pick(['hyah!', 'ha!', 'en garde']), 1.2); }
-        }
+        const done = this.move!.update(c, dt);
+        if (ch.fightPose?.act) this.checkHit(c);
+        if (!done) return false;
+        if (this.name === 'smash') c.sound?.('thud', 0.8);
+        this.swings++;
+        this.lastKey = { g: [...ch.fightPose!.grip] as [number, number], b: ch.fightPose!.blade };
+        this.move = null;
+        if (this.swings < this.times) { this.phase = 'windup'; return false; }
+        this.relax(c);
+        if (this.opts.keepOut) return true;
+        this.phase = 'stow'; this.pt = 0;
+        if (!this.atCursor) c.say(pick(['hyah!', 'ha!', 'en garde']), 1.2);
         return false;
       }
       case 'stow': return this.tool.stow(c, dt) || this.pt > 2;
     }
   }
+  /** Out of the sword stance, back to standing normally. */
+  private relax(c: Ctx) {
+    const ch = c.char;
+    ch.fightPose = null; ch.fightVX = null; ch.fightZ = null; ch.faceLock = null;
+    if (this.tool.item) this.tool.item.aimLocal = null;
+  }
   stop(c: Ctx) {
     c.char.handTarget = null;
+    this.relax(c);
     const it = this.tool.item;
     if (it?.where === 'hand') { it.aim = null; if (!this.opts.keepOut) c.items.stow(it); }
   }
 }
 
-const lerpN = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** Something of his is lying around: walk over, bend down, pick it up, and put it on his belt. */
 export class FetchItem extends Skill {

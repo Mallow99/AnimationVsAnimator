@@ -58,11 +58,15 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   right-click one of them → Settings), their own name, look, mind, memories and AI brain, and you talk to either
   one the same way (double-click them). Settings that are about the app (climbing windows, moving windows, the
   AI service, fights...) stay the same in both. They share the furniture.
-- **Fights**: they spar now and then, or ask for it ("duel", or **Make them spar now**). A little fighting-game
-  AI runs offline: jabs, crosses, uppercuts, front kicks, roundhouses, sweeps, jump attacks, blocking, dodging,
-  combos, juggles, real knockback and knockdowns; first to three knockdowns wins. *Play fights*: fists, foam and
-  wooden swords. *Real fights*: katanas; a cut takes a limb off (they put it back on), a hard hit runs them
-  through. No gore, just sparks. When one squares up to your cursor, the other comes to back him up.
+- **Fights**: they spar now and then, or ask for it ("duel", or **Make them spar now**). Always with swords: they
+  draw them with a twirl and square off in a fencer's stance. Moves: diagonal cuts, lunging thrusts, rising cuts
+  that launch, a two-handed overhead cut that breaks a guard, a spinning slash, quick flurries, a dash-through
+  cut, jumping cuts. They block at the right height, parry (which throws the other one off balance, sometimes
+  sending his sword flying), clash blades, hop or backflip out, and circle again. A fighting AI runs offline;
+  their mood is their style. Hits make them skid or fly (they land on their feet); they only go down to a sweep,
+  a big hit while staggered, or the knockout (a moment of slow motion). *Play fights*: foam swords.
+  *Real fights*: katanas in both hands; once someone's worn down a cut can take a limb off (they put it back on)
+  or run him through. No gore, just sparks. When one squares up to your cursor, the other comes to back him up.
 - **Optional gear**: helmet and boots in Items → Inventory. **Wear** puts them on; **Drop it in**
   lets him fetch them. Take them back or **Put away** whenever you like.
 - **Make your own items and props**: it's just a text file. See [docs/MAKING-THINGS.md](docs/MAKING-THINGS.md)
