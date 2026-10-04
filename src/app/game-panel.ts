@@ -1,7 +1,8 @@
-// An independent tabletop window. Its position and keyboard focus do not own his speech bubble.
+// An independent game window. Its position and keyboard focus do not own his speech bubble.
+// `which` says whose game it is right now (either stick figure can invite you).
 import type { Pet } from '../core/pet';
 
-export function createGamePanel(pet: Pet, typing: (on: boolean) => void, talk: () => void) {
+export function createGamePanel(which: () => Pet, typing: (on: boolean) => void, talk: () => void) {
   const panel = document.createElement('section');
   panel.id = 'gamePanel'; panel.hidden = true; panel.setAttribute('aria-label', 'Othello on the TV');
   const header = document.createElement('div'); header.className = 'game-titlebar';
@@ -20,7 +21,7 @@ export function createGamePanel(pet: Pet, typing: (on: boolean) => void, talk: (
     button.addEventListener('click', () => {
       typing(true);
       focusIndex = i;
-      if (pet.game.play(i, pet.ctx.world.time)) updateBoard();
+      if (which().game.play(i, which().ctx.world.time)) updateBoard();
     });
     button.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -50,12 +51,12 @@ export function createGamePanel(pet: Pet, typing: (on: boolean) => void, talk: (
   play.addEventListener('click', () => {
     // The desktop overlay starts non-focusable. Enable it before asking a cell for focus.
     typing(true);
-    pet.game.accept(); updateBoard(); focusIndex = pet.game.moves[0] ?? 19;
+    which().game.accept(); updateBoard(); focusIndex = which().game.moves[0] ?? 19;
     cells.forEach((b, n) => b.tabIndex = n === focusIndex ? 0 : -1);
-    setTimeout(() => { if (pet.game.state === 'playing' && !panel.hidden) cells[focusIndex].focus(); }, 30);
+    setTimeout(() => { if (which().game.state === 'playing' && !panel.hidden) cells[focusIndex].focus(); }, 30);
   });
-  close.addEventListener('click', () => pet.game.close());
-  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); pet.game.close(); } });
+  close.addEventListener('click', () => which().game.close());
+  panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); which().game.close(); } });
   panel.addEventListener('focusin', () => typing(true));
   panel.addEventListener('pointerdown', () => typing(true));
   panel.addEventListener('focusout', (e) => { if (!panel.contains(e.relatedTarget as Node | null)) typing(false); });
@@ -82,9 +83,9 @@ export function createGamePanel(pet: Pet, typing: (on: boolean) => void, talk: (
   header.addEventListener('pointerup', endDrag); header.addEventListener('pointercancel', endDrag); header.addEventListener('lostpointercapture', endDrag);
   rules.addEventListener('toggle', clampPosition);
   function updateBoard() {
-    const game = pet.game, count = game.score, moves = game.turn === 'you' ? game.moves : [];
-    subtitle.textContent = `A match with ${pet.config.name}`;
-    yours.textContent = `● You  ${count.you}`; his.textContent = `○ ${pet.config.name}  ${count.him}`;
+    const game = which().game, count = game.score, moves = game.turn === 'you' ? game.moves : [];
+    subtitle.textContent = `A match with ${which().config.name}`;
+    yours.textContent = `● You  ${count.you}`; his.textContent = `○ ${which().config.name}  ${count.him}`;
     status.textContent = game.state === 'invite' ? 'Grab a controller. You play black.'
       : game.state === 'finished' ? game.result === 'you' ? 'You won. Nicely played!' : game.result === 'him' ? 'He wins this round.' : 'An even match. A draw!'
         : `${game.notice ? game.notice + ' ' : ''}${game.turn === 'you' ? 'Your turn — choose a marked square.' : 'His turn…'}`;
@@ -108,20 +109,20 @@ export function createGamePanel(pet: Pet, typing: (on: boolean) => void, talk: (
     },
     rect() { return panel.hidden ? null : panel.getBoundingClientRect(); },
     update() {
-      const game = pet.game;
+      const game = which().game;
       panel.hidden = game.state === 'closed';
       if (panel.hidden) {
         if (wasOpen) { if (panel.contains(document.activeElement)) (document.activeElement as HTMLElement).blur(); typing(false); }
         wasOpen = false; drag = null; return;
       }
-      const key = [game.revision, game.turn, game.state, game.notice, pet.config.name].join('|');
+      const key = [game.revision, game.turn, game.state, game.notice, which().config.name].join('|');
       if (key !== shown) { shown = key; updateBoard(); }
       const size = `${panel.offsetWidth}:${panel.offsetHeight}`;
       if (!wasOpen) userPosition = false;
       if (!wasOpen || !userPosition && size !== measuredSize) {
-        const anchor = game.anchor ?? pet.talkAnchor();
+        const anchor = game.anchor ?? which().talkAnchor();
         const right = anchor.x + 70, left = anchor.x - panel.offsetWidth - 70;
-        const preferLeft = pet.char.x > anchor.x;
+        const preferLeft = which().char.x > anchor.x;
         const fitsRight = right + panel.offsetWidth <= window.innerWidth - 8, fitsLeft = left >= 8;
         const x = preferLeft && fitsLeft || !fitsRight && fitsLeft ? left : right;
         position = { x, y: anchor.y - panel.offsetHeight - 60 };

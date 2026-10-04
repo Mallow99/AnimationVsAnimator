@@ -5,7 +5,8 @@ The user's latest instructions take priority over the historical roadmap.
 
 - Preserve the existing personality, procedural stick-figure look, and movement presets. Ask before
   substantial character/design changes. Small tool improvements and clear activity UI are welcome.
-- The owner resumed multiple characters: his friend is a second `Pet` in the same overlay (see the handoff).
+- Two equal stick figures: a second `Pet` in the same overlay, with its own config file, settings window,
+  memory file and brain (see the handoff).
   The owner wants them split into separate apps that talk to each other later; keep them one app for now.
   No health bars or permanent death: play fights, or real fights where limbs come off and go back on.
 - Keep `src/core` free of Node, Electron and OS imports. Put native integration behind the shell bridge.

@@ -21,7 +21,7 @@ app.whenReady().then(async () => {
   await until(() => overlay.webContents.executeJavaScript('!!window.pet'));
   await until(() => overlay.webContents.executeJavaScript('window.pet.ctx.world.windows.length === 1'));
   await overlay.webContents.executeJavaScript('window.petShell.openSettings()');
-  await until(() => { settings = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/settings/index.html')); return !!settings && !settings.webContents.isLoading(); });
+  await until(() => { settings = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/settings/index.html?pet=0')); return !!settings && !settings.webContents.isLoading(); });
   assert.equal(await settings.webContents.executeJavaScript('document.querySelector("#aiInterval").value'), '40');
   await settings.webContents.executeJavaScript('window.petShell.setConfig({aiInterval:120})');
   await until(() => overlay.webContents.executeJavaScript('window.pet.config.aiInterval === 120'));
@@ -51,11 +51,41 @@ app.whenReady().then(async () => {
   assert(overlay.isFocusable(), 'closing the game stole focus from open chat');
   await overlay.webContents.executeJavaScript('document.querySelector("#talkClose").click()');
   await until(() => !overlay.isFocusable());
-  await overlay.webContents.executeJavaScript('window.petShell.saveMemory(JSON.stringify({summary:"smoke",notes:[]}))');
-  await until(() => fs.existsSync(path.join(dir, 'memory.json')));
+  // The second stick figure: their own settings window in their own color, their own config, the shared
+  // settings kept in step, their own talk box and memory file.
+  await until(() => overlay.webContents.executeJavaScript('window.pets.length === 2'));
+  await overlay.webContents.executeJavaScript('window.petShell.openSettings(1)');
+  let second;
+  await until(() => { second = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/settings/index.html?pet=1')); return !!second && !second.webContents.isLoading(); });
+  const accent = (w) => w.webContents.executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()');
+  await until(async () => (await accent(second)) === '#f7931e');
+  assert.match(second.getTitle(), /Leonard/);
+  await second.webContents.executeJavaScript('document.querySelector("[data-tab=him]")?.click()');
+  await settings.webContents.executeJavaScript('document.querySelector("[data-tab=him]")?.click()');
+  await pause(300);
+  fs.writeFileSync(path.join(__dirname, '../.build/settings-pet1.png'), (await settings.webContents.capturePage()).toPNG());
+  fs.writeFileSync(path.join(__dirname, '../.build/settings-pet2.png'), (await second.webContents.capturePage()).toPNG());
+  await second.webContents.executeJavaScript('window.petShell.setConfig({look:{color:"#22aa55"}})');
+  await until(() => overlay.webContents.executeJavaScript('window.pets[1].config.look.color === "#22aa55"'));
+  await until(async () => (await accent(second)) === '#22aa55');
+  assert.notEqual(await accent(settings), '#22aa55', 'the first one changed color too');
+  assert.equal(await overlay.webContents.executeJavaScript('window.pets[0].config.look.color'), '#4450d6');
+  await second.webContents.executeJavaScript('window.petShell.setConfig({fightMode:"real"})');
+  await until(() => overlay.webContents.executeJavaScript('window.pets[0].config.fightMode === "real" && window.pets[1].config.fightMode === "real"'));
+  await overlay.webContents.executeJavaScript('window.pets[1].onTalk()');
+  await until(() => overlay.isFocusable());
+  assert.match(await overlay.webContents.executeJavaScript('document.querySelector("#talkText").placeholder'), /Leonard/);
+  await overlay.webContents.executeJavaScript(`(() => { const input = document.querySelector('#talkText'); input.value = 'hello'; document.querySelector('#talk').requestSubmit(); })()`);
+  await until(() => overlay.webContents.executeJavaScript('window.pets[1].brain.log.some(l => l.who === "him")'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#talkClose").click()');
+  await until(() => !overlay.isFocusable());
+  await overlay.webContents.executeJavaScript('window.petShell.saveMemory(0, JSON.stringify({summary:"smoke",notes:[]})); window.petShell.saveMemory(1, JSON.stringify({summary:"smoke two",notes:[]}))');
+  await until(() => fs.existsSync(path.join(dir, 'memory.json')) && fs.existsSync(path.join(dir, 'memory-2.json')));
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'memory.json'), 'utf8')).summary, 'smoke');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'memory-2.json'), 'utf8')).summary, 'smoke two');
+  await until(() => fs.existsSync(path.join(dir, 'pet-2.json')));
   assert.deepEqual(issues, []);
-  console.log('PASS Electron: overlay, fake helper, settings inventory sprites/equipment, Othello/chat focus, configuration and memory save');
+  console.log('PASS Electron: overlay, fake helper, settings inventory, Othello/chat focus, configuration, two stick figures (own settings window and color, shared settings, talk box, memory file)');
   app.quit();
 }).catch((err) => { console.error(err); process.exitCode = 1; app.exit(1); });
 app.on('will-quit', () => {

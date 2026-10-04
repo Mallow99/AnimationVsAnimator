@@ -6,11 +6,14 @@ const on = (channel: string) => (cb: (data: any) => void) => {
   ipcRenderer.on(channel, (_e, data) => cb(data));
 };
 
+// Settings windows say which stick figure they're for in their address (settings/index.html?pet=1).
+const petId = Number(new URLSearchParams(location.search).get('pet') ?? 0) || 0;
+
 contextBridge.exposeInMainWorld('petShell', {
-  // overlay
+  // overlay (it hosts both stick figures, so it says which one each message is about)
   setClickThrough: (ignore: boolean) => ipcRenderer.send('pet:clickThrough', ignore),
-  sendStats: (stats: unknown) => ipcRenderer.send('pet:stats', stats),
-  sendCollections: (data: unknown) => ipcRenderer.send('pet:collections', data),
+  sendStats: (id: number, stats: unknown) => ipcRenderer.send('pet:stats', id, stats),
+  sendCollections: (id: number, data: unknown) => ipcRenderer.send('pet:collections', id, data),
   onCommand: on('pet:command'),
   onWindows: on('world:windows'),
   onWindowsLog: on('world:log'),
@@ -18,22 +21,22 @@ contextBridge.exposeInMainWorld('petShell', {
   pressed: () => ipcRenderer.send('pet:pressed'),
   moveCursor: (x: number, y: number) => ipcRenderer.send('pet:moveCursor', x, y),
   moveWindow: (id: number, x: number, y: number, w: number, h: number) => ipcRenderer.send('pet:moveWindow', id, x, y, w, h),
-  ask: (req: unknown) => ipcRenderer.invoke('brain:ask', req),
-  loadMemory: () => ipcRenderer.invoke('memory:load'),
+  ask: (id: number, req: unknown) => ipcRenderer.invoke('brain:ask', id, req),
+  loadMemory: (id: number) => ipcRenderer.invoke('memory:load', id),
+  saveMemory: (id: number, json: string) => ipcRenderer.send('memory:save', id, json),
   getItemDefs: () => ipcRenderer.invoke('items:defs'),
   onItemDefs: on('items:defs'),
   setTyping: (on: boolean) => ipcRenderer.send('pet:typing', on),
-  openItemsFolder: () => ipcRenderer.send('items:openFolder'),
-  reloadItems: () => ipcRenderer.send('items:reload'),
-  saveMemory: (json: string) => ipcRenderer.send('memory:save', json),
-  // shared
-  getConfig: () => ipcRenderer.invoke('config:get'),
+  getConfigs: () => ipcRenderer.invoke('config:all'),
+  openSettings: (id = petId, tab?: string) => ipcRenderer.send('settings:open', id, tab),
+  // shared: config changes arrive as { id, config } for either stick figure
   onConfig: on('config:changed'),
-  openSettings: () => ipcRenderer.send('settings:open'),
-  // settings window
-  setConfig: (patch: unknown) => ipcRenderer.send('config:set', patch),
-  resetConfig: () => ipcRenderer.send('config:reset'),
-  command: (cmd: string) => ipcRenderer.send('pet:command', cmd),
+  // settings window (for the stick figure in its address)
+  petId,
+  getConfig: () => ipcRenderer.invoke('config:get', petId),
+  setConfig: (patch: unknown) => ipcRenderer.send('config:set', petId, patch),
+  resetConfig: () => ipcRenderer.send('config:reset', petId),
+  command: (cmd: string) => ipcRenderer.send('pet:command', petId, cmd),
   onStats: on('pet:stats'),
   onCollections: on('pet:collections'),
   keyStatus: (provider: string) => ipcRenderer.invoke('brain:keyStatus', provider),
@@ -41,4 +44,6 @@ contextBridge.exposeInMainWorld('petShell', {
   onKeyStatus: on('brain:keyStatus'),
   setKey: (key: string) => ipcRenderer.send('brain:setKey', key),
   onTab: on('settings:tab'),
+  openItemsFolder: () => ipcRenderer.send('items:openFolder'),
+  reloadItems: () => ipcRenderer.send('items:reload'),
 });

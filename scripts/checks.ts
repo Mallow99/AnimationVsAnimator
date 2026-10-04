@@ -354,9 +354,9 @@ function duo(fightMode: 'play' | 'real' = 'play', seed = 7) {
   return { a, b, seen, run };
 }
 const realRandom = Math.random;
-await test('his friend: own name, color and an offline mind; shares the furniture without saving it twice', () => {
+await test('the second stick figure: own name and color, same mind mode; shares the furniture without saving it twice', () => {
   const { a, b } = duo();
-  assert.equal(b.config.name, DEFAULT_CONFIG.friend.name); assert.equal(b.config.look.color, DEFAULT_CONFIG.friend.color); assert.equal(b.config.mind, 'offline');
+  assert.equal(b.config.name, DEFAULT_CONFIG.friend.name); assert.equal(b.config.look.color, DEFAULT_CONFIG.friend.color); assert.equal(b.config.mind, a.config.mind);
   assert.equal(b.props, a.props); assert(!b.ownsProps);
   const odd = mergeConfig(DEFAULT_CONFIG, { friend: { color: 'red', name: '  ' }, fightMode: 'nuke' });
   assert.deepEqual(odd.friend, DEFAULT_CONFIG.friend); assert.equal(odd.fightMode, 'play');

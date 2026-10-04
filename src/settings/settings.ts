@@ -22,8 +22,10 @@ interface Stats {
 }
 interface KeyStatus { provider: ProviderId; saved: boolean; hint: string }
 interface Shell {
+  /** Which stick figure this window is for (0 = the first, 1 = the second). */
+  petId: number;
   getConfig(): Promise<PetConfig>;
-  onConfig(cb: (c: PetConfig) => void): void;
+  onConfig(cb: (c: { id: number; config: PetConfig }) => void): void;
   setConfig(patch: unknown): void;
   resetConfig(): void;
   command(cmd: string): void;
@@ -220,8 +222,6 @@ $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.t
 $<HTMLInputElement>('sfx').addEventListener('change', (e) => set({ sfx: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('destructible').addEventListener('change', (e) => set({ destructible: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('friendOn').addEventListener('change', (e) => set({ friend: { on: (e.target as HTMLInputElement).checked } }));
-$<HTMLInputElement>('friendName').addEventListener('input', (e) => set({ friend: { name: (e.target as HTMLInputElement).value } }));
-$<HTMLInputElement>('friendColor').addEventListener('input', (e) => set({ friend: { color: (e.target as HTMLInputElement).value } }));
 $<HTMLSelectElement>('fightMode').addEventListener('change', (e) => set({ fightMode: (e.target as HTMLSelectElement).value }));
 $('duelNow').addEventListener('click', () => shell.command('do:duel'));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
@@ -270,8 +270,19 @@ shell.onKeyStatus(showKey);
 $('resetAll').addEventListener('click', () => shell.resetConfig());
 
 // ── show the current settings ──
+/** The window wears its stick figure's color: tabs, buttons, chips, the mood badge. */
+function theme(color: string) {
+  const n = parseInt(color.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const light = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62; // pale colors get dark text on them
+  const root = document.documentElement.style;
+  root.setProperty('--accent', color);
+  root.setProperty('--accent-ink', light ? '#1b1a22' : '#ffffff');
+  root.setProperty('--track', `rgba(${r}, ${g}, ${b}, 0.18)`);
+}
+
 function render(c: PetConfig) {
   cfg = c;
+  theme(c.look.color);
   $('title').textContent = c.name;
   document.title = `${c.name} — Settings`;
   const name = $<HTMLInputElement>('name');
@@ -281,9 +292,6 @@ function render(c: PetConfig) {
   $<HTMLInputElement>('sound').checked = c.sound;
   $<HTMLInputElement>('destructible').checked = c.destructible;
   $<HTMLInputElement>('friendOn').checked = c.friend.on;
-  const friendName = $<HTMLInputElement>('friendName');
-  if (document.activeElement !== friendName) friendName.value = c.friend.name;
-  $<HTMLInputElement>('friendColor').value = c.friend.color;
   $<HTMLSelectElement>('fightMode').value = c.fightMode;
   $('duelNow').toggleAttribute('disabled', !c.friend.on);
   $<HTMLInputElement>('sfx').checked = c.sfx;
@@ -318,7 +326,7 @@ function render(c: PetConfig) {
   for (const [btn, isOn] of presetButtons) btn.setAttribute('aria-pressed', String(isOn()));
 }
 shell.getConfig().then(render);
-shell.onConfig(render);
+shell.onConfig(({ id, config }) => { if (id === (shell.petId ?? 0)) render(config); });
 
 // ── Mind tab: moves and drawings ──
 /** Name a made-up move before saving it (a little inline box; Electron has no prompt()). */

@@ -6,7 +6,8 @@ stop point before preparing multiple characters. The original vision and histori
 remain useful context; the latest owner instructions take priority. The owner has since approved
 removable helmet/boots and GUI polish, then chose a house art style: flat, front-on props drawn smooth
 and pixelated at his own pixel size (see the reference notes in docs/HANDOFF.md). The Othello table was
-removed; Othello is played on the TV (as is his own runner game). The owner has resumed multiple characters: a friend with combat.
+removed; Othello is played on the TV (as is his own runner game). The owner has resumed multiple characters: two equal stick figures (own settings windows,
+configs, memories, brains) that fight each other with a fighting-game AI. See docs/HANDOFF.md.
 
 A desktop pet: a procedural stick figure living in a transparent, always-on-top,
 click-through overlay. Inspired by Alan Becker's *Animator vs. Animation*.

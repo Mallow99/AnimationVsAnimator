@@ -53,12 +53,16 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
 - **Othello together**: on the placed TV, choose **Play Othello** (or say "play Othello"). He picks up a controller
   and invites you; you play black, he plays white. The board shows on the TV and in its own draggable window.
   **Talk to him** keeps the match running while you chat. Works offline, with no AI calls for moves.
-- **His friend** (Settings → General → His friend; on by default): a second stick figure, Leonard (orange; rename
-  and recolor him), with an offline mind of his own. They share the furniture, spar with each other now and then,
-  and when one squares up to your cursor the other comes to back him up. **Fights** setting: *play fights* (fists,
-  foam and wooden swords, nobody gets hurt) or *real fights* (katanas: a cut takes a limb off, a hit to the body
-  runs him through and he goes down for a few seconds; no gore, just sparks, and limbs go back on). Say "duel" or
-  use **Make them spar now**.
+- **Two stick figures** (Settings → General → Second stick figure; on by default): Blurp and a second one,
+  Leonard (orange). They're equals: each has **their own settings window in their own color** (tray icon, or
+  right-click one of them → Settings), their own name, look, mind, memories and AI brain, and you talk to either
+  one the same way (double-click them). Settings that are about the app (climbing windows, moving windows, the
+  AI service, fights...) stay the same in both. They share the furniture.
+- **Fights**: they spar now and then, or ask for it ("duel", or **Make them spar now**). A little fighting-game
+  AI runs offline: jabs, crosses, uppercuts, front kicks, roundhouses, sweeps, jump attacks, blocking, dodging,
+  combos, juggles, real knockback and knockdowns; first to three knockdowns wins. *Play fights*: fists, foam and
+  wooden swords. *Real fights*: katanas; a cut takes a limb off (they put it back on), a hard hit runs them
+  through. No gore, just sparks. When one squares up to your cursor, the other comes to back him up.
 - **Optional gear**: helmet and boots in Items → Inventory. **Wear** puts them on; **Drop it in**
   lets him fetch them. Take them back or **Put away** whenever you like.
 - **Make your own items and props**: it's just a text file. See [docs/MAKING-THINGS.md](docs/MAKING-THINGS.md)

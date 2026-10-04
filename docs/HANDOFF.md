@@ -2,7 +2,41 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest: his friend, fights, and fixes from the owner's test
+## Latest: two equal stick figures, real fights, and two bug fixes
+
+Owner's asks: Blurp ragdolled a lot "in front of things"; legs showed through boots; fights were the same
+slash over and over with no knockback, kicks backwards, no fighting smarts; the friend should be a second
+main stick figure with their own GUI in their color, talked to and handled the same way.
+
+- **Ragdolling in front of things** (probably also the "TV physics box" report): standing in front of
+  anything taller than his shoulders (TV, easel), his neck "landed" on its top edge = `headDown` = trip. Upright,
+  only feet (and hips when sitting) collide with platforms now (`Character.step`, `onThings`). Not the helmet.
+- **Boots**: depth-sorted by the foot alone; the leg drew over them when the knee was nearer. Now just in front
+  of their own leg (`equipmentPoses`).
+- **Fighting**: `Character.knock(vx, vy, launch, stun, down)` (skid back on the ground with a hard stop, or whole-
+  body launch / knockdown), `hitstun`, `faceLock` (keeps facing the opponent while stepping back: kicks went
+  backwards because walking turned him to face his drift), `attack` (what move, how far, still winding up?),
+  `aimAhead` (attacks always go forward). New gestures `jab`, `uppercut`, `frontkick`, `sweep`; strikes carry an
+  `AttackKind`. `Pet.takeHit` uses `KNOCK[kind]` (pet.ts); blocking (guard/sword, facing) recoils the attacker,
+  sweeps go under. `skills/duel.ts` is a fighting CPU (reaction time/aggression from mood; block/dodge on wind-ups,
+  jump sweeps, footsies, range-based moves, combos on hitstun, sweeps vs blockers, juggles, pressure on getup;
+  sword footwork + kicks); three knockdowns wins. Knockdowns no longer end the duel (mind `tripped`/`crashed`);
+  a challenge makes the other one square up too (`challenged`). Tests seed `Math.random` for fights.
+- **Two equal stick figures**: main.ts keeps `configs[0..1]` (pet.json, pet-2.json; first time, pet-2 is made from
+  `friendConfig` with `friend.name/color`), `SHARED` keys kept equal in both, a settings window per id
+  (`settings/index.html?pet=N`; preload reads `petId`), memory files memory.json / memory-2.json, stats and
+  collections routed by id, `brain:ask` per id, tray entries for both. renderer.ts is a `pets[]` list:
+  each has its own save (`pet-save`, `pet-save-2`; old `friend-*` keys are picked up once), talk box in their
+  color for whoever you double-click, its own settings; the Othello window follows whoever invited you.
+  Settings page themes itself (`theme()`: `--accent`, `--accent-ink`) in its figure's color.
+- Build: `dist/items` is cleared before copying examples (retired files were still shipping).
+
+Checked: typecheck, 33 focused checks, full sim seeds 1 and 2, Chromium browser check, and the **Electron
+check under Xvfb** (the Electron binary downloads in this container now): two settings windows in their own
+colors, per-figure config changes, shared settings in step, talking to the second one, memory-2.json, pet-2.json.
+Not run on a Mac or PC.
+
+## Earlier: his friend, fights, and fixes from the owner's test
 
 The owner tested this branch and asked for: straight boots, the Othello table removed (Othello stays on the
 TV; I first misread this and removed the game too, then restored it), a friend with a combat system,

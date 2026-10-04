@@ -99,14 +99,14 @@ export const DEFAULT_CONFIG: PetConfig = {
 };
 
 /**
- * His friend's settings: everything the same as his (size, look, how they move, sounds), but their own
- * name and color, an offline mind (no AI calls), a persona of their own, and no tweaked preferences.
+ * The second stick figure's starting settings: the same as his (size, look, how they move, sounds,
+ * mind mode), with their own name, color and persona, and no tweaked preferences. (After that they
+ * have their own settings file and window, and you change them like his.)
  */
 export function friendConfig(main: PetConfig): PetConfig {
   const c = structuredClone(main);
   c.name = main.friend.name;
   c.look.color = main.friend.color;
-  c.mind = 'offline';
   c.persona = `${main.friend.name}, ${main.name}'s best friend and sparring partner. Competitive, loud, always up for a fight, terrible loser.`;
   c.biases = {};
   return c;
