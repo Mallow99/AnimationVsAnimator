@@ -308,6 +308,18 @@ await test('an untouched shipped example upgrades while a custom one is preserve
     fs.writeFileSync(file, JSON.stringify({ ...original, length: 25 })); assert(!unchangedExample(file, [original]));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+await test('standing in front of tall furniture never trips him (his neck used to land on the top edge)', () => {
+  for (const id of ['canvas', 'tv']) {
+    const p = pet(); p.paused = true; for (let i = 0; i < 240; i++) p.update(1/120);
+    const t = p.props.spawn(id, 900, bounds.floor - 100, p.char.scale)!; for (let i = 0; i < 240; i++) p.update(1/120);
+    let rag = 0, prev = p.char.mode;
+    for (let k = 0; k < 4; k++) {
+      p.char.walkTo(t.center.x + (k % 3 - 1) * 12);
+      for (let i = 0; i < 600; i++) { p.update(1/120); if (p.char.mode === 'ragdoll' && prev !== 'ragdoll') rag++; prev = p.char.mode; }
+    }
+    assert.equal(rag, 0, `${id}: tripped ${rag} times`);
+  }
+});
 await test('throwing one of his things never knocks your own cursor away', () => {
   for (const id of ['sword', 'mace', 'bouncy-ball', 'pen']) {
     const p = pet(); p.paused = true; for (let i = 0; i < 240; i++) p.update(1/120); p.paused = false;

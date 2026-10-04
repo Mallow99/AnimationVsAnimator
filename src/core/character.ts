@@ -932,10 +932,14 @@ export class Character {
     const fall = this.destructible && (this.mode === 'ragdoll' || this.mode === 'air') ? b.points.map((p) => (p.y - p.py) / dt) : null;
     const friction = this.mode === 'ragdoll' || this.mode === 'lie' ? 0.4 : 0.25;
     const bounds = { ...this.bounds, depth: this.bounds.depth ?? 40 * this.scale };
+    // Standing (or sitting), only his feet (and his bottom) rest on things. Windows and furniture are in front
+    // of or behind him, so his head and hands mustn't "land" on a top edge he happens to be standing
+    // in front of (his neck resting on the TV's top read as falling over, and he'd ragdoll).
+    const onThings = this.mode === 'ground' ? [b.j.footL, b.j.footR] : this.mode === 'sit' ? [b.j.footL, b.j.footR, b.j.hip] : b.points;
     for (let i = 0; i < 8; i++) {
       solveSticks(b.sticks);
       collide(b.points, bounds, friction);
-      collidePlatforms(b.points, this.platforms, friction);
+      collidePlatforms(onThings, this.platforms, friction);
     }
     if (fall) this.checkImpacts(fall);
     if (this.missing.size || this.fadingPieces.length) this.stepLimbs(dt);

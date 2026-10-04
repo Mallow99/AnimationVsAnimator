@@ -483,7 +483,10 @@ export function equipmentPoses(it: Item, ch: Character): ItemPose[] {
   return (['L', 'R'] as const).filter((side) => ch.hasLimb(side === 'L' ? 'legL' : 'legR')).map((side) => {
     const foot = j[side === 'L' ? 'footL' : 'footR'], knee = j[side === 'L' ? 'kneeL' : 'kneeR'];
     const down = norm3(sub3(foot, knee));
-    return { at: { x: foot.x, y: foot.y, z: foot.z + 0.2 }, dir: { x: down.y, y: -down.x, z: 0 }, scale: ch.scale, mirror: ch.facing < 0 };
+    // Drawn just in front of its own leg (legs are sorted by the middle of the shin and thigh), so the
+    // leg never shows through the boot, while the other leg can still pass in front of it.
+    const legZ = (knee.z + foot.z) / 2;
+    return { at: { x: foot.x, y: foot.y, z: Math.max(foot.z, legZ) + 0.05 }, dir: { x: down.y, y: -down.x, z: 0 }, scale: ch.scale, mirror: ch.facing < 0 };
   });
 }
 
