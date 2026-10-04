@@ -295,6 +295,9 @@ function render(c: PetConfig) {
   }
   interval.value = String(c.aiInterval);
   $<HTMLInputElement>('outline').checked = c.look.outline;
+  $('mindHead').setAttribute('aria-pressed', String(c.mindLook !== 'circuit'));
+  $('mindCircuit').setAttribute('aria-pressed', String(c.mindLook === 'circuit'));
+  $('mindHeadNote').hidden = c.mindLook === 'circuit'; $('mindCircuitNote').hidden = c.mindLook !== 'circuit';
   for (const [input, out, key] of sliders) {
     const [a, b] = key.split('.');
     const v = b ? (c as any)[a][b] : (c as any)[a];
@@ -539,6 +542,11 @@ function neurons(now: number) {
   g.textBaseline = 'middle';
 
   const s = latest, ns = neuronsNow(s);
+  if (cfg?.mindLook === 'circuit') {
+    circuit(g, W, H, now, s, ns, { accent, ink, muted, skin });
+    tooltip(g, W, H, css, ink, panel);
+    return;
+  }
   const P = (p: V) => project(p, W, H);
   const head = P({ x: 0, y: 0, z: 0 }), R = head.R;
 
@@ -614,7 +622,11 @@ function neurons(now: number) {
     }
   }
   g.globalAlpha = 1;
-  // What the neuron under your cursor is.
+  tooltip(g, W, H, css, ink, panel);
+}
+
+/** What the neuron (or chip) under your cursor is, along the bottom. */
+function tooltip(g: CanvasRenderingContext2D, W: number, H: number, css: CSSStyleDeclaration, ink: string, panel: string) {
   if (hover) {
     const n = hover;
     const text = n.kind === 'mood' ? `${n.label} — drag up or down to change it`
@@ -625,6 +637,134 @@ function neurons(now: number) {
     g.fillStyle = ink; g.globalAlpha = 0.9; g.beginPath(); g.roundRect(8, H - 30, w, 22, 6); g.fill();
     g.fillStyle = panel; g.globalAlpha = 1; g.textAlign = 'left'; g.fillText(text, 16, H - 19, W - 32);
   }
+}
+
+/**
+ * The same mind as a circuit board. Feelings are input pins down the left, feeding a bus; every
+ * choice is a chip (bigger and brighter = wants it more); what he's doing is the big processor on
+ * the right; his AI brain is the chip at the top. The winning path lights up, with signals running
+ * along it. Same hit-testing as the head (it fills in `projected`), so every drag and click works.
+ */
+function circuit(g: CanvasRenderingContext2D, W: number, H: number, now: number, s: Stats, ns: Neuron[], c: { accent: string; ink: string; muted: string; skin: string }) {
+  const BOARD = '#0f3a2c', BOARD_EDGE = '#1d5a43', TRACE = '#2f7656', COPPER = '#d8b25a', SILK = '#cfe9d6', GLOW = '#7dffc4', CHIP = '#1b1e25', LED = '#ffc94d';
+  const t = now / 1000;
+  g.save();
+  g.fillStyle = BOARD; g.beginPath(); g.roundRect(4, 4, W - 8, H - 8, 10); g.fill();
+  g.strokeStyle = BOARD_EDGE; g.lineWidth = 2; g.stroke();
+  // Vias: a faint grid of plated holes, and a few mounting holes in the corners.
+  g.fillStyle = BOARD_EDGE;
+  for (let x = 24; x < W - 12; x += 24) for (let y = 24; y < H - 12; y += 24) { g.beginPath(); g.arc(x, y, 1.2, 0, 7); g.fill(); }
+  for (const [x, y] of [[16, 16], [W - 16, 16], [16, H - 16], [W - 16, H - 16]]) {
+    g.fillStyle = COPPER; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); g.fillStyle = BOARD; g.beginPath(); g.arc(x, y, 2.5, 0, 7); g.fill();
+  }
+  const silk = (text: string, x: number, y: number, align: CanvasTextAlign = 'left') => {
+    g.fillStyle = SILK; g.globalAlpha = 0.75; g.font = '600 9px ' + getComputedStyle(document.documentElement).getPropertyValue('--mono');
+    g.textAlign = align; g.fillText(text, x, y); g.globalAlpha = 1;
+  };
+  const trace = (pts: [number, number][], lit: number, width = 2) => {
+    g.strokeStyle = lit > 0.5 ? GLOW : TRACE; g.globalAlpha = lit > 0.5 ? 0.35 + 0.65 * lit : 0.55 + lit * 0.3;
+    g.lineWidth = width; g.lineJoin = 'round'; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke(); g.globalAlpha = 1;
+  };
+  const signal = (pts: [number, number][], speed: number) => {
+    // A bright pulse running along a polyline.
+    const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1])), total = lens.reduce((a, b) => a + b, 0) || 1;
+    let d = ((t * speed * 120) % total);
+    for (let i = 0; i < lens.length; i++) {
+      if (d <= lens[i]) {
+        const u = d / (lens[i] || 1), x = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u, y = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u;
+        g.fillStyle = GLOW; g.shadowColor = GLOW; g.shadowBlur = 8; g.fillRect(x - 2.5, y - 2.5, 5, 5); g.shadowBlur = 0;
+        return;
+      }
+      d -= lens[i];
+    }
+  };
+  const chipBox = (x: number, y: number, w: number, h: number, pins: number, lit: number, edge: string) => {
+    // Pins along the top and bottom, then the body, then a glow edge as bright as he wants it.
+    g.fillStyle = COPPER; g.globalAlpha = 0.85;
+    for (let i = 0; i < pins; i++) {
+      const px = x - w / 2 + ((i + 0.5) / pins) * w;
+      g.fillRect(px - 1.5, y - h / 2 - 3, 3, 3); g.fillRect(px - 1.5, y + h / 2, 3, 3);
+    }
+    g.globalAlpha = 1; g.fillStyle = CHIP; g.beginPath(); g.roundRect(x - w / 2, y - h / 2, w, h, 2.5); g.fill();
+    g.strokeStyle = edge; g.globalAlpha = 0.25 + lit * 0.75; g.lineWidth = 1.5; g.stroke(); g.globalAlpha = 1;
+    g.fillStyle = SILK; g.globalAlpha = 0.5; g.beginPath(); g.arc(x - w / 2 + 3.5, y - h / 2 + 3.5, 1.2, 0, 7); g.fill(); g.globalAlpha = 1;
+  };
+
+  const moods = ns.filter((n) => n.kind === 'mood'), opts = ns.filter((n) => n.kind === 'option').sort((a, b) => a.label.localeCompare(b.label));
+  const out = ns.find((n) => n.kind === 'out')!, ai = ns.find((n) => n.kind === 'ai')!;
+  const chosen = opts.find((n) => n.label === s.doing);
+  const top = new Set([...opts].sort((a, b) => b.lit - a.lit).slice(0, 5).map((n) => n.id));
+  projected = [];
+
+  // Feelings: pads with an LED, down the left edge, wired to a bus.
+  const padX = 34, busX = 112, y0 = 46, y1 = H - 46;
+  silk('MOOD IN', padX - 14, 26);
+  moods.forEach((n, i) => {
+    const y = y0 + (i / Math.max(1, moods.length - 1)) * (y1 - y0);
+    trace([[padX + 8, y], [busX, y]], n.lit * 0.6);
+    g.fillStyle = COPPER; g.fillRect(padX - 8, y - 6, 16, 12);
+    g.fillStyle = LED; g.globalAlpha = 0.15 + n.lit * 0.85; g.shadowColor = LED; g.shadowBlur = 12 * n.lit;
+    g.beginPath(); g.arc(padX + 18, y - 11, 3.5, 0, 7); g.fill(); g.shadowBlur = 0; g.globalAlpha = 1;
+    silk(n.label, padX + 26, y - 10);
+    projected.push({ n, sx: padX, sy: y, r: 9, z: 0 });
+  });
+  trace([[busX, y0], [busX, y1]], 0.2, 3);
+
+  // What he's doing: the processor.
+  const cpuX = W - 78, cpuY = H / 2 + 14, cpuW = 92, cpuH = 74;
+  // His AI brain: a chip at the top, feeding the processor.
+  const aiX = W - 78, aiY = 52;
+  trace([[aiX, aiY + 14], [aiX, cpuY - cpuH / 2 - 4]], ai.lit, 2.5);
+  if (ai.lit > 0.5) signal([[aiX, aiY + 14], [aiX, cpuY - cpuH / 2 - 4]], 1);
+  chipBox(aiX, aiY, 54, 26, 6, ai.lit, c.accent);
+  silk('AI', aiX, aiY + 1, 'center'); silk(ai.label.toUpperCase(), aiX, aiY - 24, 'center');
+  projected.push({ n: ai, sx: aiX, sy: aiY, r: 16, z: 0 });
+
+  // Every choice: a chip in a grid, wired off the bus. The chosen one is wired on to the processor.
+  const gx0 = busX + 26, gx1 = cpuX - cpuW / 2 - 30, gy0 = 40, gy1 = H - 40;
+  const cols = Math.max(2, Math.round(Math.sqrt(opts.length * (gx1 - gx0) / (gy1 - gy0)))), rows = Math.max(1, Math.ceil(opts.length / cols));
+  const cw = (gx1 - gx0) / cols, chh = (gy1 - gy0) / rows;
+  const chips = opts.map((n, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    const x = gx0 + (col + 0.5) * cw, y = gy0 + (row + 0.5) * chh;
+    const w = Math.max(14, cw * (0.35 + 0.45 * n.lit)), h = Math.max(9, chh * (0.28 + 0.3 * n.lit));
+    return { n, x, y, w, h };
+  });
+  for (const ch of chips) trace([[busX, ch.y], [ch.x - ch.w / 2 - 3, ch.y]], ch.n === chosen ? 1 : ch.n.lit * 0.4, 1.2);
+  if (chosen) {
+    const ch = chips.find((q) => q.n === chosen)!;
+    const path: [number, number][] = [[ch.x + ch.w / 2 + 3, ch.y], [gx1 + 14, ch.y], [gx1 + 14, cpuY], [cpuX - cpuW / 2 - 4, cpuY]];
+    trace(path, 1, 3);
+    signal(path, 1.1);
+    for (const m of moods.filter((q) => q.lit > 0.35)) {
+      const p = projected.find((q) => q.n === m)!;
+      signal([[padX + 8, p.sy], [busX, p.sy], [busX, ch.y], [ch.x - ch.w / 2 - 3, ch.y]], 0.6 + m.lit);
+    }
+  }
+  for (const ch of chips) {
+    const n = ch.n, bold = n === chosen || n === hover;
+    chipBox(ch.x, ch.y, ch.w, ch.h, Math.max(2, Math.round(ch.w / 9)), n.lit, n === chosen || n.lit > 0.75 ? GLOW : c.accent);
+    if (n.bias && Math.abs(n.bias - 1) > 0.02) {
+      g.strokeStyle = COPPER; g.lineWidth = 1.2; g.setLineDash(n.bias < 1 ? [2, 3] : []);
+      const pad = 4 + Math.abs(Math.log(n.bias)) * 4;
+      g.beginPath(); g.roundRect(ch.x - ch.w / 2 - pad, ch.y - ch.h / 2 - pad, ch.w + pad * 2, ch.h + pad * 2, 4); g.stroke(); g.setLineDash([]);
+    }
+    if (top.has(n.id) || bold) {
+      g.fillStyle = bold ? '#ffffff' : SILK; g.globalAlpha = bold ? 1 : 0.8;
+      g.font = (bold ? '600 ' : '') + '10px ' + getComputedStyle(document.documentElement).getPropertyValue('--ui');
+      g.textAlign = 'center'; g.fillText(n.label, ch.x, ch.y + ch.h / 2 + 11); g.globalAlpha = 1;
+    }
+    projected.push({ n, sx: ch.x, sy: ch.y, r: Math.max(ch.w, ch.h) / 2, z: 0 });
+  }
+
+  chipBox(cpuX, cpuY, cpuW, cpuH, 9, 1, GLOW);
+  g.fillStyle = GLOW; g.globalAlpha = 0.12 + 0.08 * Math.sin(t * 3); g.beginPath(); g.roundRect(cpuX - cpuW / 2 + 6, cpuY - cpuH / 2 + 6, cpuW - 12, cpuH - 12, 3); g.fill(); g.globalAlpha = 1;
+  silk('DOING', cpuX, cpuY - 16, 'center');
+  g.fillStyle = '#ffffff'; g.font = '600 12px ' + getComputedStyle(document.documentElement).getPropertyValue('--ui'); g.textAlign = 'center';
+  g.fillText(out.label, cpuX, cpuY + 6, cpuW - 10);
+  projected.push({ n: out, sx: cpuX, sy: cpuY, r: cpuW / 2, z: 0 });
+  silk(`${(cfg?.name ?? 'BLURP').toUpperCase()} REV 2`, W - 30, H - 14, 'right');
+  g.restore();
 }
 requestAnimationFrame(neurons);
 (window as unknown as { __neurons: () => typeof projected }).__neurons = () => projected; // for poking at in DevTools
@@ -679,6 +819,8 @@ cvN.addEventListener('wheel', (e) => {
 }, { passive: false });
 cvN.addEventListener('pointerleave', () => { hover = null; });
 $('resetBiases').addEventListener('click', () => set({ biases: {} }));
+$('mindHead').addEventListener('click', () => set({ mindLook: 'head' }));
+$('mindCircuit').addEventListener('click', () => set({ mindLook: 'circuit' }));
 
 // Everything's set up: ask him for his drawings, moves, memories and things.
 shell.command('sync');

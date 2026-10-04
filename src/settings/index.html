@@ -159,8 +159,13 @@
     <section data-panel="mind" hidden>
       <div class="group">
         <h2>Inside his head</h2>
+        <div class="chips" role="group" aria-label="How his mind looks">
+          <button class="chip" type="button" id="mindHead" aria-pressed="true">His head (clearer)</button>
+          <button class="chip" type="button" id="mindCircuit" aria-pressed="false">Circuit board</button>
+        </div>
         <div class="card"><canvas id="neurons" height="380" style="touch-action:none"></canvas></div>
-        <p class="note">His real decision-making, live, inside a model of his head. The ring low at the back is what he feels; the neurons scattered through his head are everything he could do (bigger and brighter = wants it more); the big one at the front is what he's doing; the one on top is his AI brain. <b>Drag the head</b> to turn it. <b>Drag a feeling</b> up or down to change it. <b>Click a choice</b> to make him do it; <b>drag it up or down</b> (or scroll on it) to make him like it more or less from now on (a ring shows your tweak; dotted = less).</p>
+        <p class="note" id="mindCircuitNote" hidden>The same thinking as a circuit board: his feelings are the input pins on the left, feeding a bus; every chip is something he could do (bigger and brighter = wants it more); the big chip on the right is what he's doing; the one at the top is his AI brain. Lit traces with moving signals are the path his decision took. <b>Drag a feeling pin</b> up or down to change it. <b>Click a chip</b> to make him do it; <b>drag it up or down</b> (or scroll on it) to make him like it more or less (a ring shows your tweak; dotted = less).</p>
+        <p class="note" id="mindHeadNote">His real decision-making, live, inside a model of his head. The ring low at the back is what he feels; the neurons scattered through his head are everything he could do (bigger and brighter = wants it more); the big one at the front is what he's doing; the one on top is his AI brain. <b>Drag the head</b> to turn it. <b>Drag a feeling</b> up or down to change it. <b>Click a choice</b> to make him do it; <b>drag it up or down</b> (or scroll on it) to make him like it more or less from now on (a ring shows your tweak; dotted = less).</p>
         <div class="btns"><button class="btn ghost small" id="resetBiases" type="button">Reset his preferences</button></div>
       </div>
       <div class="group">

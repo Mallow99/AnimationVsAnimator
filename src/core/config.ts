@@ -60,6 +60,8 @@ export interface PetConfig {
    * he wants each thing than his mood alone would say. 1 = normal, 3 = loves it, 0.2 = hardly ever.
    */
   biases: Record<string, number>;
+  /** How the Mind tab draws his thinking: a 3D model of his head (clearer), or a circuit board (cooler). */
+  mindLook: 'head' | 'circuit';
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
@@ -84,6 +86,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   sfx: true,
   volume: 0.6,
   biases: {},
+  mindLook: 'head',
 };
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }
@@ -140,6 +143,7 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   merge(out.look as unknown as Record<string, unknown>, p.look, 'look.');
   merge(out.body as unknown as Record<string, unknown>, p.body, 'body.');
   if (!['offline', 'chat', 'full'].includes(out.mind)) out.mind = 'offline';
+  if (out.mindLook !== 'head' && out.mindLook !== 'circuit') out.mindLook = base.mindLook;
   if (!/^#[0-9a-f]{6}$/i.test(out.look.color)) out.look.color = base.look.color;
   if (!out.name.trim()) out.name = base.name;
   if (!Object.hasOwn(PROVIDERS, out.provider)) out.provider = base.provider;

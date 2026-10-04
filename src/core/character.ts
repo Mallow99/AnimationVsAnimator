@@ -65,6 +65,8 @@ export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack
 /** How he holds his arms when he's just standing there (body language for his emotion). */
 export type IdleStyle = 'none' | 'crossed' | 'hips' | 'behind' | 'hug';
 export type SeatStyle = 'up' | 'lounge' | 'front' | 'lie';
+/** How far he turns toward you on a seat, per sitting style (0 = side-on, 1 = facing you). */
+const SEAT_TURN: Record<SeatStyle, number> = { up: 0.62, lounge: 0.55, front: 0.92, lie: 0 };
 
 export type CharEvent =
   | { type: 'landed'; speed: number }
@@ -974,8 +976,9 @@ export class Character {
     if (this.idleStyle !== 'none' && this.mode === 'ground' && !this.walking && !this.gesture && Math.abs(this.rootVX) < 10 && !this.handTarget) {
       want = Math.max(want, { none: 0, crossed: 0.85, hips: 0.95, hug: 0.75, behind: 0.35 }[this.idleStyle]);
     }
-    // Sitting square to you on the couch: turned out of the screen, a little toward the way he faces.
-    if (this.mode === 'sit' && this.seat && this.seatStyle === 'front') want = Math.max(want, 0.8);
+    // On a seat (furniture is drawn front-on): turned mostly out of the screen so his knees come toward
+    // you like the seat's, still angled the way he faces. 'front' is fully square to you; lying stays side-on.
+    if (this.mode === 'sit' && this.seat) want = Math.max(want, SEAT_TURN[this.seatStyle]);
     if (g && this.mode === 'ground') {
       const u = g.t / GESTURE_TIME[g.name];
       want = Math.max(want, (GESTURE_PRESENT[g.name] ?? 0) * clamp(u * 5, 0, 1) * clamp((1 - u) * 5, 0, 1));
@@ -2016,20 +2019,23 @@ export class Character {
     const lean = (this.lounge ? -9 : 1.5 + P.hunch * 6) * sc;
     const neck = this.off(hip, lean, -Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)));
     const ground = Math.min(this.bounds.floor, st.y + legLen);
+    // Knees over the seat's front edge. The more he's turned toward you, the wider apart his knees and
+    // the closer together his feet, so from the front it reads as sitting (hips, out to the knees, down).
+    const kneeSide = (3.5 + 5.5 * this.present) * sc, kneeFwd = Math.sqrt(Math.max(d.thigh ** 2 - kneeSide ** 2 - sc * sc, 1));
+    const kneeAt = (k: 'L' | 'R') => this.off(hip, kneeFwd, 1 * sc, sideOf(k) * kneeSide);
     const foot = (k: 'L' | 'R') => {
-      const kn = this.off(hip, d.thigh * 0.95, 1 * sc, sideOf(k) * 3.5 * sc);
+      const kn = kneeAt(k);
       const swing = this.lounge ? 0 : Math.sin(this.time * 1.7 + (k === 'L' ? 0 : 2)) * 0.12;
-      return { x: kn.x + this.facing * Math.sin(swing) * d.shin, y: Math.min(ground - 2, kn.y + d.shin * Math.cos(swing)), z: kn.z };
+      const f = { x: kn.x + this.facing * Math.sin(swing) * d.shin, y: Math.min(ground - 2, kn.y + d.shin * Math.cos(swing)), z: kn.z };
+      return this.off(f, 0, 0, -sideOf(k) * 3 * this.present * sc);
     };
     const fL = foot('L'), fR = foot('R');
-    const B = basis(this.yaw);
-    const knee = (k: 'L' | 'R', f: V3) => twoBoneIK3(hip, f, d.thigh, d.shin, this.kneePole(B, k));
     const hand = (k: 'L' | 'R') => this.gamepad ? this.padHand(hip, k)
       : this.handTarget && k === this.useHand
       ? this.pt(this.handTarget.x, this.handTarget.y, neck.z)
-      : this.lounge ? this.off(neck, -4 * sc, 4 * sc, sideOf(k) * 9 * sc) : this.off(knee(k, k === 'L' ? fL : fR), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
+      : this.lounge ? this.off(hip, -3 * sc, -1 * sc, sideOf(k) * 11 * sc) : this.off(kneeAt(k), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
     this.fillLimbs(t, hip, neck, (this.lounge ? -0.1 : 0.1) + P.hunch * 0.6, 0, hand('L'), hand('R'), fL, fR);
-    t.kneeL = knee('L', fL); t.kneeR = knee('R', fR);
+    t.kneeL = kneeAt('L'); t.kneeR = kneeAt('R');
     Object.assign(s, { hip: 0.4, neck: 0.25, head: 0.25, kneeL: 0.2, kneeR: 0.2, footL: 0.12, footR: 0.12, elbowL: 0.08, elbowR: 0.08, handL: 0.1, handR: 0.1 });
   }
 
