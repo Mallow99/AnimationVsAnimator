@@ -1,6 +1,6 @@
 // Bundles the TypeScript into plain JavaScript with esbuild (fast, tiny).
 import { build } from 'esbuild';
-import { cpSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync } from 'node:fs';
 
 const common = { bundle: true, sourcemap: true, logLevel: 'warning', target: 'es2022' };
 const what = process.argv[2];
@@ -27,7 +27,9 @@ if (what === 'lab') {
   mkdirSync('dist/app', { recursive: true });
   cpSync('src/app/index.html', 'dist/app/index.html');
   cpSync('src/app/game.css', 'dist/app/game.css');
-  // Example item and prop files (and the how-to) for your items folder.
+  // Example item and prop files (and the how-to) for your items folder. Start clean, so an example
+  // that was retired (the Othello table, the mallet) doesn't linger from an older build.
+  rmSync('dist/items', { recursive: true, force: true });
   cpSync('src/core/items', 'dist/items', { recursive: true });
   cpSync('src/core/props', 'dist/items', { recursive: true });
   cpSync('docs/MAKING-THINGS.md', 'dist/items/MAKING-THINGS.md');
