@@ -26,6 +26,8 @@ export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { t
   | { type: 'propSpawned'; id: string; name: string }   // a prop (a chair, a TV...) dropped in
   | { type: 'hitByFriend'; name: string; power: number; cut: boolean; stabbed: boolean; play: boolean } // his friend hit him
   | { type: 'friendFighting'; angry: boolean } // his friend squared up to your cursor: back him up
+  | { type: 'blocked'; name: string } // he blocked his friend's hit
+  | { type: 'challenged'; name: string; armed: boolean } // his friend squared up to him
   | { type: 'appChanged'; app: string; title: string }  // you switched to another app
   | { type: 'bonked'; speed: number } // a ball hit him
   | { type: 'hitCursor'; power: number; by: string } // he hit your cursor (and maybe sent it flying)
@@ -801,6 +803,14 @@ export class Mind {
         } else if (this.skill?.name !== 'duel' && chance(0.5)) c.say(pick(e.play ? ['hey!', 'oof', 'cheap shot'] : ['OW', 'hey!!', 'what was that for']), 1.2);
         return;
       }
+      case 'challenged': {
+        // His friend wants to fight: he squares up too (same weapons), unless he's busy with something of his own.
+        const keep = ['playgame', 'reattach', 'sleep', 'duel'];
+        if (this.skill && keep.includes(this.skill.name) || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand) return;
+        this.why = `${e.name} wants to fight`;
+        this.interrupt(c, new Duel(e.armed));
+        return;
+      }
       case 'friendFighting': {
         // His friend's fighting your cursor: he joins in (unless he's busy with something of his own).
         const busy = this.skill && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'chase'].includes(this.skill.name);
@@ -929,6 +939,8 @@ export class Mind {
         return;
 
       case 'crashed':
+        // Knocked down in a fight: part of the fight. He gets up and keeps going (the duel handles it).
+        if (this.skill?.name === 'duel' && ch.whole) { if (chance(0.5)) c.say(pick(['oof', 'ow!', 'lucky', 'ugh']), 1); return; }
         if (this.skill instanceof GetDown) {
           // Lesson learned: that jump was too big. Be warier of drops this high.
           const was = c.lessons.safeDrop;
@@ -945,6 +957,7 @@ export class Mind {
         return;
 
       case 'tripped':
+        if (this.skill?.name === 'duel' && ch.whole) { if (chance(0.35)) c.say(pick(['oof', 'whoa', '!']), 0.8); return; }
         m.nudge({ happiness: -0.03, annoyance: 0.05 });
         c.say('!', 0.8);
         this.interrupt(c, this.afterFall(c));

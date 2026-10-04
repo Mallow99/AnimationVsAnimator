@@ -60,7 +60,11 @@ function spring(s: { x: number; v: number }, target: number, dt: number, k: numb
 const sideOf = (k: 'L' | 'R') => (k === 'L' ? 1 : -1);
 
 export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack' | 'stretch' | 'lookAround' | 'cower' | 'dance' | 'nuzzle' | 'kick'
-  | 'punch' | 'swat' | 'highkick' | 'knock' | 'scratch';
+  | 'punch' | 'swat' | 'highkick' | 'knock' | 'scratch' | 'jab' | 'uppercut' | 'frontkick' | 'sweep';
+/** What kind of hit a strike is (decides how hard, and which way, it knocks whoever it lands on). */
+export type AttackKind = 'jab' | 'cross' | 'swat' | 'uppercut' | 'frontkick' | 'roundhouse' | 'sweep' | 'air' | 'kick';
+/** Gestures that are attacks: getting hit interrupts them. */
+export const ATTACKS: ReadonlySet<Gesture> = new Set(['punch', 'jab', 'swat', 'highkick', 'uppercut', 'frontkick', 'sweep', 'kick']);
 
 /** How he holds his arms when he's just standing there (body language for his emotion). */
 export type IdleStyle = 'none' | 'crossed' | 'hips' | 'behind' | 'hug';
@@ -133,6 +137,7 @@ type Grip = { x: number; y: number; z: number; cx: number; cy: number; cz: numbe
 const GESTURE_TIME: Record<Gesture, number> = {
   stomp: 0.75, wave: 1.4, shrug: 0.9, laugh: 1.9, flail: 1.2, pokeBack: 0.5, stretch: 2.4, lookAround: 2.2, cower: 1.6, dance: 4, nuzzle: 1.6, kick: 0.65,
   punch: 0.42, swat: 0.5, highkick: 0.72, knock: 1.2, scratch: 1.5,
+  jab: 0.28, uppercut: 0.56, frontkick: 0.58, sweep: 0.7,
 };
 /**
  * How much he turns toward you during a gesture (0 = stays side-on, 1 = faces you).
@@ -191,7 +196,13 @@ export class Character {
    * What he's hitting with right now (the fist of a punch, the foot of a kick...), how hard
    * (0..1), and which swing it is (one hit per swing). Set during the fast part of an attack only.
    */
-  strike: { joint: JointName; power: number; id: number } | null = null;
+  strike: { joint: JointName; power: number; id: number; kind?: AttackKind } | null = null;
+  /** Fighting: he keeps facing this way even while stepping back (null = face where he's going). */
+  faceLock: 1 | -1 | null = null;
+  /** Just got hit: he can't start an attack until this runs out (seconds). */
+  hitstun = 0;
+  /** Sliding back from a hit: walking is paused and he skids to a stop. */
+  private slide = 0;
   private gestureId = 0;
   private knocks = 0;
   /** Jumping at something to punch it: where (a skill keeps it pointed at the target). */
@@ -353,6 +364,18 @@ export class Character {
   /** Standing on the ground and free to take a new order. */
   get ready() { return this.mode === 'ground' && !this.gesture && !this.jumpPrep; }
   get walking() { return this.mode === 'ground' && this.goalX !== null; }
+  /**
+   * The attack he's in the middle of (for a fighter reading his opponent): which move, how far into it
+   * (0..1), and whether it's still winding up (that's the moment to block or dodge). Null if he isn't.
+   */
+  get attack(): { name: Gesture; u: number; windup: boolean } | null {
+    const g = this.gesture;
+    if (!g || !ATTACKS.has(g.name)) return this.airPunch ? { name: 'punch', u: 0.5, windup: false } : null;
+    const u = g.t / GESTURE_TIME[g.name];
+    return { name: g.name, u, windup: u < 0.32 };
+  }
+  /** Any gesture at all in progress (attacks, waves...). */
+  get busy() { return this.gesture !== null || this.jumpPrep !== null; }
   get climbingWall() { return this.mode === 'climb' ? this.climb!.wall : null; }
 
   // ───────────── limbs coming off and going back on ─────────────
@@ -768,6 +791,34 @@ export class Character {
     if (at && this.mode === 'ground') this.facing = sign(at.x - this.rootX);
   }
 
+  /**
+   * Knocked back by a hit (px/s). On his feet, a light hit makes him skid back a little and his head
+   * snaps back; `launch` (or any hit while he's already in the air) sends his whole body flying, and a
+   * big enough one knocks him down. He can't attack again until `stun` runs out. Interrupts his attack.
+   */
+  knock(vx: number, vy: number, launch: boolean, stun = 0.3, down = false) {
+    this.hitstun = Math.max(this.hitstun, stun);
+    if (this.gesture && ATTACKS.has(this.gesture.name)) this.gesture = null;
+    this.airPunch = null; this.jumpPrep = null;
+    const fast = Math.hypot(vx, vy);
+    if (!launch && this.mode === 'ground') {
+      this.goalX = null;
+      this.rootVX = clamp(this.rootVX + vx, -900, 900);
+      this.slide = 0.18 + Math.min(0.25, Math.abs(vx) / 2400);
+      this.body.push('neck', vx * 0.5, -40, this.dt);
+      this.body.push('head', vx * 0.7, -60, this.dt);
+      this.stun = Math.max(this.stun, 0.12);
+      return;
+    }
+    if (this.mode === 'held' || this.mode === 'climb' || this.mode === 'ceiling') { this.poke('hip', vx, vy); return; }
+    this.goalX = null;
+    this.body.launch(vx, vy, this.dt);
+    this.stun = Math.max(this.stun, 0.25);
+    // A big hit (or another one while he's already flying) puts him on the floor.
+    if (down || fast > 560 || this.mode === 'ragdoll' || this.mode === 'air' && fast > 300) { if (this.mode !== 'ragdoll') { this.setMode('ragdoll'); this.events.push({ type: 'tripped' }); } }
+    else if (this.mode !== 'air') this.setMode('air');
+  }
+
   /** A shove at a joint, in pixels/second. */
   poke(joint: JointName, vx: number, vy: number, vz = 0) {
     this.body.push(joint, vx, vy, this.dt, vz);
@@ -871,6 +922,7 @@ export class Character {
     this.time += dt;
     this.modeTime += dt;
     this.stun = Math.max(0, this.stun - dt);
+    this.hitstun = Math.max(0, this.hitstun - dt);
     this.strike = null;
     const t: Targets = {};
     const s: Strengths = {};
@@ -1238,7 +1290,9 @@ export class Character {
       }
     }
     if (this.windup > 0) { this.windup -= dt; want = 0; this.crouch = Math.max(this.crouch, 7 * sc); }
-    const accel = 450 * speedMul;
+    if (this.slide > 0) { this.slide -= dt; want = 0; }
+    // Skidding back from a hit stops fast (a short slide, not a glide); walking speeds up gently.
+    const accel = this.slide > 0 ? 2600 : 450 * speedMul;
     this.rootVX += clamp(want - this.rootVX, -accel * dt, accel * dt);
     // Follow-through: arms swing on past when he stops short, and trail when he takes off.
     const acc = (this.rootVX - this.prevRootVX) / dt;
@@ -1260,7 +1314,8 @@ export class Character {
     }
 
     const moving = Math.abs(this.rootVX) > 10;
-    if (moving) this.facing = sign(this.rootVX);
+    if (this.faceLock) this.facing = this.faceLock;
+    else if (moving) this.facing = sign(this.rootVX);
     else if (this.look && Math.abs(this.look.x - this.rootX) > 25 && !this.gesture) this.facing = sign(this.look.x - this.rootX);
     const f = this.turnF;
     const root = this.pt(this.rootX, floor - 2);
@@ -1530,19 +1585,20 @@ export class Character {
           if (u > 0.4 && !g.fired) { g.fired = true; this.events.push({ type: 'step' }); }
           break;
         }
+        case 'jab':
         case 'punch': {
           // Wind up (fist pulled back by his chin), snap it out at the target, pull it back.
-          // The other hand stays up guarding his face. He leans into it.
+          // The other hand stays up guarding his face. He leans into it. A jab is the same, quicker and lighter.
           const back = smooth(clamp(u / 0.3, 0, 1)), out = clamp((u - 0.3) / 0.14, 0, 1), ret = smooth(clamp((u - 0.62) / 0.38, 0, 1));
           const ext = out * out * (1 - ret);
-          const tip = this.aimFrom(neck, g, armLen * 0.98, front);
+          const tip = this.aimAhead(neck, g, armLen * 0.98, front);
           const chamber = this.off(neck, -3 * sc, 7 * sc, sideOf(front) * 3 * sc);
           const rest = front === 'R' ? handR : handL;
           const fist = lerp3(lerp3(rest, chamber, back * (1 - ret)), tip, ext);
           const guardHand = this.off(neck, 7 * sc, 5 * sc, -sideOf(front) * 3 * sc);
           if (front === 'R') { handR = fist; handL = guardHand; } else { handL = fist; handR = guardHand; }
           neckT = this.off(neck, (5 * ext - 3 * back * (1 - out)) * sc, 0);
-          if (u > 0.32 && u < 0.64) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: 0.7, id: this.gestureId };
+          if (u > 0.32 && u < 0.64) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: g.name === 'jab' ? 0.35 : 0.7, id: this.gestureId, kind: g.name === 'jab' ? 'jab' : 'cross' };
           break;
         }
         case 'swat': {
@@ -1556,7 +1612,7 @@ export class Character {
           const hand = sw > 0 ? lerp3(arc, rest, ret) : lerp3(rest, start, up);
           if (front === 'R') handR = hand; else handL = hand;
           nod -= 0.15 * up;
-          if (sw > 0.15 && ret < 0.25) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: 0.5, id: this.gestureId };
+          if (sw > 0.15 && ret < 0.25) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: 0.5, id: this.gestureId, kind: 'swat' };
           break;
         }
         case 'highkick': {
@@ -1564,7 +1620,7 @@ export class Character {
           const legLen = d.thigh + d.shin;
           const ch = smooth(clamp(u / 0.32, 0, 1)), out = clamp((u - 0.32) / 0.14, 0, 1), down = smooth(clamp((u - 0.62) / 0.38, 0, 1));
           const ext = out * out * (1 - down);
-          const tip = this.aimFrom(hip, g, legLen * 0.96, front);
+          const tip = this.aimAhead(hip, g, legLen * 0.96, front);
           const chamber = this.off(hip, 9 * sc, legLen * 0.5, sideOf(front) * track);
           const rest = front === 'R' ? footR : footL;
           const foot = lerp3(lerp3(rest, chamber, ch * (1 - down)), tip, ext);
@@ -1573,7 +1629,58 @@ export class Character {
           neckT = this.off(neck, -lean, 0);
           handL = this.off(neckT, (front === 'R' ? -12 : 10) * sc, armLen * 0.35, hang + 3 * sc);
           handR = this.off(neckT, (front === 'R' ? 10 : -12) * sc, armLen * 0.35, -hang - 3 * sc);
-          if (u > 0.33 && u < 0.62) this.strike = { joint: front === 'R' ? 'footR' : 'footL', power: 0.9, id: this.gestureId };
+          if (u > 0.33 && u < 0.62) this.strike = { joint: front === 'R' ? 'footR' : 'footL', power: 0.9, id: this.gestureId, kind: 'roundhouse' };
+          break;
+        }
+        case 'uppercut': {
+          // Dip low, then drive up: the fist rises from his hip past his chin to above his head. Big launcher.
+          const dip = smooth(clamp(u / 0.3, 0, 1)), rise = clamp((u - 0.3) / 0.2, 0, 1), ret = smooth(clamp((u - 0.68) / 0.32, 0, 1));
+          const r = smooth(rise) * (1 - ret);
+          this.crouch = Math.max(this.crouch, 12 * sc * dip * (1 - rise));
+          hipT = this.off(hip, 2 * sc * dip, 9 * sc * dip * (1 - rise) - 3 * sc * r);
+          neckT = this.off(hipT, (3 + 3 * r) * sc, -d.torso);
+          const low = this.off(hip, 5 * sc, -3 * sc, sideOf(front) * 4 * sc);
+          const high = this.off(neckT, 9 * sc, -armLen * 0.85, sideOf(front) * 2 * sc);
+          const rest = front === 'R' ? handR : handL;
+          const fist = rise > 0 ? lerp3(lerp3(low, high, smooth(rise)), rest, ret) : lerp3(rest, low, dip);
+          const guardHand = this.off(neck, 7 * sc, 5 * sc, -sideOf(front) * 3 * sc);
+          if (front === 'R') { handR = fist; handL = guardHand; } else { handL = fist; handR = guardHand; }
+          nod -= 0.25 * r;
+          if (rise > 0.1 && rise < 1 && ret < 0.1) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: 0.9, id: this.gestureId, kind: 'uppercut' };
+          break;
+        }
+        case 'frontkick': {
+          // Knee up to his chest, then push the foot straight out at belly height: a shove that sends you back.
+          const legLen = d.thigh + d.shin;
+          const ch = smooth(clamp(u / 0.32, 0, 1)), out = clamp((u - 0.32) / 0.12, 0, 1), down = smooth(clamp((u - 0.6) / 0.4, 0, 1));
+          const ext = out * (2 - out) * (1 - down);
+          const tip = this.off(hip, legLen * 0.95, -3 * sc, sideOf(front) * track);
+          const chamber = this.off(hip, 11 * sc, legLen * 0.15 - 4 * sc, sideOf(front) * track);
+          const rest = front === 'R' ? footR : footL;
+          const foot = lerp3(lerp3(rest, chamber, ch * (1 - down)), tip, ext);
+          if (front === 'R') footR = foot; else footL = foot;
+          neckT = this.off(neck, -(ch * 4 + ext * 5) * (1 - down) * sc, 0);
+          handL = this.off(neckT, (front === 'R' ? -8 : 9) * sc, armLen * 0.35, hang + 3 * sc);
+          handR = this.off(neckT, (front === 'R' ? 9 : -8) * sc, armLen * 0.35, -hang - 3 * sc);
+          if (out > 0.2 && down < 0.15) this.strike = { joint: front === 'R' ? 'footR' : 'footL', power: 0.8, id: this.gestureId, kind: 'frontkick' };
+          break;
+        }
+        case 'sweep': {
+          // Drop low on his hands, and sweep a straight leg along the floor from behind him to out in front.
+          const legLen = d.thigh + d.shin;
+          const drop = smooth(clamp(u / 0.25, 0, 1)), sw = clamp((u - 0.25) / 0.3, 0, 1), up = smooth(clamp((u - 0.72) / 0.28, 0, 1));
+          const low = drop * (1 - up);
+          this.crouch = Math.max(this.crouch, 26 * sc * low); // low on purpose: not losing his balance
+          hipT = this.off(hip, -3 * sc * low, 15 * sc * low);
+          neckT = this.off(hipT, 6 * sc * low, -d.torso * (1 - 0.25 * low));
+          const along = lerp(-legLen * 0.5, legLen * 0.95, smooth(sw));
+          const sweepFoot = { x: hipT.x + this.facing * along, y: root.y - 1, z: root.z + this.latZ(front, track) };
+          const rest = front === 'R' ? footR : footL;
+          const foot = lerp3(rest, sweepFoot, low);
+          if (front === 'R') footR = foot; else footL = foot;
+          const palm = (k: 'L' | 'R') => lerp3(k === 'L' ? handL : handR, this.off(root, 7 * sc, -1 * sc, sideOf(k) * 6 * sc), low);
+          handL = palm('L'); handR = palm('R');
+          if (sw > 0.15 && sw < 0.95 && up < 0.1) this.strike = { joint: front === 'R' ? 'footR' : 'footL', power: 0.7, id: this.gestureId, kind: 'sweep' };
           break;
         }
         case 'knock': {
@@ -1780,6 +1887,12 @@ export class Character {
   }
 
   /** A point toward `at` from `from`, at most `reach` away (where a punch or kick lands), on his `k` side in depth. */
+  /** Like aimFrom, but never behind him: attacks always go out the way he's facing. */
+  private aimAhead(from: V3, at: Vec, reach: number, k: 'L' | 'R'): V3 {
+    const dx = this.facing * Math.max(Math.abs(at.x - from.x), reach * 0.7);
+    return this.aimFrom(from, { x: from.x + dx, y: at.y }, reach, k);
+  }
+
   private aimFrom(from: V3, at: Vec, reach: number, k: 'L' | 'R'): V3 {
     const dx = at.x - from.x, dy = at.y - from.y, dd = Math.hypot(dx, dy) || 1, r = Math.min(dd, reach);
     return { x: from.x + (dx / dd) * r, y: from.y + (dy / dd) * r, z: from.z + this.latZ(k, 3 * this.scale) };
@@ -2089,7 +2202,7 @@ export class Character {
       const fist = this.aimFrom(neck, reachUp, (d.upperArm + d.foreArm) * 0.98, front);
       t[front === 'R' ? 'handR' : 'handL'] = fist;
       s[front === 'R' ? 'handR' : 'handL'] = 0.35;
-      if (this.airPunch && this.modeTime > 0.05 && this.modeTime < 0.7) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: 0.85, id: this.gestureId };
+      if (this.airPunch && this.modeTime > 0.05 && this.modeTime < 0.7) this.strike = { joint: front === 'R' ? 'handR' : 'handL', power: 0.85, id: this.gestureId, kind: 'air' };
     }
     // Hanging off your cursor: swinging his legs like a kid on the monkey bars.
     if (this.mode === 'held' && this.held?.self) {
