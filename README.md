@@ -4,7 +4,7 @@ A stick-figure desktop pet inspired by Alan Becker's *Animator vs. Animation*.
 He lives on top of your screen, has his own physics and moods, and you can poke,
 grab, and throw him.
 
-[See the couch, TV and video games](docs/images/tv-couch-preview.png).
+[See the couch, TV and video games](docs/images/tv-couch-preview.png), and [all his furniture](docs/images/props-preview.png).
 
 ## Run it (macOS or Windows)
 1. Install [Node.js](https://nodejs.org) (LTS).
@@ -46,7 +46,7 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   **Give him** to put it on his belt. Take something from him (right-click) and it dangles from your cursor: press and hold
   to swing it, let go to drop or throw it, let go on him to hand it back. He asks for his things back, and picks them up
   when they're lying around.
-- **Props**: chair, couch, TV (with a game console), scooter, desk and canvas (Settings → Items → Props). He sits on the chair and couch, watches TV
+- **Props**: chair, couch, TV (with a game console), scooter, desk and canvas (Settings → Items → Props). He sits on the chair and couch (up straight, leaning back, turned to face you, or sprawled along the couch), watches TV
   (from the couch if it's near), rides the scooter across the screen. Drag them around; tip his chair and he falls off.
 - **Video games**: with a TV out he grabs a controller and plays his own little runner game (from the couch if
   it's near), and takes losing personally. Settings → Items → the placed TV → **Video games**, or ask him.

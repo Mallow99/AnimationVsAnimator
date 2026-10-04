@@ -2,24 +2,16 @@
   "type": "prop",
   "id": "chair",
   "name": "Chair",
-  "about": "A wooden chair. He sits on it when he's tired, and drags it over to watch TV.",
+  "about": "A wooden chair. He sits on it when he's tired (up straight, or turned out to face you), and drags it over to watch TV.",
   "use": "seat",
   "outline": [
     [
       0,
-      0
-    ],
-    [
-      5,
-      0
-    ],
-    [
-      5,
-      24
+      22
     ],
     [
       30,
-      24
+      22
     ],
     [
       30,
@@ -31,44 +23,99 @@
     ]
   ],
   "seat": [
-    16,
+    15,
     23
   ],
-  "shape": [],
-  "sprite": {
-    "x": 0,
-    "y": 0,
-    "pixel": 2,
-    "palette": {
-      "h": "#edb978",
-      "l": "#be8550",
-      "o": "#29232d",
-      "w": "#835339"
+  "shape": [
+    {
+      "rect": [
+        2,
+        0,
+        5,
+        24
+      ],
+      "fill": "#8a735e",
+      "radius": 1
     },
-    "rows": [
-      "oooo............",
-      "oooo............",
-      "ooho............",
-      "ooho............",
-      "ooho............",
-      "ooho............",
-      "ooho............",
-      "ooho............",
-      "oolo............",
-      "oolo............",
-      "oooo............",
-      "oooooooooooooooo",
-      "ohhhhhhhhhhhhhho",
-      "ollllllllllllllo",
-      "oooooooooooooooo",
-      "olwo........owo.",
-      "olwo........owo.",
-      "olwo........owo.",
-      "olwo........owo.",
-      "olwo........owo.",
-      "olwo........owo.",
-      "oloo........owo.",
-      "............ooo."
-    ]
-  }
+    {
+      "rect": [
+        23,
+        0,
+        5,
+        24
+      ],
+      "fill": "#8a735e",
+      "radius": 1
+    },
+    {
+      "rect": [
+        1,
+        0,
+        28,
+        6
+      ],
+      "fill": "#a08670",
+      "radius": 2
+    },
+    {
+      "rect": [
+        6,
+        10,
+        18,
+        4
+      ],
+      "fill": "#8a735e",
+      "radius": 1
+    },
+    {
+      "rect": [
+        2,
+        26,
+        5,
+        18
+      ],
+      "fill": "#6e5a48",
+      "radius": 1
+    },
+    {
+      "rect": [
+        23,
+        26,
+        5,
+        18
+      ],
+      "fill": "#6e5a48",
+      "radius": 1
+    },
+    {
+      "rect": [
+        6,
+        35,
+        18,
+        4
+      ],
+      "fill": "#5f4c3b",
+      "radius": 1
+    },
+    {
+      "rect": [
+        0,
+        20,
+        30,
+        5
+      ],
+      "fill": "#a08670",
+      "radius": 2
+    },
+    {
+      "rect": [
+        1,
+        24,
+        28,
+        3
+      ],
+      "fill": "#6e5a48",
+      "radius": 1
+    }
+  ]
 }

@@ -24,7 +24,8 @@ import type { DepthPart } from './render';
 /** What he does with it: draw (a pen), swing (a sword), smash (a hammer, overhead), throw (a ball), none (just carries it). */
 export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'none';
 export type BeltSpot = 'side' | 'back' | 'pocket' | 'none';
-export interface ItemStroke { pts: [number, number][]; color: string; width: number }
+/** A line through `pts`, or (with `fill`) a flat filled shape, optionally with an edge line. */
+export interface ItemStroke { pts: [number, number][]; color: string; width: number; fill?: string }
 export interface ItemDef {
   id: string; name: string; about: string;
   use: ItemUse;
@@ -51,11 +52,17 @@ export function parseItemDef(raw: unknown): ItemDef | null {
   const length = num(o.length, 16, 4, 60), grip = num(o.grip, 3, 0, 20);
   let shape: ItemStroke[] = [];
   if (Array.isArray(o.shape)) {
-    for (const st of o.shape.slice(0, 16)) {
+    for (const st of o.shape.slice(0, 24)) {
       if (!st || typeof st !== 'object') continue;
       const s = st as Record<string, unknown>;
       const pts = (Array.isArray(s.pts) ? s.pts : []).filter((p): p is [number, number] => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
         .slice(0, 40).map((p) => [clamp(p[0], -grip - 5, length + 5), clamp(p[1], -20, 20)] as [number, number]);
+      if (s.fill !== undefined) {
+        // A flat filled shape (the house style). A fill it can't read is left out, not guessed.
+        const fill = color(s.fill, '');
+        if (fill && pts.length >= 3) shape.push({ pts, fill, color: color(s.color, '#2a2c44'), width: num(s.width, 0, 0, 8) });
+        continue;
+      }
       if (pts.length >= 2) shape.push({ pts, color: color(s.color, color(o.color, '#2a2c44')), width: num(s.width, 2.5, 0.5, 8) });
     }
   }
@@ -206,7 +213,7 @@ export class Item {
   get drawPadding() {
     const s = this.def.sprite;
     const spritePad = s ? Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.x + s.rows[0].length * s.pixel), Math.abs(s.y + s.rows.length * s.pixel)) : 0;
-    return Math.max(6, spritePad, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.abs(p[1]) + s.width / 2))) * this.scale;
+    return Math.max(6, spritePad, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.max(Math.abs(p[1]), -p[0]) + s.width / 2))) * this.scale;
   }
 }
 
@@ -447,15 +454,15 @@ export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderin
     ctx.save(); ctx.translate(pose.at.x, pose.at.y); ctx.transform(d.x * sc * mirror, d.y * sc * mirror, ax * sc, ay * sc, 0, 0);
     drawSprite(ctx, it.def.sprite); ctx.restore();
   }
+  const m = pose.mirror ? -1 : 1;
   for (const st of it.def.shape) {
-    ctx.strokeStyle = st.color;
-    ctx.lineWidth = st.width * sc;
     ctx.beginPath();
     st.pts.forEach(([along, across], i) => {
-      const x = pose.at.x + d.x * along * sc + ax * across * sc, y = pose.at.y + d.y * along * sc + ay * across * sc;
+      const x = pose.at.x + d.x * along * m * sc + ax * across * sc, y = pose.at.y + d.y * along * m * sc + ay * across * sc;
       if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
     });
-    ctx.stroke();
+    if (st.fill) { ctx.closePath(); ctx.fillStyle = st.fill; ctx.fill(); }
+    if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * sc; ctx.stroke(); }
   }
   ctx.restore();
 }

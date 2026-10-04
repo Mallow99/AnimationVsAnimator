@@ -64,6 +64,7 @@ export type Gesture = 'stomp' | 'wave' | 'shrug' | 'laugh' | 'flail' | 'pokeBack
 
 /** How he holds his arms when he's just standing there (body language for his emotion). */
 export type IdleStyle = 'none' | 'crossed' | 'hips' | 'behind' | 'hug';
+export type SeatStyle = 'up' | 'lounge' | 'front' | 'lie';
 
 export type CharEvent =
   | { type: 'landed'; speed: number }
@@ -209,8 +210,13 @@ export class Character {
   private ledge: { x: number; dir: number } | null = null;
   /** Sitting on a seat (a chair, a couch): where his bottom goes. A skill keeps it up to date if the seat moves. */
   seat: Vec | null = null;
-  /** Leaning back on the seat (a couch) instead of sitting up (a chair). */
-  lounge = false;
+  /**
+   * How he's sitting on a seat: sitting up (a chair), leaning back, sitting square to you (turned out
+   * of the screen, still glancing the way he faces), or lying along it (a couch: head on the armrest
+   * behind him, feet the way he faces).
+   */
+  seatStyle: SeatStyle = 'up';
+  get lounge() { return this.seatStyle === 'lounge'; }
   /** Sitting with a game controller in both hands; `padMash` (0..1) is how hard his thumbs are going. */
   gamepad = false;
   padMash = 0;
@@ -714,13 +720,13 @@ export class Character {
   get onLedge() { return this.ledge !== null; }
 
   /** Sit down on a seat at `at` (he should be standing right by it), facing `dir`. */
-  sitOn(at: Vec, dir: 1 | -1, lounge = false) {
+  sitOn(at: Vec, dir: 1 | -1, style: SeatStyle = 'up') {
     if (this.mode !== 'ground') return false;
     this.goalX = null; this.gesture = null;
     this.facing = dir;
     this.setMode('sit');
     this.seat = { x: at.x, y: at.y };
-    this.lounge = lounge;
+    this.seatStyle = style;
     return true;
   }
 
@@ -968,6 +974,8 @@ export class Character {
     if (this.idleStyle !== 'none' && this.mode === 'ground' && !this.walking && !this.gesture && Math.abs(this.rootVX) < 10 && !this.handTarget) {
       want = Math.max(want, { none: 0, crossed: 0.85, hips: 0.95, hug: 0.75, behind: 0.35 }[this.idleStyle]);
     }
+    // Sitting square to you on the couch: turned out of the screen, a little toward the way he faces.
+    if (this.mode === 'sit' && this.seat && this.seatStyle === 'front') want = Math.max(want, 0.8);
     if (g && this.mode === 'ground') {
       const u = g.t / GESTURE_TIME[g.name];
       want = Math.max(want, (GESTURE_PRESENT[g.name] ?? 0) * clamp(u * 5, 0, 1) * clamp((1 - u) * 5, 0, 1));
@@ -997,7 +1005,7 @@ export class Character {
     if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
     if (m !== 'air') { this.leapWall = null; this.airPunch = null; this.airReach = null; }
     if (m !== 'ground') { this.pushAt = null; this.pushY = null; }
-    if (m !== 'sit') { this.ledge = null; this.seat = null; this.lounge = false; this.gamepad = false; }
+    if (m !== 'sit') { this.ledge = null; this.seat = null; this.seatStyle = 'up'; this.gamepad = false; }
     if (m !== 'puppet') this.puppetMove = null;
     if (m !== 'roll') this.rolling = null;
     if (m !== 'air') { this.airFlip = null; this.flipDone = false; }
@@ -1966,6 +1974,33 @@ export class Character {
     Object.assign(s, { hip: 0.3, neck: 0.22, head: 0.25, kneeL: 0.2, kneeR: 0.2, footL: 0.12, footR: 0.12, elbowL: 0.08, elbowR: 0.08, handL: 0.1, handR: 0.1 });
   }
 
+  /**
+   * Lying along a couch: hips a bit back from the middle, back propped up on the armrest behind him,
+   * head up so he can see past his feet. One leg out straight, the other knee up. A controller rests
+   * on his belly, or one hand goes behind his head.
+   */
+  private seatLiePose(t: Targets, s: Strengths) {
+    const d = this.d, sc = this.scale, st = this.seat!, f = this.facing;
+    const hipX = st.x - f * 14 * sc;
+    this.rootX = hipX;
+    const hip = this.pt(hipX, st.y - 3 * sc);
+    const neck = this.pt(hipX - f * 25 * sc, st.y - 19 * sc);
+    const straight = this.pt(hipX + f * (d.thigh + d.shin) * 0.97, st.y - 3 * sc);
+    const kneeUp = this.pt(hipX + f * d.thigh * 0.62, st.y - 3 * sc - d.thigh * 0.78);
+    const tucked = this.pt(kneeUp.x + f * d.shin * 0.72, st.y - 3 * sc);
+    const front = 'L'; // one leg out straight, the other knee up
+    const fL = front === 'L' ? straight : tucked, fR = front === 'L' ? tucked : straight;
+    const belly = this.pt((hipX + neck.x) / 2, (hip.y + neck.y) / 2 - 7 * sc);
+    const jig = (k: 'L' | 'R') => Math.sin(this.time * 19 + (k === 'L' ? 0 : 1.7)) * this.padMash * 1.2 * sc;
+    const hand = (k: 'L' | 'R') => this.gamepad ? this.pt(belly.x + f * 3 * sc, belly.y - 4 * sc + jig(k), sideOf(k) * 2.5 * sc)
+      : k === front ? this.pt(belly.x, belly.y + 3 * sc) : this.pt(neck.x - f * 6 * sc, neck.y - d.neck - 2 * sc);
+    this.fillLimbs(t, hip, neck, -0.15 * f, 0, hand('L'), hand('R'), fL, fR);
+    const B = basis(this.yaw);
+    t.kneeL = fL === tucked ? kneeUp : twoBoneIK3(hip, fL, d.thigh, d.shin, this.kneePole(B, 'L'));
+    t.kneeR = fR === tucked ? kneeUp : twoBoneIK3(hip, fR, d.thigh, d.shin, this.kneePole(B, 'R'));
+    Object.assign(s, { hip: 0.45, neck: 0.35, head: 0.3, kneeL: 0.25, kneeR: 0.25, footL: 0.2, footR: 0.2, elbowL: 0.1, elbowR: 0.1, handL: 0.12, handR: 0.12 });
+  }
+
   /** Holding a controller: both hands together in front of his belly, thumbs going (a little jiggle). */
   private padHand(hip: V3, k: 'L' | 'R'): V3 {
     const sc = this.scale, jig = Math.sin(this.time * 19 + (k === 'L' ? 0 : 1.7)) * this.padMash * 1.2 * sc;
@@ -1974,6 +2009,7 @@ export class Character {
 
   /** On a chair or a couch: bottom on the seat, knees bent over its front edge, feet down toward the floor. */
   private seatPose(t: Targets, s: Strengths) {
+    if (this.seatStyle === 'lie') { this.seatLiePose(t, s); return; }
     const d = this.d, sc = this.scale, P = this.posture, st = this.seat!, legLen = d.thigh + d.shin;
     this.rootX = st.x;
     const hip = this.pt(st.x, st.y - 3 * sc);

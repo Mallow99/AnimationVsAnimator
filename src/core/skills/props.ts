@@ -1,6 +1,7 @@
 // Furniture activities, separated from combat and climbing.
 import { Skill, arrive, type Ctx } from './context';
 import type { Thing, PropDef } from '../props';
+import type { SeatStyle } from '../character';
 import { chance, pick, rand } from '../math';
 import { Runner } from '../tv-game';
 
@@ -9,6 +10,20 @@ export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
   const ch = c.char;
   return (c.props?.placed ?? []).filter((t) => t.def!.use === use && Math.abs(t.tilt) < 0.35 && !t.held)
     .sort((a, b) => Math.abs(a.center.x - ch.x) - Math.abs(b.center.x - ch.x));
+}
+
+/**
+ * How he sits, his choice: up straight, leaning back, square to you (looking out of the screen), or,
+ * on a couch, lying along it. Tired or low, he's more likely to sprawl.
+ */
+function seatStyle(c: Ctx, seat: Thing): SeatStyle {
+  const L = c.mood.label, slump = L === 'sleepy' || L === 'sad' ? 2 : 1;
+  const ways: [SeatStyle, number][] = seat.def!.id === 'couch'
+    ? [['up', 1], ['lounge', 1.2 * slump], ['front', 1], ['lie', 0.8 * slump]]
+    : [['up', 1.5], ['front', 1]];
+  let r = Math.random() * ways.reduce((sum, [, w]) => sum + w, 0);
+  for (const [style, w] of ways) if ((r -= w) <= 0) return style;
+  return 'up';
 }
 
 /** Sit down on a chair or a couch for a while (lean back on a couch). He falls off if you tip it over. */
@@ -23,8 +38,7 @@ export class SitOnProp extends Skill {
     if (this.phase === 'go') {
       if (this.t > 12) return true;
       if (!arrive(c, at.x, 5)) return false;
-      const lounge = this.seat.def!.id === 'couch' && chance(0.5);
-      if (!ch.sitOn(at, this.face || (chance(0.5) ? 1 : -1), lounge)) return true;
+      if (!ch.sitOn(at, this.face || (chance(0.5) ? 1 : -1), seatStyle(c, this.seat))) return true;
       this.phase = 'sit'; this.t = 0;
       if (chance(0.5)) c.say(pick(this.seat.def!.id === 'couch' ? ['ahh', 'comfy', '*flop*'] : ['ahh', 'nice chair', 'much better']), 1.4);
       return false;

@@ -1,7 +1,7 @@
 {
   "id": "helmet",
   "name": "Helmet",
-  "about": "A little steel helmet with a brass stripe. Give it to him to wear; take it off whenever you like.",
+  "about": "A little steel helmet. Give it to him to wear; take it off whenever you like.",
   "use": "none",
   "wear": "head",
   "length": 16,
@@ -9,29 +9,97 @@
   "belt": "none",
   "hit": 0,
   "bounce": 0.2,
-  "shape": [],
-  "sprite": {
-    "x": -16,
-    "y": -15,
-    "pixel": 2,
-    "palette": {
-      "S": "#e0e2e7",
-      "a": "#df9b38",
-      "c": "#738fa1",
-      "o": "#29232d",
-      "s": "#b0b7c4"
+  "shape": [
+    {
+      "pts": [
+        [
+          -13.0,
+          -1.5
+        ],
+        [
+          -12.36,
+          -5.52
+        ],
+        [
+          -10.52,
+          -9.14
+        ],
+        [
+          -7.64,
+          -12.02
+        ],
+        [
+          -4.02,
+          -13.86
+        ],
+        [
+          -0.0,
+          -14.5
+        ],
+        [
+          4.02,
+          -13.86
+        ],
+        [
+          7.64,
+          -12.02
+        ],
+        [
+          10.52,
+          -9.14
+        ],
+        [
+          12.36,
+          -5.52
+        ],
+        [
+          13.0,
+          -1.5
+        ]
+      ],
+      "fill": "#8e98a3"
     },
-    "rows": [
-      "....oooooooo....",
-      "..oooooooooooo..",
-      ".osSSSaaSSSSsso.",
-      ".osSSSaaSSSSsso.",
-      ".ossssaasssssso.",
-      ".occccaacccccco.",
-      ".occcccccccccco.",
-      "osssssssssssssso",
-      "oooooooooooooooo",
-      "..ooo......ooo.."
-    ]
-  }
+    {
+      "pts": [
+        [
+          -14.5,
+          -2.5
+        ],
+        [
+          14.5,
+          -2.5
+        ],
+        [
+          14.5,
+          2
+        ],
+        [
+          -14.5,
+          2
+        ]
+      ],
+      "fill": "#6d7682"
+    },
+    {
+      "pts": [
+        [
+          -9,
+          -8
+        ],
+        [
+          -4,
+          -12
+        ],
+        [
+          -1,
+          -12.3
+        ],
+        [
+          -6,
+          -7
+        ]
+      ],
+      "fill": "#b4bcc6"
+    }
+  ]
 }

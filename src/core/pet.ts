@@ -1214,7 +1214,7 @@ export class Pet {
         list: this.items.list.map((it) => ({ uid: it.uid, id: it.def.id, name: it.def.name, where: it.where, slot: it.slot, drawn: !!it.def.drawn })),
       },
       props: {
-        kinds: [...this.props.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about, sprite: d.sprite, shape: d.shape })),
+        kinds: [...this.props.defs.values()].map((d) => ({ id: d.id, name: d.name, about: d.about, sprite: d.sprite, shape: d.shape, screen: d.screen })),
         placed: this.props.placed.map((t, i) => ({ i, id: t.def!.id, name: t.def!.name })),
       },
       memory: { summary: this.memory.summary, notes: this.memory.notes, tally: this.memory.tally, firstMet: this.memory.firstMet, summarizedAt: this.memory.summarizedAt },

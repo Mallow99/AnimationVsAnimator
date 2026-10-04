@@ -149,6 +149,12 @@ pixel art to keep in step. Add filled pieces to `shape`:
 - Add `"color"` and `"width"` to give a filled piece an edge line (usually you won't).
 - Keep every part at least 4 wide: thinner bits break up or vanish once he's pixelated.
 - A TV's `screen` is painted on top of the body, rounded, and shows his shows, his game, or your Othello board.
+- Pick whichever flat view reads best: furniture is front-on (couch, chair, desk, TV, easel); the scooter is
+  side-on, because wheels only read from the side. Never a three-quarter or perspective view.
+
+Items can be flat too: give a stroke a `fill` and at least three points (in the item's `[along, across]`
+coordinates) and it becomes a filled shape. The helmet, boots and mace are made this way; boots flip with
+his feet when he turns around.
 
 ## Pixel sprites and removable gear
 
@@ -169,8 +175,9 @@ their own two-screen-point grid (they don't follow his pixel size, so prefer fla
 Sprites supply art; `outline`, `seat`, `screen` and wheels still supply the physical interaction.
 
 For equipment, copy `helmet.json` or `boots.json`. Set `"wear": "head"` or `"wear": "feet"`,
-`"use": "none"`, `"belt": "none"`, and `"hit": 0`. The helmet follows his head; the boot sprite is
-attached to each present foot and mirrored when he turns left. Take/drop/give-back work like tools.
+`"use": "none"`, `"belt": "none"`, and `"hit": 0`. The helmet follows his head (`along` runs across his
+head, `across` runs down the screen, `[0, 0]` is the middle of his head); boots are attached to each
+present foot (`[0, 0]` is the foot, `along` points the way he faces) and mirrored when he turns left. Take/drop/give-back work like tools.
 Only one item can occupy each equipment location; a replacement drops the previous one. This is
 cosmetic clothing, with no armor or health system.
 

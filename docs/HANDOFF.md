@@ -25,12 +25,21 @@ characters are bright, flat and outline-free on top of it. He still turns to fac
   "video games" and "play Othello"; the AI prompt lists `videogame` and `playgame`.
 - `builtin-history.json` now records the previous shipped tv/couch/table, so unedited copies in the items
   folder upgrade, and an unedited old `board-game.json` is removed (`main.ts`); edited ones are kept.
-- **Not yet converted** to the flat style: chair, desk, scooter, canvas/easel, helmet, boots, mace. Next step
-  is to convert them the same way once the owner signs off on the couch/TV look
-  ([preview](images/tv-couch-preview.png)).
+- Every shipped prop and the helmet, boots and mace are now flat art ([all props](images/props-preview.png)).
+  Chair, desk, easel are front-on; the scooter is side-on (wheels only read from the side). Items support
+  `fill` shapes (`items.ts`), mirrored for boots. Pen, sword, mallet and ball were already smooth strokes in
+  his style and are unchanged. Settings cards draw flat art and screens (`settings/item-card.ts`).
+- Seating styles (`Character.seatStyle`: up / lounge / front / lie; he picks in `SitOnProp`, sprawling more
+  when sleepy or sad). `front` turns him out to face you (three-quarters toward the way he faces);
+  `lie` (couch only) lies along the cushions, head propped on the armrest behind him, feet toward the TV,
+  one knee up, controller on his belly when gaming.
+- More AvA references from the owner (not committed; they're Alan Becker's frames): environments the
+  animator draws are thin black line art on white (stairs, doors, walls), which is what his own drawings
+  already look like; items in the desktop fight are bright, flat colored segments; a pose sheet shows
+  lying, crouching and flailing silhouettes. Furniture stays filled and muted per the couch reference.
 
-Checked in the cloud machine: typecheck, 25 focused checks (new: TV Othello, couch from either side, video
-game on/off, runner timing, flat-art parsing), full sim on seeds 1 and 2, and the Chromium browser check.
+Checked in the cloud machine: typecheck, 27 focused checks (new: TV Othello, couch from either side, video
+game on/off, runner timing, flat-art parsing, couch poses, flat items), full sim on seeds 1 and 2, and the Chromium browser check.
 The Electron/Xvfb check was updated for the TV but not re-run here. Not run on a Mac or PC.
 
 ## Previous round (Codex: reliability, items, polish)

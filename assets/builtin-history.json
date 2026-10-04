@@ -668,6 +668,85 @@
           "width": 3
         }
       ]
+    },
+    {
+      "type": "prop",
+      "id": "scooter",
+      "name": "Scooter",
+      "about": "A kick scooter. He hops on, holds the handlebar, kicks off, and rolls across the screen.",
+      "use": "ride",
+      "outline": [
+        [
+          4,
+          32
+        ],
+        [
+          34,
+          32
+        ],
+        [
+          39,
+          0
+        ],
+        [
+          41,
+          38
+        ],
+        [
+          5,
+          38
+        ]
+      ],
+      "wheels": [
+        3,
+        4
+      ],
+      "wheel": 4.5,
+      "bar": [
+        39,
+        1
+      ],
+      "friction": 0.01,
+      "shape": [],
+      "sprite": {
+        "x": -4,
+        "y": -2,
+        "pixel": 2,
+        "palette": {
+          "B": "#789fbd",
+          "S": "#e0e2e7",
+          "b": "#415d8a",
+          "k": "#151b28",
+          "o": "#29232d",
+          "s": "#b0b7c4"
+        },
+        "rows": [
+          ".................kkooookk",
+          ".................kksssskk",
+          ".................kkooookk",
+          "....................oSo..",
+          "....................oSo..",
+          "....................bbo..",
+          "....................bbo..",
+          "....................bbo..",
+          "....................bbo..",
+          "....................oSo..",
+          "....................oSo..",
+          "....................oSo..",
+          "....................oSo..",
+          "....................oSo..",
+          "....................oSo..",
+          "....................oSo..",
+          "..ooossssssssssoooooooo..",
+          "..oBBBBBBBBBBBBBBBBBboo..",
+          "..obbbbbbbbbbbbbbbbbboo..",
+          "..oooooooooooooooooooo...",
+          "..oooo..............oooo.",
+          ".oossoo............oossoo",
+          ".oossoo............oossoo",
+          "..oooo..............oooo."
+        ]
+      }
     }
   ],
   "board-game.json": [
@@ -977,6 +1056,88 @@
           "width": 3
         }
       ]
+    },
+    {
+      "type": "prop",
+      "id": "canvas",
+      "name": "Canvas",
+      "about": "An easel for his pen. Ask him to paint; the picture stays on the canvas and is saved.",
+      "use": "canvas",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          48,
+          0
+        ],
+        [
+          48,
+          68
+        ],
+        [
+          0,
+          68
+        ]
+      ],
+      "screen": [
+        4,
+        4,
+        40,
+        46
+      ],
+      "shape": [],
+      "sprite": {
+        "x": -2,
+        "y": -2,
+        "pixel": 2,
+        "palette": {
+          "e": "#f9efd9",
+          "h": "#edb978",
+          "l": "#be8550",
+          "o": "#29232d",
+          "w": "#835339"
+        },
+        "rows": [
+          "oooooooooooooooooooooooooo",
+          "ohhhhhhhhhhhhhhhhhhhhhhhho",
+          "oloooooooooooooooooooooowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "oloeeeeeeeeeeeeeeeeeeeeowo",
+          "owoooooooooooooooooooooowo",
+          "ollllllllllllllllllllllllo",
+          "oooooooooooooooooooooooooo",
+          "oooooooooooooooooooooooooo",
+          "....olo............olo....",
+          "....olo............olo....",
+          "....olo............olo....",
+          "....olo............olo....",
+          "....olo............olo....",
+          "....ooo............ooo...."
+        ]
+      }
     }
   ],
   "chair.json": [
@@ -1074,6 +1235,80 @@
           "width": 4
         }
       ]
+    },
+    {
+      "type": "prop",
+      "id": "chair",
+      "name": "Chair",
+      "about": "A wooden chair. He sits on it when he's tired, and drags it over to watch TV.",
+      "use": "seat",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          5,
+          24
+        ],
+        [
+          30,
+          24
+        ],
+        [
+          30,
+          44
+        ],
+        [
+          0,
+          44
+        ]
+      ],
+      "seat": [
+        16,
+        23
+      ],
+      "shape": [],
+      "sprite": {
+        "x": 0,
+        "y": 0,
+        "pixel": 2,
+        "palette": {
+          "h": "#edb978",
+          "l": "#be8550",
+          "o": "#29232d",
+          "w": "#835339"
+        },
+        "rows": [
+          "oooo............",
+          "oooo............",
+          "ooho............",
+          "ooho............",
+          "ooho............",
+          "ooho............",
+          "ooho............",
+          "ooho............",
+          "oolo............",
+          "oolo............",
+          "oooo............",
+          "oooooooooooooooo",
+          "ohhhhhhhhhhhhhho",
+          "ollllllllllllllo",
+          "oooooooooooooooo",
+          "olwo........owo.",
+          "olwo........owo.",
+          "olwo........owo.",
+          "olwo........owo.",
+          "olwo........owo.",
+          "olwo........owo.",
+          "oloo........owo.",
+          "............ooo."
+        ]
+      }
     }
   ],
   "couch.json": [
@@ -1423,6 +1658,233 @@
             ]
           ],
           "color": "#2a2c44",
+          "width": 2
+        }
+      ]
+    },
+    {
+      "type": "prop",
+      "id": "desk",
+      "name": "Desk",
+      "about": "A little wooden desk. A sturdy surface for his things and somewhere to perch.",
+      "use": "none",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          0
+        ],
+        [
+          80,
+          44
+        ],
+        [
+          0,
+          44
+        ]
+      ],
+      "shape": [],
+      "sprite": {
+        "x": -2,
+        "y": -2,
+        "pixel": 2,
+        "palette": {
+          "d": "#563b35",
+          "h": "#edb978",
+          "l": "#be8550",
+          "o": "#29232d",
+          "w": "#835339"
+        },
+        "rows": [
+          "oooooooooooooooooooooooooooooooooooooooooo",
+          "ohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhho",
+          "ollllllllllllllllllllllllllllllllllllllllo",
+          "ollllllllllllllllllllllllllllllllllllllllo",
+          "oooooooooooooooooooooooooooooooooooooooooo",
+          "..owwo.................oooooooooooooowwo..",
+          "..owwo.................ollllllllllllowwo..",
+          "..owwo.................owwwwwwwwwwwwowwo..",
+          "..owwo.................owwwwoooowwwwowwo..",
+          "..owwo.................owwwwoooowwwwowwo..",
+          "..owwo.................owwwwwwwwwwwwowwo..",
+          "..owwo.................owwwwwwwwwwwwowwo..",
+          "..owwo.................owwwwwwwwwwwwowwo..",
+          "..dddd.................ooooooooooooodddd..",
+          "..owwo..............................owwo..",
+          "..owwo..............................owwo..",
+          "..owwo..............................owwo..",
+          "..owwo..............................owwo..",
+          "..owwo..............................owwo..",
+          "..owwo..............................owwo..",
+          "..owwo..............................owwo..",
+          "..owwo..............................owwo..",
+          "..oooo..............................oooo.."
+        ]
+      }
+    }
+  ],
+  "helmet.json": [
+    {
+      "id": "helmet",
+      "name": "Helmet",
+      "about": "A little steel helmet with a brass stripe. Give it to him to wear; take it off whenever you like.",
+      "use": "none",
+      "wear": "head",
+      "length": 16,
+      "grip": 16,
+      "belt": "none",
+      "hit": 0,
+      "bounce": 0.2,
+      "shape": [],
+      "sprite": {
+        "x": -16,
+        "y": -15,
+        "pixel": 2,
+        "palette": {
+          "S": "#e0e2e7",
+          "a": "#df9b38",
+          "c": "#738fa1",
+          "o": "#29232d",
+          "s": "#b0b7c4"
+        },
+        "rows": [
+          "....oooooooo....",
+          "..oooooooooooo..",
+          ".osSSSaaSSSSsso.",
+          ".osSSSaaSSSSsso.",
+          ".ossssaasssssso.",
+          ".occccaacccccco.",
+          ".occcccccccccco.",
+          "osssssssssssssso",
+          "oooooooooooooooo",
+          "..ooo......ooo.."
+        ]
+      }
+    }
+  ],
+  "boots.json": [
+    {
+      "id": "boots",
+      "name": "Boots",
+      "about": "A pair of sturdy little boots. They follow his feet; drop them in or put them away any time.",
+      "use": "none",
+      "wear": "feet",
+      "length": 14,
+      "grip": 6,
+      "belt": "none",
+      "hit": 0,
+      "bounce": 0.2,
+      "shape": [],
+      "sprite": {
+        "x": -6,
+        "y": -10,
+        "pixel": 2,
+        "palette": {
+          "h": "#edb978",
+          "l": "#be8550",
+          "o": "#29232d",
+          "w": "#835339"
+        },
+        "rows": [
+          ".ooooo....",
+          ".olllo....",
+          ".owwwo....",
+          ".ohhho....",
+          ".ooooooooo",
+          ".owwwwlllo",
+          "oooooooooo"
+        ]
+      }
+    }
+  ],
+  "mace.json": [
+    {
+      "id": "mace",
+      "name": "Mace",
+      "about": "A toy metal mace. A slower wind-up and a heavy overhead bonk, different from his wooden sword.",
+      "use": "smash",
+      "length": 27,
+      "grip": 4,
+      "belt": "back",
+      "hit": 1.6,
+      "shape": [
+        {
+          "pts": [
+            [
+              -4,
+              0
+            ],
+            [
+              21,
+              0
+            ]
+          ],
+          "color": "#6b4426",
+          "width": 3
+        },
+        {
+          "pts": [
+            [
+              20,
+              -5
+            ],
+            [
+              25,
+              -5
+            ],
+            [
+              28,
+              0
+            ],
+            [
+              25,
+              5
+            ],
+            [
+              20,
+              5
+            ],
+            [
+              17,
+              0
+            ],
+            [
+              20,
+              -5
+            ]
+          ],
+          "color": "#939bab",
+          "width": 5
+        },
+        {
+          "pts": [
+            [
+              22,
+              -5
+            ],
+            [
+              22,
+              -9
+            ]
+          ],
+          "color": "#d0d5df",
+          "width": 2
+        },
+        {
+          "pts": [
+            [
+              22,
+              5
+            ],
+            [
+              22,
+              9
+            ]
+          ],
+          "color": "#d0d5df",
           "width": 2
         }
       ]

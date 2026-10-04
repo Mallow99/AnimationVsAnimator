@@ -205,6 +205,32 @@ await test('flat prop art: filled boxes and shapes parse, bad colors are refused
   const tv = parsePropDef(JSON.parse(fs.readFileSync('src/core/props/tv.json', 'utf8')))!;
   assert(!tv.sprite && tv.shape.every((st) => st.fill || st.width));
 });
+await test('on the couch he can sit up, lean back, face you, or lie along it with his feet toward the TV', () => {
+  const p = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
+  p.paused = true; for (let i = 0; i < 600; i++) p.update(1/120); p.mind.reset(p.ctx);
+  const couch = p.props.spawn('couch', p.char.x, bounds.floor - 56 * p.char.scale - 2, p.char.scale)!;
+  for (let i = 0; i < 240; i++) p.update(1/120);
+  const at = couch.seatAt!, j = p.char.body.j;
+  p.char.walkTo(at.x); for (let i = 0; i < 600 && Math.abs(p.char.x - at.x) > 4; i++) p.update(1/120);
+  assert(p.char.sitOn(at, 1, 'lie')); for (let i = 0; i < 360; i++) p.update(1/120);
+  assert.equal(p.char.mode, 'sit');
+  assert(j.head.x < j.hip.x && j.footL.x > j.hip.x && j.footR.x > j.hip.x, 'not lying feet-first toward the way he faces');
+  assert(Math.abs(j.hip.y - at.y) < 10 * p.char.scale && j.head.y < j.hip.y, 'not lying on the seat with his head propped up');
+  p.char.standUp(); for (let i = 0; i < 240; i++) p.update(1/120);
+  p.char.walkTo(at.x); for (let i = 0; i < 600 && Math.abs(p.char.x - at.x) > 4; i++) p.update(1/120);
+  assert(p.char.sitOn(at, -1, 'front')); for (let i = 0; i < 240; i++) p.update(1/120);
+  assert(Math.abs(Math.sin(p.char.yaw)) > 0.7, 'not turned out to face you');
+  p.char.standUp(); for (let i = 0; i < 120; i++) p.update(1/120);
+  assert.equal(p.char.seatStyle, 'up');
+});
+await test('items can be flat filled shapes, and boots mirror with his feet', () => {
+  const def = parseItemDef({ id: 'cap', wear: 'head', shape: [{ pts: [[-5, 0], [0, -5], [5, 0]], fill: '#aabbcc' }, { pts: [[0, 0], [1, 1], [2, 0]], fill: 'blue' }, { pts: [[0, 0], [5, 0]] }] })!;
+  assert.equal(def.shape.length, 2); assert.equal(def.shape[0].fill, '#aabbcc'); assert.equal(def.shape[0].width, 0);
+  for (const id of ['helmet', 'boots', 'mace']) {
+    const d = parseItemDef(JSON.parse(fs.readFileSync(`src/core/items/${id}.json`, 'utf8')))!;
+    assert(!d.sprite && d.shape.some((st) => st.fill), `${id} isn't flat art`);
+  }
+});
 await test('asymmetric furniture keeps its position through repeated save/load cycles', () => {
   let p = pet(); p.props.spawn('chair', 700, 700, p.char.scale);
   for (let i = 0; i < 10; i++) { const next = pet(); next.load(p.save()); p = next; }
