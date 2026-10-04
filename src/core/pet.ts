@@ -19,6 +19,7 @@ import { limbOf } from './body';
 import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, parseMove, splitSpeech } from './brain';
 import { WindowAccess } from './window-access';
+import { BoardGame } from './board-game';
 import { controllerPart } from './render';
 import { distToSegment, type Vec } from './math';
 import { Memory } from './memory';
@@ -55,6 +56,7 @@ export class Pet {
   readonly mood = new Mood();
   readonly mind = new Mind();
   readonly brain = new Brain();
+  readonly game = new BoardGame();
   /** His notes and summary (milestone 5). */
   readonly memory = new Memory();
   /** Called with his memory file's contents when it changes (the app writes it to disk). */
@@ -156,6 +158,7 @@ export class Pet {
     this.char.mode = 'air';
     const pet = this;
     this.ctx = {
+      game: this.game,
       get cursorPlay() { return pet.config.knockCursor; },
       get windowMoves() {
         return !pet.config.moveWindows || !pet.config.windows ? 'off' as const : !pet.onMoveWindow ? 'unsupported' as const
@@ -213,6 +216,7 @@ export class Pet {
     if (!Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, 0.1); // after a stall (laptop asleep), don't try to catch up forever
     this.ctx.world.time += dt;
+    this.game.update(this.ctx.world.time);
     this.ctx.canGrabCursor = this.config.mischief && !!this.onMoveCursor;
     if (this.freeze > 0) { this.freeze -= dt; dt = 0; }
     this.acc += dt;

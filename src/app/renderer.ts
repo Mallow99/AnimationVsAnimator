@@ -6,6 +6,7 @@ import type { Bounds } from '../core/physics';
 import type { WinRect } from '../core/world';
 import type { BrainRequest } from '../core/brain';
 import { playBlip, playSfx } from './sfx';
+import { createGamePanel } from './game-panel';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -149,8 +150,8 @@ resize();
 // Double-click him (or pick "Talk" from his right-click menu): a little text box pops up over his head.
 const talk = document.getElementById('talk') as HTMLFormElement;
 const talkText = document.getElementById('talkText') as HTMLInputElement;
-let talkOpen = false, talkIdle = 0;
-const syncTyping = () => shell?.setTyping(talkOpen);
+let talkOpen = false, talkIdle = 0, gameTyping = false;
+const syncTyping = () => shell?.setTyping(talkOpen || gameTyping);
 function openTalk() {
   talkOpen = true;
   talk.classList.add('open');
@@ -175,6 +176,12 @@ function placeTalk() {
   // Leave his speech bubble its own space above his head, even while the input is open.
   const bubbleSpace = pet.speaking ? 80 : 14;
   let x = Math.min(Math.max(a.x, width / 2 + 8), window.innerWidth - width / 2 - 8), bottom = Math.max(a.y - bubbleSpace, height + 8);
+  const game = gamePanel.rect();
+  if (game && x + width / 2 > game.left - 8 && x - width / 2 < game.right + 8 && bottom > game.top - 8 && bottom - height < game.bottom + 8) {
+    if (game.left >= width + 16) x = game.left - width / 2 - 10;
+    else if (window.innerWidth - game.right >= width + 16) x = game.right + width / 2 + 10;
+    else bottom = game.top > height + 18 ? game.top - 10 : Math.min(window.innerHeight - 8, game.bottom + height + 10);
+  }
   talk.style.left = `${x}px`; talk.style.top = `${bottom}px`;
 }
 pet.onTalk = openTalk;
@@ -193,6 +200,7 @@ const overTalk = (x: number, y: number) => {
   const r = talk.getBoundingClientRect();
   return x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 12;
 };
+const gamePanel = createGamePanel(pet, (on) => { gameTyping = on; syncTyping(); }, openTalk);
 
 // ── click-through ──
 // The window ignores the mouse (clicks fall through to your desktop) except
@@ -200,7 +208,7 @@ const overTalk = (x: number, y: number) => {
 // or you're carrying one of his things (then a click anywhere drops it).
 let ignoring = true;
 function updateClickThrough(x: number, y: number) {
-  const want = !(pet.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y)
+  const want = !(pet.dragging || gamePanel.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y) || gamePanel.over(x, y)
     || (friend && (friend.dragging || friend.hit(x, y) || friend.uiHit(x, y) || friend.carrying)));
   if (want !== ignoring) {
     ignoring = want;
@@ -227,13 +235,14 @@ window.addEventListener('mousemove', (e) => {
 });
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  if (gamePanel.over(e.clientX, e.clientY)) return;
   const who = friend && (friend.hit(e.clientX, e.clientY) || friend.uiHit(e.clientX, e.clientY)) ? friend : pet;
   if (who.contextMenu(e.clientX, e.clientY)) shell?.pressed();
   updateClickThrough(e.clientX, e.clientY);
 });
 window.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
-  if (overTalk(e.clientX, e.clientY)) return;
+  if (overTalk(e.clientX, e.clientY) || gamePanel.over(e.clientX, e.clientY)) return;
   if (talkOpen && !pet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
   // His friend first if you clicked right on them; otherwise him (and the furniture), then the friend's things.
   const now = performance.now();
@@ -284,6 +293,7 @@ function frame(now: number) {
   if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; pet.pointerMove(last.x, last.y, vel.x, vel.y, now); friend?.pointerMove(last.x, last.y, vel.x, vel.y, now); }
   pet.update(dt);
   friend?.update(dt);
+  gamePanel.update();
   updateClickThrough(last.x, last.y);
   if (talkOpen) { placeTalk(); if (now - talkIdle > 45000 && document.activeElement !== talkText) closeTalk(); }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);

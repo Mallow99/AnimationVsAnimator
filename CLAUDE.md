@@ -5,8 +5,8 @@ They record the current reliability/item work, tests, Windows distribution steps
 stop point before preparing multiple characters. The original vision and historical handoff below
 remain useful context; the latest owner instructions take priority. The owner has since approved
 removable helmet/boots and GUI polish, then chose a house art style: flat, front-on props drawn smooth
-and pixelated at his own pixel size (see the reference notes in docs/HANDOFF.md). Othello was removed
-(he plays his own video game on the TV). The owner has resumed multiple characters: a friend with combat.
+and pixelated at his own pixel size (see the reference notes in docs/HANDOFF.md). The Othello table was
+removed; Othello is played on the TV (as is his own runner game). The owner has resumed multiple characters: a friend with combat.
 
 A desktop pet: a procedural stick figure living in a transparent, always-on-top,
 click-through overlay. Inspired by Alan Becker's *Animator vs. Animation*.

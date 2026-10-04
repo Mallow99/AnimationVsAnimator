@@ -149,7 +149,7 @@ pixel art to keep in step. Add filled pieces to `shape`:
 - Pieces are painted in order, so list what's at the back first.
 - Add `"color"` and `"width"` to give a filled piece an edge line (usually you won't).
 - Keep every part at least 4 wide: thinner bits break up or vanish once he's pixelated.
-- A TV's `screen` is painted on top of the body, rounded, and shows his shows or his game.
+- A TV's `screen` is painted on top of the body, rounded, and shows his shows, his game, or your Othello board.
 - Pick whichever flat view reads best: furniture is front-on (couch, chair, desk, TV, easel); the scooter is
   side-on, because wheels only read from the side. Never a three-quarter or perspective view.
 
@@ -182,7 +182,7 @@ knee, `along` is across the leg) and mirrored when he turns left. Take/drop/give
 Only one item can occupy each equipment location; a replacement drops the previous one. This is
 cosmetic clothing, with no armor or health system.
 
-Video games are played on the TV (its console is part of the TV).
+Games are played on the TV (its console is part of the TV): his own runner game, and Othello with you.
 
 ## 3. Making your own version of him
 
@@ -204,7 +204,8 @@ body or items, the same way items are files now.
 
 New examples include `mace.json`, `helmet.json`, `boots.json`, `canvas.json` and `desk.json`. A canvas uses
 `"use": "canvas"` and a `screen` rectangle for the painting area. Any `"use": "tv"` prop can host his video
-game; defining a new game needs code. See `src/core/tv-game.ts` and `src/core/skills/props.ts`. Canvas pictures are saved with the pet.
+game and Othello; defining a new game needs code. See `src/core/tv-game.ts`, `src/core/board-game.ts` and
+`src/core/skills/props.ts`. Canvas pictures are saved with the pet.
 The mace uses `smash` (the old mallet was retired). Customized copies of the older examples are
 preserved when bundled examples improve.
 

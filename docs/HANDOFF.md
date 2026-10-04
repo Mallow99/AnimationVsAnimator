@@ -4,7 +4,8 @@ Start here after reading the project vision in `CLAUDE.md`.
 
 ## Latest: his friend, fights, and fixes from the owner's test
 
-The owner tested this branch and asked for: straight boots, Othello removed, a friend with a combat system,
+The owner tested this branch and asked for: straight boots, the Othello table removed (Othello stays on the
+TV; I first misread this and removed the game too, then restored it), a friend with a combat system,
 fixes for items knocking the cursor, the TV's physics box looking different from its drawing, sitting
 sideways looking weird, the mallet removed, and a circuit-board look for the Mind tab.
 
@@ -26,12 +27,12 @@ sideways looking weird, the mallet removed, and a circuit-board look for the Min
   knees apart over the seat edge (`seatPose`), lounging hands on the cushion. Lying stays side-on.
 - **Mind tab**: `config.mindLook` head | circuit; `circuit()` in settings.ts draws the same `projected`
   hit-test data as a PCB (mood pins → bus → choice chips → processor; AI chip).
-- Boots are straight sleeves on the shin. Othello and the mallet are gone (unedited copies are removed from
-  the items folder via `builtin-history.json`).
+- Boots are straight sleeves on the shin. The mallet is gone (unedited copies are removed from the items folder
+  via `builtin-history.json`). Othello stays on the TV; a hit from his friend doesn't break up your match.
 - **TV mismatch: not reproduced.** Outline vs drawing checked resting, dragged, knocked over and stacked:
   they line up. Waiting on a screenshot from the owner.
 
-Checked: typecheck, 27 focused checks (new: friend config/shared props, play fight, real fight, team-up, your
+Checked: typecheck, 32 focused checks (new: friend config/shared props, play fight, real fight, team-up, your
 throws vs your cursor), full sim on seeds 1 and 2, Chromium browser check (friend present). The fight checks
 are random; they passed 6 runs in a row. Not run on a Mac or PC; the Electron check wasn't re-run here.
 
@@ -49,13 +50,13 @@ characters are bright, flat and outline-free on top of it. He still turns to fac
 - `couch.json` and `tv.json` are redrawn in that style. The couch is sized so a seated Blurp's head just
   clears the backrest (as in the reference); its solid outline is armrests + seat (the backrest is behind
   him, not something to stand on). The TV sits on a cabinet with a console and a second controller.
-- **Othello is gone** (the owner asked; first the table, then the game itself). `skills/props.ts` has one
-  `AtTheTV` base (couch or chair near the TV, else the floor; faces it) with `WatchTV` and `PlayVideoGame`
-  (`videogame`: his solo runner game, `tv-game.ts`, with fumbles that depend on mood, and reactions to
-  crashes/records). `Character.gamepad` /
+- **The Othello table is gone; games are on the TV.** `skills/props.ts` has one `AtTheTV` base (couch or
+  chair near the TV, else the floor; faces it) with `WatchTV`, `PlayVideoGame` (`videogame`: his solo runner
+  game, `tv-game.ts`, with fumbles that depend on mood, and reactions to crashes/records) and
+  `PlayBoardGame` (`playgame`: Othello with you; the board mirrors onto the TV). `Character.gamepad` /
   `padMash` hold a controller in both hands (`render.ts` `controllerPart`).
-- Settings → placed TV has Watch TV / Video games / Change channel. Chat understands "video games"; the AI
-  prompt lists `videogame`.
+- Settings → placed TV has Watch TV / Video games / Play Othello / Change channel. Chat understands
+  "video games" and "play Othello"; the AI prompt lists `videogame` and `playgame`.
 - `builtin-history.json` now records the previous shipped tv/couch/table, so unedited copies in the items
   folder upgrade, and an unedited old `board-game.json` is removed (`main.ts`); edited ones are kept.
 - Every shipped prop and the helmet, boots and mace are now flat art ([all props](images/props-preview.png)).
@@ -77,7 +78,7 @@ The Electron/Xvfb check was updated for the TV but not re-run here. Not run on a
 
 ## Previous round (Codex: reliability, items, polish)
 
-(Since changed: Othello, the table and the mallet are removed; furniture is flat art. Read the rest as history.)
+(Since changed: the table and the mallet are removed, Othello is on the TV, furniture is flat art. Read the rest as history.)
 
 This branch includes the reliability and
 cleanup roadmap, followed by the owner-approved pixel-prop/Othello polish pass. It deliberately stops before

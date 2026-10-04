@@ -8,6 +8,7 @@ import type { Props } from '../props';
 import type { Vec } from '../math';
 import type { Memory } from '../memory';
 import type { Items } from '../items';
+import type { BoardGame } from '../board-game';
 
 export type LookMode = 'default' | 'cursor' | 'away' | 'down' | 'none' | 'target';
 
@@ -83,6 +84,7 @@ export interface Ctx {
   windowMoves?: 'ok' | 'off' | 'unsupported' | 'stuck';
   /** Drawings that came to life: balls, boxes, ledges. */
   props?: Props;
+  game?: BoardGame;
   /** His friend (the other stick figure on screen), if there is one. */
   foe?: () => { char: Character; name: string; busy: boolean } | null;
   /** How fights with his friend go: play (foam and wooden swords) or real (katanas that cut). */

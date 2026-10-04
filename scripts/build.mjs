@@ -26,6 +26,7 @@ if (what === 'lab') {
   cpSync('src/settings/index.html', 'dist/settings/index.html');
   mkdirSync('dist/app', { recursive: true });
   cpSync('src/app/index.html', 'dist/app/index.html');
+  cpSync('src/app/game.css', 'dist/app/game.css');
   // Example item and prop files (and the how-to) for your items folder.
   cpSync('src/core/items', 'dist/items', { recursive: true });
   cpSync('src/core/props', 'dist/items', { recursive: true });

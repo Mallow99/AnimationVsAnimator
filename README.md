@@ -50,6 +50,9 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   (from the couch if it's near), rides the scooter across the screen. Drag them around; tip his chair and he falls off.
 - **Video games**: with a TV out he grabs a controller and plays his own little runner game (from the couch if
   it's near), and takes losing personally. Settings → Items → the placed TV → **Video games**, or ask him.
+- **Othello together**: on the placed TV, choose **Play Othello** (or say "play Othello"). He picks up a controller
+  and invites you; you play black, he plays white. The board shows on the TV and in its own draggable window.
+  **Talk to him** keeps the match running while you chat. Works offline, with no AI calls for moves.
 - **His friend** (Settings → General → His friend; on by default): a second stick figure, Leonard (orange; rename
   and recolor him), with an offline mind of his own. They share the furniture, spar with each other now and then,
   and when one squares up to your cursor the other comes to back him up. **Fights** setting: *play fights* (fists,
@@ -107,8 +110,8 @@ his name, size, look (presets or every number by hand) and how he moves.
 ## Commands
 
 Recent additions: a flat, front-on couch and TV in his own style (pixelated with him), video games and
-video games on the TV, removable helmet and boots, a larger pen, optional mace and canvas painting. Drop props
-in from Settings → Items, then use **Paint** or **Video games**.
+video games and Othello on the TV, removable helmet and boots, a larger pen, optional mace and canvas painting. Drop props
+in from Settings → Items, then use **Paint**, **Video games** or **Play Othello**.
 Full AI mode has a thinking-interval control for lower free-tier usage. His persona and body look
 remain the same. See [docs/HANDOFF.md](docs/HANDOFF.md) for verified changes and hardware checks.
 
