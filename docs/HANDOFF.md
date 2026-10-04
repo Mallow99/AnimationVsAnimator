@@ -1,6 +1,41 @@
 # Current handoff
 
-Start here after reading the project vision in `CLAUDE.md`. This branch includes the reliability and
+Start here after reading the project vision in `CLAUDE.md`.
+
+## Latest: house art style, and games on the TV
+
+The owner set the art direction: **props are flat and front-on, in the same smooth style as him, and get
+pixelated with him at his own pixel size** (he lives at pixel size 2; bigger pixel sizes aren't a target).
+The reference is an *Animator vs. Animation* frame of three stick figures on a couch: the couch is drawn
+straight-on with no perspective, in muted grey-beige with soft two-tone shading and a faint stripe; the
+characters are bright, flat and outline-free on top of it. He still turns to face things side-on.
+
+- `props.ts`: prop `shape` pieces can be filled (`rect` + `radius` + `fill`, or `pts` + `fill`), painted in
+  order. Flat props render smooth, then through `PixelLayer` at `look.pixel` (`Props.draw(ctx, now, pixel)`).
+  Older sprite props keep their own 2-point grid. A TV screen paints on top of a flat body.
+- `couch.json` and `tv.json` are redrawn in that style. The couch is sized so a seated Blurp's head just
+  clears the backrest (as in the reference); its solid outline is armrests + seat (the backrest is behind
+  him, not something to stand on). The TV sits on a cabinet with a console and a second controller.
+- **The Othello table is gone; games are on the TV.** `skills/props.ts` has one `AtTheTV` base (couch or
+  chair near the TV, else the floor; faces it) with `WatchTV`, `PlayVideoGame` (`videogame`: his solo runner
+  game, `tv-game.ts`, with fumbles that depend on mood, and reactions to crashes/records) and
+  `PlayBoardGame` (`playgame`: Othello with you; the board mirrors onto the TV). `Character.gamepad` /
+  `padMash` hold a controller in both hands (`render.ts` `controllerPart`).
+- Settings → placed TV has Watch TV / Video games / Play Othello / Change channel. Chat understands
+  "video games" and "play Othello"; the AI prompt lists `videogame` and `playgame`.
+- `builtin-history.json` now records the previous shipped tv/couch/table, so unedited copies in the items
+  folder upgrade, and an unedited old `board-game.json` is removed (`main.ts`); edited ones are kept.
+- **Not yet converted** to the flat style: chair, desk, scooter, canvas/easel, helmet, boots, mace. Next step
+  is to convert them the same way once the owner signs off on the couch/TV look
+  ([preview](images/tv-couch-preview.png)).
+
+Checked in the cloud machine: typecheck, 25 focused checks (new: TV Othello, couch from either side, video
+game on/off, runner timing, flat-art parsing), full sim on seeds 1 and 2, and the Chromium browser check.
+The Electron/Xvfb check was updated for the TV but not re-run here. Not run on a Mac or PC.
+
+## Previous round (Codex: reliability, items, polish)
+
+This branch includes the reliability and
 cleanup roadmap, followed by the owner-approved pixel-prop/Othello polish pass. It deliberately stops before
 the multiple-character stage. The existing persona, body design and look presets are preserved.
 
@@ -29,8 +64,8 @@ the multiple-character stage. The existing persona, body design and look presets
   a slower overhead wind-up; the old mallet remains in inventory/saves. Wide loose items render
   without clipping. The scooter exits on the correct side. TV has channel controls and small detail
   improvements; scooter details are slightly clearer.
-- Props now have solid, shaded pixel sprites: chair, couch, CRT TV, scooter, desk, easel and an
-  Othello table. Their physics and existing uses remain. Sprites are editable JSON rows/palette in
+- Props got solid, shaded pixel sprites: chair, couch, CRT TV, scooter, desk, easel and an
+  Othello table (couch/TV since redrawn and the table replaced; see above). Their physics and existing uses remain. Sprites are editable JSON rows/palette in
   `pixel-art.ts`, with bounded validation; custom line drawings still work. No new dependencies.
 - Othello replaces tic-tac-toe. He chooses the nearest stool, faces the table, reaches toward the
   board when pieces change, invites you, and reacts to the result. Rules include eight-direction
@@ -58,9 +93,9 @@ the multiple-character stage. The existing persona, body design and look presets
 
 ## Trying the additions
 
-Run `npm start`. Settings → Items shows sprite previews. [Preview image](images/othello-preview.png). Drop in the **Othello table**, wait for it
-to land, then choose **Play Othello** under the placed prop or say “play Othello”. He sits at the
-nearest stool. Accept **Play Othello**: you are black and go first. Marked squares are legal; the
+Run `npm start`. Settings → Items shows previews. [Preview image](images/tv-couch-preview.png). Drop in the **TV**
+(and the couch), wait for them to land, then choose **Play Othello** under the placed TV or say “play Othello”.
+He sits on the couch (or the floor), picks up a controller and invites you. Accept **Play Othello**: you are black and go first. Marked squares are legal; the
 most discs wins. **Talk to him** opens his usual chat without ending the match. Drag the game's
 title bar to move it; Escape while the game has focus closes it. Arrow keys navigate the board;
 Enter places a disc. **How to play** explains the rules.
@@ -158,6 +193,6 @@ in the old roadmap as authorization for a character/personality redesign.
 - `core/items.ts`: worn gear attachment poses, drawing parts and saves; `settings/item-card.ts`: previews.
 - `scripts/checks.ts`: rule, pass, session/chat, equipment, migration and save-position regressions.
 
-Keep prop sprites at two screen points per rendered pixel; do not change the character's presets to
-make furniture match. The legacy line-definition path remains useful for his own drawings and custom
+New props use the flat style and follow his pixel size; never change the character's presets to make
+furniture match. Older sprite props keep their two-point grid until they're converted. The legacy line-definition path remains useful for his own drawings and custom
 items. Future multi-character preparation is still paused at the owner's boundary.

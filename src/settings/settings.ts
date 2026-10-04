@@ -401,9 +401,13 @@ function renderProps(v: PropsView) {
   $('propKinds').replaceChildren(...v.kinds.map((k) => thingCard(k, [['Drop it in', () => shell.command(`prop:spawn:${k.id}`)]])));
   $('propPlaced').replaceChildren(...(v.placed.length
     ? [...v.placed.map((p) => moveRow(p.name, 0, [
-        ...(p.id === 'tv' ? [['Change channel', () => shell.command(`prop:channel:${p.i}`)] as [string, () => void]] : []),
+        ...(p.id === 'tv' ? [
+          ['Watch TV', () => shell.command('do:watchtv')],
+          ['Video games', () => shell.command('do:videogame')],
+          ['Play Othello', () => shell.command('do:playgame')],
+          ['Change channel', () => shell.command(`prop:channel:${p.i}`)],
+        ] as [string, () => void][] : []),
         ...(p.id === 'canvas' ? [['Paint', () => shell.command('do:paint')] as [string, () => void]] : []),
-        ...(p.id === 'board-game' ? [['Play Othello', () => shell.command('do:playgame')] as [string, () => void]] : []),
         ['Put away', () => shell.command(`prop:remove:${p.i}`)]
       ], 'on the desktop')),
       moveRow('All of them', 0, [['Put everything away', () => shell.command('prop:clear')]], '')]

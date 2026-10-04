@@ -2,86 +2,184 @@
   "type": "prop",
   "id": "tv",
   "name": "TV",
-  "about": "An old TV on little legs. He sits down in front of it (on the couch, if there is one) and watches cartoons.",
+  "about": "A chunky old TV on a cabinet, with a game console. He watches cartoons, plays his own games, and plays Othello with you.",
   "use": "tv",
   "outline": [
     [
+      4,
+      4
+    ],
+    [
+      66,
+      4
+    ],
+    [
+      66,
+      48
+    ],
+    [
+      70,
+      48
+    ],
+    [
+      70,
+      70
+    ],
+    [
       0,
-      0
+      70
     ],
     [
-      56,
-      0
-    ],
-    [
-      56,
-      38
-    ],
-    [
-      52,
-      46
+      0,
+      48
     ],
     [
       4,
-      46
-    ],
-    [
-      0,
-      38
+      48
     ]
   ],
   "screen": [
-    6,
-    8,
-    36,
-    22
+    11,
+    11,
+    48,
+    30
   ],
-  "shape": [],
-  "sprite": {
-    "x": -2,
-    "y": -12,
-    "pixel": 2,
-    "palette": {
-      "a": "#df9b38",
-      "c": "#738fa1",
-      "d": "#563b35",
-      "h": "#edb978",
-      "k": "#151b28",
-      "o": "#29232d",
-      "s": "#b0b7c4",
-      "w": "#835339"
+  "shape": [
+    {
+      "pts": [
+        [
+          30,
+          4
+        ],
+        [
+          18,
+          -8
+        ]
+      ],
+      "color": "#4b5355",
+      "width": 1.8
     },
-    "rows": [
-      ".......o.............o........",
-      ".......o.............o........",
-      "........s...........s.........",
-      "........s...........s.........",
-      ".........o.........o..........",
-      ".........o.........o..........",
-      "oooooooooooooooooooooooooooooo",
-      "ohhhhhhhhhhhhhhhhhhhhhhhhhhhho",
-      "owoooooooooooooooooooooowwwwwo",
-      "owoccccccccccccccccccccowwwwwo",
-      "owockkkkkkkkkkkkkkkkkkcowooowo",
-      "owockkkkkkkkkkkkkkkkkkcowosowo",
-      "owockkkkkkkkkkkkkkkkkkcowooowo",
-      "owockkkkkkkkkkkkkkkkkkcowwwwwo",
-      "owockkkkkkkkkkkkkkkkkkcowwwwwo",
-      "owockkkkkkkkkkkkkkkkkkcowooowo",
-      "owockkkkkkkkkkkkkkkkkkcowoaowo",
-      "owockkkkkkkkkkkkkkkkkkcowooowo",
-      "owockkkkkkkkkkkkkkkkkkcowwwwwo",
-      "owockkkkkkkkkkkkkkkkkkcowwwwwo",
-      "owockkkkkkkkkkkkkkkkkkcowdddwo",
-      "owoccccccccccccccccccccowwwwwo",
-      "owoooooooooooooooooooooowdddwo",
-      "owwwwwwwwwwwwwwwwwwwwwwwwwwwwo",
-      "owwwwwwwwwwwwwwwwwwwwwwwwdddwo",
-      "oooooooooooooooooooooooooooooo",
-      "...ooo..................ooo...",
-      "...ooo..................ooo...",
-      "...ooo..................ooo...",
-      "...ooo..................ooo..."
-    ]
-  }
+    {
+      "pts": [
+        [
+          40,
+          4
+        ],
+        [
+          52,
+          -8
+        ]
+      ],
+      "color": "#4b5355",
+      "width": 1.8
+    },
+    {
+      "rect": [
+        29,
+        0,
+        12,
+        6
+      ],
+      "radius": 3,
+      "fill": "#6c7778"
+    },
+    {
+      "rect": [
+        4,
+        4,
+        62,
+        44
+      ],
+      "radius": 8,
+      "fill": "#8d9b9a"
+    },
+    {
+      "rect": [
+        6,
+        5,
+        58,
+        4
+      ],
+      "radius": 2,
+      "fill": "#a2afae"
+    },
+    {
+      "rect": [
+        8,
+        8,
+        54,
+        36
+      ],
+      "radius": 6,
+      "fill": "#4b5355"
+    },
+    {
+      "rect": [
+        0,
+        46,
+        70,
+        24
+      ],
+      "radius": 3,
+      "fill": "#8a735e"
+    },
+    {
+      "rect": [
+        0,
+        46,
+        70,
+        3
+      ],
+      "radius": 1.5,
+      "fill": "#9c8570"
+    },
+    {
+      "rect": [
+        5,
+        53,
+        60,
+        13
+      ],
+      "radius": 2,
+      "fill": "#5b4a3d"
+    },
+    {
+      "rect": [
+        9,
+        56,
+        24,
+        9
+      ],
+      "radius": 2,
+      "fill": "#3b3f4f"
+    },
+    {
+      "rect": [
+        28,
+        59,
+        3,
+        3
+      ],
+      "fill": "#6fe08a"
+    },
+    {
+      "rect": [
+        39,
+        59,
+        16,
+        6
+      ],
+      "radius": 3,
+      "fill": "#3b3f4f"
+    },
+    {
+      "rect": [
+        44,
+        61,
+        3,
+        2
+      ],
+      "fill": "#9aa3b8"
+    }
+  ]
 }

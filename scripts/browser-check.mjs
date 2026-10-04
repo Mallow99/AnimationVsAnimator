@@ -61,7 +61,7 @@ try {
     for (let i = 0; i < 600; i++) p.update(1/120);
     const floor = p.ctx.world.bounds.floor, sc = p.char.scale;
     const canvas = p.props.spawn('canvas', p.char.x + 40*sc, floor - 68*sc - 2, sc);
-    p.props.spawn('tv', 180, floor - 46*sc - 2, sc);
+    p.props.spawn('chair', 180, floor - 44*sc - 2, sc);
     p.props.spawn('desk', 320, floor - 44*sc - 2, sc);
     p.props.spawn('scooter', 900, floor - 38*sc - 2, sc);
     for (let i = 0; i < 240; i++) p.update(1/120);
@@ -69,11 +69,11 @@ try {
     for (let i = 0; i < 3600 && !canvas.art; i++) p.update(1/120);
     if (!canvas.art) throw new Error('Canvas painting did not finish');
     p.mind.reset(p.ctx); p.paused = true;
-    // Arrange the painted easel away from the new table instead of overlapping both pieces.
+    // Arrange the painted easel away from the TV instead of overlapping both pieces.
     for (const point of canvas.points) { point.x += 430; point.px += 430; }
     p.props.spawn('chair', 70, floor - 44*sc - 2, sc);
-    p.props.spawn('couch', 420, floor - 38*sc - 2, sc);
-    p.props.spawn('board-game', p.char.x + 70.4*sc, floor - 64*sc - 2, sc);
+    p.props.spawn('couch', 420, floor - 56*sc - 2, sc);
+    p.props.spawn('tv', p.char.x + 160*sc, floor - 70*sc - 2, sc);
     p.items.give('helmet', p.char); p.items.give('boots', p.char);
     for (let i = 0; i < 240; i++) p.update(1/120);
     p.paused = false; p.command('do:playgame');

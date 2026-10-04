@@ -19,10 +19,11 @@ import tvDef from './props/tv.json';
 import scooterDef from './props/scooter.json';
 import canvasDef from './props/canvas.json';
 import deskDef from './props/desk.json';
-import gameDef from './props/board-game.json';
 import type { WinRect } from './world';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import { PixelLayer, DEFAULT_LOOK, type Ctx2D } from './render';
+import type { Disc } from './board-game';
+import { BLOCK_W, PLAYER_W, Runner } from './tv-game';
 
 /** Platform ids for drawn things start here, far from any window's. */
 const PROP_ID = 1_000_000_000;
@@ -68,21 +69,41 @@ export type ThingKind = 'box' | 'ledge' | 'ramp' | 'bridge' | 'prop';
 export interface PropDef {
   id: string; name: string; about: string;
   /** What he does with it: sit on it, watch it, ride it, or just stand on it. */
-  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'game' | 'none';
+  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'none';
   /** Its solid shape: points around its edge, clockwise on screen. Edges facing up are things to stand on. */
   outline: [number, number][];
   /** Where his bottom goes when he sits on it. */
   seat?: [number, number];
-  /** A second stool on the other side of a game table, for approaching from either direction. */
-  seatRight?: [number, number];
   /** The TV screen: x, y, width, height. */
   screen?: [number, number, number, number];
   /** Which outline points are wheels (they roll), how big, and where he holds on. */
   wheels?: number[]; wheel?: number; bar?: [number, number];
   /** How grippy it is on the floor (0.6 = stays put, 0.01 = rolls). */
   friction: number;
-  shape: { pts: [number, number][]; color: string; width: number }[];
+  shape: PropShape[];
   sprite?: PixelSprite;
+  /** Everything it draws fits in this box (x1, y1, x2, y2), in its own coordinates. */
+  bounds?: [number, number, number, number];
+}
+
+/**
+ * One piece of a prop's drawing: a line through `pts` (`color`, `width`), or a flat filled shape:
+ * a polygon (`pts` + `fill`) or a rounded box (`rect` [x, y, w, h] + `radius` + `fill`).
+ * A filled piece can have an edge line too (`color` + `width`).
+ */
+export interface PropShape { pts: [number, number][]; color: string; width: number; fill?: string; rect?: [number, number, number, number]; radius?: number }
+
+/** The box around its outline, screen and drawing (for painting it as pixel art). */
+function shapeBounds(outline: [number, number][], shape: PropShape[], screen?: [number, number, number, number]): [number, number, number, number] {
+  const xs: number[] = [], ys: number[] = [];
+  const add = (x: number, y: number, pad = 0) => { xs.push(x - pad, x + pad); ys.push(y - pad, y + pad); };
+  for (const [x, y] of outline) add(x, y);
+  if (screen) { add(screen[0], screen[1]); add(screen[0] + screen[2], screen[1] + screen[3]); }
+  for (const st of shape) {
+    if (st.rect) { add(st.rect[0], st.rect[1], st.width); add(st.rect[0] + st.rect[2], st.rect[1] + st.rect[3], st.width); }
+    for (const [x, y] of st.pts) add(x, y, st.width);
+  }
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
 }
 
 /** Saved canvas pictures are bounded just like custom item files. */
@@ -110,10 +131,20 @@ export function parsePropDef(raw: unknown): PropDef | null {
   const outline = (Array.isArray(o.outline) ? o.outline : []).slice(0, 12).map(pt).filter((p): p is [number, number] => !!p);
   if (!id || outline.length < 3) return null;
   const color = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : '#2a2c44');
-  const shape = (Array.isArray(o.shape) ? o.shape : []).slice(0, 30).flatMap((st) => {
+  const shape = (Array.isArray(o.shape) ? o.shape : []).slice(0, 60).flatMap((st): PropShape[] => {
     const s = st as Record<string, unknown>;
-    const pts = (Array.isArray(s?.pts) ? s.pts : []).slice(0, 40).map(pt).filter((p): p is [number, number] => !!p);
-    return pts.length >= 2 ? [{ pts, color: color(s.color), width: typeof s.width === 'number' && Number.isFinite(s.width) ? Math.max(0.5, Math.min(12, s.width)) : 3 }] : [];
+    if (!s || typeof s !== 'object') return [];
+    const pts = (Array.isArray(s.pts) ? s.pts : []).slice(0, 40).map(pt).filter((p): p is [number, number] => !!p);
+    const rect = Array.isArray(s.rect) && s.rect.length === 4 && s.rect.every((v) => typeof v === 'number' && Number.isFinite(v)) && s.rect[2] > 0 && s.rect[3] > 0
+      ? s.rect.map((v: number) => Math.max(-200, Math.min(400, v))) as [number, number, number, number] : undefined;
+    const fill = typeof s.fill === 'string' && /^#[0-9a-f]{6}$/i.test(s.fill) ? s.fill : undefined;
+    if (s.fill !== undefined && !fill) return []; // a fill it can't read: leave the piece out rather than guess
+    // A filled piece only gets an edge line if it asks for one.
+    const width = typeof s.width === 'number' && Number.isFinite(s.width) ? Math.max(0, Math.min(12, s.width)) : fill ? 0 : 3;
+    const radius = typeof s.radius === 'number' && Number.isFinite(s.radius) ? Math.max(0, Math.min(30, s.radius)) : 0;
+    if (rect) return fill || width ? [{ pts: [], rect, radius, fill, color: color(s.color), width }] : [];
+    if (pts.length < (fill ? 3 : 2)) return [];
+    return [{ pts, fill, color: color(s.color), width: fill ? width : Math.max(0.5, width) }];
   });
   const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
   const scr = Array.isArray(o.screen) && o.screen.length === 4 && o.screen.every(Number.isFinite) && o.screen[2] > 0 && o.screen[3] > 0
@@ -122,12 +153,13 @@ export function parsePropDef(raw: unknown): PropDef | null {
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 160) : '',
-    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' || o.use === 'game' ? o.use : 'none',
-    outline, seat: pt(o.seat) ?? undefined, seatRight: pt(o.seatRight) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
+    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' ? o.use : 'none',
+    outline, seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
     wheels: Array.isArray(o.wheels) ? o.wheels.filter((i): i is number => Number.isInteger(i) && i >= 0 && i < outline.length) : undefined,
     wheel: num(o.wheel, 4, 1, 20), friction: num(o.friction, 0.6, 0, 1),
     sprite,
     shape: shape.length ? shape : sprite ? [] : [{ pts: [...outline, outline[0]], color: '#2a2c44', width: 3 }],
+    bounds: shapeBounds(outline, shape, scr),
   };
 }
 
@@ -188,6 +220,9 @@ export class Thing {
   /** A TV: switched on (he's watching). */
   on = false;
   channel = 0;
+  /** A TV with its console on: what's on screen instead of a show (his own game, or the board you two are playing). */
+  arcade: Runner | null = null;
+  board: readonly Disc[] | null = null;
   art: { shape: Vec[][]; color: string; title: string } | null = null;
   /** Size it was made at (props scale with him). */
   scale = 1;
@@ -334,6 +369,8 @@ export class Thing {
 
   private drawProp(ctx: Ctx2D, alpha: number, now: number) {
     const def = this.def!;
+    // Flat, filled art (the newer style) paints its screen on top of the body; line art paints it underneath.
+    const flat = def.shape.some((st) => st.fill);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -342,32 +379,86 @@ export class Thing {
       ctx.save(); ctx.translate(at.x, at.y); ctx.rotate(this.tilt); ctx.scale(this.scale, this.scale);
       drawSprite(ctx, def.sprite); ctx.restore();
     }
-    // A TV: the screen (dark when off; cartoons when he's watching).
-    if (def.screen) {
-      const [sx, sy, sw, sh] = def.screen;
-      const c = [this.toWorld(sx, sy), this.toWorld(sx + sw, sy), this.toWorld(sx + sw, sy + sh), this.toWorld(sx, sy + sh)];
-      ctx.beginPath(); c.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath();
-      ctx.fillStyle = def.use === 'canvas' ? '#fff8e8' : this.on ? '#1d2b4a' : '#22232c';
-      ctx.fill();
-      if (this.on && def.use === 'tv') { ctx.save(); ctx.clip(); this.drawShow(ctx, sx, sy, sw, sh, now); ctx.restore(); }
-      if (this.art && def.use === 'canvas') {
-        ctx.save(); ctx.clip(); ctx.strokeStyle = this.art.color; ctx.lineWidth = 2 * this.scale;
-        const size = Math.min(sw, sh) * 0.8;
-        for (const stroke of this.art.shape) {
-          ctx.beginPath();
-          stroke.forEach((p, i) => { const q = this.toWorld(sx + sw / 2 + p.x * size, sy + sh / 2 + p.y * size); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-    }
+    if (!flat) this.drawScreen(ctx, now, false);
     for (const st of def.shape) {
-      ctx.strokeStyle = st.color; ctx.lineWidth = st.width * this.scale;
+      if (!st.fill && !st.width) continue;
       ctx.beginPath();
-      st.pts.forEach(([x, y], i) => { const q = this.toWorld(x, y); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
-      ctx.stroke();
+      if (st.rect) this.roundRect(ctx, st.rect, st.radius ?? 0);
+      else {
+        st.pts.forEach(([x, y], i) => { const q = this.toWorld(x, y); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+        if (st.fill) ctx.closePath();
+      }
+      if (st.fill) { ctx.fillStyle = st.fill; ctx.fill(); }
+      if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * this.scale; ctx.stroke(); }
     }
+    if (flat) this.drawScreen(ctx, now, true);
     ctx.restore();
+  }
+
+  /** A rounded box in the prop's own frame (so it tips over with it). Adds to the current path. */
+  private roundRect(ctx: Ctx2D, [x, y, w, h]: [number, number, number, number], r: number) {
+    const at = this.toWorld(x, y);
+    ctx.save(); ctx.translate(at.x, at.y); ctx.rotate(this.tilt); ctx.scale(this.scale, this.scale);
+    ctx.roundRect(0, 0, w, h, Math.min(r, w / 2, h / 2));
+    ctx.restore();
+  }
+
+  /** A TV's screen (dark when off; a show, his game or your board when on), or a canvas and its picture. */
+  private drawScreen(ctx: Ctx2D, now: number, rounded: boolean) {
+    const def = this.def!;
+    if (!def.screen) return;
+    const [sx, sy, sw, sh] = def.screen;
+    ctx.beginPath();
+    if (rounded) this.roundRect(ctx, def.screen, 3);
+    else {
+      const c = [this.toWorld(sx, sy), this.toWorld(sx + sw, sy), this.toWorld(sx + sw, sy + sh), this.toWorld(sx, sy + sh)];
+      c.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath();
+    }
+    ctx.fillStyle = def.use === 'canvas' ? '#fff8e8' : this.on ? '#1d2b4a' : '#22232c';
+    ctx.fill();
+    if (this.on && def.use === 'tv') {
+      ctx.save(); ctx.clip();
+      if (this.board) this.drawBoard(ctx, this.board, sx, sy, sw, sh);
+      else if (this.arcade) this.drawArcade(ctx, this.arcade, sx, sy, sw, sh);
+      else this.drawShow(ctx, sx, sy, sw, sh, now);
+      ctx.restore();
+    }
+    if (this.art && def.use === 'canvas') {
+      ctx.save(); ctx.clip(); ctx.strokeStyle = this.art.color; ctx.lineWidth = 2 * this.scale;
+      const size = Math.min(sw, sh) * 0.8;
+      for (const stroke of this.art.shape) {
+        ctx.beginPath();
+        stroke.forEach((p, i) => { const q = this.toWorld(sx + sw / 2 + p.x * size, sy + sh / 2 + p.y * size); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  /** Your Othello game, on the TV: a green board with the discs, small enough to read from the couch. */
+  private drawBoard(ctx: Ctx2D, board: readonly Disc[], sx: number, sy: number, sw: number, sh: number) {
+    const size = Math.min(sw, sh) - 4, x0 = sx + (sw - size) / 2, y0 = sy + (sh - size) / 2, cell = size / 8;
+    ctx.beginPath(); this.roundRect(ctx, [x0 - 1, y0 - 1, size + 2, size + 2], 1.5);
+    ctx.fillStyle = '#2f7a55'; ctx.fill();
+    board.forEach((d, i) => {
+      if (!d) return;
+      const q = this.toWorld(x0 + (i % 8 + 0.5) * cell, y0 + (Math.floor(i / 8) + 0.5) * cell);
+      ctx.fillStyle = d === 'black' ? '#1b1d26' : '#f1ead8';
+      ctx.beginPath(); ctx.arc(q.x, q.y, cell * 0.42 * this.scale, 0, 7); ctx.fill();
+    });
+  }
+
+  /** His own game on the TV: a little guy hopping over blocks, and his score. */
+  private drawArcade(ctx: Ctx2D, g: Runner, sx: number, sy: number, sw: number, sh: number) {
+    const box = (u: number, v: number, w: number, h: number, color: string) => {
+      ctx.beginPath(); this.roundRect(ctx, [sx + u * sw, sy + v * sh, w * sw, h * sh], 1); ctx.fillStyle = color; ctx.fill();
+    };
+    box(0, 0.8, 1, 0.2, '#3d5a3a'); // the ground
+    for (const o of g.blocks) box(o.x - BLOCK_W / 2, 0.8 - o.h, BLOCK_W, o.h, '#e0704a');
+    const hurt = g.crashedAt >= 0 && g.time - g.crashedAt < 0.6;
+    box(g.x - PLAYER_W / 2, 0.8 - 0.14 - g.y, PLAYER_W, 0.14, hurt ? '#ff5a5a' : '#ffd23f');
+    // The score: one tick per point, up in the corner (big enough to read as pixels).
+    for (let i = 0; i < Math.min(g.score, 10); i++) box(0.05 + i * 0.06, 0.07, 0.04, 0.08, '#cfe8ff');
   }
 
   /** What's on TV: a few little shows that take turns (a stick figure running about, a bouncing ball, static, color bars). */
@@ -442,13 +533,19 @@ export class Thing {
   get moving() { return this.points.some((p) => Math.abs(p.x - p.px) + Math.abs(p.y - p.py) > 0.02) || this.held !== null; }
 
   private pixels = new PixelLayer();
-  draw(ctx: CanvasRenderingContext2D, alpha: number, now = 0) {
+  /** `pixel` is his pixel size: furniture in the flat style is drawn smooth and pixelated with him, so it always matches. */
+  draw(ctx: CanvasRenderingContext2D, alpha: number, now = 0, pixel = 1) {
     if (this.def) {
+      const box = (b: [number, number, number, number]) => [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]].map(([x, y]) => this.toWorld(x, y));
       if (this.def.sprite) {
+        // Hand-made pixel sprites keep their own grid.
         const s = this.def.sprite, w = s.rows[0].length * s.pixel, h = s.rows.length * s.pixel;
-        const corners = [[s.x, s.y], [s.x + w, s.y], [s.x + w, s.y + h], [s.x, s.y + h]].map(([x, y]) => this.toWorld(x, y));
         ctx.save(); ctx.globalAlpha *= alpha;
-        this.pixels.paint(ctx, corners, 2, { ...DEFAULT_LOOK, pixel: 2, outline: false }, (g) => this.drawProp(g, 1, now));
+        this.pixels.paint(ctx, box([s.x, s.y, s.x + w, s.y + h]), 2, { ...DEFAULT_LOOK, pixel: 2, outline: false }, (g) => this.drawProp(g, 1, now));
+        ctx.restore();
+      } else if (pixel > 1 && this.def.bounds) {
+        ctx.save(); ctx.globalAlpha *= alpha;
+        this.pixels.paint(ctx, box(this.def.bounds), 2 * pixel, { ...DEFAULT_LOOK, pixel, outline: false }, (g) => this.drawProp(g, 1, now));
         ctx.restore();
       } else this.drawProp(ctx, alpha, now);
       return;
@@ -548,7 +645,7 @@ export function rampSlopeId(n: number, up: 1 | -1) { return PROP_ID + n * 64 + (
 export const reserveThing = () => nextProp++;
 
 /** The props that come with him (in his inventory; none are out until you drop them in). */
-export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef, gameDef].map((d) => parsePropDef(d)!);
+export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef].map((d) => parsePropDef(d)!);
 
 export class Props {
   balls: Ball[] = [];
@@ -687,8 +784,8 @@ export class Props {
     return best;
   }
 
-  draw(ctx: CanvasRenderingContext2D, now: number) {
-    for (const t of this.things) t.draw(ctx, t.forever ? 1 : Math.max(0, Math.min(1, (DOODLE_LIFE - (now - t.doodle.born)) / 10)), now);
+  draw(ctx: CanvasRenderingContext2D, now: number, pixel = 1) {
+    for (const t of this.things) t.draw(ctx, t.forever ? 1 : Math.max(0, Math.min(1, (DOODLE_LIFE - (now - t.doodle.born)) / 10)), now, pixel);
     ctx.save();
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 3;
     for (const b of this.balls) {

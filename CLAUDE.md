@@ -4,8 +4,9 @@
 They record the current reliability/item work, tests, Windows distribution steps, and the owner's
 stop point before preparing multiple characters. The original vision and historical handoff below
 remain useful context; the latest owner instructions take priority. The owner has since approved
-solid pixel-art props, a seated Othello table with independent chat, removable helmet/boots and GUI
-polish. These are now implemented on `codex/reliability-and-items`; multiple characters remain paused.
+removable helmet/boots and GUI polish, then chose a house art style: flat, front-on props drawn smooth
+and pixelated at his own pixel size (see the reference notes in docs/HANDOFF.md). The Othello table was
+replaced by games on the TV (his solo runner game and Othello with you). Multiple characters remain paused.
 
 A desktop pet: a procedural stick figure living in a transparent, always-on-top,
 click-through overlay. Inspired by Alan Becker's *Animator vs. Animation*.

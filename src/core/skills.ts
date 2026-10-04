@@ -14,7 +14,7 @@ import { preferredSlots, type Item, type ItemUse } from './items';
 
 import { Skill, arrive, type Ctx, type LookMode } from './skills/context';
 export { Skill, DEFAULT_LESSONS, type Ctx, type World, type Lessons, type LookMode } from './skills/context';
-export { propsOf, SitOnProp, WatchTV, RideScooter, PlayBoardGame } from './skills/props';
+export { propsOf, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PlayBoardGame } from './skills/props';
 
 /** Do some skills one after the other (each one is made when its turn comes). */
 export class Chain extends Skill {

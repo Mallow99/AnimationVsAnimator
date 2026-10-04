@@ -86,6 +86,12 @@ function readItemDefs(): unknown[] {
         if (f.endsWith('.md') || (!copied.includes(f) && !fs.existsSync(to)) || unchangedExample(to, old)) fs.copyFileSync(path.join(examples, f), to);
         if (!copied.includes(f)) copied.push(f);
       }
+      // Examples that no longer ship (the Othello table, now played on the TV) go away, unless you edited them.
+      const shipped = new Set(fs.readdirSync(examples));
+      for (const [f, old] of Object.entries(builtinHistory as Record<string, unknown[]>)) {
+        const at = path.join(dir, f);
+        if (!shipped.has(f) && fs.existsSync(at) && unchangedExample(at, old)) fs.rmSync(at);
+      }
       fs.writeFileSync(marker, JSON.stringify(copied));
     }
     for (const f of fs.readdirSync(dir)) {

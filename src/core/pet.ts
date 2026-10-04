@@ -20,6 +20,7 @@ import { DOODLE_LIFE, drawDoodles } from './doodles';
 import { Brain, parseMove, splitSpeech } from './brain';
 import { WindowAccess } from './window-access';
 import { BoardGame } from './board-game';
+import { controllerPart } from './render';
 import { distToSegment, type Vec } from './math';
 import { Memory } from './memory';
 import { CursorBody, drawCursorFlight } from './cursor';
@@ -325,13 +326,14 @@ export class Pet {
   draw(ctx: CanvasRenderingContext2D) {
     const look = this.config.look;
     // His drawings that came to life, and his furniture: behind him (he sits on them, stands on them).
-    this.props.draw(ctx, this.ctx.world.time);
+    this.props.draw(ctx, this.ctx.world.time, Math.round(look.pixel));
     // Squash and stretch (drawing only): scale him about his feet for a moment.
     const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
     const extras: DepthPart[] = [
       ...beltParts(this.char, '#3a2a22'),
       ...this.items.onHim.filter((it) => !(it.where === 'belt' && it.slot === 3)).flatMap((it) => itemParts(it, this.char)),
+      ...(this.char.gamepad && this.char.mode === 'sit' ? [controllerPart(this.char)] : []),
     ];
     if (look.pixel > 1) {
       this.pixels.draw(ctx, this.char, look, extras);

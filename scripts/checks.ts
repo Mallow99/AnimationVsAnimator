@@ -13,6 +13,7 @@ import { unchangedExample } from '../src/electron/builtin-files';
 import { BoardGame, chooseGameMove, gameResult, openingBoard, captures, legalMoves, type Disc } from '../src/core/board-game';
 import { Item, BUILTIN_ITEMS } from '../src/core/items';
 import { parseSprite } from '../src/core/pixel-art';
+import { Runner } from '../src/core/tv-game';
 
 let passed = 0;
 async function test(name: string, fn: () => void | Promise<void>) { await fn(); passed++; console.log(`PASS ${name}`); }
@@ -136,39 +137,82 @@ await test('complete offline Othello matches terminate with valid scores and aut
   }
   assert(passed, 'no match exercised a passed turn');
 });
-await test('he can offer a game and removing the board cancels it', () => {
+const tvAt = (p: Pet, x: number) => p.props.spawn('tv', x, bounds.floor - 70 * p.char.scale - 2, p.char.scale)!;
+await test('he can offer Othello on the TV and removing the TV cancels it', () => {
   const p = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
   p.paused = true; for (let i = 0; i < 360; i++) p.update(1 / 120);
   p.mind.reset(p.ctx);
-  const table = p.props.spawn('board-game', p.char.x + 70.4 * p.char.scale, bounds.floor - 64 * p.char.scale - 2, p.char.scale)!;
+  const tv = tvAt(p, p.char.x + 160 * p.char.scale);
   for (let i = 0; i < 240; i++) p.update(1 / 120);
   p.paused = false; p.command('do:playgame');
   for (let i = 0; i < 1800 && p.game.state === 'closed'; i++) p.update(1 / 120);
-  assert.equal(p.game.state, 'invite'); assert.equal(p.char.mode, 'sit'); assert(p.char.seat); p.game.accept(); p.props.remove(table); p.update(1 / 60);
-  assert.equal(p.game.state, 'closed');
+  assert.equal(p.game.state, 'invite'); assert.equal(p.char.mode, 'sit'); assert(p.char.gamepad);
+  assert(tv.on); assert.equal(tv.board, p.game.board);
+  p.game.accept(); p.props.remove(tv); p.update(1 / 60);
+  assert.equal(p.game.state, 'closed'); assert(!p.char.gamepad);
 });
-await test('he approaches the Othello table from either side and uses the nearest stool', () => {
+await test('he takes the couch near the TV from either side, faces it, and the board shows on screen', () => {
   for (const side of [-1, 1]) {
     const p = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
     p.paused = true; for (let i = 0; i < 600; i++) p.update(1/120); p.mind.reset(p.ctx);
-    const table = p.props.spawn('board-game', p.char.x + side*220, bounds.floor - 64*p.char.scale - 2, p.char.scale)!;
+    const couch = p.props.spawn('couch', p.char.x + side * 120, bounds.floor - 56 * p.char.scale - 2, p.char.scale)!;
+    const tv = tvAt(p, p.char.x + side * 300);
     for (let i = 0; i < 240; i++) p.update(1/120);
     p.paused = false; p.command('do:playgame');
     for (let i = 0; i < 1800 && p.game.state === 'closed'; i++) p.update(1/120);
     assert.equal(p.game.state, 'invite'); assert.equal(p.char.mode, 'sit');
-    assert.equal(p.char.facing, side === 1 ? 1 : -1);
-    const seat = side === 1 ? table.seatAt! : table.toWorld(...table.def!.seatRight!);
-    assert(Math.abs(p.char.x - seat.x) < 6*p.char.scale);
+    assert(Math.abs(p.char.x - couch.seatAt!.x) < 6 * p.char.scale, 'not on the couch');
+    assert.equal(p.char.facing, Math.sign(tv.center.x - couch.center.x));
+    p.game.accept(); for (let i = 0; i < 240; i++) p.update(1/120);
+    assert.equal(tv.board, p.game.board); assert(p.char.gamepad);
   }
 });
+await test('video games: controller in hand, his game on the TV, and it all switches off when he stops', () => {
+  const p = new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), destructible: false });
+  p.paused = true; for (let i = 0; i < 600; i++) p.update(1/120); p.mind.reset(p.ctx);
+  const tv = tvAt(p, p.char.x + 200 * p.char.scale);
+  for (let i = 0; i < 240; i++) p.update(1/120);
+  p.paused = false; p.command('do:videogame');
+  for (let i = 0; i < 1800 && !tv.arcade; i++) p.update(1/120);
+  assert(tv.arcade, 'his game never came on'); assert(tv.on); assert(p.char.gamepad); assert.equal(p.char.mode, 'sit');
+  assert.equal(p.char.facing, Math.sign(tv.center.x - p.char.x));
+  const start = tv.arcade.time; for (let i = 0; i < 600; i++) p.update(1/120);
+  assert(tv.arcade.time > start, 'the game is not running');
+  p.mind.reset(p.ctx);
+  assert(!tv.on); assert.equal(tv.arcade, null); assert(!p.char.gamepad);
+});
+await test('his runner game: good timing clears blocks, bad timing crashes, and beating his best is a record', () => {
+  const run = (skill: number, seed: number) => {
+    let s = seed; const random = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const g = new Runner(skill, random), seen = { point: 0, crash: 0, record: 0 };
+    for (let i = 0; i < 120 * 180; i++) for (const e of g.step(1 / 120)) seen[e]++;
+    return seen;
+  };
+  const pro = run(1, 7); assert.equal(pro.crash, 0); assert(pro.point > 60);
+  const rookie = run(0.2, 7); assert(rookie.crash >= 3, `only ${rookie.crash} crashes`); assert(rookie.record >= 1);
+});
+await test('flat prop art: filled boxes and shapes parse, bad colors are refused, and the drawing has bounds', () => {
+  const def = parsePropDef({ type: 'prop', id: 'box', outline: [[0, 0], [20, 0], [20, 10], [0, 10]], shape: [
+    { rect: [0, -6, 20, 16], radius: 4, fill: '#aabbcc' },
+    { pts: [[0, 0], [10, -9], [20, 0]], fill: '#112233' },
+    { rect: [0, 0, 5, 5], fill: 'red' },
+    { pts: [[0, 0], [5, 5]], color: '#000000', width: 2 },
+  ] })!;
+  assert.equal(def.shape.length, 3);
+  assert.deepEqual(def.shape[0].rect, [0, -6, 20, 16]); assert.equal(def.shape[0].width, 0);
+  assert.equal(def.shape[1].fill, '#112233'); assert.equal(def.shape[2].width, 2);
+  assert.deepEqual(def.bounds!.map((v) => Math.round(v)), [-2, -9, 20, 10]);
+  const tv = parsePropDef(JSON.parse(fs.readFileSync('src/core/props/tv.json', 'utf8')))!;
+  assert(!tv.sprite && tv.shape.every((st) => st.fill || st.width));
+});
 await test('asymmetric furniture keeps its position through repeated save/load cycles', () => {
-  let p = pet(); p.props.spawn('board-game', 700, 700, p.char.scale);
+  let p = pet(); p.props.spawn('chair', 700, 700, p.char.scale);
   for (let i = 0; i < 10; i++) { const next = pet(); next.load(p.save()); p = next; }
   assert.equal(Math.round(p.props.placed[0].center.x), 700);
 });
 await test('chat and incidental AI plans leave the seated match running; an explicit activity interrupts', async () => {
   const p = pet(); p.paused = true; for (let i = 0; i < 600; i++) p.update(1/120); p.mind.reset(p.ctx);
-  p.props.spawn('board-game', p.char.x + 70.4*p.char.scale, bounds.floor - 64*p.char.scale - 2, p.char.scale);
+  tvAt(p, p.char.x + 160 * p.char.scale);
   for (let i = 0; i < 240; i++) p.update(1/120);
   p.paused = false; p.command('do:playgame');
   for (let i = 0; i < 1800 && p.game.state === 'closed'; i++) p.update(1/120);

@@ -2,79 +2,220 @@
   "type": "prop",
   "id": "couch",
   "name": "Couch",
-  "about": "A comfy couch. He flops onto it, and it's the best seat for watching TV.",
+  "about": "A comfy couch, front on. He flops onto it, and it's the best seat for TV and video games.",
   "use": "seat",
   "outline": [
     [
       0,
-      8
-    ],
-    [
-      10,
-      8
-    ],
-    [
-      10,
       20
     ],
     [
-      80,
+      14,
       20
     ],
     [
-      80,
-      8
+      14,
+      31
     ],
     [
-      90,
-      8
+      110,
+      31
     ],
     [
-      90,
-      38
+      110,
+      20
+    ],
+    [
+      124,
+      20
+    ],
+    [
+      124,
+      56
     ],
     [
       0,
-      38
+      56
     ]
   ],
   "seat": [
-    44,
-    19
+    62,
+    32
   ],
-  "shape": [],
-  "sprite": {
-    "x": 0,
-    "y": -2,
-    "pixel": 2,
-    "palette": {
-      "R": "#db7b73",
-      "d": "#563b35",
-      "o": "#29232d",
-      "r": "#a85558"
+  "shape": [
+    {
+      "rect": [
+        7,
+        0,
+        110,
+        40
+      ],
+      "radius": 10,
+      "fill": "#9a917f"
     },
-    "rows": [
-      "..oooooooooooooooooooooooooooooooooooooooooo..",
-      "..oRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRo..",
-      "..oRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRo..",
-      "..orrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrro..",
-      "ooooooRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRoooooo",
-      "oRRRRoRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRoRRRRo",
-      "oRRRRoRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRoRRRRo",
-      "oRRRRoRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRoRRRRo",
-      "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
-      "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
-      "orrrroooooooooooooooooooooooooooooooooooorrrro",
-      "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
-      "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
-      "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
-      "orrrrorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrorrrro",
-      "orrrrorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrorrrro",
-      "orrrroddddddddddddddddddddddddddddddddddorrrro",
-      "orrrroooooooooooooooooooooooooooooooooooorrrro",
-      "oooooo..................................oooooo",
-      "...ooo..................................ooo...",
-      "...ooo..................................ooo..."
-    ]
-  }
+    {
+      "rect": [
+        11,
+        3,
+        49,
+        32
+      ],
+      "radius": 7,
+      "fill": "#bdb3a1"
+    },
+    {
+      "rect": [
+        64,
+        3,
+        49,
+        32
+      ],
+      "radius": 7,
+      "fill": "#bdb3a1"
+    },
+    {
+      "rect": [
+        19,
+        5,
+        4,
+        28
+      ],
+      "fill": "#c8bfae"
+    },
+    {
+      "rect": [
+        31,
+        5,
+        4,
+        28
+      ],
+      "fill": "#c8bfae"
+    },
+    {
+      "rect": [
+        43,
+        5,
+        4,
+        28
+      ],
+      "fill": "#c8bfae"
+    },
+    {
+      "rect": [
+        72,
+        5,
+        4,
+        28
+      ],
+      "fill": "#c8bfae"
+    },
+    {
+      "rect": [
+        84,
+        5,
+        4,
+        28
+      ],
+      "fill": "#c8bfae"
+    },
+    {
+      "rect": [
+        96,
+        5,
+        4,
+        28
+      ],
+      "fill": "#c8bfae"
+    },
+    {
+      "rect": [
+        11,
+        30,
+        102,
+        13
+      ],
+      "radius": 4,
+      "fill": "#b3a995"
+    },
+    {
+      "rect": [
+        13,
+        31,
+        98,
+        3
+      ],
+      "radius": 1.5,
+      "fill": "#c6bdab"
+    },
+    {
+      "rect": [
+        9,
+        41,
+        106,
+        12
+      ],
+      "radius": 3,
+      "fill": "#8e8573"
+    },
+    {
+      "rect": [
+        0,
+        18,
+        19,
+        36
+      ],
+      "radius": 8,
+      "fill": "#aca28f"
+    },
+    {
+      "rect": [
+        105,
+        18,
+        19,
+        36
+      ],
+      "radius": 8,
+      "fill": "#aca28f"
+    },
+    {
+      "rect": [
+        2,
+        19,
+        15,
+        5
+      ],
+      "radius": 2.5,
+      "fill": "#c3baa8"
+    },
+    {
+      "rect": [
+        107,
+        19,
+        15,
+        5
+      ],
+      "radius": 2.5,
+      "fill": "#c3baa8"
+    },
+    {
+      "rect": [
+        8,
+        52,
+        7,
+        4
+      ],
+      "radius": 1,
+      "fill": "#5f4c3b"
+    },
+    {
+      "rect": [
+        109,
+        52,
+        7,
+        4
+      ],
+      "radius": 1,
+      "fill": "#5f4c3b"
+    }
+  ]
 }

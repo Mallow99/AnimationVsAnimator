@@ -36,7 +36,7 @@ app.whenReady().then(async () => {
   await overlay.webContents.executeJavaScript(`(() => {
     const p=window.pet; p.paused=true; p.mind.reset(p.ctx); p.applyConfig({...p.config,windows:false}); p.setWindows([]); p.command('respawn');
     for(let i=0;i<600;i++)p.update(1/120);
-    p.props.spawn('board-game',p.char.x+70.4*p.char.scale,p.ctx.world.bounds.floor-64*p.char.scale-2,p.char.scale);
+    p.props.spawn('tv',p.char.x+160*p.char.scale,p.ctx.world.bounds.floor-70*p.char.scale-2,p.char.scale);
     for(let i=0;i<240;i++)p.update(1/120);
     p.paused=false; p.command('do:playgame');
     for(let i=0;i<1800 && p.game.state==='closed';i++)p.update(1/120);

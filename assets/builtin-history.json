@@ -329,6 +329,93 @@
           "width": 2.5
         }
       ]
+    },
+    {
+      "type": "prop",
+      "id": "tv",
+      "name": "TV",
+      "about": "An old TV on little legs. He sits down in front of it (on the couch, if there is one) and watches cartoons.",
+      "use": "tv",
+      "outline": [
+        [
+          0,
+          0
+        ],
+        [
+          56,
+          0
+        ],
+        [
+          56,
+          38
+        ],
+        [
+          52,
+          46
+        ],
+        [
+          4,
+          46
+        ],
+        [
+          0,
+          38
+        ]
+      ],
+      "screen": [
+        6,
+        8,
+        36,
+        22
+      ],
+      "shape": [],
+      "sprite": {
+        "x": -2,
+        "y": -12,
+        "pixel": 2,
+        "palette": {
+          "a": "#df9b38",
+          "c": "#738fa1",
+          "d": "#563b35",
+          "h": "#edb978",
+          "k": "#151b28",
+          "o": "#29232d",
+          "s": "#b0b7c4",
+          "w": "#835339"
+        },
+        "rows": [
+          ".......o.............o........",
+          ".......o.............o........",
+          "........s...........s.........",
+          "........s...........s.........",
+          ".........o.........o..........",
+          ".........o.........o..........",
+          "oooooooooooooooooooooooooooooo",
+          "ohhhhhhhhhhhhhhhhhhhhhhhhhhhho",
+          "owoooooooooooooooooooooowwwwwo",
+          "owoccccccccccccccccccccowwwwwo",
+          "owockkkkkkkkkkkkkkkkkkcowooowo",
+          "owockkkkkkkkkkkkkkkkkkcowosowo",
+          "owockkkkkkkkkkkkkkkkkkcowooowo",
+          "owockkkkkkkkkkkkkkkkkkcowwwwwo",
+          "owockkkkkkkkkkkkkkkkkkcowwwwwo",
+          "owockkkkkkkkkkkkkkkkkkcowooowo",
+          "owockkkkkkkkkkkkkkkkkkcowoaowo",
+          "owockkkkkkkkkkkkkkkkkkcowooowo",
+          "owockkkkkkkkkkkkkkkkkkcowwwwwo",
+          "owockkkkkkkkkkkkkkkkkkcowwwwwo",
+          "owockkkkkkkkkkkkkkkkkkcowdddwo",
+          "owoccccccccccccccccccccowwwwwo",
+          "owoooooooooooooooooooooowdddwo",
+          "owwwwwwwwwwwwwwwwwwwwwwwwwwwwo",
+          "owwwwwwwwwwwwwwwwwwwwwwwwdddwo",
+          "oooooooooooooooooooooooooooooo",
+          "...ooo..................ooo...",
+          "...ooo..................ooo...",
+          "...ooo..................ooo...",
+          "...ooo..................ooo..."
+        ]
+      }
     }
   ],
   "scooter.json": [
@@ -692,6 +779,115 @@
           "width": 1.5
         }
       ]
+    },
+    {
+      "type": "prop",
+      "id": "board-game",
+      "name": "Othello table",
+      "about": "A little table and stool for Othello. He sits down, invites you to play, and can chat during the match.",
+      "use": "game",
+      "outline": [
+        [
+          44,
+          0
+        ],
+        [
+          130,
+          0
+        ],
+        [
+          130,
+          34
+        ],
+        [
+          166,
+          34
+        ],
+        [
+          166,
+          64
+        ],
+        [
+          0,
+          64
+        ],
+        [
+          0,
+          34
+        ],
+        [
+          32,
+          34
+        ],
+        [
+          32,
+          20
+        ],
+        [
+          44,
+          20
+        ]
+      ],
+      "shape": [],
+      "seat": [
+        14,
+        34
+      ],
+      "sprite": {
+        "x": -2,
+        "y": -2,
+        "pixel": 2,
+        "palette": {
+          "G": "#478969",
+          "d": "#563b35",
+          "e": "#f9efd9",
+          "g": "#2d6752",
+          "h": "#edb978",
+          "k": "#151b28",
+          "l": "#be8550",
+          "o": "#29232d",
+          "w": "#835339"
+        },
+        "rows": [
+          "......................oooooooooooooooooooooooooooooooooooooooooooo..................",
+          "......................ohhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhho..................",
+          "......................ollllloooooooooooooooooooooooooooooolllllllo..................",
+          "......................olllllogggGGGgggGGGgggGGGgggGGGddddolllllllo..................",
+          "......................ollllloGGGgggGGGgggGGGgggGGGgggddddolllllllo..................",
+          "......................olllllogggGGGgggGGGgggGGGgggGGGddddolllllllo..................",
+          "......................ollllloGGGgggGGGgeeGkkgggGGGgggddddolllllllo..................",
+          "......................olllllogggGGGgggGkkgeeGGGgggGGGddddolllllllo..................",
+          "......................ollllloGGGgggGGGgggGGGgggGGGgggddddolllllllo..................",
+          "......................olllllogggGGGgggGGGgggGGGgggGGGddddolllllllo..................",
+          "......................owwwwwoGGGgggGGGgggGGGgggGGGgggddddowwwwwwwo..................",
+          "......................oooooooooooooooooooooooooooooooooooooooooooo..................",
+          "..........................owwo.............................owwo.....................",
+          "..........................owwo.............................owwo.....................",
+          "..........................owwo.............................owwo.....................",
+          "..........................owwo.............................owwo.....................",
+          "..........................owwo.............................owwo.....................",
+          "ooooooooooooooooo.........owwo.............................owwo....ooooooooooooooooo",
+          "ohhhhhhhhhhhhhhho.........owwo.............................owwo....ohhhhhhhhhhhhhhho",
+          "olllllllllllllllo.........owwo.............................owwo....olllllllllllllllo",
+          "ooooooooooooooooo.........owwo.............................owwo....ooooooooooooooooo",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..owwo......owwo..........owwo.............................owwo......owwo......owwo.",
+          "..oooo......oooo..........oooo.............................oooo......oooo......oooo."
+        ]
+      },
+      "seatRight": [
+        150,
+        34
+      ]
     }
   ],
   "canvas.json": [
@@ -1039,6 +1235,86 @@
           "width": 3
         }
       ]
+    },
+    {
+      "type": "prop",
+      "id": "couch",
+      "name": "Couch",
+      "about": "A comfy couch. He flops onto it, and it's the best seat for watching TV.",
+      "use": "seat",
+      "outline": [
+        [
+          0,
+          8
+        ],
+        [
+          10,
+          8
+        ],
+        [
+          10,
+          20
+        ],
+        [
+          80,
+          20
+        ],
+        [
+          80,
+          8
+        ],
+        [
+          90,
+          8
+        ],
+        [
+          90,
+          38
+        ],
+        [
+          0,
+          38
+        ]
+      ],
+      "seat": [
+        44,
+        19
+      ],
+      "shape": [],
+      "sprite": {
+        "x": 0,
+        "y": -2,
+        "pixel": 2,
+        "palette": {
+          "R": "#db7b73",
+          "d": "#563b35",
+          "o": "#29232d",
+          "r": "#a85558"
+        },
+        "rows": [
+          "..oooooooooooooooooooooooooooooooooooooooooo..",
+          "..oRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRo..",
+          "..oRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRo..",
+          "..orrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrro..",
+          "ooooooRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRoooooo",
+          "oRRRRoRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRoRRRRo",
+          "oRRRRoRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRoRRRRo",
+          "oRRRRoRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRoRRRRo",
+          "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
+          "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
+          "orrrroooooooooooooooooooooooooooooooooooorrrro",
+          "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
+          "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
+          "orrrroRRRRRRRRRRRRRRRRrrRRRRRRRRRRRRRRRRorrrro",
+          "orrrrorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrorrrro",
+          "orrrrorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrorrrro",
+          "orrrroddddddddddddddddddddddddddddddddddorrrro",
+          "orrrroooooooooooooooooooooooooooooooooooorrrro",
+          "oooooo..................................oooooo",
+          "...ooo..................................ooo...",
+          "...ooo..................................ooo..."
+        ]
+      }
     }
   ],
   "desk.json": [

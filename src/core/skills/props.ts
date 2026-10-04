@@ -2,8 +2,9 @@
 import { Skill, arrive, type Ctx } from './context';
 import type { Thing, PropDef } from '../props';
 import { chance, pick, rand } from '../math';
+import { Runner } from '../tv-game';
 
-/** The props of a kind (seat, tv, ride) that are standing up on the floor, nearest first. */
+/** The props of a kind (seat, tv, ride, canvas) that are standing up on the floor, nearest first. */
 export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
   const ch = c.char;
   return (c.props?.placed ?? []).filter((t) => t.def!.use === use && Math.abs(t.tilt) < 0.35 && !t.held)
@@ -14,11 +15,10 @@ export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
 export class SitOnProp extends Skill {
   readonly name = 'sitdown';
   private phase: 'go' | 'sit' = 'go';
-  constructor(private seat: Thing, private dur = rand(10, 25), private face: 1 | -1 | 0 = 0, readonly why = '', private useRightSeat = false) { super(); }
+  constructor(private seat: Thing, private dur = rand(10, 25), private face: 1 | -1 | 0 = 0, readonly why = '') { super(); }
   start(c: Ctx) { c.look = 'default'; }
   update(c: Ctx) {
-    const ch = c.char, right = this.seat.def?.seatRight;
-    const at = this.useRightSeat && right ? this.seat.toWorld(...right) : this.seat.seatAt;
+    const ch = c.char, at = this.seat.seatAt;
     if (!at || !c.props?.things.includes(this.seat)) return true;
     if (this.phase === 'go') {
       if (this.t > 12) return true;
@@ -44,56 +44,163 @@ export class SitOnProp extends Skill {
   stop(c: Ctx) { if (c.char.mode === 'sit' && c.char.seat) c.char.standUp(); }
 }
 
-/** TV time: on the couch (or a chair) if there's one near the TV, else on the floor in front of it. Switches it on, watches, reacts. */
-export class WatchTV extends Skill {
-  readonly name = 'watchtv';
+/**
+ * Anything at the TV: he finds the couch (or a chair) near it, else sits on the floor in front of it,
+ * and turns to face it. Subclasses decide what happens once he's settled.
+ */
+abstract class AtTheTV extends Skill {
   private sub: SitOnProp | null = null;
-  private phase: 'go' | 'watch' = 'go';
-  private next = 2;
-  private dur = rand(20, 40);
-  constructor(private tv: Thing) { super(); }
+  private phase: 'go' | 'settled' = 'go';
+  constructor(protected tv: Thing) { super(); }
   start(c: Ctx) {
     const tvx = this.tv.center.x;
     const seat = propsOf(c, 'seat').filter((s) => Math.abs(s.center.x - tvx) < 320 && Math.abs(s.center.x - tvx) > 40)
       .sort((a, b) => (b.def!.id === 'couch' ? 1 : 0) - (a.def!.id === 'couch' ? 1 : 0))[0];
-    if (seat) { this.sub = new SitOnProp(seat, this.dur, Math.sign(tvx - seat.center.x) as 1 | -1); this.sub.start(c); }
+    if (seat) { this.sub = new SitOnProp(seat, 3600, Math.sign(tvx - seat.center.x) as 1 | -1); this.sub.start(c); }
     c.look = 'target';
   }
-  update(c: Ctx, dt: number) {
+  /** Getting there and staying put: 'go' on the way, 'settled' sitting and facing it, 'gone' if it fell apart. */
+  protected settle(c: Ctx, dt: number): 'go' | 'settled' | 'gone' {
     const ch = c.char, tv = this.tv;
-    if (!c.props?.things.includes(tv) || Math.abs(tv.tilt) > 0.6) { tv.on = false; return true; }
-    c.lookTarget = tv.center;
+    if (!c.props?.things.includes(tv) || tv.held || Math.abs(tv.tilt) > 0.6) return 'gone';
+    c.look = 'target'; c.lookTarget = tv.center;
     if (this.sub) {
       this.sub.t += dt;
-      if (this.sub.update(c)) { tv.on = false; return true; }
-      if (ch.mode === 'sit') this.watch(c);
-      return false;
+      if (this.sub.update(c)) return 'gone';
+      return ch.mode === 'sit' ? 'settled' : 'go';
     }
-    const spot = tv.center.x + (ch.x < tv.center.x ? -1 : 1) * 70 * ch.scale;
     if (this.phase === 'go') {
-      if (this.t > 12) return true;
-      if (!arrive(c, spot, 8)) return false;
+      if (this.t > 12) return 'gone';
+      const spot = tv.center.x + (ch.x < tv.center.x ? -1 : 1) * 70 * ch.scale;
+      if (!arrive(c, spot, 8)) return 'go';
       ch.facing = Math.sign(tv.center.x - ch.x) as 1 | -1;
       ch.sit();
-      this.phase = 'watch'; this.t = 0;
-      return false;
+      this.phase = 'settled';
     }
-    if (ch.mode !== 'sit') { tv.on = false; return true; }
-    this.watch(c);
-    if (this.t > this.dur) { tv.on = false; ch.standUp(); return true; }
-    return false;
+    return ch.mode === 'sit' ? 'settled' : 'gone';
   }
-  /** On, and reacting to what's on now and then. */
-  private watch(c: Ctx) {
+  stop(c: Ctx) {
+    const tv = this.tv;
+    tv.on = false; tv.arcade = null; tv.board = null;
+    c.char.gamepad = false; c.char.padMash = 0;
+    this.sub?.stop(c);
+    if (!this.sub && c.char.mode === 'sit') c.char.standUp();
+  }
+}
+
+/** TV time: switches it on, watches his shows, reacts now and then. */
+export class WatchTV extends AtTheTV {
+  readonly name = 'watchtv';
+  private next = 2;
+  private watched = 0;
+  private dur = rand(20, 40);
+  update(c: Ctx, dt: number) {
+    const s = this.settle(c, dt);
+    if (s === 'gone') return true;
+    if (s === 'go') return false;
     const tv = this.tv;
     if (!tv.on) { tv.on = true; c.sound?.('click', 0.5); }
-    if (this.t > this.next) {
-      this.next = this.t + rand(5, 10);
+    this.watched += dt;
+    if (this.watched > this.next) {
+      this.next = this.watched + rand(5, 10);
       c.say(pick(['haha', 'ooh', 'no way', 'lol', 'run, little guy!', 'this show is weird', 'he looks like me', '♪', 'again?', 'classic']), 1.6);
       c.mood.nudge({ boredom: -0.12, happiness: 0.02 });
     }
+    return this.watched > this.dur;
   }
-  stop(c: Ctx) { this.tv.on = false; this.sub?.stop(c); if (!this.sub && c.char.mode === 'sit') c.char.standUp(); }
+}
+
+/** Video games on his own: controller in hand, his little runner game on the TV, and he takes it personally. */
+export class PlayVideoGame extends AtTheTV {
+  readonly name = 'videogame';
+  private played = 0;
+  private dur = rand(25, 45);
+  private chatter = 6;
+  update(c: Ctx, dt: number) {
+    const s = this.settle(c, dt);
+    if (s === 'gone') return true;
+    if (s === 'go') return false;
+    const ch = c.char, tv = this.tv;
+    if (!tv.on || !tv.arcade) {
+      tv.on = true; tv.board = null;
+      // Better at it when he's on form; worse when he's sleepy or upset.
+      const L = c.mood.label;
+      tv.arcade = new Runner(L === 'sleepy' || L === 'sad' ? 0.45 : L === 'angry' ? 0.55 : 0.8);
+      c.sound?.('click', 0.5);
+      if (chance(0.6)) c.say(pick(['game time', "let's go", 'ok. focus.']), 1.4);
+    }
+    ch.gamepad = true;
+    const g = tv.arcade;
+    for (const e of g.step(dt)) {
+      if (e === 'crash') {
+        c.say(pick(['NO', 'noooo', 'that was lag', 'come ON', 'ugh', 'it jumped late!']), 1.4);
+        c.mood.nudge({ annoyance: 0.05, boredom: -0.05 });
+      } else if (e === 'record') {
+        c.say(pick(['new record!', 'YES', "let's GO"]), 1.6);
+        c.mood.nudge({ happiness: 0.08 });
+      } else {
+        c.sound?.('click', 0.15);
+        if (g.score === 8) c.say(pick(['ooh, a good run', "don't choke", 'easy']), 1.4);
+      }
+    }
+    // Thumbs: busy as a block comes up, easy otherwise.
+    const near = g.blocks.some((b) => b.x > g.x && b.x - g.x < 0.25);
+    ch.padMash += ((near ? 1 : 0.25) - ch.padMash) * Math.min(1, dt * 8);
+    this.played += dt;
+    if (this.played > this.chatter) { this.chatter = this.played + rand(8, 14); c.mood.nudge({ boredom: -0.1, happiness: 0.02 }); }
+    if (this.played > this.dur && g.crashedAt >= 0 && g.time - g.crashedAt < 1) {
+      if (chance(0.5)) c.say(pick(['ok, one more— no. done.', 'enough for now', 'I was winning']), 1.6);
+      return true;
+    }
+    return this.played > this.dur + 20;
+  }
+}
+
+/**
+ * Othello with you, on the TV's console. He asks; you choose whether to join in the game window.
+ * The board shows on the TV too. Interruptions close it cleanly.
+ */
+export class PlayBoardGame extends AtTheTV {
+  readonly name = 'playgame';
+  private offered = false;
+  private reacted = false;
+  private revision = -1;
+  private activeAt = 0;
+  private mashUntil = 0;
+  update(c: Ctx, dt: number) {
+    if (!c.game) return true;
+    const s = this.settle(c, dt);
+    if (s === 'gone') return true;
+    if (s === 'go') return !this.offered && this.t > 15;
+    const ch = c.char, tv = this.tv, game = c.game;
+    if (!this.offered) {
+      if (!game.invite()) return true;
+      this.offered = true; this.activeAt = c.world.time;
+      tv.on = true; tv.arcade = null; tv.board = game.board;
+      c.sound?.('click', 0.5);
+      c.say('wanna play a round?', 2);
+    }
+    ch.gamepad = true;
+    tv.on = true; tv.board = game.board;
+    game.anchor = tv.toWorld(tv.def!.screen ? tv.def!.screen[0] + tv.def!.screen[2] / 2 : 0, 0);
+    if (this.revision !== game.revision) {
+      this.revision = game.revision; this.activeAt = c.world.time;
+      // His move (or yours) lands: thumbs on the buttons for a moment.
+      if (game.lastMove >= 0) { this.mashUntil = c.world.time + 0.5; c.sound?.('click', 0.35); }
+    }
+    ch.padMash = c.world.time < this.mashUntil || (game.state === 'playing' && game.turn === 'him') ? 1 : 0.1;
+    if (game.state === 'finished' && !this.reacted) {
+      this.reacted = true;
+      c.say(game.result === 'you' ? 'rematch?' : game.result === 'him' ? 'ha! got you' : 'draw. again?', 2);
+      c.mood.nudge({ boredom: -0.15, happiness: 0.03 });
+    }
+    if (game.state === 'playing') this.reacted = false;
+    return game.state === 'closed' || c.world.time - this.activeAt > (game.state === 'invite' ? 45 : 900);
+  }
+  stop(c: Ctx) {
+    if (this.offered) c.game?.close();
+    super.stop(c);
+  }
 }
 
 /** Scooter time: hop on, hold the handlebar, kick off a few times, roll across the screen, brake, hop off. */
@@ -150,64 +257,4 @@ export class RideScooter extends Skill {
     return this.t > 1.5 || (ch.ready && ch.support !== deck.id);
   }
   stop(c: Ctx) { c.char.handTarget = null; }
-}
-
-/** He offers a game; the person chooses whether to join. Interruptions close it cleanly. */
-export class PlayBoardGame extends Skill {
-  readonly name = 'playgame';
-  private offered = false;
-  private reacted = false;
-  private seat: SitOnProp | null = null;
-  private rightSeat = false;
-  private revision = -1;
-  private activeAt = 0;
-  private reachUntil = 0;
-  constructor(private table: Thing) { super(); }
-  start(c: Ctx) {
-    this.rightSeat = !!this.table.def?.seatRight && c.char.x > this.table.toWorld(86, 0).x;
-    this.seat = this.table.seatAt ? new SitOnProp(this.table, 3600, this.rightSeat ? -1 : 1, '', this.rightSeat) : null;
-    this.seat?.start(c);
-  }
-  update(c: Ctx, dt: number) {
-    if (!c.game || !c.props?.things.includes(this.table) || this.table.held || Math.abs(this.table.tilt) > 0.6) return true;
-    if (this.seat) {
-      this.seat.t += dt;
-      if (this.seat.update(c)) return true;
-    }
-    c.look = 'target'; c.lookTarget = this.table.center;
-    if (!this.offered) {
-      if (this.t > 15) return true;
-      if (this.seat) { if (c.char.mode !== 'sit') return false; }
-      else {
-        if (!arrive(c, this.table.center.x - 38 * c.char.scale, 8)) return false;
-        c.char.sit();
-      }
-      if (!c.game.invite()) return true;
-      this.offered = true; this.t = 0;
-      c.say('wanna play a round?', 2);
-    }
-    if (c.char.mode !== 'sit') return true;
-    c.game.anchor = this.table.def?.sprite ? this.table.toWorld(86, 0) : this.table.center;
-    if (this.revision !== c.game.revision) {
-      this.revision = c.game.revision; this.activeAt = c.world.time;
-      if (c.game.lastMove >= 0) {
-        this.reachUntil = c.world.time + 0.35;
-        c.sound?.('click', 0.35);
-      }
-    }
-    c.char.handTarget = c.world.time < this.reachUntil ? this.table.toWorld(this.rightSeat ? 122 : 50, 6) : null;
-    if (c.game.state === 'finished' && !this.reacted) {
-      this.reacted = true;
-      c.say(c.game.result === 'you' ? 'rematch?' : c.game.result === 'him' ? 'ha! got you' : 'draw. again?', 2);
-      c.mood.nudge({ boredom: -0.15, happiness: 0.03 });
-    }
-    if (c.game.state === 'playing') this.reacted = false;
-    return c.game.state === 'closed' || c.world.time - this.activeAt > (c.game.state === 'invite' ? 45 : 900);
-  }
-  stop(c: Ctx) {
-    if (this.offered) c.game?.close();
-    c.char.handTarget = null;
-    this.seat?.stop(c);
-    if (!this.seat && c.char.mode === 'sit') c.char.standUp();
-  }
 }

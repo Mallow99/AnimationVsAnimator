@@ -3,7 +3,7 @@ import type { Pet } from '../core/pet';
 
 export function createGamePanel(pet: Pet, typing: (on: boolean) => void, talk: () => void) {
   const panel = document.createElement('section');
-  panel.id = 'gamePanel'; panel.hidden = true; panel.setAttribute('aria-label', 'Othello table');
+  panel.id = 'gamePanel'; panel.hidden = true; panel.setAttribute('aria-label', 'Othello on the TV');
   const header = document.createElement('div'); header.className = 'game-titlebar';
   const title = document.createElement('strong'); title.textContent = 'OTHELLO';
   const close = document.createElement('button'); close.type = 'button'; close.className = 'game-close';
@@ -85,7 +85,7 @@ export function createGamePanel(pet: Pet, typing: (on: boolean) => void, talk: (
     const game = pet.game, count = game.score, moves = game.turn === 'you' ? game.moves : [];
     subtitle.textContent = `A match with ${pet.config.name}`;
     yours.textContent = `● You  ${count.you}`; his.textContent = `○ ${pet.config.name}  ${count.him}`;
-    status.textContent = game.state === 'invite' ? 'Pull up a seat. You play black.'
+    status.textContent = game.state === 'invite' ? 'Grab a controller. You play black.'
       : game.state === 'finished' ? game.result === 'you' ? 'You won. Nicely played!' : game.result === 'him' ? 'He wins this round.' : 'An even match. A draw!'
         : `${game.notice ? game.notice + ' ' : ''}${game.turn === 'you' ? 'Your turn — choose a marked square.' : 'His turn…'}`;
     grid.hidden = game.state === 'invite'; score.hidden = game.state === 'invite';

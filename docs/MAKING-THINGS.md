@@ -120,7 +120,7 @@ around 45 tall looks right next to him.
 | `screen`  | (`tv`) the screen: `[x, y, width, height]`. It's dark until he switches it on, then shows cartoons. |
 | `wheels`, `wheel`, `bar` | (`ride`) which outline corners are wheels (by position in the list, counting from 0), how big the wheels are, and where he holds on (`[x, y]`). |
 | `friction`| how grippy it is on the floor: `0.6` stays put (the default), `0.01` rolls. |
-| `shape`   | the drawing: strokes like items, but with `[x, y]` points. The drawing doesn't have to match the outline exactly (the chair's outline is a simple shape; its drawing has legs and a back). |
+| `shape`   | the drawing: strokes like items, but with `[x, y]` points, or flat filled shapes (see "Flat art" below). The drawing doesn't have to match the outline exactly (the chair's outline is a simple shape; its drawing has legs and a back). |
 
 ### Tips
 
@@ -131,6 +131,24 @@ around 45 tall looks right next to him.
 - Props come out of the top of the screen when you drop them in, so give them a moment to land.
 
 ---
+
+## Flat art (the house style)
+
+The couch and TV are drawn the way he is: flat, front-on shapes with no outlines, muted colors (so he
+stays the brightest thing on screen), soft rounded corners, and a couple of tones for shading. They're
+drawn smooth and then pixelated at **his** pixel size, so they always match him; there's no separate
+pixel art to keep in step. Add filled pieces to `shape`:
+
+```json
+{ "rect": [10, 24, 84, 12], "radius": 4, "fill": "#b3a995" },
+{ "pts": [[0, 10], [12, 0], [24, 10]], "fill": "#9a917f" }
+```
+
+- `rect` is `[x, y, width, height]`, with rounded corners of `radius`; `pts` + `fill` is any flat shape.
+- Pieces are painted in order, so list what's at the back first.
+- Add `"color"` and `"width"` to give a filled piece an edge line (usually you won't).
+- Keep every part at least 4 wide: thinner bits break up or vanish once he's pixelated.
+- A TV's `screen` is painted on top of the body, rounded, and shows his shows, his game, or your Othello board.
 
 ## Pixel sprites and removable gear
 
@@ -146,8 +164,8 @@ Items and props can use a `sprite` instead of line strokes. Copy a shipped examp
 
 Every character is one pixel; `.` is transparent. Rows must have the same width, up to 128 columns
 and 128 rows. Palette colors are six-digit hex values. `pixel` is the local pixel size, before scaling
-with him. `x`/`y` locate the sprite in the same coordinates as the object's drawing. Props are rendered
-on a crisp two-screen-point grid. You can also keep `shape` strokes for details or older custom art.
+with him. `x`/`y` locate the sprite in the same coordinates as the object's drawing. Sprite props keep
+their own two-screen-point grid (they don't follow his pixel size, so prefer flat art for new props). You can also keep `shape` strokes for details or older custom art.
 Sprites supply art; `outline`, `seat`, `screen` and wheels still supply the physical interaction.
 
 For equipment, copy `helmet.json` or `boots.json`. Set `"wear": "head"` or `"wear": "feet"`,
@@ -156,8 +174,7 @@ attached to each present foot and mirrored when he turns left. Take/drop/give-ba
 Only one item can occupy each equipment location; a replacement drops the previous one. This is
 cosmetic clothing, with no armor or health system.
 
-An Othello table can supply `seat` and `seatRight` (both `[x, y]`) so he approaches the closest side.
-This is furniture for the existing pet. The game panel and speech remain separate.
+Games are played on the TV (its console is part of the TV): his own runner game, and Othello with you.
 
 ## 3. Making your own version of him
 
@@ -177,10 +194,10 @@ body or items, the same way items are files now.
 
 ## 4. For the curious: how it works
 
-New examples include `mace.json`, `helmet.json`, `boots.json`, `canvas.json`, `desk.json` and `board-game.json`. A canvas uses
-`"use": "canvas"` and a `screen` rectangle for the painting area. A board game uses `"use": "game"`;
-today that starts the offline Othello activity. Defining a new game needs code.
-See `src/core/board-game.ts` and `src/core/skills/props.ts`. Canvas pictures are saved with the pet.
+New examples include `mace.json`, `helmet.json`, `boots.json`, `canvas.json` and `desk.json`. A canvas uses
+`"use": "canvas"` and a `screen` rectangle for the painting area. Any `"use": "tv"` prop can host his video
+game and Othello; defining a new game needs code. See `src/core/tv-game.ts`, `src/core/board-game.ts` and
+`src/core/skills/props.ts`. Canvas pictures are saved with the pet.
 The mace uses `smash`; existing mallets still work. Customized copies of the older examples are
 preserved when bundled examples improve.
 

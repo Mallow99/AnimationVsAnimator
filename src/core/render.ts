@@ -156,6 +156,23 @@ export class PixelLayer {
   }
 }
 
+/** A game controller held in both hands (flat, like his furniture), in front of him. */
+export function controllerPart(c: Character): DepthPart {
+  const j = c.body.j, sc = c.scale, x = (j.handL.x + j.handR.x) / 2, y = (j.handL.y + j.handR.y) / 2;
+  const w = 16 * sc, h = 8 * sc;
+  return {
+    z: Math.max(j.handL.z, j.handR.z) + 0.5,
+    pts: [{ x: x - w, y: y - h }, { x: x + w, y: y + h }],
+    draw: (g) => {
+      g.save();
+      g.beginPath(); g.roundRect(x - w / 2, y - h / 2, w, h, h / 2); g.fillStyle = '#3b3f4f'; g.fill();
+      g.fillStyle = '#e46a5c'; g.beginPath(); g.arc(x + w * 0.24, y, 1.8 * sc, 0, 7); g.fill();
+      g.fillStyle = '#b4bccc'; g.fillRect(x - w * 0.36, y - 1 * sc, 4.5 * sc, 2 * sc);
+      g.restore();
+    },
+  };
+}
+
 /**
  * His belt: a band around his hips, square to his torso. Split into short pieces so the
  * part behind him is drawn behind his body and the front part in front.

@@ -4,7 +4,7 @@ A stick-figure desktop pet inspired by Alan Becker's *Animator vs. Animation*.
 He lives on top of your screen, has his own physics and moods, and you can poke,
 grab, and throw him.
 
-[See the pixel furniture and Othello preview](docs/images/othello-preview.png).
+[See the couch, TV and video games](docs/images/tv-couch-preview.png).
 
 ## Run it (macOS or Windows)
 1. Install [Node.js](https://nodejs.org) (LTS).
@@ -46,10 +46,12 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   **Give him** to put it on his belt. Take something from him (right-click) and it dangles from your cursor: press and hold
   to swing it, let go to drop or throw it, let go on him to hand it back. He asks for his things back, and picks them up
   when they're lying around.
-- **Props**: pixel-art chair, couch, CRT TV, scooter, desk, canvas and Othello table (Settings → Items → Props). He sits on the chair and couch, watches TV
+- **Props**: chair, couch, TV (with a game console), scooter, desk and canvas (Settings → Items → Props). He sits on the chair and couch, watches TV
   (from the couch if it's near), rides the scooter across the screen. Drag them around; tip his chair and he falls off.
-- **Othello together**: drop in the Othello table and select **Play Othello**. He takes a stool;
-  you play black, he plays white. The board has its own draggable window, legal-move hints and score.
+- **Video games**: with a TV out he grabs a controller and plays his own little runner game (from the couch if
+  it's near), and takes losing personally. Settings → Items → the placed TV → **Video games**, or ask him.
+- **Othello together**: on the placed TV, choose **Play Othello** (or say "play Othello"). He picks up a controller
+  and invites you; you play black, he plays white. The board shows on the TV and in its own draggable window.
   **Talk to him** keeps the match running while you chat. Works offline, with no AI calls for moves.
 - **Optional gear**: helmet and boots in Items → Inventory. **Wear** puts them on; **Drop it in**
   lets him fetch them. Take them back or **Put away** whenever you like.
@@ -101,9 +103,9 @@ his name, size, look (presets or every number by hand) and how he moves.
 
 ## Commands
 
-Recent additions: solid pixel-art furniture, seated Othello with independent chat, removable helmet
-and boots, a larger pen, optional mace and canvas painting. Drop props in from Settings → Items,
-then use **Paint** or **Play Othello**.
+Recent additions: a flat, front-on couch and TV in his own style (pixelated with him), video games and
+Othello on the TV, removable helmet and boots, a larger pen, optional mace and canvas painting. Drop props
+in from Settings → Items, then use **Paint**, **Video games** or **Play Othello**.
 Full AI mode has a thinking-interval control for lower free-tier usage. His persona and body look
 remain the same. See [docs/HANDOFF.md](docs/HANDOFF.md) for verified changes and hardware checks.
 

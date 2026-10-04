@@ -211,6 +211,9 @@ export class Character {
   seat: Vec | null = null;
   /** Leaning back on the seat (a couch) instead of sitting up (a chair). */
   lounge = false;
+  /** Sitting with a game controller in both hands; `padMash` (0..1) is how hard his thumbs are going. */
+  gamepad = false;
+  padMash = 0;
   /** Climbable walls (window sides, screen edges). */
   walls: Wall[] = [];
   /**
@@ -994,7 +997,7 @@ export class Character {
     if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
     if (m !== 'air') { this.leapWall = null; this.airPunch = null; this.airReach = null; }
     if (m !== 'ground') { this.pushAt = null; this.pushY = null; }
-    if (m !== 'sit') { this.ledge = null; this.seat = null; this.lounge = false; }
+    if (m !== 'sit') { this.ledge = null; this.seat = null; this.lounge = false; this.gamepad = false; }
     if (m !== 'puppet') this.puppetMove = null;
     if (m !== 'roll') this.rolling = null;
     if (m !== 'air') { this.airFlip = null; this.flipDone = false; }
@@ -1932,7 +1935,9 @@ export class Character {
     const B = basis(this.yaw);
     const kneeL = twoBoneIK3(hip, footL, d.thigh, d.shin, this.kneePole(B, 'L'));
     const kneeR = twoBoneIK3(hip, footR, d.thigh, d.shin, this.kneePole(B, 'R'));
-    this.fillLimbs(t, hip, neck, 0.1 + P.hunch * 0.9, 0, this.off(kneeL, 2 * sc, 3 * sc, 1 * sc), this.off(kneeR, 4 * sc, 3 * sc, -1 * sc), footL, footR);
+    const handL = this.gamepad ? this.padHand(hip, 'L') : this.off(kneeL, 2 * sc, 3 * sc, 1 * sc);
+    const handR = this.gamepad ? this.padHand(hip, 'R') : this.off(kneeR, 4 * sc, 3 * sc, -1 * sc);
+    this.fillLimbs(t, hip, neck, 0.1 + P.hunch * 0.9, 0, handL, handR, footL, footR);
     Object.assign(s, { hip: 0.2, neck: 0.2, head: 0.25, kneeL: 0.15, kneeR: 0.15, footL: 0.2, footR: 0.2, elbowL: 0.08, elbowR: 0.08, handL: 0.08, handR: 0.08 });
   }
 
@@ -1961,6 +1966,12 @@ export class Character {
     Object.assign(s, { hip: 0.3, neck: 0.22, head: 0.25, kneeL: 0.2, kneeR: 0.2, footL: 0.12, footR: 0.12, elbowL: 0.08, elbowR: 0.08, handL: 0.1, handR: 0.1 });
   }
 
+  /** Holding a controller: both hands together in front of his belly, thumbs going (a little jiggle). */
+  private padHand(hip: V3, k: 'L' | 'R'): V3 {
+    const sc = this.scale, jig = Math.sin(this.time * 19 + (k === 'L' ? 0 : 1.7)) * this.padMash * 1.2 * sc;
+    return this.off(hip, 12 * sc, -12 * sc + jig, sideOf(k) * 2.5 * sc);
+  }
+
   /** On a chair or a couch: bottom on the seat, knees bent over its front edge, feet down toward the floor. */
   private seatPose(t: Targets, s: Strengths) {
     const d = this.d, sc = this.scale, P = this.posture, st = this.seat!, legLen = d.thigh + d.shin;
@@ -1977,7 +1988,8 @@ export class Character {
     const fL = foot('L'), fR = foot('R');
     const B = basis(this.yaw);
     const knee = (k: 'L' | 'R', f: V3) => twoBoneIK3(hip, f, d.thigh, d.shin, this.kneePole(B, k));
-    const hand = (k: 'L' | 'R') => this.handTarget && k === this.useHand
+    const hand = (k: 'L' | 'R') => this.gamepad ? this.padHand(hip, k)
+      : this.handTarget && k === this.useHand
       ? this.pt(this.handTarget.x, this.handTarget.y, neck.z)
       : this.lounge ? this.off(neck, -4 * sc, 4 * sc, sideOf(k) * 9 * sc) : this.off(knee(k, k === 'L' ? fL : fR), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
     this.fillLimbs(t, hip, neck, (this.lounge ? -0.1 : 0.1) + P.hunch * 0.6, 0, hand('L'), hand('R'), fL, fR);
