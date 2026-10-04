@@ -2,7 +2,40 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest: house art style, and games on the TV
+## Latest: his friend, fights, and fixes from the owner's test
+
+The owner tested this branch and asked for: straight boots, Othello removed, a friend with a combat system,
+fixes for items knocking the cursor, the TV's physics box looking different from its drawing, sitting
+sideways looking weird, the mallet removed, and a circuit-board look for the Mind tab.
+
+- **Friend** (`config.friend`, `friendConfig()` in config.ts): a second `Pet` in the same overlay
+  (`renderer.ts`: `syncFriend`). It shares the main pet's `Props` (`new Pet(bounds, cfg, { props })`;
+  `ownsProps` false: the main pet steps, draws and saves the furniture). Own items, mood, mind (offline: no AI
+  calls), save (`friend-save` / `friend-memory` in browser storage). Input goes to whichever one you click.
+  `Pet.others` links them; `ctx.foe()` tells skills about the other one. Talking to the friend isn't built.
+- **Fights** (`config.fightMode`: play | real). `skills/duel.ts` `Duel`: close in, swing (`SwordSwing` now takes
+  a target, an item and `keepOut`) or punch/kick, back off, call it after 14 to 24 s. Hits between pets:
+  `Pet.strikes` (fists/feet), `bladeHits` (swords), `flyingItems` (thrown things) → `hitFriend` → `takeHit`:
+  blocking (sword out or fists up, facing the attacker), knock-back (foam barely), and in real fights with a
+  `cuts` item: a limb comes off (`Character.detach`, so `Reattach` takes over) or a body hit runs him through
+  (`stayDown` for 2.5 to 4 s). Mind: `duel` option (playful/bored/excited, 90 s cooldown), `hitByFriend` (fights
+  back), `friendFighting` (backs him up against your cursor). New items: `foam-sword`, `katana` (`cuts: true`).
+- **Your throws no longer hit your cursor**: letting go of a carried item counted as a throw starting on your
+  cursor. `Item.thrownBy` ('him' | 'you'); only his throws and swats knock the cursor.
+- **Seated poses**: furniture is front-on, so on a seat he turns mostly toward you (`SEAT_TURN` per style),
+  knees apart over the seat edge (`seatPose`), lounging hands on the cushion. Lying stays side-on.
+- **Mind tab**: `config.mindLook` head | circuit; `circuit()` in settings.ts draws the same `projected`
+  hit-test data as a PCB (mood pins → bus → choice chips → processor; AI chip).
+- Boots are straight sleeves on the shin. Othello and the mallet are gone (unedited copies are removed from
+  the items folder via `builtin-history.json`).
+- **TV mismatch: not reproduced.** Outline vs drawing checked resting, dragged, knocked over and stacked:
+  they line up. Waiting on a screenshot from the owner.
+
+Checked: typecheck, 27 focused checks (new: friend config/shared props, play fight, real fight, team-up, your
+throws vs your cursor), full sim on seeds 1 and 2, Chromium browser check (friend present). The fight checks
+are random; they passed 6 runs in a row. Not run on a Mac or PC; the Electron check wasn't re-run here.
+
+## Earlier: house art style, and games on the TV
 
 The owner set the art direction: **props are flat and front-on, in the same smooth style as him, and get
 pixelated with him at his own pixel size** (he lives at pixel size 2; bigger pixel sizes aren't a target).

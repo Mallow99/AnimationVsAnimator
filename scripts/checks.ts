@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Pet, DEFAULT_CONFIG } from '../src/core/pet';
+import { Pet, DEFAULT_CONFIG, friendConfig } from '../src/core/pet';
 import { mergeConfig } from '../src/core/config';
 import { parseItemDef } from '../src/core/items';
 import { parsePropDef, makeBridge } from '../src/core/props';
@@ -245,6 +245,57 @@ await test('throwing one of his things never knocks your own cursor away', () =>
     for (let i = 0; i < 240; i++) { p.cursor(x + 90 + i, y - 24, 120, 0); p.update(1/120); }
     assert.equal(it.where === 'cursor', false); assert.deepEqual(hits, [], `${id} knocked the cursor`);
   }
+});
+/** Him and his friend, standing a little apart on the floor. */
+function duo(fightMode: 'play' | 'real' = 'play') {
+  const cfg = { ...structuredClone(DEFAULT_CONFIG), destructible: true, fightMode };
+  const a = new Pet(bounds, cfg), b = new Pet(bounds, friendConfig(cfg), { props: a.props });
+  a.others = [b]; b.others = [a];
+  b.char.body.translate(160, 0);
+  a.paused = b.paused = true;
+  for (let i = 0; i < 360; i++) { a.update(1/120); b.update(1/120); }
+  a.mind.reset(a.ctx); b.mind.reset(b.ctx); a.paused = b.paused = false;
+  const seen = { a: [] as string[], b: [] as string[] };
+  for (const [p, list] of [[a, seen.a], [b, seen.b]] as const) {
+    const orig = p.mind.onEvent.bind(p.mind);
+    p.mind.onEvent = (c, e) => { if (e.type === 'hitByFriend') list.push(e.cut ? 'cut' : e.stabbed ? 'stab' : 'hit'); if (e.type === 'limbOff') list.push('limbOff'); orig(c, e); };
+  }
+  const run = (secs: number, until?: () => boolean) => { for (let i = 0; i < secs * 120 && !until?.(); i++) { a.update(1/120); b.update(1/120); } };
+  return { a, b, seen, run };
+}
+await test('his friend: own name, color and an offline mind; shares the furniture without saving it twice', () => {
+  const { a, b } = duo();
+  assert.equal(b.config.name, DEFAULT_CONFIG.friend.name); assert.equal(b.config.look.color, DEFAULT_CONFIG.friend.color); assert.equal(b.config.mind, 'offline');
+  assert.equal(b.props, a.props); assert(!b.ownsProps);
+  const odd = mergeConfig(DEFAULT_CONFIG, { friend: { color: 'red', name: '  ' }, fightMode: 'nuke' });
+  assert.deepEqual(odd.friend, DEFAULT_CONFIG.friend); assert.equal(odd.fightMode, 'play');
+  assert.equal(mergeConfig(DEFAULT_CONFIG, { friend: { on: false } }).friend.name, DEFAULT_CONFIG.friend.name);
+  a.props.spawn('chair', 500, 600, a.char.scale);
+  assert.equal(JSON.parse(a.save()).props.length, 1); assert.equal(JSON.parse(b.save()).props, undefined);
+});
+await test('a play fight: they spar, hits land both ways, and nobody loses a limb', () => {
+  const { a, b, seen, run } = duo('play');
+  a.command('do:duel'); run(0.05);
+  assert.equal(a.mind.skill?.name, 'duel');
+  run(30, () => seen.a.length > 0 && seen.b.length > 0);
+  assert(seen.b.length > 0, 'his hits never landed'); assert(seen.a.length > 0, 'his friend never fought back');
+  assert(![...seen.a, ...seen.b].some((x) => x === 'cut' || x === 'stab' || x === 'limbOff'), 'a play fight hurt someone');
+  assert(a.char.whole && b.char.whole);
+  assert(![...a.items.list, ...b.items.list].some((it) => it.def.id === 'katana'), 'a katana came out in a play fight');
+});
+await test('a real fight: katanas, and sooner or later someone loses a limb or gets run through', () => {
+  const { a, b, seen, run } = duo('real');
+  a.command('do:duel');
+  run(90, () => [...seen.a, ...seen.b].some((x) => x === 'cut' || x === 'stab'));
+  assert(a.items.list.some((it) => it.def.id === 'katana'), 'he never drew a katana');
+  assert([...seen.a, ...seen.b].some((x) => x === 'cut' || x === 'stab'), `nothing serious happened: ${seen.a.join(',')} / ${seen.b.join(',')}`);
+});
+await test('squaring up to your cursor: his friend comes to back him up', () => {
+  const { a, b, run } = duo('play');
+  a.cursor(a.char.x + 120, bounds.floor - 60);
+  a.command('do:spar'); b.cursor(a.char.x + 120, bounds.floor - 60);
+  run(0.5);
+  assert(['spar', 'brawl'].includes(b.mind.skill?.name ?? ''), `friend is doing ${b.mind.skill?.name}`);
 });
 await test('a fast weapon swing registers the cursor between frames', () => {
   const item = new Item(BUILTIN_ITEMS.find((d) => d.id === 'sword')!);

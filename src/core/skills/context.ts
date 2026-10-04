@@ -83,6 +83,10 @@ export interface Ctx {
   windowMoves?: 'ok' | 'off' | 'unsupported' | 'stuck';
   /** Drawings that came to life: balls, boxes, ledges. */
   props?: Props;
+  /** His friend (the other stick figure on screen), if there is one. */
+  foe?: () => { char: Character; name: string; busy: boolean } | null;
+  /** How fights with his friend go: play (foam and wooden swords) or real (katanas that cut). */
+  fightMode?: 'play' | 'real';
   /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
   onBecome?: (d: Doodle) => void;
 }

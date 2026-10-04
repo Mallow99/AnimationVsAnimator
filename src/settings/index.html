@@ -255,6 +255,20 @@
         <input type="text" id="name" maxlength="40" />
       </div>
       <div class="group">
+        <h2>His friend</h2>
+        <div class="card">
+          <label class="switch"><span><span class="row-label">Friend</span><br /><small class="note">A second stick figure on your screen with a mind of their own (offline, no AI calls). They hang out, share his furniture, spar with him, and back him up when he squares up to your cursor.</small></span><input type="checkbox" id="friendOn" /></label>
+          <div class="inline"><input type="text" id="friendName" maxlength="40" aria-label="Friend's name" /><input type="color" id="friendColor" aria-label="Friend's color" /><span class="row-label">Name and color</span></div>
+          <label class="row-label" for="fightMode">Fights</label>
+          <select id="fightMode">
+            <option value="play">Play fights: fists, foam and wooden swords (nobody gets hurt)</option>
+            <option value="real">Real fights: katanas that cut limbs off or run them through</option>
+          </select>
+          <small class="note">Real fights need <b>Breakable</b> on (below) for limbs to come off. No gore either way: sparks, and they stick their limbs back on.</small>
+          <div class="btns"><button class="btn ghost small" id="duelNow" type="button">Make them spar now</button></div>
+        </div>
+      </div>
+      <div class="group">
         <h2>Interaction</h2>
         <div class="card">
           <label class="switch"><span><span class="row-label">Climb on windows</span><br /><small class="note">He can stand on, jump onto and get carried by your open windows.</small></span><input type="checkbox" id="windows" /></label>
@@ -262,7 +276,7 @@
           <label class="switch"><span><span class="row-label">He can move your windows</span><br /><small class="note">He pushes windows along, kicks them across the screen, and surfs on them. The first time, macOS asks you to allow it under Privacy &amp; Security → Accessibility. He leaves alone the window you're working in.</small></span><input type="checkbox" id="moveWindows" /></label>
           <small class="note" id="moveInfo"></small>
           <label class="switch"><span><span class="row-label">He can see what you're doing</span><br /><small class="note">He knows which app you're in and its window's title (he'll comment on it), and where the text and buttons in it are, so he can sit on your chat messages. Nothing from inside your windows is read. It all stays on your computer, except with an AI brain on: then the app name and title go into what he tells the AI. On a Mac this uses the same Accessibility permission as moving windows.</small></span><input type="checkbox" id="screenAware" /></label>
-          <label class="switch"><span><span class="row-label">He can hit your cursor</span><br /><small class="note">His punches, kicks, sword and mallet hits (and his ball) knock your real cursor flying, and sometimes he jumps up and hangs off it. Move your mouse to take it back; shake him off.</small></span><input type="checkbox" id="knockCursor" /></label>
+          <label class="switch"><span><span class="row-label">He can hit your cursor</span><br /><small class="note">His punches, kicks, sword and mace hits (and his ball) knock your real cursor flying, and sometimes he jumps up and hangs off it. Move your mouse to take it back; shake him off.</small></span><input type="checkbox" id="knockCursor" /></label>
           <label class="switch"><span><span class="row-label">Mischief mode</span><br /><small class="note">Desktop Goose style: now and then he grabs your cursor and drags it around. Move your mouse to take it back.</small></span><input type="checkbox" id="mischief" /></label>
           <label class="switch"><span><span class="row-label">Talking sounds</span><br /><small class="note">Little blips as his words type out, like characters in indie games.</small></span><input type="checkbox" id="sound" /></label>
           <label class="switch"><span><span class="row-label">Sound effects</span><br /><small class="note">Footsteps, thuds, an "oof" when he crashes, snaps, whooshes. All made in code, no sound files.</small></span><input type="checkbox" id="sfx" /></label>

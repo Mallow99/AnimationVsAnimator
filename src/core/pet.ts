@@ -10,7 +10,7 @@ import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowSides, windowWalls, type WinRect } from './world';
 import { beltParts, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
-import { drawItem, itemParts, itemFromDrawing, Items, type Item } from './items';
+import { drawItem, itemParts, itemFromDrawing, Items, type Item, type ItemDef } from './items';
 import { Props, parseCanvasArt, type Ball, type Thing } from './props';
 import type { Doodle } from './doodles';
 import type { Platform } from './physics';
@@ -44,7 +44,7 @@ const UI_ID = 2_000_000_000;
 /** A finished drawing kept in his gallery. Shape is in a box from -0.5 to 0.5. */
 export interface Drawing { title: string; shape: Vec[][]; color: string; at: number }
 
-export { DEFAULT_CONFIG, type PetConfig } from './config';
+export { DEFAULT_CONFIG, friendConfig, type PetConfig } from './config';
 
 const STEP = 1 / 120; // physics runs at a fixed 120 steps per second
 const SMACK_SPEED = 1400; // cursor speed (px/s) that counts as a smack rather than a brush
@@ -64,8 +64,16 @@ export class Pet {
   paused = false;
   private acc = 0;
   private press: { joint: JointName; limb?: { piece: LooseLimb; idx: number }; ball?: Ball; thing?: Thing; x: number; y: number; t: number; moved: boolean; grabbed: boolean } | null = null;
-  /** His drawings that came to life: balls, boxes, ledges. */
-  readonly props = new Props();
+  /** His drawings that came to life: balls, boxes, ledges (and furniture). Shared with his friend. */
+  readonly props: Props;
+  /** False for his friend: the main pet runs, draws and saves the furniture they share. */
+  readonly ownsProps: boolean;
+  /** The other stick figures on screen (his friend). Set by the app. */
+  others: Pet[] = [];
+  /** Run through in a real fight: he stays down until this time. */
+  private downUntil = 0;
+  /** The fight he last asked his friend to join (so he only asks once per fight). */
+  private backupAsked: object | null = null;
   private windowPlats: Platform[] = [];
   private bonkCooldown = 0;
   /** Sparks from limbs snapping off and clicking back on. */
@@ -138,7 +146,9 @@ export class Pet {
   /** The desktop helper's latest word on moving windows ("moved a window", "no permission yet"...). */
   moveNote = '';
 
-  constructor(bounds: Bounds, readonly config: PetConfig = structuredClone(DEFAULT_CONFIG)) {
+  constructor(bounds: Bounds, readonly config: PetConfig = structuredClone(DEFAULT_CONFIG), shared?: { props: Props }) {
+    this.props = shared?.props ?? new Props();
+    this.ownsProps = !shared;
     this.char = new Character(bounds, (bounds.left + bounds.right) / 2, config.scale);
     this.applyConfig(config);
     // Start him up in the air so he drops in.
@@ -174,8 +184,16 @@ export class Pet {
       hangOnCursor: () => this.hangOnCursor(),
       props: this.props,
       onBecome: (d) => this.becomeReal(d),
+      foe: () => {
+        const o = pet.others[0];
+        if (!o) return null;
+        const doing = o.mind.skill?.name;
+        return { char: o.char, name: o.config.name, busy: !!doing && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'duel', 'spar'].includes(doing) };
+      },
+      get fightMode() { return pet.config.fightMode; },
     };
-    this.props.onPlatforms = () => this.refreshPlatforms();
+    if (shared) { const first = this.props.onPlatforms; this.props.onPlatforms = () => { first?.(); this.refreshPlatforms(); }; }
+    else this.props.onPlatforms = () => this.refreshPlatforms();
     this.items.giveStarter(this.char); // just his pen; the rest is in his inventory (Settings → Items)
     this.items.onChange = () => this.onCollections?.();
     this.memory.onChange = () => { this.onCollections?.(); this.onMemorySave?.(this.memory.save()); };
@@ -205,7 +223,7 @@ export class Pet {
       // Standing on something he drew: his weight pushes on it (a bridge sags under him).
       const under = this.props.thingOf(this.char.support);
       if (under && (this.char.mode === 'ground' || this.char.mode === 'sit')) under.carry(this.char.support, this.char.x);
-      this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.uiPlats.length ? [...this.windowPlats, ...this.uiPlats] : this.windowPlats, this.ctx.world.windows);
+      if (this.ownsProps) this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.uiPlats.length ? [...this.windowPlats, ...this.uiPlats] : this.windowPlats, this.ctx.world.windows);
       this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms);
       this.ballContact();
       this.acc -= STEP;
@@ -226,7 +244,14 @@ export class Pet {
     }
     if (this.listening) { this.char.presentWant = 0.6; this.mind.holdUntil = this.ctx.world.time + 1; if (this.char.walking) this.char.stop(); }
     else this.char.presentWant = 0;
+    if (this.downUntil && this.ctx.world.time > this.downUntil) { this.downUntil = 0; this.char.stayDown = false; }
     if (!this.paused) { this.mind.update(this.ctx, dt); this.brain.update(this.ctx, this.mind); }
+    // Squaring up to your cursor: his friend comes and backs him up.
+    const sk = this.mind.skill;
+    if (sk && (sk.name === 'spar' || sk.name === 'brawl') && this.backupAsked !== sk) {
+      this.backupAsked = sk;
+      for (const o of this.others) o.emit({ type: 'friendFighting', angry: sk.name === 'brawl' });
+    }
     if (this.bubble) this.typeOut(this.bubble, dt);
     if (this.bubble && this.bubble.t > this.bubble.ttl) this.bubble = null;
     for (const f of this.puffs) { f.t += dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.92; f.vy *= 0.92; }
@@ -322,7 +347,7 @@ export class Pet {
   draw(ctx: CanvasRenderingContext2D) {
     const look = this.config.look;
     // His drawings that came to life, and his furniture: behind him (he sits on them, stands on them).
-    this.props.draw(ctx, this.ctx.world.time, Math.round(look.pixel));
+    if (this.ownsProps) this.props.draw(ctx, this.ctx.world.time, Math.round(look.pixel));
     // Squash and stretch (drawing only): scale him about his feet for a moment.
     const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
@@ -933,6 +958,62 @@ export class Pet {
     this.emit({ type: 'hitCursor', power, by });
   }
 
+  /** One of his hits reached his friend. Counts toward the duel if it landed. */
+  private hitFriend(o: Pet, joint: JointName, vx: number, vy: number, power: number, weapon: ItemDef | null, at: Vec) {
+    if (!o.takeHit(this, joint, vx, vy, power, weapon, at)) return;
+    const duel = this.mind.skill as { name: string; hits?: number } | null;
+    if (duel?.name === 'duel' && duel.hits !== undefined) duel.hits++;
+  }
+
+  /**
+   * His friend hit him (a punch, a kick, a sword, something thrown). He may block it. A play fight
+   * just knocks him about (foam barely does anything). In a real fight a katana can take a limb off,
+   * and a hard hit to the body runs him through: down he goes for a few seconds. No blood: sparks,
+   * like when he loses a limb any other way. Returns false if he blocked it.
+   */
+  takeHit(from: Pet, joint: JointName, vx: number, vy: number, power: number, weapon: ItemDef | null, at: Vec): boolean {
+    const ch = this.char, w = this.ctx.world, real = this.config.fightMode === 'real';
+    const dir = Math.sign(ch.x - from.char.x) || 1;
+    // Blocking: sword out (or fists up), facing the one swinging at him.
+    const blade = this.items.list.find((it) => it.where === 'hand' && it.def.use === 'swing');
+    if (Math.sign(from.char.x - ch.x) === ch.facing && ch.mode === 'ground' && Math.random() < (blade && weapon ? 0.35 : ch.guard ? 0.2 : 0)) {
+      this.burstAt(at.x, at.y, 8);
+      this.sound('clang', 0.9);
+      from.char.poke('neck', -dir * 260, -60); ch.poke('neck', dir * 140, -40);
+      this.freeze = from.freeze = 0.05;
+      return false;
+    }
+    const foam = !!weapon && !weapon.cuts && weapon.hit < 0.5;
+    const soft = foam ? 0.4 : 1;
+    const sharp = real && !!weapon?.cuts;
+    let cut = false, stabbed = false;
+    if (sharp && ch.destructible) {
+      const limb = limbOf(joint);
+      if (limb && power > 0.5 && Math.random() < 0.65) {
+        cut = !!ch.detach(limb, { x: vx * 0.35, y: vy * 0.35 - 140, z: (Math.random() - 0.5) * 400 });
+      } else if (!limb && power > 0.65) {
+        // Run through: the hit goes clean through his middle and he crumples.
+        stabbed = true;
+        ch.poke('hip', dir * 1900, -260);
+        ch.stayDown = true;
+        this.downUntil = w.time + 2.5 + Math.random() * 1.5;
+        for (let i = 0; i < 16; i++) {
+          const a = Math.random() * Math.PI * 2, s = 140 + Math.random() * 240;
+          this.sparks.push({ x: at.x, y: at.y, vx: Math.cos(a) * s + dir * 180, vy: Math.sin(a) * s - 100, t: 0, life: 0.4 + Math.random() * 0.4, color: i % 2 ? '#ffffff' : shade(this.config.look.color, 0.4) });
+        }
+      }
+    }
+    if (!stabbed) {
+      const k = (weapon ? 0.55 : 0.5) * soft;
+      ch.poke(joint, vx * k, vy * k - 120 * soft);
+      this.burstAt(at.x, at.y, foam ? 3 : 7);
+    }
+    this.sound(foam ? 'bonk' : stabbed ? 'crash' : cut ? 'snap' : weapon ? 'clang' : 'punch', Math.min(1, 0.4 + power * 0.6));
+    this.freeze = from.freeze = Math.max(this.freeze, 0.03 + 0.05 * Math.min(1, power) + (stabbed || cut ? 0.06 : 0));
+    this.emit({ type: 'hitByFriend', name: from.config.name, power, cut, stabbed, play: !real });
+    return true;
+  }
+
   /** He jumped up and grabbed your cursor: he hangs from it by his front hand, and goes where it goes. */
   private hangOnCursor() {
     const cur = this.ctx.world.cursor, hand = this.char.useHand;
@@ -969,6 +1050,17 @@ export class Pet {
       const speed = 500 + 900 * st.power;
       this.lastStrike = st.id;
       this.knockCursor({ x: cur.x, y: cur.y }, (dx / d) * speed + jv.x * 0.3, (dy / d) * speed + jv.y * 0.3 - 320 * st.power, st.power, st.joint.startsWith('foot') ? 'foot' : 'fist');
+      return;
+    }
+    // His friend: a punch or a kick that lands (checked along the fist's path, so a fast one can't skip him).
+    for (const o of this.others) {
+      const mid = { x: (from.x + p.x) / 2, y: (from.y + p.y) / 2 };
+      const joint = o.char.hitTest(p.x, p.y, 4 * sc) ?? o.char.hitTest(mid.x, mid.y, 4 * sc);
+      if (!joint) continue;
+      const base = st.joint.startsWith('foot') ? this.char.body.j.hip : this.char.body.j.neck;
+      const dx = p.x - base.x, dy = p.y - base.y, d = Math.hypot(dx, dy) || 1, speed = 700 + 1000 * st.power;
+      this.lastStrike = st.id;
+      this.hitFriend(o, joint, (dx / d) * speed + jv.x * 0.2, (dy / d) * speed + jv.y * 0.2 - 200 * st.power, st.power, null, { x: p.x, y: p.y });
       return;
     }
     // A window's side: punched or kicked, it shoots off the way he hit it.
@@ -1036,6 +1128,14 @@ export class Pet {
         other.thrownAt = w.time; other.thrownBy = 'him';
         this.sound('clang', 0.5);
       }
+      // His friend: the blade passing through any of his joints.
+      for (const o of this.others) {
+        if (!ready(o)) continue;
+        const hit = (Object.entries(o.char.body.j) as [JointName, { x: number; y: number }][]).find(([, q]) => seg(q.x, q.y) < 5 * sc);
+        if (!hit) continue;
+        this.bladeCooldown.set(o, w.time + 0.4);
+        this.hitFriend(o, hit[0], v.x * 0.8, v.y * 0.8, power, it.def, { x: hit[1].x, y: hit[1].y });
+      }
       for (const th of this.props.things) {
         if (!ready(th)) continue;
         const tip = it.tip, mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -1096,6 +1196,14 @@ export class Pet {
         this.bladeCooldown.set(it, t + 0.4);
         this.knockCursor({ x: cur.x, y: cur.y }, v.x * 0.9, v.y * 0.9 - 200, Math.min(1, speed / 1200) * Math.max(0.4, it.def.hit), 'item');
         it.push(-v.x * 0.35, -Math.abs(v.y) * 0.3 - 120); // and it bounces off
+        continue;
+      }
+      // Into his friend (things he threw).
+      const o = it.thrownBy === 'him' && speed > 420 ? this.others.find((f) => f.char.hitTest(it.at.x, it.at.y, 3)) : undefined;
+      if (o && (this.bladeCooldown.get(it) ?? -1) < t) {
+        this.bladeCooldown.set(it, t + 0.5);
+        this.hitFriend(o, o.char.hitTest(it.at.x, it.at.y, 3)!, v.x * 0.6, v.y * 0.6, Math.min(1, speed / 1200) * Math.max(0.3, it.def.hit), it.def, { x: it.at.x, y: it.at.y });
+        it.push(-v.x * 0.3, -Math.abs(v.y) * 0.3 - 150);
         continue;
       }
       // Flying into him (not right after he threw it).
@@ -1359,7 +1467,7 @@ export class Pet {
 
   // ── saving between runs ──
   save() {
-    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], props: this.props.savePlaced() });
+    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], ...(this.ownsProps ? { props: this.props.savePlaced() } : {}) });
   }
   load(json: string | null) {
     if (!json) return;
@@ -1380,7 +1488,7 @@ export class Pet {
       }));
       if (Array.isArray(d.items)) this.items.load(d.items, this.char, d.itemsKnown);
       // His furniture, back where it was (standing on the floor).
-      if (Array.isArray(d.props)) for (const p of d.props.slice(0, 12)) {
+      if (this.ownsProps && Array.isArray(d.props)) for (const p of d.props.slice(0, 12)) {
         if (!p || typeof p.id !== 'string' || !Number.isFinite(p.x)) continue;
         const def = this.props.defs.get(p.id);
         if (!def) { this.pendingProps.push(p); continue; } // one of yours: its file loads a moment later

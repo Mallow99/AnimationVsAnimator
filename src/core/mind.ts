@@ -16,7 +16,7 @@ import type { Vec } from './math';
 import type { MoodState } from './mood';
 import { chance, pick, rand, sign } from './math';
 import {
-  Chain, routeTo, Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PaintCanvas, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
+  Chain, routeTo, Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PaintCanvas, Duel, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 
@@ -24,6 +24,8 @@ export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { t
   | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number }
   | { type: 'itemSpawned'; name: string; uid: number } // something new appeared (you dropped it in from his inventory)
   | { type: 'propSpawned'; id: string; name: string }   // a prop (a chair, a TV...) dropped in
+  | { type: 'hitByFriend'; name: string; power: number; cut: boolean; stabbed: boolean; play: boolean } // his friend hit him
+  | { type: 'friendFighting'; angry: boolean } // his friend squared up to your cursor: back him up
   | { type: 'appChanged'; app: string; title: string }  // you switched to another app
   | { type: 'bonked'; speed: number } // a ball hit him
   | { type: 'hitCursor'; power: number; by: string } // he hit your cursor (and maybe sent it flying)
@@ -156,6 +158,7 @@ const AFTERGLOW: Record<string, Partial<MoodState>> = {
   sitdown: { energy: 0.08, boredom: 0.04, happiness: 0.03 },
   watchtv: { boredom: -0.5, happiness: 0.08, energy: 0.04 },
   videogame: { boredom: -0.6, happiness: 0.06 },
+  duel: { boredom: -0.55, happiness: 0.05, energy: -0.08 },
   ride: { boredom: -0.45, happiness: 0.08, energy: -0.03 },
   ramp: { boredom: -0.3, happiness: 0.05 }, bridge: { boredom: -0.3, happiness: 0.05 }, drawramp: { boredom: -0.3, happiness: 0.05 },
 };
@@ -181,12 +184,14 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'ropebridge', label: 'Draw a rope bridge' },
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'videogame', label: 'Play video games' }, { name: 'ride', label: 'Ride the scooter' },
-  { name: 'paint', label: 'Paint on his canvas' },
+  { name: 'paint', label: 'Paint on his canvas' }, { name: 'duel', label: 'Spar with his friend' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
 export class Mind {
   skill: Skill | null = null;
+  /** When he last started a duel with his friend (so they don't fight nonstop). */
+  private duelAt = -60;
   private last = '';
   private queued: Skill | null = null;
   private pokes: number[] = [];
@@ -492,6 +497,7 @@ export class Mind {
       ...this.windowOptions(c),
       ...this.windowPranks(c),
       ...this.propOptions(c),
+      ...this.friendOptions(c),
       ...this.perchOptions(c),
       ...this.itemOptions(c),
       ...this.parkourOptions(c),
@@ -667,6 +673,18 @@ export class Mind {
     return opts;
   }
 
+  /** His friend: square up for a spar (a play fight, or a real one, depending on the setting). */
+  private friendOptions(c: Ctx): Option[] {
+    const foe = c.foe?.(), ch = c.char, L = c.mood.label, E = c.mood.emotion, s = c.mood.s;
+    if (!foe) { if (this.forced) this.cant.duel = 'nobody to spar with (turn his friend on in Settings)'; return []; }
+    if (ch.legCount < 2 || !ch.useHand || ch.support >= 0 && !c.props?.thingOf(ch.support)) { if (this.forced) this.cant.duel = 'not from up here'; return []; }
+    if (foe.busy && !this.forced) return [];
+    const armed = c.fightMode === 'real' || chance(0.7);
+    const score = c.world.time - this.duelAt < 90 ? 0 : L === 'playful' || E === 'excited' ? 0.55 : L === 'bored' ? 0.4 : L === 'angry' ? 0.35 : L === 'sleepy' || L === 'sad' ? 0 : 0.1 + s.energy * 0.1;
+    return [{ name: 'duel', why: c.fightMode === 'real' ? `a real duel with ${foe.name}` : `play fighting with ${foe.name}`, score,
+      make: () => { this.duelAt = c.world.time; return new Duel(armed); } }];
+  }
+
   /** Climbing onto windows and getting back down. */
   private windowOptions(c: Ctx): Option[] {
     const s = c.mood.s, L = c.mood.label, ch = c.char, opts: Option[] = [];
@@ -765,6 +783,27 @@ export class Mind {
         m.nudge({ fear: 0.15, happiness: -0.1, annoyance: e.yanked ? 0.25 : 0.08, trust: e.yanked ? -0.04 : 0, boredom: -0.4 });
         this.why = e.yanked ? 'you pulled his limb off' : 'a limb came off';
         if (!(this.skill instanceof Reattach)) this.interrupt(c, new Reattach());
+        return;
+      }
+      case 'hitByFriend': {
+        // Play fight: it's a game, he hits back. Real fight: it hurts, and it makes him mad (or scared).
+        m.asleep = false;
+        m.nudge(e.play ? { boredom: -0.2, happiness: 0.02 } : { annoyance: 0.1 + e.power * 0.1, fear: e.stabbed ? 0.2 : 0.05, happiness: -0.05, boredom: -0.3 });
+        if (e.cut || e.stabbed || !c.char.whole) return; // losing a limb (or going down) comes first
+        if (this.skill?.name !== 'duel' && chance(e.play ? 0.75 : 0.9) && c.char.legCount === 2 && c.char.useHand) {
+          this.why = e.play ? `${e.name} started it: fighting back` : `${e.name} attacked him`;
+          this.interrupt(c, new Duel(e.play ? chance(0.6) : true));
+        } else if (this.skill?.name !== 'duel' && chance(0.5)) c.say(pick(e.play ? ['hey!', 'oof', 'cheap shot'] : ['OW', 'hey!!', 'what was that for']), 1.2);
+        return;
+      }
+      case 'friendFighting': {
+        // His friend's fighting your cursor: he joins in (unless he's busy with something of his own).
+        const busy = this.skill && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'chase'].includes(this.skill.name);
+        if (busy || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand) return;
+        if (!c.world.cursor) return;
+        this.why = 'backing up his friend';
+        c.say(pick(['I got you!', 'two on one!', 'tag team!', 'me too!']), 1.2);
+        this.interrupt(c, new Brawl(rand(5, 9), e.angry));
         return;
       }
       case 'limbOn':

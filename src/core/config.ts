@@ -62,6 +62,13 @@ export interface PetConfig {
   biases: Record<string, number>;
   /** How the Mind tab draws his thinking: a 3D model of his head (clearer), or a circuit board (cooler). */
   mindLook: 'head' | 'circuit';
+  /** His friend: a second stick figure in the same app, with its own mind, who he plays and spars with. */
+  friend: { on: boolean; name: string; color: string };
+  /**
+   * How they fight each other: 'play' = foam and wooden swords, nobody gets hurt; 'real' = katanas
+   * that can cut a limb off (he puts it back on) or run him through (he goes down for a bit).
+   */
+  fightMode: 'play' | 'real';
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
@@ -87,7 +94,23 @@ export const DEFAULT_CONFIG: PetConfig = {
   volume: 0.6,
   biases: {},
   mindLook: 'head',
+  friend: { on: true, name: 'Leonard', color: '#f7931e' },
+  fightMode: 'play',
 };
+
+/**
+ * His friend's settings: everything the same as his (size, look, how they move, sounds), but their own
+ * name and color, an offline mind (no AI calls), a persona of their own, and no tweaked preferences.
+ */
+export function friendConfig(main: PetConfig): PetConfig {
+  const c = structuredClone(main);
+  c.name = main.friend.name;
+  c.look.color = main.friend.color;
+  c.mind = 'offline';
+  c.persona = `${main.friend.name}, ${main.name}'s best friend and sparring partner. Competitive, loud, always up for a fight, terrible loser.`;
+  c.biases = {};
+  return c;
+}
 
 export interface Range { min: number; max: number; step: number; label: string; hint: string }
 
@@ -141,6 +164,10 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
     }
   }
   merge(out.look as unknown as Record<string, unknown>, p.look, 'look.');
+  merge(out.friend as unknown as Record<string, unknown>, p.friend, 'friend.');
+  if (!/^#[0-9a-f]{6}$/i.test(out.friend.color)) out.friend.color = base.friend.color;
+  if (!out.friend.name.trim()) out.friend.name = base.friend.name;
+  if (out.fightMode !== 'play' && out.fightMode !== 'real') out.fightMode = base.fightMode;
   merge(out.body as unknown as Record<string, unknown>, p.body, 'body.');
   if (!['offline', 'chat', 'full'].includes(out.mind)) out.mind = 'offline';
   if (out.mindLook !== 'head' && out.mindLook !== 'circuit') out.mindLook = base.mindLook;

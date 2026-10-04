@@ -48,6 +48,7 @@ An item hangs on his belt, he takes it out to use it, and you can take it from h
 | `belt`  | where he keeps it: `side` (a hip), `back`, `pocket` (small things, hidden), or `none` (he can't put it away). |
 | `hit`   | how hard it hits: `0` harmless, `1` a wooden sword, `2` a big hit. Anything that hits can knock your cursor flying. |
 | `bounce`| how bouncy it is when it lands: `0` a thud, `0.9` a super ball. Leave it out for `0.3`. |
+| `cuts`  | `true` for a real blade (like `katana.json`): in a real fight it can take a limb off or run someone through. |
 | `shape` | the drawing (see "Drawing it" below). |
 
 ### What `use` does

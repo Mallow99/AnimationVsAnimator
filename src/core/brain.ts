@@ -340,6 +340,7 @@ export class Brain {
     else if (has('sleep', 'nap', 'rest')) { say = 'zzz'; plan = [{ do: 'sleep' }]; }
     else if (has('wake')) { say = '!'; plan = [{ do: 'wake' }]; }
     else if (has('video game', 'videogame', 'gaming', 'play games', 'play your game')) { say = 'game time'; plan = [{ do: 'videogame' }]; }
+    else if (has('duel', 'spar with', 'fight your friend', 'fight him', 'fight each other', 'sword fight')) { say = 'oh it is ON'; plan = [{ do: 'duel' }]; }
     else if (has('paint', 'canvas')) { say = 'one sec'; plan = [{ do: 'paint' }]; }
     else if (has('draw', 'doodle')) { say = 'one sec'; plan = [{ do: 'doodle' }]; }
     else if (has('climb')) { say = 'on it'; plan = [{ do: 'climb' }]; }
@@ -443,7 +444,7 @@ export class Brain {
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
       'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling), "perch" (hop up and sit on something in their window, like a chat message).',
       'DRAWING YOUR WAY: "ramp" draws a ramp up onto a window and walks up it; "bridge" draws a bridge across a gap to a window; "drawramp" draws one to jump off. Your drawings are solid and have weight.',
-      'PROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV), "ride" (the scooter). Only if they\'re out.',
+      'PROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV), "ride" (the scooter). Only if they\'re out. "duel": spar with your friend (the other stick figure), if they\'re around.',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
       ...(bodyGuide ? BODY_GUIDE : []),
       ...(drawGuide ? DRAW_GUIDE : []),

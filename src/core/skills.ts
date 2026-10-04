@@ -15,6 +15,7 @@ import { preferredSlots, type Item, type ItemUse } from './items';
 import { Skill, arrive, type Ctx, type LookMode } from './skills/context';
 export { Skill, DEFAULT_LESSONS, type Ctx, type World, type Lessons, type LookMode } from './skills/context';
 export { propsOf, SitOnProp, WatchTV, PlayVideoGame, RideScooter } from './skills/props';
+export { Duel } from './skills/duel';
 
 /** Do some skills one after the other (each one is made when its turn comes). */
 export class Chain extends Skill {
@@ -827,13 +828,21 @@ export class SwordSwing extends Skill {
   private hit = false;
   private from = -70;
   private k: { top: number; bottom: number; windup: number; cut: number; follow: number; lead: number; bounce: number; what: string };
-  constructor(private times = 2, private atCursor = true, use: 'swing' | 'smash' = 'swing') {
+  /**
+   * `opts.target`: swing at this instead of your cursor (his friend, in a duel). `opts.item`: with this
+   * one (a foam sword, a katana). `opts.keepOut`: leave it in his hand afterwards (more swings coming).
+   */
+  constructor(private times = 2, private atCursor = true, use: 'swing' | 'smash' = 'swing',
+    private opts: { target?: () => Vec | null; item?: Item; keepOut?: boolean } = {}) {
     super();
     this.name = use === 'smash' ? 'smash' : 'swing';
     this.tool = new Tool(use);
+    if (opts.item) this.tool.item = opts.item;
     this.k = SWINGS[use];
   }
-  start(c: Ctx) { c.look = this.atCursor ? 'cursor' : 'none'; }
+  /** What he's swinging at: your cursor, his friend, or nothing (practice). */
+  private aim(c: Ctx) { return this.opts.target ? this.opts.target() : this.atCursor ? c.world.cursor : null; }
+  start(c: Ctx) { c.look = this.opts.target ? 'none' : this.atCursor ? 'cursor' : 'none'; }
 
   /** Arm and sword at angle phi (degrees: 0 = straight ahead, 90 = straight up, negative = down). */
   private pose(c: Ctx, phi: number) {
@@ -847,13 +856,13 @@ export class SwordSwing extends Skill {
   /** Did the swing go through your cursor? (Once per swing.) */
   private checkHit(c: Ctx) {
     const it = this.tool.item!, cur = c.world.cursor, ch = c.char;
-    if (this.hit || !cur || it.tipSpeed < 200 || it.sweptDistTo(cur.x, cur.y) > (this.name === 'smash' ? 12 : 9) * ch.scale) return;
+    if (this.hit || this.opts.target || !cur || it.tipSpeed < 200 || it.sweptDistTo(cur.x, cur.y) > (this.name === 'smash' ? 12 : 9) * ch.scale) return;
     this.hit = true;
     c.hitCursor?.(cur.x, cur.y, it.tipVel.x * 0.8, it.tipVel.y * 0.8 - (this.name === 'smash' ? 0 : 260), Math.max(0.6, it.def.hit));
   }
 
   update(c: Ctx, dt: number) {
-    const ch = c.char, cur = c.world.cursor;
+    const ch = c.char, cur = this.aim(c);
     this.pt += dt;
     if (this.phase !== 'tool' && this.phase !== 'stow' && this.tool.item?.where !== 'hand') return true;
     switch (this.phase) {
@@ -871,7 +880,7 @@ export class SwordSwing extends Skill {
         // The far end of what he swings sweeps a circle around his shoulder: stand where your cursor is on it.
         const j = ch.body.j, arm = (ch.d.upperArm + ch.d.foreArm) * 0.85, L = this.tool.item!.def.length * ch.scale;
         const R = Math.hypot(arm + L * Math.cos(this.k.lead), L * Math.sin(this.k.lead));
-        if (this.atCursor && cur && this.pt < 3) {
+        if (cur && this.pt < 3) {
           const dy = cur.y - j.neck.y, dx = cur.x - j.neck.x;
           const want = Math.sqrt(Math.max((0.8 * R) ** 2 - dy * dy, (0.3 * R) ** 2));
           if (Math.abs(Math.abs(dx) - want) > 8 * ch.scale) {
@@ -880,7 +889,7 @@ export class SwordSwing extends Skill {
           }
         }
         ch.stop();
-        if (this.atCursor && cur) ch.facing = Math.sign(cur.x - ch.x) || ch.facing;
+        if (cur) ch.facing = Math.sign(cur.x - ch.x) || ch.facing;
         this.phase = 'windup'; this.pt = 0; this.from = -70;
         return false;
       }
@@ -908,6 +917,7 @@ export class SwordSwing extends Skill {
           this.swings++;
           this.from = this.k.bottom;
           if (this.swings < this.times) { this.phase = 'windup'; this.pt = 0; }
+          else if (this.opts.keepOut) { this.tool.item!.aim = null; ch.handTarget = null; return true; }
           else { this.phase = 'stow'; this.pt = 0; if (!this.atCursor) c.say(pick(['hyah!', 'ha!', 'en garde']), 1.2); }
         }
         return false;
@@ -918,7 +928,7 @@ export class SwordSwing extends Skill {
   stop(c: Ctx) {
     c.char.handTarget = null;
     const it = this.tool.item;
-    if (it?.where === 'hand') { it.aim = null; c.items.stow(it); }
+    if (it?.where === 'hand') { it.aim = null; if (!this.opts.keepOut) c.items.stow(it); }
   }
 }
 

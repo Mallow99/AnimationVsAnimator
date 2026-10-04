@@ -50,6 +50,12 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   (from the couch if it's near), rides the scooter across the screen. Drag them around; tip his chair and he falls off.
 - **Video games**: with a TV out he grabs a controller and plays his own little runner game (from the couch if
   it's near), and takes losing personally. Settings → Items → the placed TV → **Video games**, or ask him.
+- **His friend** (Settings → General → His friend; on by default): a second stick figure, Leonard (orange; rename
+  and recolor him), with an offline mind of his own. They share the furniture, spar with each other now and then,
+  and when one squares up to your cursor the other comes to back him up. **Fights** setting: *play fights* (fists,
+  foam and wooden swords, nobody gets hurt) or *real fights* (katanas: a cut takes a limb off, a hit to the body
+  runs him through and he goes down for a few seconds; no gore, just sparks, and limbs go back on). Say "duel" or
+  use **Make them spar now**.
 - **Optional gear**: helmet and boots in Items → Inventory. **Wear** puts them on; **Drop it in**
   lets him fetch them. Take them back or **Put away** whenever you like.
 - **Make your own items and props**: it's just a text file. See [docs/MAKING-THINGS.md](docs/MAKING-THINGS.md)

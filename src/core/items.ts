@@ -15,6 +15,8 @@ import penDef from './items/pen.json';
 import swordDef from './items/wooden-sword.json';
 import ballDef from './items/bouncy-ball.json';
 import maceDef from './items/mace.json';
+import foamDef from './items/foam-sword.json';
+import katanaDef from './items/katana.json';
 import helmetDef from './items/helmet.json';
 import bootsDef from './items/boots.json';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
@@ -36,6 +38,8 @@ export interface ItemDef {
   shape: ItemStroke[];
   sprite?: PixelSprite;
   wear?: 'head' | 'feet';
+  /** A real blade: in a real fight it can cut a limb off or run someone through. */
+  cuts?: boolean;
   /** Made from one of his drawings (not a file). */
   drawn?: boolean;
 }
@@ -75,6 +79,7 @@ export function parseItemDef(raw: unknown): ItemDef | null {
     belt: o.belt === 'side' || o.belt === 'back' || o.belt === 'pocket' ? o.belt : o.belt === 'none' ? 'none' : 'side',
     hit: num(o.hit, 0, 0, 3), bounce: num(o.bounce, 0.3, 0, 0.92), shape, sprite,
     wear: o.wear === 'head' || o.wear === 'feet' ? o.wear : undefined,
+    cuts: o.cuts === true ? true : undefined,
   };
 }
 
@@ -97,7 +102,7 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
 export const SLOT_NAMES = ['left hip', 'right hip', 'back', 'pocket'];

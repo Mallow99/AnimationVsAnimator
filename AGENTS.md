@@ -5,8 +5,9 @@ The user's latest instructions take priority over the historical roadmap.
 
 - Preserve the existing personality, procedural stick-figure look, and movement presets. Ask before
   substantial character/design changes. Small tool improvements and clear activity UI are welcome.
-- This batch stops **before preparing multiple characters**. Shared-world architecture, a second pet,
-  pet-versus-pet combat, health and death are future work requiring the owner to resume that stage.
+- The owner resumed multiple characters: his friend is a second `Pet` in the same overlay (see the handoff).
+  The owner wants them split into separate apps that talk to each other later; keep them one app for now.
+  No health bars or permanent death: play fights, or real fights where limbs come off and go back on.
 - Keep `src/core` free of Node, Electron and OS imports. Put native integration behind the shell bridge.
 - Keep Windows distribution in working order. Package the PowerShell helper as a real file, retain
   the visible-pixel/DIP conversion, and never ship app-data files or provider keys.

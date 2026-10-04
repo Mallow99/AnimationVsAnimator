@@ -219,6 +219,11 @@ $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking
 $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('sfx').addEventListener('change', (e) => set({ sfx: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('destructible').addEventListener('change', (e) => set({ destructible: (e.target as HTMLInputElement).checked }));
+$<HTMLInputElement>('friendOn').addEventListener('change', (e) => set({ friend: { on: (e.target as HTMLInputElement).checked } }));
+$<HTMLInputElement>('friendName').addEventListener('input', (e) => set({ friend: { name: (e.target as HTMLInputElement).value } }));
+$<HTMLInputElement>('friendColor').addEventListener('input', (e) => set({ friend: { color: (e.target as HTMLInputElement).value } }));
+$<HTMLSelectElement>('fightMode').addEventListener('change', (e) => set({ fightMode: (e.target as HTMLSelectElement).value }));
+$('duelNow').addEventListener('click', () => shell.command('do:duel'));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
 $<HTMLTextAreaElement>('persona').addEventListener('input', (e) => set({ persona: (e.target as HTMLTextAreaElement).value }));
 $<HTMLInputElement>('model').addEventListener('change', (e) => set({ model: (e.target as HTMLInputElement).value.trim() }));
@@ -275,6 +280,12 @@ function render(c: PetConfig) {
   $<HTMLInputElement>('smacking').checked = c.smacking;
   $<HTMLInputElement>('sound').checked = c.sound;
   $<HTMLInputElement>('destructible').checked = c.destructible;
+  $<HTMLInputElement>('friendOn').checked = c.friend.on;
+  const friendName = $<HTMLInputElement>('friendName');
+  if (document.activeElement !== friendName) friendName.value = c.friend.name;
+  $<HTMLInputElement>('friendColor').value = c.friend.color;
+  $<HTMLSelectElement>('fightMode').value = c.fightMode;
+  $('duelNow').toggleAttribute('disabled', !c.friend.on);
   $<HTMLInputElement>('sfx').checked = c.sfx;
   $<HTMLInputElement>('windows').checked = c.windows;
   $<HTMLInputElement>('mischief').checked = c.mischief;

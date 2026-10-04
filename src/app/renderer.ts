@@ -1,7 +1,7 @@
 // The overlay page: sets up the canvas, runs the frame loop, feeds mouse input
 // to the pet, and tells the desktop shell when clicks should pass through.
 
-import { Pet, type PetConfig } from '../core/pet';
+import { Pet, friendConfig, type PetConfig } from '../core/pet';
 import type { Bounds } from '../core/physics';
 import type { WinRect } from '../core/world';
 import type { BrainRequest } from '../core/brain';
@@ -65,17 +65,51 @@ const saveMemory = () => {
   if (shell) shell.saveMemory(json); else try { localStorage.setItem(MEMORY_KEY, json); } catch { /* ignore */ }
 };
 pet.onMemorySave = () => { clearTimeout(memTimer); memTimer = setTimeout(saveMemory, 1000); };
-const save = () => { try { localStorage.setItem(SAVE_KEY, pet.save()); } catch { /* ignore */ } saveMemory(); };
+
+// ── his friend: a second stick figure in the same overlay, with a mind of its own ──
+// (Same furniture, same windows, same cursor. Saved in browser storage under its own keys.)
+const FRIEND_SAVE = 'friend-save', FRIEND_MEMORY = 'friend-memory';
+let friend: Pet | null = null;
+let lastWins: WinRect[] = [], lastDefs: unknown[] = [];
+const saveFriend = () => {
+  if (!friend) return;
+  try { localStorage.setItem(FRIEND_SAVE, friend.save()); localStorage.setItem(FRIEND_MEMORY, friend.memory.save()); } catch { /* ignore */ }
+};
+function syncFriend(c: PetConfig) {
+  if (!c.friend.on) {
+    if (friend) { saveFriend(); pet.others = []; friend = null; }
+    return;
+  }
+  if (friend) { friend.applyConfig(friendConfig(c)); return; }
+  const f = new Pet(bounds(), friendConfig(c), { props: pet.props });
+  try { f.load(localStorage.getItem(FRIEND_SAVE)); f.memory.load(localStorage.getItem(FRIEND_MEMORY)); } catch { /* storage blocked */ }
+  // Drops in on the other side of the screen from him.
+  const b = bounds(), x = pet.char.x < (b.left + b.right) / 2 ? b.right * 0.75 : b.right * 0.25;
+  f.char.body.translate(x - f.char.x, 0);
+  f.others = [pet]; pet.others = [f];
+  f.setWindows(lastWins);
+  if (lastDefs.length) f.addDefs(lastDefs);
+  f.onBlip = (pitch) => playBlip(pitch * 0.85, f.config.volume);
+  f.onSound = (name, strength) => playSfx(name, strength, f.config.volume, 0.75 + f.mood.s.happiness * 0.4);
+  if (shell) {
+    f.onMoveCursor = (x2, y2) => shell.moveCursor(x2, y2);
+    f.onMoveWindow = (id, x2, y2, w, h) => shell.moveWindow(id, x2, y2, w, h);
+    f.onOpenSettings = () => shell.openSettings();
+  } else f.onMoveWindow = (id, x2, y2) => { const w = fakeWins.find((q) => q.id === id); if (w) { w.x = x2; w.y = y2; pet.setWindows(fakeWins); f.setWindows(fakeWins); } };
+  friend = f;
+}
+const setWindowsAll = (wins: WinRect[]) => { lastWins = wins; pet.setWindows(wins); friend?.setWindows(wins); };
+const save = () => { try { localStorage.setItem(SAVE_KEY, pet.save()); } catch { /* ignore */ } saveMemory(); saveFriend(); };
 setInterval(save, 15000);
 window.addEventListener('beforeunload', save);
 
 // Settings live in the desktop shell (pet.json). Get them now, and whenever they change.
 if (shell) {
-  shell.getConfig().then((c) => pet.applyConfig(c));
-  shell.onConfig((c) => pet.applyConfig(c));
+  shell.getConfig().then((c) => { pet.applyConfig(c); syncFriend(c); });
+  shell.onConfig((c) => { pet.applyConfig(c); syncFriend(c); });
   shell.onCommand((cmd) => pet.command(cmd));
-  shell.onWindows((wins) => pet.setWindows(wins)); // other apps' windows become platforms
-  shell.onUi((ui) => pet.setScreen(ui)); // what you're doing: he comments on it, and sits on things in your window
+  shell.onWindows((wins) => setWindowsAll(wins)); // other apps' windows become platforms
+  shell.onUi((ui) => { pet.setScreen(ui); friend?.setScreen(ui); }); // what you're doing: he comments on it, and sits on things in your window
   shell.onWindowsLog((line) => { if (line.startsWith('move:')) pet.moveNote = line.slice(5).trim(); }); // how moving windows is going
   pet.onMoveCursor = (x, y) => shell.moveCursor(x, y); // mischief mode, and knocking it flying
   pet.onMoveWindow = (id, x, y, w, h) => shell.moveWindow(id, x, y, w, h); // he pushes your windows around
@@ -87,12 +121,13 @@ if (shell) {
   };
   setInterval(() => shell.sendStats(pet.stats()), 400);
   // Item definition files (yours, from the items folder) on top of the ones he comes with.
-  shell.getItemDefs().then((d) => pet.addDefs(d), () => {});
-  shell.onItemDefs((d) => pet.addDefs(d));
+  shell.getItemDefs().then((d) => { lastDefs = d; pet.addDefs(d); friend?.addDefs(d); }, () => {});
+  shell.onItemDefs((d) => { lastDefs = d; pet.addDefs(d); friend?.addDefs(d); });
   pet.onOpenSettings = () => shell.openSettings();
   pet.onCollections = () => { shell.sendCollections(pet.collections()); save(); };
 }
 (window as unknown as { pet: Pet }).pet = pet; // handy for poking at from DevTools
+Object.defineProperty(window, 'friend', { get: () => friend }); // his friend, the same way
 
 // ── his voice and sound effects (made in code: see sfx.ts) ──
 // Voice: tiny square-wave blips, one per couple of letters (like Undertale or Animal Crossing).
@@ -105,6 +140,7 @@ function resize() {
   canvas.height = Math.round(window.innerHeight * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   pet.setBounds(bounds());
+  friend?.setBounds(bounds());
 }
 window.addEventListener('resize', resize);
 resize();
@@ -164,7 +200,8 @@ const overTalk = (x: number, y: number) => {
 // or you're carrying one of his things (then a click anywhere drops it).
 let ignoring = true;
 function updateClickThrough(x: number, y: number) {
-  const want = !(pet.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y));
+  const want = !(pet.dragging || pet.hit(x, y) || pet.uiHit(x, y) || pet.carrying || overTalk(x, y)
+    || (friend && (friend.dragging || friend.hit(x, y) || friend.uiHit(x, y) || friend.carrying)));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);
@@ -184,29 +221,36 @@ window.addEventListener('mousemove', (e) => {
   last = { x: e.clientX, y: e.clientY, t: now };
   pet.cursor(e.clientX, e.clientY, vel.x, vel.y);
   pet.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now);
+  friend?.cursor(e.clientX, e.clientY, vel.x, vel.y);
+  friend?.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now);
   updateClickThrough(e.clientX, e.clientY);
 });
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
-  if (pet.contextMenu(e.clientX, e.clientY)) shell?.pressed();
+  const who = friend && (friend.hit(e.clientX, e.clientY) || friend.uiHit(e.clientX, e.clientY)) ? friend : pet;
+  if (who.contextMenu(e.clientX, e.clientY)) shell?.pressed();
   updateClickThrough(e.clientX, e.clientY);
 });
 window.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   if (overTalk(e.clientX, e.clientY)) return;
   if (talkOpen && !pet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
-  if (pet.pointerDown(e.clientX, e.clientY, performance.now())) {
+  // His friend first if you clicked right on them; otherwise him (and the furniture), then the friend's things.
+  const now = performance.now();
+  const onFriend = !!friend && (friend.hit(e.clientX, e.clientY) || friend.uiHit(e.clientX, e.clientY) || friend.carrying);
+  if (onFriend ? friend!.pointerDown(e.clientX, e.clientY, now) : pet.pointerDown(e.clientX, e.clientY, now) || !!friend?.pointerDown(e.clientX, e.clientY, now)) {
     canvas.style.cursor = 'grabbing';
     shell?.pressed();
   }
 });
 window.addEventListener('mouseup', (e) => {
-  if (pet.dragging) shell?.pressed(); // hand focus back once more after letting go
+  if (pet.dragging || friend?.dragging) shell?.pressed(); // hand focus back once more after letting go
   pet.pointerUp(e.clientX, e.clientY);
+  friend?.pointerUp(e.clientX, e.clientY);
   updateClickThrough(e.clientX, e.clientY);
 });
 // If the mouse leaves the window mid-drag, let go.
-window.addEventListener('blur', () => pet.pointerUp(last.x, last.y));
+window.addEventListener('blur', () => { pet.pointerUp(last.x, last.y); friend?.pointerUp(last.x, last.y); });
 
 // ── preview mode: a couple of fake windows to climb on ──
 const fakeWins: WinRect[] = [];
@@ -214,12 +258,13 @@ if (!shell) {
   const W = window.innerWidth, H = window.innerHeight;
   fakeWins.push({ id: 1, x: W * 0.08, y: H - 210, w: Math.min(360, W * 0.3), h: 260 });
   fakeWins.push({ id: 2, x: W * 0.55, y: H - 330, w: Math.min(420, W * 0.35), h: 380 });
-  pet.setWindows(fakeWins);
+  setWindowsAll(fakeWins);
   // He can push the fake windows around too.
   pet.onMoveWindow = (id, x, y) => {
     const w = fakeWins.find((f) => f.id === id);
-    if (w) { w.x = x; w.y = y; pet.setWindows(fakeWins); }
+    if (w) { w.x = x; w.y = y; setWindowsAll(fakeWins); }
   };
+  syncFriend(pet.config);
 }
 function drawFakeWindows() {
   for (const w of fakeWins) {
@@ -236,13 +281,15 @@ function frame(now: number) {
   const dt = (now - prev) / 1000;
   prev = now;
   // The mouse may sit still while held; decay its velocity so he isn't "thrown" on release.
-  if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; pet.pointerMove(last.x, last.y, vel.x, vel.y, now); }
+  if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; pet.pointerMove(last.x, last.y, vel.x, vel.y, now); friend?.pointerMove(last.x, last.y, vel.x, vel.y, now); }
   pet.update(dt);
+  friend?.update(dt);
   updateClickThrough(last.x, last.y);
   if (talkOpen) { placeTalk(); if (now - talkIdle > 45000 && document.activeElement !== talkText) closeTalk(); }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   if (fakeWins.length) drawFakeWindows();
   pet.draw(ctx);
+  friend?.draw(ctx);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
