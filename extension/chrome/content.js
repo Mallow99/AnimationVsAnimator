@@ -6,9 +6,9 @@
     picking = false,
     busy = false;
   const taken = [];
-  const highlight = document.createElement("div");
+  const highlight = document.createElement('div');
   highlight.style.cssText =
-    "position:fixed;pointer-events:none;border:3px solid #6859e8;box-sizing:border-box;z-index:2147483647;display:none;background:#6859e814";
+    'position:fixed;pointer-events:none;border:3px solid #6859e8;box-sizing:border-box;z-index:2147483647;display:none;background:#6859e814';
   document.documentElement.append(highlight);
   function screenPoint(r) {
     return {
@@ -29,32 +29,32 @@
   }
   function cancel() {
     picking = false;
-    highlight.style.display = "none";
+    highlight.style.display = 'none';
   }
   function restore() {
     for (const [node, visibility, priority] of taken)
       if (node.isConnected) {
         if (visibility)
-          node.style.setProperty("visibility", visibility, priority);
-        else node.style.removeProperty("visibility");
+          node.style.setProperty('visibility', visibility, priority);
+        else node.style.removeProperty('visibility');
       }
     taken.length = 0;
   }
   document.addEventListener(
-    "pointermove",
+    'pointermove',
     (event) => {
       if (!picking) return;
       const node = event.target;
       if (
         !(node instanceof HTMLElement) ||
         node === highlight ||
-        ["HTML", "BODY", "INPUT", "TEXTAREA", "SELECT"].includes(node.tagName)
+        ['HTML', 'BODY', 'INPUT', 'TEXTAREA', 'SELECT'].includes(node.tagName)
       ) {
-        highlight.style.display = "none";
+        highlight.style.display = 'none';
         return;
       }
       const r = node.getBoundingClientRect();
-      highlight.style.display = "block";
+      highlight.style.display = 'block';
       highlight.style.left = `${r.x}px`;
       highlight.style.top = `${r.y}px`;
       highlight.style.width = `${r.width}px`;
@@ -63,7 +63,7 @@
     true,
   );
   document.addEventListener(
-    "click",
+    'click',
     (event) => {
       if (!picking) return;
       event.preventDefault();
@@ -71,7 +71,7 @@
       const node = event.target;
       if (
         node instanceof HTMLElement &&
-        !["HTML", "BODY", "INPUT", "TEXTAREA", "SELECT"].includes(node.tagName)
+        !['HTML', 'BODY', 'INPUT', 'TEXTAREA', 'SELECT'].includes(node.tagName)
       )
         selected = node;
       cancel();
@@ -79,26 +79,26 @@
     true,
   );
   document.addEventListener(
-    "keydown",
+    'keydown',
     (event) => {
-      if (event.key === "Escape") cancel();
+      if (event.key === 'Escape') cancel();
     },
     true,
   );
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
-    if (message.action === "connect") connected = true;
-    if (message.action === "pick") {
+    if (message.action === 'connect') connected = true;
+    if (message.action === 'pick') {
       connected = true;
       picking = true;
     }
-    if (message.action === "restore") restore();
-    if (message.action === "disconnect") {
+    if (message.action === 'restore') restore();
+    if (message.action === 'disconnect') {
       connected = false;
       cancel();
       restore();
       selected = null;
     }
-    if (message.action === "selection") {
+    if (message.action === 'selection') {
       if (!connected || !selected?.isConnected) {
         respond(null);
         return;
@@ -110,7 +110,7 @@
         viewportHeight: innerHeight,
         screen: screenPoint(r),
         title: (
-          selected.getAttribute("alt") ||
+          selected.getAttribute('alt') ||
           selected.textContent ||
           selected.tagName
         )
@@ -119,13 +119,13 @@
       });
       return;
     }
-    if (message.action === "take" && selected?.isConnected) {
+    if (message.action === 'take' && selected?.isConnected) {
       taken.push([
         selected,
-        selected.style.getPropertyValue("visibility"),
-        selected.style.getPropertyPriority("visibility"),
+        selected.style.getPropertyValue('visibility'),
+        selected.style.getPropertyPriority('visibility'),
       ]);
-      selected.style.setProperty("visibility", "hidden", "important");
+      selected.style.setProperty('visibility', 'hidden', 'important');
       selected = null;
     }
     respond({ ok: true });
@@ -135,10 +135,10 @@
     busy = true;
     try {
       const result = await chrome.runtime.sendMessage({
-        action: "tick",
+        action: 'tick',
         page: page(),
       });
-      if (!result?.ok && result?.error?.includes("switched off")) {
+      if (!result?.ok && result?.error?.includes('switched off')) {
         connected = false;
         restore();
       }
@@ -149,5 +149,5 @@
       busy = false;
     }
   }, 1000);
-  window.addEventListener("pagehide", restore);
+  window.addEventListener('pagehide', restore);
 })();
