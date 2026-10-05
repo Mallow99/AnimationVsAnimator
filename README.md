@@ -6,6 +6,10 @@ grab, and throw him.
 
 [See the couch, TV and video games](docs/images/tv-couch-preview.png), and [all his furniture](docs/images/props-preview.png).
 
+The latest changes add cursor weapons, pen-made pistols/tools, guard pressure, and up to five figures.
+See [Desktop interactions](docs/DESKTOP-INTERACTIONS.md) for Chrome setup and the limits of the
+real-folder/document visit prototype. It uses actual native windows; it creates no HTML room files.
+
 ## Run it (macOS or Windows)
 1. Install [Node.js](https://nodejs.org) (LTS).
 2. Get this repo (GitHub Desktop → Clone), then open a terminal in its folder.

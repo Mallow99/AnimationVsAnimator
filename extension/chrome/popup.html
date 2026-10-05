@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8" /><title>Stick figures</title
+><style>
+  body {
+    width: 290px;
+    margin: 14px;
+    color: #22304c;
+    font: 14px system-ui;
+  }
+  input,
+  button {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 9px;
+    margin: 5px 0;
+    font: inherit;
+  }
+  p {
+    line-height: 1.4;
+  }
+  #status {
+    color: #465674;
+  }
+</style>
+<h3>Connect this page</h3>
+<p>Copy the Chrome pairing link from the desktop app's Settings.</p>
+<input id="pair" type="password" placeholder="Paste pairing link" /><button
+  id="save"
+>
+  Pair with desktop</button
+><button id="connect">Let them onto this page</button
+><button id="pick">Pick something they can take</button
+><button id="restore">Put everything back</button
+><button id="disconnect">Disconnect this page</button>
+<p id="status"></p>
+<script src="popup.js"></script>

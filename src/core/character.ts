@@ -100,6 +100,7 @@ export type SeatStyle = 'up' | 'lounge' | 'front' | 'lie';
 const SEAT_TURN: Record<SeatStyle, number> = { up: 0.62, lounge: 0.55, front: 0.92, lie: 0 };
 
 export type CharEvent =
+  | { type: 'hardImpact'; speed: number }
   | { type: 'landed'; speed: number }
   | { type: 'crashed'; speed: number }
   | { type: 'tripped' }
@@ -201,6 +202,7 @@ export class Character {
   walkSpeed = 62;
   /** When true he stays down after falling / lying (sleeping, sulking). */
   stayDown = false;
+  sleeping = false;
   /** Can limbs come off (big crashes, hard smacks, yanking a hand or foot)? */
   destructible = true;
   /** Limbs that came off, lying around (or being held), by which limb they are. */
@@ -239,10 +241,21 @@ export class Character {
   fightPose: FightPose | null = null;
   /** Fight footwork: the fight skill drives his speed directly (lunges, dashes), and his depth (passing in front). */
   fightVX: number | null = null;
+  /** The item hand follows a stable carrying pose during locomotion. */
+  carryPose: { hand: 'L' | 'R'; use: string; twoHand: boolean } | null = null;
+  get locomotion(): 'idle' | 'walk' | 'run' | 'backstep' | 'air' {
+    if (this.mode !== 'ground') return 'air';
+    if (Math.abs(this.rootVX) <= 10) return 'idle';
+    if (this.rootVX * this.facing < -10 && this.faceLock !== null) return 'backstep';
+    return this.running && Math.abs(this.rootVX) > 115 * this.scale ? 'run' : 'walk';
+  }
   fightZ: number | null = null;
   /** In a fight: health (0 = knocked out) and poise (balance; it runs out from taking or blocking hits). */
   hp = 1;
   poise = 1;
+  /** Pressure persists through an exchange; recovery begins only after a quiet gap. */
+  poiseDelay = 0;
+  breakCount = 0;
   /** Poise broken: stumbling, wide open, for this long (seconds). */
   stagger = 0;
   private fightDrop = 0;
@@ -930,7 +943,7 @@ export class Character {
     this.held = { joint, x, y, vx: 0, vy: 0, self };
     this.body.j[joint].invMass = 0;
     this.goalX = null; this.gesture = null; this.jumpPrep = null;
-    this.stayDown = false;
+    this.stayDown = this.sleeping;
     this.setMode('held');
     this.events.push({ type: self ? 'hangOn' : 'grabbed' });
   }
@@ -965,7 +978,7 @@ export class Character {
     p.px = p.x - vx * this.dt; p.py = p.y - vy * this.dt; p.pz = p.z;
     const speed = Math.hypot(vx, vy);
     this.held = null;
-    this.setMode(speed > 1300 ? 'ragdoll' : 'air');
+    this.setMode(this.sleeping || speed > 1300 ? 'ragdoll' : 'air');
     this.events.push({ type: 'released', speed });
   }
 
@@ -1015,9 +1028,14 @@ export class Character {
     this.modeTime += dt;
     this.stun = Math.max(0, this.stun - dt);
     this.hitstun = Math.max(0, this.hitstun - dt);
+    const wasBroken=this.stagger>0;
     this.stagger = Math.max(0, this.stagger - dt);
-    // Poise comes back while he isn't being hit (faster when he's not on guard against an attack).
-    if (this.stagger <= 0 && this.hitstun <= 0) this.poise = Math.min(1, this.poise + dt * (this.poise < 0.3 ? 0.35 : 0.2));
+    if(wasBroken && this.stagger===0){this.poise=Math.max(this.poise,0.65);this.poiseDelay=0.6;}
+    this.poiseDelay = Math.max(0, this.poiseDelay - dt);
+    if (this.stagger <= 0 && this.hitstun <= 0 && this.poiseDelay <= 0) {
+      const recovering = !this.fightPose?.block && !this.fightPose?.act;
+      this.poise = Math.min(1, this.poise + dt * (recovering ? 0.16 : 0.035));
+    }
     this.strike = null;
     const t: Targets = {};
     const s: Strengths = {};
@@ -1034,7 +1052,10 @@ export class Character {
       case 'lie': this.liePose(t, s); break;
       case 'getup': this.getupPose(t, s); break;
       case 'air': this.airPose(t, s, 0.07); internal = true; break;
-      case 'held': this.airPose(t, s, 0.025); this.flailOverlay(t, s); internal = true; break;
+      case 'held':
+        if (!this.sleeping) { this.airPose(t, s, 0.025); this.flailOverlay(t, s); }
+        internal = true;
+        break;
       case 'ragdoll': break;
       case 'climb': this.climbPose(dt, t, s); break;
       case 'ceiling': this.ceilingPose(dt, t, s); break;
@@ -1085,10 +1106,22 @@ export class Character {
     // (On a chair or the couch his seat holds his hips: they mustn't come to rest on its armrest or back,
     // or on something drawn over it.)
     const onThings = this.mode === 'ground' || this.mode === 'sit' && this.seat ? [b.j.footL, b.j.footR] : this.mode === 'sit' ? [b.j.footL, b.j.footR, b.j.hip] : b.points;
+    const impact = this.sleeping ? b.points.map(p => ({vx: (p.x - p.px) / dt, vy: (p.y - p.py) / dt})) : null;
     for (let i = 0; i < 8; i++) {
       solveSticks(b.sticks);
       collide(b.points, bounds, friction);
       collidePlatforms(onThings, this.platforms, friction);
+    }
+    if (impact) {
+      let speed = 0;
+      b.points.forEach((p, i) => {
+        if (!p.invMass) return;
+        const v = impact[i];
+        if (p.grounded && v.vy > 0) speed = Math.max(speed, v.vy);
+        if (p.x - p.r <= bounds.left + 0.5 && v.vx < 0 || p.x + p.r >= bounds.right - 0.5 && v.vx > 0) speed = Math.max(speed, Math.abs(v.vx));
+        if (p.y - p.r <= bounds.top + 0.5 && v.vy < 0) speed = Math.max(speed, -v.vy);
+      });
+      if (speed > 600) this.events.push({type: 'hardImpact', speed});
     }
     if (fall) this.checkImpacts(fall);
     if (this.missing.size || this.fadingPieces.length) this.stepLimbs(dt);
@@ -1467,14 +1500,15 @@ export class Character {
     if (legs === 1) { this.hopPose(dt, t, s, floor); return; }
 
     // Running has its own cycle (see runPose).
-    if (this.running && moving && this.crouch < 6 * sc) { this.runPose(dt, t, s, floor); return; }
+    if (this.locomotion === 'run' && moving && !this.fightPose?.move && this.crouch < 6 * sc) { this.runPose(dt, t, s, floor); return; }
 
     // Feet. Walking: the foot that's furthest behind swings forward and lands half
     // a stride ahead of the hips, then the other foot goes — a steady left-right rhythm.
     // Standing: small shuffles keep both feet under him.
     const B = this.style, legLen = d.thigh + d.shin;
     const speed = Math.abs(this.rootVX), dir = sign(this.rootVX);
-    const stepLen = B.stride * 26 * sc * (this.running ? 1.3 : 1);
+    const backwards = this.locomotion === 'backstep';
+    const stepLen = B.stride * 26 * sc * (backwards ? 0.9 : 1);
     const track = 2.5 * sc; // walking, each foot lands a little to its own side
     // On guard he shuffles: the feet keep their fencing stance and slide along with him (unless he really runs).
     const shuffle = !!this.fightPose && moving && speed < 420;
@@ -1523,7 +1557,7 @@ export class Character {
       const ft = this.feet[k];
       if (!ft.swinging) continue;
       if (moving) ft.dur = Math.min(ft.dur, stepT); // speeding up? hurry the step
-      if (shuffle) ft.lift = Math.min(ft.lift, 3 * sc); // a fencer's shuffle stays low
+      if (shuffle || backwards) ft.lift = Math.min(ft.lift, 3 * sc); // a fencer's shuffle stays low
       ft.t += dt / ft.dur;
       const u = Math.min(ft.t, 1);
       const to = landAt(k, (1 - u) * ft.dur);
@@ -2103,24 +2137,27 @@ export class Character {
   private runPose(dt: number, t: Targets, s: Strengths, floor: number) {
     const d = this.d, sc = this.scale, L = d.thigh + d.shin;
     const angry = this.gait === 'stomp';
-    const speed = Math.abs(this.rootVX), stride = L * (angry ? 1.7 : 2.3);
+    const speed = Math.abs(this.rootVX), travel = Math.sign(this.rootVX) || this.facing;
+    // Contact duration and stride agree with actual travel speed, keeping planted feet on the floor.
+    const stanceEnd = angry ? 0.48 : 0.42;
+    const span = L * (angry ? 0.86 : 1.02), stride = span / stanceEnd;
     const before = this.runPhase;
     this.runPhase = (this.runPhase + (speed * dt) / stride) % 1;
-    const ph = this.runPhase, stanceEnd = angry ? 0.42 : 0.32;
+    const ph = this.runPhase;
     if ((before < 0.5 && ph >= 0.5) || ph < before) this.events.push({ type: 'step' });
-    const root = this.pt(this.rootX, floor - 2);
     const footAt = (off: number, k: 'L' | 'R') => {
       const u = (ph + off) % 1;
-      if (u < stanceEnd) return this.off(root, lerp(0.4 * L, -0.45 * L, u / stanceEnd), 0, sideOf(k) * 2.5 * sc);
+      const side = sideOf(k) * 2.5 * sc;
+      if (u < stanceEnd) return { x: this.rootX + travel * span * (0.5 - u / stanceEnd), y: this.groundY(this.rootX + travel * span * (0.5 - u / stanceEnd)) - 2, z: this.rootZ + side };
       const kk = (u - stanceEnd) / (1 - stanceEnd);
-      // Heel kicks up behind first, then the leg swings through and reaches far forward.
-      const lift = Math.sin(Math.PI * Math.min(1, kk * 1.25)) * L * (angry ? 0.3 : 0.38);
-      return this.off(root, lerp(-0.45 * L, 0.4 * L, smooth(kk)), -lift, sideOf(k) * 2.5 * sc);
+      // Toe-off, heel recovery, then extension. The arc is continuous at both contacts.
+      const lift = Math.sin(Math.PI * kk) * L * (angry ? 0.32 : 0.42);
+      return { x: this.rootX + travel * lerp(-span / 2, span / 2, smooth(kk)), y: floor - 2 - lift, z: this.rootZ + side };
     };
     const footL = footAt(0, 'L'), footR = footAt(0.5, 'R');
-    // Lowest at mid-stance (foot under him), highest in the float; legs reach long at landing.
+    // Lowest at mid-stance, highest during the short flight between contacts.
     const mid = stanceEnd / 2;
-    const hip = this.pt(this.rootX, floor - 2 - L * 0.95 + Math.cos((ph - mid) * 4 * Math.PI) * 1.8 * sc);
+    const hip = this.pt(this.rootX, floor - 2 - L * 0.86 + Math.cos((ph - mid) * 4 * Math.PI) * 1.8 * sc);
     this.hipTarget = hip;
     const a = angry ? 0.42 : 0.34; // forward pitch
     const neck = this.off(hip, Math.sin(a) * d.torso, -Math.cos(a) * d.torso);
@@ -2132,7 +2169,23 @@ export class Character {
       return this.off(elbow, Math.cos(th) * d.foreArm * (angry ? 0.8 : 1), -Math.sin(th) * d.foreArm * (angry ? 0.8 : 1), -sideOf(k) * 1.5 * sc);
     };
     const swing = Math.sin(ph * 2 * Math.PI) * amp;
-    const handL = armAt(swing, 'L'), handR = armAt(-swing, 'R'); // each arm opposite its leg
+    let handL = armAt(swing, 'L'), handR = armAt(-swing, 'R'); // each arm opposite its leg
+    if (this.carryPose) {
+      const held = this.carryPose, hand = this.off(neck, 16 * sc, 13 * sc + Math.sin(ph * Math.PI * 4) * sc, sideOf(held.hand) * 4 * sc);
+      if (held.hand === 'L') handL = hand; else handR = hand;
+      if (held.twoHand) {
+        const support = this.off(hand, -5 * sc, 3 * sc, -sideOf(held.hand) * 3 * sc);
+        if (held.hand === 'L') handR = support; else handL = support;
+      }
+    }
+    if (this.fightPose) {
+      const hands = this.fightHands(neck, this.fightPose);
+      handL = hands.L; handR = hands.R;
+    }
+    if (this.handTarget && this.useHand) {
+      const hand = this.reachToward(neck, this.handTarget, this.useHand);
+      if (this.useHand === 'L') handL = hand; else handR = hand;
+    }
     this.fillLimbs(t, hip, neck, -0.15, 0, handL, handR, footL, footR);
     Object.assign(s, { hip: 0.3, neck: 0.3, head: 0.3, kneeL: 0.25, kneeR: 0.25, footL: 0.4, footR: 0.4, elbowL: 0.22, elbowR: 0.22, handL: 0.22, handR: 0.22 });
     // Keep the walking feet in sync so stopping or slowing to a walk is seamless.
@@ -2256,8 +2309,8 @@ export class Character {
     const B = basis(this.yaw);
     const kneeL = twoBoneIK3(hip, footL, d.thigh, d.shin, this.kneePole(B, 'L'));
     const kneeR = twoBoneIK3(hip, footR, d.thigh, d.shin, this.kneePole(B, 'R'));
-    const handL = this.gamepad ? this.padHand(hip, 'L') : this.off(kneeL, 2 * sc, 3 * sc, 1 * sc);
-    const handR = this.gamepad ? this.padHand(hip, 'R') : this.off(kneeR, 4 * sc, 3 * sc, -1 * sc);
+    const handL = this.handsAt?.L ? this.reachToward(neck, this.handsAt.L, 'L') : this.gamepad ? this.padHand(hip, 'L') : this.off(kneeL, 2 * sc, 3 * sc, 1 * sc);
+    const handR = this.handsAt?.R ? this.reachToward(neck, this.handsAt.R, 'R') : this.gamepad ? this.padHand(hip, 'R') : this.off(kneeR, 4 * sc, 3 * sc, -1 * sc);
     this.fillLimbs(t, hip, neck, 0.1 + P.hunch * 0.9, 0, handL, handR, footL, footR);
     Object.assign(s, { hip: 0.2, neck: 0.2, head: 0.25, kneeL: 0.15, kneeR: 0.15, footL: 0.2, footR: 0.2, elbowL: 0.08, elbowR: 0.08, handL: 0.08, handR: 0.08 });
   }
@@ -2305,7 +2358,7 @@ export class Character {
     const fL = front === 'L' ? straight : tucked, fR = front === 'L' ? tucked : straight;
     const belly = this.pt((hipX + neck.x) / 2, (hip.y + neck.y) / 2 - 7 * sc);
     const jig = (k: 'L' | 'R') => Math.sin(this.time * 19 + (k === 'L' ? 0 : 1.7)) * this.padMash * 1.2 * sc;
-    const hand = (k: 'L' | 'R') => this.gamepad ? this.pt(belly.x + f * 3 * sc, belly.y - 4 * sc + jig(k), sideOf(k) * 2.5 * sc)
+    const hand = (k: 'L' | 'R') => this.handsAt?.[k] ? this.reachToward(neck, this.handsAt[k]!, k) : this.gamepad ? this.pt(belly.x + f * 3 * sc, belly.y - 4 * sc + jig(k), sideOf(k) * 2.5 * sc)
       : k === front ? this.pt(belly.x, belly.y + 3 * sc) : this.pt(neck.x - f * 6 * sc, neck.y - d.neck - 2 * sc);
     this.fillLimbs(t, hip, neck, -0.15 * f, 0, hand('L'), hand('R'), fL, fR);
     const B = basis(this.yaw);
@@ -2340,7 +2393,7 @@ export class Character {
       return this.off(f, 0, 0, -sideOf(k) * 3 * this.present * sc);
     };
     const fL = foot('L'), fR = foot('R');
-    const hand = (k: 'L' | 'R') => this.gamepad ? this.padHand(hip, k)
+    const hand = (k: 'L' | 'R') => this.handsAt?.[k] ? this.reachToward(neck, this.handsAt[k]!, k) : this.gamepad ? this.padHand(hip, k)
       : this.handTarget && k === this.useHand
       ? this.pt(this.handTarget.x, this.handTarget.y, neck.z)
       : this.lounge ? this.off(hip, -3 * sc, -1 * sc, sideOf(k) * 11 * sc) : this.off(kneeAt(k), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);

@@ -29,16 +29,15 @@ export class ShootBow extends Skill {
    * `target`: what to shoot at (your cursor, his friend's chest). `at`: which (what the arrows may hit).
    * `keepOut`: leave the bow in his hand afterwards (the fight decides what's next).
    */
-  constructor(private shots: number, private target: () => Vec | null, private at: 'friend' | 'cursor', private keepOut = false, readonly why = '') { super(); }
+  constructor(private shots: number, private target: () => Vec | null, private at: 'friend' | 'cursor', private keepOut = false, readonly why = '', private selected: Item | null = null) { super(); }
 
   start(c: Ctx) {
     c.look = 'target';
     const ch = c.char, hand = ch.useHand;
-    const bow = c.items.find('shoot');
+    const bow = this.selected ?? c.items.find('shoot');
     if (!bow || !hand || bow.where === 'cursor' || bow.where === 'world') return;
     // Hands free: whatever he's holding goes back on his belt (or down, if there's no room).
-    for (const it of c.items.list) if (it.where === 'hand' && it !== bow && !c.items.stow(it)) c.items.drop(it, 0, -60);
-    c.items.toHand(bow, hand);
+    c.items.wield(bow, hand);
     c.sound?.('pickup', 0.6);
     this.bow = bow;
     this.drawTime = rand(0.42, 0.6);

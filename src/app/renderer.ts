@@ -1,3 +1,4 @@
+import { isWeapon } from '../core/combat/armament';
 // The overlay page: sets up the canvas, runs the frame loop, feeds mouse input to the stick figures,
 // and tells the desktop shell when clicks should pass through.
 //
@@ -12,6 +13,11 @@ import type { WinRect } from '../core/world';
 import type { BrainRequest } from '../core/brain';
 import { playBlip, playSfx } from './sfx';
 import { createGamePanel } from './game-panel';
+import {FileHabitats} from './file-habitats';
+import {PageCutouts} from './page-cutouts';
+import type {FileWindow,DesktopAction,DesktopResult,DesktopState,PageCutout} from '../shared/desktop';
+import { companionConfig } from '../core/config';
+import { CursorWeapon, type CursorWeaponKind } from '../core/combat/cursor-weapon';
 import { SwordMove, MOVES, STANCES, guardPose } from '../core/skills/swordplay';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
@@ -35,6 +41,12 @@ interface PetShell {
   getItemDefs(): Promise<unknown[]>;
   onItemDefs(cb: (defs: unknown[]) => void): void;
   setTyping(on: boolean): void;
+  desktopAction(id:number,action:DesktopAction):Promise<DesktopResult>;
+  onDesktopState(cb:(state:DesktopState)=>void):void;
+  onCutout(cb:(cutout:PageCutout)=>void):void;
+  onFileWindows(cb:(windows:FileWindow[])=>void):void;
+  onHabitat(cb:(visit:{id:number;path:string})=>void):void;
+  fileHomes(homes:{id:number;path:string}[]):void;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
 
@@ -47,6 +59,20 @@ function bounds(): Bounds {
 
 /** The stick figures: index = their id (0 = Blurp, 1 = the second one). */
 const pets: Pet[] = [];
+const habitats = new FileHabitats((homes) => {
+  shell?.fileHomes?.(homes);
+  syncPeers();
+});
+const cutouts = new PageCutouts();
+const desktopPets = () => pets.filter((_, id) => !habitats.isAway(id));
+const activePets = () => [...desktopPets(), ...habitats.activePets];
+function syncPeers() {
+  const active = desktopPets();
+  for (const p of active) p.others = active.filter((o) => o !== p);
+}
+let restoredHabitats = false;
+let desktopState: DesktopState = { browser: null };
+Object.assign(window, { habitats, cutouts });
 let lastWins: WinRect[] = [], lastDefs: unknown[] = [];
 // Browser storage for their mood and things (works in Electron too); memories go in files on the desktop.
 const saveKey = (id: number) => (id ? `pet-save-${id + 1}` : 'pet-save');
@@ -55,20 +81,20 @@ const memoryLoaded: boolean[] = [];
 
 /** Save one of them (mood, things, gallery) and their memories. */
 function saveOne(id: number) {
-  const p = pets[id];
+  const home=pets[id],p=habitats.petFor(id)??home;
   if (!p) return;
-  try { localStorage.setItem(saveKey(id), p.save()); } catch { /* ignore */ }
+  try { const saved=JSON.parse(p.save());if(home.ownsProps)saved.props=home.props.savePlaced();else delete saved.props;localStorage.setItem(saveKey(id),JSON.stringify(saved)); } catch { /* ignore */ }
   if (!memoryLoaded[id]) return; // don't overwrite the file before we've read it
   const json = p.memory.save();
   if (shell) shell.saveMemory(id, json); else try { localStorage.setItem(memoryKey(id), json); } catch { /* ignore */ }
 }
-const save = () => pets.forEach((_, id) => saveOne(id));
+const save = () => {pets.forEach((_,id)=>saveOne(id));try{localStorage.setItem('file-homes',JSON.stringify(habitats.save()));}catch{}};
 setInterval(save, 15000);
 window.addEventListener('beforeunload', save);
 
 /** Bring one of them to life: load their save and memories, and wire them to the desktop. */
 function makePet(id: number, config: PetConfig): Pet {
-  const p = id === 0 ? new Pet(bounds(), config) : new Pet(bounds(), config, { props: pets[0].props });
+  const p = id === 0 ? new Pet(bounds(), config,{identity:'pet-0'}) : new Pet(bounds(), config, { props: pets[0].props,identity:`pet-${id}` });
   try {
     // (The second one used to be saved as "friend-save"/"friend-memory": pick those up once.)
     p.load(localStorage.getItem(saveKey(id)) ?? (id === 1 ? localStorage.getItem('friend-save') : null));
@@ -88,6 +114,8 @@ function makePet(id: number, config: PetConfig): Pet {
   p.onSound = (name, strength) => playSfx(name, strength, p.config.volume, (id ? 0.75 : 0.8) + p.mood.s.happiness * 0.4);
   p.onTalk = () => openTalk(p);
   if (shell) {
+    p.onDesktopAction=async action=>{const result=await shell.desktopAction(id,action);if(result.ok && action==='restorepage')cutouts.clear();return result;};
+    p.desktopState=desktopState;
     p.onMoveCursor = (x, y) => shell.moveCursor(x, y); // mischief mode, and knocking it flying
     p.onMoveWindow = (wid, x, y, w, h) => shell.moveWindow(wid, x, y, w, h); // pushing your windows around
     // AI brain: the desktop shell makes the actual call (it holds the API key).
@@ -106,23 +134,44 @@ function makePet(id: number, config: PetConfig): Pet {
 
 /** Their settings arrived (or changed): apply them, and add or remove the second one. */
 function applyConfigs(configs: PetConfig[]) {
-  pets[0].applyConfig(configs[0]);
-  const want = configs[0].friend.on && !!configs[1];
-  if (want && !pets[1]) {
-    const p = makePet(1, configs[1]);
-    // Drops in on the other side of the screen from the first one.
-    const b = bounds(), x = pets[0].char.x < (b.left + b.right) / 2 ? b.right * 0.75 : b.right * 0.25;
-    p.char.body.translate(x - p.char.x, 0);
-    pets[1] = p;
-  } else if (!want && pets[1]) {
-    saveOne(1);
-    if (talkPet === pets[1]) closeTalk();
-    pets.length = 1;
-  } else if (want) pets[1].applyConfig(configs[1]);
-  for (const p of pets) p.others = pets.filter((o) => o !== p);
+  const count = configs[0].friend.on ? configs[0].figureCount : 1;
+  for (let id = count; id < pets.length; id++) {
+    saveOne(id);
+    habitats.returnHome(id);
+    if (talkPet === pets[id]) closeTalk();
+    pets[id].leaveWorld();
+  }
+  pets.length = Math.min(pets.length, count);
+  for (let id = 0; id < count; id++) {
+    const cfg = configs[id] ?? companionConfig(configs[0], id);
+    if (pets[id]) pets[id].applyConfig(cfg);
+    else {
+      const p = makePet(id, cfg),
+        b = bounds();
+      p.char.body.translate(
+        ((b.right - b.left) * (id + 1)) / (count + 1) + b.left - p.char.x,
+        0,
+      );
+      pets[id] = p;
+    }
+  }
+  habitats.sync(pets);
+  if (!configs[0].fileHomes)
+    for (let id = 0; id < pets.length; id++) habitats.returnHome(id);
+  if (!restoredHabitats) {
+    restoredHabitats = true;
+    if (configs[0].fileHomes)
+      try {
+        habitats.restore(
+          JSON.parse(localStorage.getItem('file-homes') ?? 'null'),
+          pets,
+        );
+      } catch {}
+  }
+  syncPeers();
 }
-const configs: PetConfig[] = [structuredClone(DEFAULT_CONFIG)];
-configs[1] = friendConfig(configs[0]);
+
+const configs: PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(DEFAULT_CONFIG,id));
 pets[0] = makePet(0, configs[0]);
 
 const setWindowsAll = (wins: WinRect[]) => { lastWins = wins; for (const p of pets) p.setWindows(wins); };
@@ -131,11 +180,15 @@ const setWindowsAll = (wins: WinRect[]) => { lastWins = wins; for (const p of pe
 if (shell) {
   shell.getConfigs().then((cs) => { cs.forEach((c, i) => (configs[i] = c)); applyConfigs(configs); });
   shell.onConfig(({ id, config }) => { configs[id] = config; applyConfigs(configs); });
-  shell.onCommand(({ id, cmd }) => pets[id]?.command(cmd));
+  shell.onCommand(({id,cmd})=>{if(cmd==='returnHome'){habitats.returnHome(id);return;} (habitats.petFor(id)??pets[id])?.command(cmd);});
+  shell.onDesktopState?.(state=>{desktopState=state;for(const p of [...pets,...habitats.activePets])p.desktopState=state;});
+  shell.onCutout?.(cutout=>cutouts.add(cutout));
+  shell.onFileWindows?.(files=>habitats.refresh(files));
+  shell.onHabitat?.(({id,path})=>{if(pets[id])habitats.enter(id,pets[id],path);});
   shell.onWindows((wins) => setWindowsAll(wins)); // other apps' windows become platforms
   shell.onUi((ui) => { for (const p of pets) p.setScreen(ui); }); // what you're doing: they comment on it, and sit on things in your window
   shell.onWindowsLog((line) => { if (line.startsWith('move:')) for (const p of pets) p.moveNote = line.slice(5).trim(); }); // how moving windows is going
-  setInterval(() => pets.forEach((p, id) => shell.sendStats(id, p.stats())), 400);
+  setInterval(() => pets.forEach((p, id) => shell.sendStats(id,(habitats.petFor(id)??p).stats())), 400);
   // Item definition files (yours, from the items folder) on top of the ones they come with.
   shell.getItemDefs().then((d) => { lastDefs = d; for (const p of pets) p.addDefs(d); }, () => {});
   shell.onItemDefs((d) => { lastDefs = d; for (const p of pets) p.addDefs(d); });
@@ -234,7 +287,7 @@ const gamePanel = createGamePanel(gamePet, (on) => { gameTyping = on; syncTyping
 let ignoring = true;
 const onPet = (p: Pet, x: number, y: number) => p.dragging || p.hit(x, y) || p.uiHit(x, y) || p.carrying;
 function updateClickThrough(x: number, y: number) {
-  const want = !(gamePanel.dragging || overTalk(x, y) || gamePanel.over(x, y) || pets.some((p) => onPet(p, x, y)));
+  const want = !cursorWeapon.active && !(gamePanel.dragging || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);
@@ -242,6 +295,44 @@ function updateClickThrough(x: number, y: number) {
   }
 }
 
+const cursorWeapon = new CursorWeapon();
+const weaponBar = document.createElement('div');
+weaponBar.id = 'weaponBar';
+weaponBar.style.cssText =
+  'position:fixed;right:12px;top:12px;display:none;gap:5px;padding:8px;background:#fff;color:#172033;font:13px system-ui;border-radius:6px;z-index:20';
+for (const kind of ['none', 'sword', 'mace', 'gun', 'bow'] as CursorWeaponKind[]) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = kind === 'none' ? 'Put away' : kind;
+  button.onclick = () => {
+    equipCursor(kind);
+    updateClickThrough(last.x, last.y);
+  };
+  weaponBar.append(button);
+}
+const weaponHint = document.createElement('span');
+weaponHint.style.cssText = 'max-width:260px;align-self:center;font-size:12px';
+weaponBar.append(weaponHint);
+document.body.append(weaponBar);
+function equipCursor(kind: CursorWeaponKind) {
+  if (!['none', 'sword', 'mace', 'gun', 'bow'].includes(kind)) return;
+  const held = cursorWeapon.item, owner = cursorWeapon.owner;
+  if (owner && held) owner.giveBack(held);
+  cursorWeapon.equip(kind);
+  weaponBar.style.display = kind === 'none' ? 'none' : 'flex';
+  closeTalk();
+  updateClickThrough(last.x, last.y);
+}
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') equipCursor('none');
+  if ((e.key === 'r' || e.key === 'R') && !(e.target instanceof HTMLInputElement) && cursorWeapon.active) { cursorWeapon.reload(); e.preventDefault(); }
+});
+if (shell)
+  shell.onCommand(({ cmd }) => {
+    if (cmd.startsWith('cursorWeapon:'))
+      equipCursor(cmd.split(':')[1] as CursorWeaponKind);
+  });
+Object.assign(window, { cursorWeapon, equipCursor });
 // ── mouse ──
 let last = { x: 0, y: 0, t: performance.now() };
 let vel = { x: 0, y: 0 };
@@ -252,37 +343,52 @@ window.addEventListener('mousemove', (e) => {
   vel.x += ((e.clientX - last.x) / dt - vel.x) * 0.5;
   vel.y += ((e.clientY - last.y) / dt - vel.y) * 0.5;
   last = { x: e.clientX, y: e.clientY, t: now };
-  for (const p of pets) { p.cursor(e.clientX, e.clientY, vel.x, vel.y); p.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now); }
+  cursorWeapon.pointer(e.clientX,e.clientY);
+  cutouts.move(e.clientX,e.clientY,vel.x,vel.y);
+  for (const p of activePets()) { p.cursor(e.clientX, e.clientY, vel.x, vel.y); p.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now); }
   updateClickThrough(e.clientX, e.clientY);
 });
 /** Which of them the mouse is on (the one drawn on top first), or null. */
-const petAt = (x: number, y: number) => [...pets].reverse().find((p) => p.hit(x, y) || p.uiHit(x, y) || p.carrying) ?? null;
+const petAt = (x: number, y: number) => habitats.hit(x,y,lastWins) ?? [...desktopPets()].reverse().find((p) => p.hit(x, y) || p.uiHit(x, y) || p.carrying) ?? null;
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (gamePanel.over(e.clientX, e.clientY)) return;
+  if (cursorWeapon.owner && cursorWeapon.item) {
+    const owner = cursorWeapon.owner, item = cursorWeapon.item;
+    cursorWeapon.detach();
+    const recipient = [...desktopPets()].find(p => p.char.hitTest(e.clientX, e.clientY, 12));
+    if (recipient && recipient !== owner) { owner.items.remove(item); recipient.items.list.push(item); recipient.giveBack(item); }
+    else if (recipient) owner.giveBack(item);
+    else owner.items.drop(item, vel.x, vel.y);
+    weaponBar.style.display = 'none'; updateClickThrough(e.clientX, e.clientY); return;
+  }
   const who = petAt(e.clientX, e.clientY) ?? pets[0];
   if (who.contextMenu(e.clientX, e.clientY)) shell?.pressed();
   updateClickThrough(e.clientX, e.clientY);
 });
 window.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
+  if((e.target as Element).closest('#weaponBar'))return;
+  if(cursorWeapon.active){cursorWeapon.pointer(e.clientX,e.clientY);cursorWeapon.press(true);shell?.pressed();return;}
   if (overTalk(e.clientX, e.clientY) || gamePanel.over(e.clientX, e.clientY)) return;
+  if(cutouts.grab(e.clientX,e.clientY)){shell?.pressed();return;}
   if (talkOpen && !talkPet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
   // Whoever you clicked right on; otherwise the first one (and the furniture), then the other one's things.
   const now = performance.now(), who = petAt(e.clientX, e.clientY);
-  const took = who ? who.pointerDown(e.clientX, e.clientY, now) : pets.some((p) => p.pointerDown(e.clientX, e.clientY, now));
+  const took = who ? who.pointerDown(e.clientX, e.clientY, now) : desktopPets().some((p) => p.pointerDown(e.clientX, e.clientY, now));
   if (took) {
     canvas.style.cursor = 'grabbing';
     shell?.pressed();
   }
 });
 window.addEventListener('mouseup', (e) => {
-  if (pets.some((p) => p.dragging)) shell?.pressed(); // hand focus back once more after letting go
-  for (const p of pets) p.pointerUp(e.clientX, e.clientY);
+  cursorWeapon.press(false);cutouts.release();
+  if (activePets().some((p) => p.dragging)) shell?.pressed(); // hand focus back once more after letting go
+  for (const p of activePets()) if (!p.userWeaponControlled) p.pointerUp(e.clientX, e.clientY);
   updateClickThrough(e.clientX, e.clientY);
 });
 // If the mouse leaves the window mid-drag, let go.
-window.addEventListener('blur', () => { for (const p of pets) p.pointerUp(last.x, last.y); });
+window.addEventListener('blur', () => { cursorWeapon.cancel();cutouts.release(); for (const p of activePets()) if (!p.userWeaponControlled) p.pointerUp(last.x, last.y); });
 
 // ── preview mode: a couple of fake windows to climb on ──
 const fakeWins: WinRect[] = [];
@@ -304,22 +410,71 @@ function drawFakeWindows() {
 
 // ── frame loop ──
 let prev = performance.now();
+let propAccumulator=0,propTime=0;
 function frame(now: number) {
   const dt = (now - prev) / 1000;
   prev = now;
   // The mouse may sit still while held; decay its velocity so nobody gets "thrown" on release.
-  if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; for (const p of pets) p.pointerMove(last.x, last.y, vel.x, vel.y, now); }
+  if (now - last.t > 50) {
+    vel.x *= 0.8;
+    vel.y *= 0.8;
+    for (const p of activePets())
+      p.pointerMove(last.x, last.y, vel.x, vel.y, now);
+  }
   // A knockout: everyone in slow motion for a moment.
-  const slow = pets.some((p) => p.slowmo > 0);
-  for (const p of pets) { p.slowmo = Math.max(0, p.slowmo - Math.min(dt, 0.1)); p.update(slow ? dt * 0.3 : dt); }
+  const slow = activePets().some((p) => p.slowmo > 0);
+  for (const p of desktopPets()) {
+    p.slowmo = Math.max(0, p.slowmo - Math.min(dt, 0.1));
+    p.update(slow ? dt * 0.3 : dt);
+  }
+  if (habitats.isAway(0)) {
+    propAccumulator += Math.min(0.05, Math.max(0, dt));
+    propTime += Math.min(0.05, Math.max(0, dt));
+    while (propAccumulator >= 1 / 120) {
+      pets[0].props.update(
+        1 / 120,
+        propTime,
+        bounds(),
+        pets[0].ctx.world.platforms.filter((p) => p.id < 1_000_000_000),
+        lastWins,
+      );
+      propAccumulator -= 1 / 120;
+    }
+  }
+  habitats.update(slow ? dt * 0.3 : dt);
+  const owner = desktopPets().find(p => p.items.carried && isWeapon(p.items.carried.def));
+  if (owner && owner.items.carried && cursorWeapon.item !== owner.items.carried) {
+    cursorWeapon.attach(owner.items.carried, owner);
+    weaponBar.style.display = 'flex'; updateClickThrough(last.x, last.y);
+  }
+  cursorWeapon.update(dt, desktopPets());
+  const hint = cursorWeapon.item?.def.use === 'gun' ? 'Hold and drag to aim/fire · R reload' : cursorWeapon.item?.def.use === 'shoot' ? 'Hold and drag to aim · release to shoot' : 'Hold and swipe to swing';
+  weaponHint.textContent = `${cursorWeapon.status} · ${hint}`;
+  weaponBar.title = `${cursorWeapon.status} · ${hint} · right-click to drop or hand back · Esc to return`;
+  weaponBar.setAttribute('aria-label', weaponBar.title);
+  cutouts.update(
+    dt,
+    bounds(),
+    pets.map((p, id) => (habitats.isAway(id) ? undefined : p)) as Pet[],
+  );
   gamePanel.update();
   updateClickThrough(last.x, last.y);
-  if (talkOpen) { placeTalk(); if (now - talkIdle > 45000 && document.activeElement !== talkText) closeTalk(); }
+  if (talkOpen) {
+    placeTalk();
+    if (now - talkIdle > 45000 && document.activeElement !== talkText)
+      closeTalk();
+  }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   if (fakeWins.length) drawFakeWindows();
   // Furniture first (behind both of them), then whoever's nearer to you in front (a dash passes in front of the other one).
-  for (const p of pets) p.drawProps(ctx);
-  for (const p of [...pets].sort((a, b) => a.char.body.j.hip.z - b.char.body.j.hip.z)) p.draw(ctx);
+  pets[0]?.drawProps(ctx);
+  for (const p of [...desktopPets()].sort(
+    (a, b) => a.char.body.j.hip.z - b.char.body.j.hip.z,
+  ))
+    p.draw(ctx);
+  habitats.draw(ctx, lastWins);
+  cutouts.draw(ctx);
+  cursorWeapon.draw(ctx);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

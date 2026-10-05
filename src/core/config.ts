@@ -15,8 +15,17 @@ export const PROVIDERS: Record<ProviderId, { label: string; free: boolean; model
   openrouter: { label: 'OpenRouter (free models)', free: true, model: 'meta-llama/llama-3.3-70b-instruct:free', keyUrl: 'https://openrouter.ai/keys', base: 'https://openrouter.ai/api/v1' },
 };
 
+export type Personality = 'inventive' | 'competitive' | 'gentle' | 'mischievous' | 'adventurous';
+
 export interface PetConfig {
   name: string;
+  personality: Personality;
+  figureCount: number;
+  debugCombat: boolean;
+  closeWindows: boolean;
+  fileHomes: boolean;
+  browserPlay: boolean;
+  drawTools: boolean;
   scale: number;   // overall size (1 ≈ 90 px tall)
   look: Look;
   body: BodyStyle;
@@ -31,6 +40,8 @@ export interface PetConfig {
   puppet: boolean;
   /** Seconds between unsolicited AI thoughts. Direct conversation is always immediate. */
   aiInterval: number;
+  /** 0 = calm and settled, 1 = restless. Independent of AI call frequency. */
+  hyperactivity: number;
   /** Swiping the cursor through him fast smacks him. Off by default so it doesn't happen by accident. */
   smacking: boolean;
   /** Stand on, climb and get carried by the windows on screen. */
@@ -73,6 +84,8 @@ export interface PetConfig {
 
 export const DEFAULT_CONFIG: PetConfig = {
   name: 'Blurp',
+  personality: 'inventive', figureCount: 2, debugCombat: false,
+  closeWindows: false, fileHomes:false, browserPlay: false, drawTools: true,
   scale: 1.1,
   look: { ...DEFAULT_LOOK },
   body: { ...DEFAULT_BODY },
@@ -82,6 +95,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   model: PROVIDERS.gemini.model,
   puppet: true,
   aiInterval: 40,
+  hyperactivity: 0.25,
   smacking: false,
   windows: true,
   mischief: false,
@@ -109,6 +123,7 @@ export function friendConfig(main: PetConfig): PetConfig {
   c.look.color = main.friend.color;
   c.persona = `${main.friend.name}, ${main.name}'s best friend and sparring partner. Competitive, loud, always up for a fight, terrible loser.`;
   c.biases = {};
+  c.personality = 'competitive';
   return c;
 }
 
@@ -119,6 +134,8 @@ const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 80, provider
 
 /** Every adjustable number: its limits, and how the settings window labels it. */
 export const RANGES: Record<string, Range> = {
+  'figureCount': { min: 2, max: 5, step: 1, label: 'Figures', hint: 'A small group, each with their own settings' },
+  'hyperactivity': { min: 0, max: 1, step: 0.05, label: 'Hyperactivity', hint: 'Calm ← → restless. Mood also changes how long he settles into activities.' },
   'aiInterval': { min: 40, max: 300, step: 10, label: 'AI thinking interval', hint: 'Full mode: seconds between his own ideas (higher uses fewer calls)' },
   'scale': { min: 0.6, max: 2.5, step: 0.05, label: 'Size', hint: 'How big he is on screen' },
   'volume': { min: 0, max: 1, step: 0.05, label: 'Volume', hint: 'His voice and sound effects' },
@@ -167,6 +184,8 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   merge(out.friend as unknown as Record<string, unknown>, p.friend, 'friend.');
   if (!/^#[0-9a-f]{6}$/i.test(out.friend.color)) out.friend.color = base.friend.color;
   if (!out.friend.name.trim()) out.friend.name = base.friend.name;
+  out.figureCount = Math.round(out.figureCount);
+  if (!['inventive', 'competitive', 'gentle', 'mischievous', 'adventurous'].includes(out.personality)) out.personality = base.personality;
   if (out.fightMode !== 'play' && out.fightMode !== 'real') out.fightMode = base.fightMode;
   merge(out.body as unknown as Record<string, unknown>, p.body, 'body.');
   if (!['offline', 'chat', 'full'].includes(out.mind)) out.mind = 'offline';
@@ -177,4 +196,19 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   // A bad model name, or one left over from before he had a choice of services: use the service's default.
   if (!/^[a-z0-9._:/-]+$/i.test(out.model) || /^claude-/.test(out.model)) out.model = PROVIDERS[out.provider].model;
   return out;
+}
+
+/** Optional companions; this is the same app, not exported characters. */
+export function companionConfig(main: PetConfig, id: number): PetConfig {
+  if (id === 0) return structuredClone(main);
+  if (id === 1) return friendConfig(main);
+  const c = structuredClone(main);
+  const profiles = [
+    { name: 'Moss', color: '#48a879', personality: 'gentle' as const, persona: 'Patient, warm, and quietly funny. Likes keeping the peace, shared games and comforting friends. Can defend himself without picking fights.' },
+    { name: 'Violet', color: '#ad72d3', personality: 'mischievous' as const, persona: 'A quick-witted prankster. Makes things with a pen, teases friends affectionately, and knows when to stop.' },
+    { name: 'Ruby', color: '#e46d67', personality: 'adventurous' as const, persona: 'An energetic explorer. Loves parkour, challenges, and inviting friends along. Encourages others rather than showing them up.' },
+  ];
+  const p = profiles[Math.max(0, Math.min(2, id - 2))];
+  c.name = p.name; c.look.color = p.color; c.personality = p.personality; c.persona = p.persona; c.biases = {};
+  return c;
 }

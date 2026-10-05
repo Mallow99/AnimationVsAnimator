@@ -410,6 +410,8 @@ async function live(pet: Pet, seconds: number) {
 { // Full: he decides for himself now and then, throttled; nonsense actions are ignored.
   let n = 0;
   const { pet, asked } = await brainPet('full', () => (++n % 2 ? { say: '', do: 'hop' } : { say: 'I can fly', do: 'fly' }));
+  // Isolate call cadence from the new multi-minute reading activity; its interruption contract has separate checks.
+  pet.items.defs.delete('book');
   const seen = new Set<string>();
   for (let i = 0; i < 180 * 60; i++) {
     pet.update(1 / 60);
@@ -422,6 +424,8 @@ async function live(pet: Pet, seconds: number) {
 }
 { // AI failing (no internet, bad key): he shrugs it off and instinct keeps running.
   const { pet } = await brainPet('full', () => new Error("Couldn't reach the internet."));
+  // Exercise fallback selection without the deliberate multi-minute reading commitment.
+  pet.items.defs.delete('book');
   pet.command('hear:hello?');
   const seen = new Set<string>();
   for (let i = 0; i < 90 * 60; i++) {

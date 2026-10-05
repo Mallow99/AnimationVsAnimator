@@ -14,7 +14,8 @@
     "checks": "node scripts/build.mjs checks && node .build/checks.mjs",
     "package:win": "node scripts/build.mjs && node scripts/package-win.mjs",
     "browsercheck": "node scripts/build.mjs && node scripts/browser-check.mjs",
-    "soak": "node scripts/build.mjs soak && node .build/soak.mjs"
+    "soak": "node scripts/build.mjs soak && node .build/soak.mjs",
+    "chromecheck": "node scripts/chrome-check.mjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

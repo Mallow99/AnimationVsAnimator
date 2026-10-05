@@ -38,6 +38,10 @@ interface Shell {
   onCollections(cb: (c: Collections) => void): void;
   openItemsFolder(): void;
   reloadItems(): void;
+  desktopInfo?():Promise<{pairing:string;error:string;homes:{id:number;path:string}[];connected:boolean}>;
+  openExtensionFolder?():void;
+  chooseHabitat?(kind?:'folder'|'file'):Promise<{ok:boolean;message:string}>;
+  onFileNote?(cb:(message:string)=>void):void;
 }
 const shell = (window as unknown as { petShell: Shell }).petShell;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -195,7 +199,7 @@ for (const row of PRESET_ROWS) {
 // ── sliders (built from the config's range table) ──
 const sliders: [HTMLInputElement, HTMLElement, string][] = [];
 for (const [key, r] of Object.entries(RANGES)) {
-  const host = key === 'scale' ? $('sizeSlider') : key === 'volume' ? $('volumeSlider') : key.startsWith('look.') ? $('lookSliders') : $('bodySliders');
+  const host = key === 'hyperactivity' ? $('activitySliders') : key === 'scale' ? $('sizeSlider') : key === 'volume' ? $('volumeSlider') : key.startsWith('look.') ? $('lookSliders') : $('bodySliders');
   const wrap = document.createElement('label');
   wrap.className = 'slider';
   wrap.innerHTML = `<span class="top"><span class="row-label">${r.label}</span><span></span></span><input type="range" min="${r.min}" max="${r.max}" step="${r.step}" id="s-${key}" /><small>${r.hint}</small>`;
@@ -222,6 +226,10 @@ $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.t
 $<HTMLInputElement>('sfx').addEventListener('change', (e) => set({ sfx: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('destructible').addEventListener('change', (e) => set({ destructible: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('friendOn').addEventListener('change', (e) => set({ friend: { on: (e.target as HTMLInputElement).checked } }));
+for(const id of ['debugCombat','drawTools','browserPlay','closeWindows','fileHomes'] as const)$<HTMLInputElement>(id).addEventListener('change',()=>set({[id]:$<HTMLInputElement>(id).checked}));
+$<HTMLSelectElement>('figureCount').addEventListener('change',()=>set({figureCount:Number($<HTMLSelectElement>('figureCount').value)}));
+$<HTMLSelectElement>('personality').addEventListener('change',()=>set({personality:$<HTMLSelectElement>('personality').value}));
+for(const button of document.querySelectorAll<HTMLButtonElement>('[data-weapon]'))button.onclick=()=>shell.command(`cursorWeapon:${button.dataset.weapon}`);
 $<HTMLSelectElement>('fightMode').addEventListener('change', (e) => set({ fightMode: (e.target as HTMLSelectElement).value }));
 $('duelNow').addEventListener('click', () => shell.command('do:duel'));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mind"]')) r.addEventListener('change', () => set({ mind: r.value }));
@@ -293,6 +301,11 @@ function render(c: PetConfig) {
   $<HTMLInputElement>('destructible').checked = c.destructible;
   $<HTMLInputElement>('friendOn').checked = c.friend.on;
   $<HTMLSelectElement>('fightMode').value = c.fightMode;
+  $<HTMLSelectElement>('figureCount').value=String(c.figureCount);
+  $<HTMLSelectElement>('personality').value=c.personality;
+  for(const id of ['browserPlay','closeWindows','fileHomes'] as const)$<HTMLInputElement>(id).checked=c[id];
+  $<HTMLInputElement>('debugCombat').checked=c.debugCombat;
+  $<HTMLInputElement>('drawTools').checked=c.drawTools;
   $('duelNow').toggleAttribute('disabled', !c.friend.on);
   $<HTMLInputElement>('sfx').checked = c.sfx;
   $<HTMLInputElement>('windows').checked = c.windows;
@@ -844,3 +857,12 @@ $('mindCircuit').addEventListener('click', () => set({ mindLook: 'circuit' }));
 
 // Everything's set up: ask him for his drawings, moves, memories and things.
 shell.command('sync');
+
+$('extensionFolder').onclick=()=>shell.openExtensionFolder?.();
+$('pairChrome').onclick=async()=>{try{const info=await shell.desktopInfo?.();if(!info?.pairing)throw new Error(info?.error || 'The Chrome bridge is unavailable.');await navigator.clipboard.writeText(info.pairing);$('chromeInfo').textContent='Pairing link copied. Paste it into the Chrome extension.';}catch(error){$('chromeInfo').textContent=(error as Error).message;}};
+$('chooseHabitat').onclick=async()=>{try{const result=await shell.chooseHabitat?.('folder');$('fileInfo').textContent=result?.message??'Use the desktop app for file visits.';}catch(error){$('fileInfo').textContent=(error as Error).message;}};
+$('returnHome').onclick=()=>shell.command('returnHome');
+shell.onFileNote?.(message=>{$('fileInfo').textContent=message;});
+setInterval(async()=>{try{const info=await shell.desktopInfo?.();if(!info)return;const home=info.homes.find(h=>h.id===shell.petId);if(home)$('fileInfo').textContent=`Visiting ${home.path}. Open it in Finder / Explorer to see him.`;if(info.error)$('chromeInfo').textContent=info.error;else if(info.connected)$('chromeInfo').textContent='A Chrome page is connected.';}catch{}},3000);
+
+$('chooseFile').onclick=async()=>{try{const result=await shell.chooseHabitat?.('file');$('fileInfo').textContent=result?.message??'Use the desktop app.';}catch(error){$('fileInfo').textContent=(error as Error).message;}};

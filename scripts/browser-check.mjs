@@ -140,8 +140,60 @@ try {
   const small = await evaluate(`(() => { const r = document.querySelector('#gamePanel').getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom}; })()`);
   assert(small.left >= 0 && small.top >= 0 && small.right <= 480 && small.bottom <= 640);
   await evaluate('document.querySelector(".game-close").click(); document.querySelector("#talkClose").click()');
+  // New desktop controls and data-image fragments render in the real overlay page.
+  await send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+  await evaluate("window.equipCursor('sword')");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#weaponBar')).display"),'flex');
+  await evaluate("document.querySelector('#weaponBar button').click()");assert.equal(await evaluate('window.cursorWeapon.kind'),'none');
+  // Taking an actual owned weapon automatically connects the pointer controls to that same item.
+  await evaluate(`(() => {
+    for(const p of window.pets)p.paused=true;
+    const p=window.pet;p.mind.reset(p.ctx);
+    const gun=p.items.give('gun',p.char);gun.ammo=1;p.takeItem(gun);
+  })()`);
+  await until(()=>evaluate('window.cursorWeapon.item?.def.id === "gun"'));
+  await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:220,y:260});
+  await send('Input.dispatchMouseEvent',{type:'mousePressed',x:220,y:260,button:'left',clickCount:1});
+  await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:220,y:100,button:'left',buttons:1});
+  await until(()=>evaluate('window.cursorWeapon.item.ammo === 0'));
+  assert(await evaluate('window.cursorWeapon.item.dir.y < -0.9'));
+  await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:220,y:100,button:'left',clickCount:1});
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'r',code:'KeyR'});
+  await send('Input.dispatchKeyEvent',{type:'keyUp',key:'r',code:'KeyR'});
+  await until(()=>evaluate('window.cursorWeapon.item.ammo === 6'));
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});
+  await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+  assert(await evaluate('!window.pet.userWeaponControlled && !window.pet.items.carried'));
+  await evaluate("(() => {const p=window.pet;p.takeItem(p.items.give('bow',p.char));})()");
+  await until(()=>evaluate('window.cursorWeapon.item?.def.id === "bow"'));
+  await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:200,y:260});
+  await send('Input.dispatchMouseEvent',{type:'mousePressed',x:200,y:260,button:'left',clickCount:1});
+  await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:480,y:160,button:'left',buttons:1});
+  await pause(400);
+  assert(await evaluate('!!window.cursorWeapon.item.pull'));
+  assert(await evaluate('document.querySelector("#weaponBar").textContent.includes("release")'));
+  const bowShot=await send('Page.captureScreenshot',{format:'png'});
+  writeFileSync(join(root,'.build/browser-bow.png'),Buffer.from(bowShot.data,'base64'));
+  await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:480,y:160,button:'left',clickCount:1});
+  await until(()=>evaluate('window.cursorWeapon.projectiles.rounds.some(r=>r.kind === "arrow")'));
+  await evaluate("document.querySelector('#weaponBar button').click()");
+  await evaluate(`(() => {const p=window.pet;p.applyConfig({...p.config,hyperactivity:0});p.paused=false;p.command('do:read');for(let i=0;i<3000;i++)p.update(1/120);p.paused=true;})()`);
+  assert.equal(await evaluate('window.pet.mind.skill?.name'),'read');
+  assert(await evaluate('window.pet.items.list.some(i=>i.def.id === "book" && i.where === "hand")'));
+  await pause(100);
+  const readShot=await send('Page.captureScreenshot',{format:'png'});
+  writeFileSync(join(root,'.build/browser-reading.png'),Buffer.from(readShot.data,'base64'));
+  const fragment=await send('Page.captureScreenshot',{format:'png'});
+  await evaluate(`window.cutouts.add({id:'render-check',image:${JSON.stringify('data:image/png;base64,'+fragment.data)},x:400,y:300,width:160,height:100,title:'Real screenshot',owner:0})`);
+  await until(()=>evaluate('window.cutouts.cards[0].bitmap.naturalWidth>0'));
+  assert(await evaluate('window.cutouts.hit(window.cutouts.cards[0].x+5,window.cutouts.cards[0].y+5)!==null'));await evaluate('window.cutouts.clear()');
+  // A resident uses its existing identity and is returned by the actual controller.
+  await evaluate("window.habitats.enter(0,window.pet,'/test/real-folder');window.habitats.refresh([{id:1,path:'/test/real-folder',kind:'folder',x:100,y:100,width:500,height:400}])");
+  assert.equal(await evaluate('window.habitats.activePets[0].ctx.who===window.pet.ctx.who'),true);
+  await evaluate('window.habitats.refresh([])');assert.equal(await evaluate('window.habitats.activePets.length'),0);
+  await evaluate('window.habitats.returnHome(0)');assert.equal(await evaluate('window.pet.paused'),false);
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
-  console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close and rendering');
+  console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close, actual cursor pistol aim/ammo/reload/return, bow charge/release, book rendering, page-fragment images, native-window visit controller and rendering');
   console.log('Screenshot: .build/browser-smoke.png');
 } finally {
   socket?.close(); browser.kill();

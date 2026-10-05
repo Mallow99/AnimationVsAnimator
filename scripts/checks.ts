@@ -7,9 +7,9 @@ import { Pet, DEFAULT_CONFIG, friendConfig } from '../src/core/pet';
 import type { Peer } from '../src/core/peer';
 import { aimAngle, ARROW_SPEED } from '../src/core/skills/archery';
 import { guardPose } from '../src/core/skills/swordplay';
-import { mergeConfig } from '../src/core/config';
+import { companionConfig, mergeConfig } from '../src/core/config';
 import { parseItemDef } from '../src/core/items';
-import { parsePropDef, makeBridge } from '../src/core/props';
+import { parsePropDef, makeBridge, Ball } from '../src/core/props';
 import { WindowAccess } from '../src/core/window-access';
 import { writeAtomic } from '../src/electron/storage';
 import { unchangedExample } from '../src/electron/builtin-files';
@@ -17,6 +17,18 @@ import { Item, BUILTIN_ITEMS } from '../src/core/items';
 import { parseSprite } from '../src/core/pixel-art';
 import { Runner } from '../src/core/tv-game';
 import { BoardGame, chooseGameMove, gameResult, openingBoard, captures, legalMoves, type Disc } from '../src/core/board-game';
+
+import {ShootGun} from '../src/core/skills/gun';
+import {Projectiles} from '../src/core/combat/projectiles';
+import {CursorWeapon} from '../src/core/combat/cursor-weapon';
+import {offlineReply} from '../src/core/brains/offline';
+import {carriedWeapon, nearestWeapon} from '../src/core/combat/armament';
+import {Duel} from '../src/core/skills/duel';
+import {overlapOffset} from '../src/core/geometry';
+import {WatchTV, PlayVideoGame} from '../src/core/skills/props';
+import {activitySeconds} from '../src/core/activity-pacing';
+import {FileHabitats} from '../src/app/file-habitats';
+import {DesktopBridge} from '../src/electron/desktop-bridge';
 
 let passed = 0;
 async function test(name: string, fn: () => void | Promise<void>) { await fn(); passed++; console.log(`PASS ${name}`); }
@@ -582,4 +594,845 @@ await test('bad saved moves, pictures, positions and frame times cannot poison t
   const time = p.ctx.world.time; p.update(NaN); p.update(-1); assert.equal(p.ctx.world.time, time);
   p.update(1/60); assert(Number.isFinite(p.char.x));
 });
+await test('five figures reserve distinct partners and save separate relationships', () => {
+  const cfg = structuredClone(DEFAULT_CONFIG),
+    group = Array.from(
+      { length: 5 },
+      (_, id) =>
+        new Pet(bounds, companionConfig(cfg, id), { identity: `group-${id}` }),
+    );
+  for (const p of group) {
+    p.paused = true;
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    p.mind.reset(p.ctx);
+    p.paused = false;
+  }
+  for (const p of group) p.others = group.filter((other) => other !== p);
+  const [a, b, c, d, e] = group;
+  a.selectPeer(b.ctx.who);
+  b.selectPeer(a.ctx.who);
+  c.selectPeer(d.ctx.who);
+  d.selectPeer(c.ctx.who);
+  a.ctx.feel.bond = 0.8;
+  a.selectPeer(c.ctx.who);
+  a.ctx.feel.bond = -0.4;
+  a.selectPeer(b.ctx.who);
+  assert.equal(a.ctx.feel.bond, 0.8);
+  const loaded = new Pet(bounds, cfg, { identity: a.ctx.who });
+  loaded.others = a.others;
+  loaded.load(a.save());
+  loaded.selectPeer(c.ctx.who);
+  assert.equal(loaded.ctx.feel.bond, -0.4);
+  a.selectPeer(b.ctx.who);
+  a.command('do:duel');
+  b.command('do:duel');
+  c.command('do:duel');
+  d.command('do:duel');
+  for (const p of group.slice(0, 4)) p.update(1 / 120);
+  assert.equal(c.mind.skill?.name, 'duel');
+  assert(
+    !e.partner() || !['duel'].includes(e.partner()!.view().doing ?? ''),
+    'the fifth figure stole a reserved fighter',
+  );
+  c.receive({ type: 'challenge', armed: true }, a);
+  assert.equal(c.partnerId, d.ctx.who);
+  for (const p of group) p.leaveWorld();
+});
+await test('pen-made pistol retains gun behavior through save/load and does not multiply replacements', () => {
+  const p = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  for (let n = 0; n < 2; n++) {
+    p.paused = false;
+    p.command('do:drawgun');
+    const old = p.items.list.find((it) => it.def.id === 'ink-gun')?.uid;
+    for (
+      let i = 0;
+      i < 3600 &&
+      !p.items.list.some((it) => it.def.id === 'ink-gun' && it.uid !== old);
+      i++
+    )
+      p.update(1 / 120);
+    assert(
+      p.items.list.some((it) => it.def.id === 'ink-gun'),
+      'drawing never became a pistol',
+    );
+    p.mind.reset(p.ctx);
+    p.paused = true;
+  }
+  assert.equal(p.items.list.filter((it) => it.def.id === 'ink-gun').length, 1);
+  const copy = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  copy.load(p.save());
+  const gun = copy.items.find('gun');
+  assert(gun?.def.drawn);
+  assert.equal(gun.def.id, 'ink-gun');
+});
+await test('pistol magazines survive bursts and reload before another round can fire', () => {
+  const p = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  const gun = p.items.give('gun', p.char)!;
+  gun.ammo = 1;
+  const fired: number[] = [];
+  p.ctx.fire = () => fired.push(skill.t);
+  const skill = new ShootGun(
+    () => ({ x: p.char.x + 300, y: p.char.body.j.neck.y }),
+    'cursor',
+    3,
+  );
+  skill.start(p.ctx);
+  for (let i = 0; i < 1200; i++) {
+    skill.t += 1 / 120;
+    if (skill.update(p.ctx, 1 / 120)) break;
+  }
+  skill.stop(p.ctx);
+  assert.equal(fired.length, 3);
+  assert(fired[1] - fired[0] >= 1.15);
+  assert.equal(gun.ammo, 4);
+  const copy = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  copy.load(p.save());
+  assert.equal(copy.items.find('gun')?.ammo, 4);
+});
+await test('swept bullets hit thin targets, stop at a platform, and guard hits build break pressure', () => {
+  const { a, b } = duo();
+  const n = b.char.body.j.neck;
+  const rounds = new Projectiles();
+  const hp = b.char.hp;
+  rounds.fire(n.x - 150, n.y + 12, 4000, 0, true);
+  rounds.update(0.1, bounds, [], a, [b], () => {});
+  assert(b.char.hp < hp, 'fast round skipped the body');
+  assert.equal(rounds.rounds.length, 0);
+  const blockedHp = b.char.hp;
+  rounds.fire(n.x, n.y - 100, 0, 2000, true);
+  rounds.update(
+    0.1,
+    bounds,
+    [{ id: 91, x1: n.x - 50, x2: n.x + 50, y: n.y - 50 }],
+    a,
+    [b],
+    () => {},
+  );
+  assert.equal(b.char.hp, blockedHp);
+  b.char.body.translate(a.char.x + 50 - b.char.x, 0);
+  b.char.facing = -1;
+  b.char.guard = true;
+  b.char.poise = 1;
+  b.char.hp = 1;
+  for (let i = 0; i < 6 && b.char.breakCount === 0; i++)
+    b.receive(
+      {
+        type: 'hit',
+        joint: 'neck',
+        vx: 0,
+        vy: 0,
+        power: 1,
+        weapon: { id: 'mace', hit: 1, cuts: false },
+        at: b.char.body.j.neck,
+        kind: 'heavy',
+      },
+      a,
+    );
+  assert(b.char.breakCount > 0, 'repeated guarding never broke');
+  assert.equal(b.char.hp, 1);
+  assert.equal(b.char.poise, 0);
+  assert(b.char.stagger > 0);
+  Math.random = realRandom;
+});
+await test('cursor weapons require a held button and fast swipes register between frames', () => {
+  const p = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  const weapon = new CursorWeapon(),
+    n = p.char.body.j.neck;
+  weapon.equip('mace');
+  weapon.pointer(n.x - 100, n.y + 8);
+  weapon.update(1 / 60, [p]);
+  weapon.pointer(n.x + 100, n.y + 8);
+  weapon.update(1 / 60, [p]);
+  assert.equal(p.char.hp, 1);
+  weapon.pointer(n.x - 100, n.y + 8);
+  weapon.update(1 / 60, [p]);
+  weapon.press(true);
+  weapon.pointer(n.x + 100, n.y + 8);
+  weapon.update(1 / 60, [p]);
+  assert(p.char.hp < 1);
+  const hp = p.char.hp;
+  weapon.equip('none');
+  weapon.update(1 / 60, [p]);
+  assert.equal(p.char.hp, hp);
+});
+await test('offline conversation follows ordered requests, remembers the person, and selects a named companion', () => {
+  const { a, b } = duo();
+  const named = offlineReply(
+    a.ctx,
+    `high five ${b.config.name} and then draw a pistol`,
+  );
+  assert.deepEqual(named.plan, [
+    { do: 'highfive', with: b.ctx.who },
+    { do: 'drawgun' },
+  ]);
+  assert.equal(a.partnerId, b.ctx.who);
+  offlineReply(a.ctx, 'my name is Sam');
+  assert.match(offlineReply(a.ctx, 'what is my name').say, /Sam/);
+  assert.equal(offlineReply(a.ctx, 'stop that').stop, true);
+  assert.deepEqual(offlineReply(a.ctx, 'close this tab').plan[0], {
+    do: 'closetab',
+  });
+  const recovered = offlineReply(a.ctx, 'how are you');
+  assert(recovered.say.length > 2 && !recovered.plan.length);
+  Math.random = realRandom;
+});
+await test('a file visit follows its exact real path, hides when closed, and restores one desktop identity', () => {
+  const a = new Pet(bounds, structuredClone(DEFAULT_CONFIG), {
+      identity: 'file-test',
+    }),
+    changes: unknown[] = [];
+  const habitats = new FileHabitats((h) => changes.push(h));
+  a.props.spawn('chair', 300, 600, 1);
+  habitats.enter(0, a, '/real/a/folder');
+  assert(habitats.isAway(0));
+  assert(a.paused);
+  assert.equal(habitats.activePets.length, 0);
+  habitats.refresh([
+    {
+      id: 1,
+      path: '/real/b/folder',
+      kind: 'folder',
+      x: 100,
+      y: 100,
+      width: 500,
+      height: 400,
+    },
+  ]);
+  assert.equal(
+    habitats.activePets.length,
+    0,
+    'matched a different folder with the same basename',
+  );
+  habitats.refresh([
+    {
+      id: 2,
+      path: '/real/a/folder',
+      kind: 'folder',
+      x: 100,
+      y: 100,
+      width: 500,
+      height: 400,
+    },
+  ]);
+  assert.equal(habitats.activePets.length, 1);
+  assert.equal(habitats.activePets[0].ctx.who, a.ctx.who);
+  habitats.petFor(0)!.memory.add('a real folder visit', 'event', 'him');
+  habitats.update(1 / 60);
+  habitats.refresh([]);
+  assert.equal(habitats.activePets.length, 0);
+  assert(habitats.isAway(0));
+  habitats.returnHome(0);
+  assert(!a.paused);
+  assert.equal(habitats.petFor(0), null);
+  assert.equal(a.props.placed.length, 1);
+  assert(a.memory.notes.some((n) => n.text === 'a real folder visit'));
+});
+await test('wielding reserves both hands and effective equipment depends on distance', () => {
+  const p = pet(),
+    pen = p.items.find('draw')!,
+    gun = p.items.give('gun', p.char)!;
+  p.items.toHand(pen, 'L');
+  p.items.toHand(gun, 'R');
+  const blade = p.items.give('katana', p.char)!;
+  p.items.wield(blade, 'L');
+  assert.deepEqual(
+    p.items.list.filter((it) => it.where === 'hand').map((it) => it.def.id),
+    ['katana'],
+  );
+  assert.equal(pen.where, 'belt');
+  assert.equal(gun.where, 'belt');
+  assert.equal(carriedWeapon(p.items.list, true, 60), blade);
+  assert.equal(carriedWeapon(p.items.list, true, 300), gun);
+  p.items.toCursor(blade, { x: 100, y: 100 });
+  p.items.toCursor(gun, { x: 100, y: 100 });
+  const bow = p.items.give('bow', p.char)!;
+  assert.equal(carriedWeapon(p.items.list, true, 300), bow);
+});
+await test('recovery chooses the closest reachable weapon rather than crossing the opponent', () => {
+  const def = BUILTIN_ITEMS.find((d) => d.id === 'sword')!;
+  const w = (uid: number, x: number, y = 797, speed = 0) => ({
+    owner: 'other',
+    uid,
+    def,
+    at: { x, y },
+    speed,
+    ammo: 6,
+  });
+  const near = w(1, 460),
+    powerfulButFar = {
+      ...w(2, 300),
+      def: BUILTIN_ITEMS.find((d) => d.id === 'katana')!,
+    };
+  assert.equal(
+    nearestWeapon(
+      [powerfulButFar, w(3, 710), w(4, 501, 300), w(5, 480, 790, 1000), near],
+      500,
+      800,
+      650,
+      1,
+    ),
+    near,
+  );
+});
+await test('loose weapons transfer over JSON peer messages exactly once, retaining their magazine', () => {
+  const { a, b, c } = (() => {
+    const d = duo();
+    return { ...d, c: new Pet(bounds, structuredClone(DEFAULT_CONFIG)) };
+  })();
+  c.paused = true;
+  for (let i = 0; i < 360; i++) c.update(1 / 120);
+  const wire = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
+  const remote = (p: Pet): Peer => ({
+    view: () => wire(p.view()),
+    receive: (m, from) =>
+      p.receive(wire(m), {
+        view: () => wire(from.view()),
+        receive: (r, src) => from.receive(wire(r), src),
+      }),
+  });
+  a.others = [remote(b), remote(c)];
+  b.others = [remote(a)];
+  c.others = [remote(a)];
+  const gun = a.items.give('gun', a.char)!;
+  gun.ammo = 2;
+  gun.at = { ...b.char.body.j.hip };
+  a.items.drop(gun, 0, 0);
+  const weapon = a.view().looseWeapons![0];
+  const picked = b.ctx.claimWeapon!(weapon);
+  assert(picked);
+  assert.equal(picked.def.id, 'gun');
+  assert.equal(picked.ammo, 2);
+  assert(!a.items.list.includes(gun));
+  assert.equal(a.view().looseWeapons!.length, 0);
+  c.char.body.translate(b.char.x - c.char.x, 0);
+  assert.equal(c.ctx.claimWeapon!(weapon), null);
+  assert.equal(
+    [...a.items.list, ...b.items.list, ...c.items.list].filter(
+      (it) => it.def.use === 'gun',
+    ).length,
+    1,
+  );
+  Math.random = realRandom;
+});
+await test('disarmed fighters retreat and draw a replacement when no safe loose weapon is available', () => {
+  const p = pet();
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  const foe = {
+    ...p.view(),
+    id: 'dummy',
+    name: 'dummy',
+    doing: 'duel',
+    x: p.char.x + 230,
+    joints: { ...p.view().joints },
+  };
+  p.ctx.foe = () => foe;
+  p.ctx.looseWeapons = () => [];
+  const duel = new Duel();
+  duel.start(p.ctx);
+  for (
+    let i = 0;
+    i < 180 &&
+    !p.items.list.some((it) => it.where === 'hand' && it.def.use === 'swing');
+    i++
+  ) {
+    duel.t += 1 / 120;
+    duel.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+  }
+  const sword = p.items.list.find(
+    (it) => it.where === 'hand' && it.def.use === 'swing',
+  )!;
+  assert(sword);
+  p.items.toCursor(sword, { x: 50, y: 50 });
+  for (const it of [...p.items.list])
+    if (it.def.use === 'shoot') p.items.remove(it);
+  const before = p.char.x;
+  let retreated = false;
+  for (let i = 0; i < 4200; i++) {
+    duel.t += 1 / 120;
+    duel.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+    retreated ||= p.char.x < before - 10;
+    if (
+      p.items.list.some(
+        (it) => it.def.id === 'ink-foam-sword' && it.where === 'hand',
+      )
+    )
+      break;
+  }
+  assert(retreated, 'no space made after disarm');
+  assert(
+    p.items.list.some(
+      (it) => it.def.id === 'ink-foam-sword' && it.where === 'hand',
+    ),
+    'no functional drawn replacement',
+  );
+  assert.equal(sword.where, 'cursor', 'recovery stole the user-held sword');
+  duel.stop(p.ctx);
+});
+await test('a disarmed fighter fetches its nearby dropped weapon before creating another', () => {
+  const p = pet();
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  const foe = {
+    ...p.view(),
+    id: 'dummy',
+    name: 'dummy',
+    doing: 'duel',
+    x: p.char.x + 230,
+  };
+  p.ctx.foe = () => foe;
+  const duel = new Duel();
+  duel.start(p.ctx);
+  for (
+    let i = 0;
+    i < 180 &&
+    !p.items.list.some((it) => it.where === 'hand' && it.def.use === 'swing');
+    i++
+  ) {
+    duel.t += 1 / 120;
+    duel.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+  }
+  const sword = p.items.list.find(
+    (it) => it.where === 'hand' && it.def.use === 'swing',
+  )!;
+  assert(sword);
+  for (const it of [...p.items.list])
+    if (it.def.use === 'shoot') p.items.remove(it);
+  p.items.drop(sword, 0, 0);
+  sword.at = { x: p.char.x - 80, y: bounds.floor - 8, z: 0 };
+  // Begin above the surface, then let the dropped blade settle before the recovery decision.
+  // Spawning its tip underground manufactures a launch instead of a nearby loose weapon.
+  sword.at.y = bounds.floor - sword.def.length * sword.scale - 30;
+  sword.dir = { x: 0, y: 1, z: 0 };
+  sword.loosen();
+  for (let i = 0; i < 240; i++) p.update(1 / 120);
+  let recovered = false;
+  for (let i = 0; i < 1200 && !recovered; i++) {
+    duel.t += 1 / 120;
+    duel.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+    recovered = String(sword.where) === 'hand';
+  }
+  assert(recovered, 'the nearby reachable weapon was not recovered');
+  assert(
+    !p.items.list.some((it) => it.def.drawn),
+    'made a duplicate instead of retrieving the weapon',
+  );
+  assert.equal(p.items.list.filter((it) => it.where === 'hand').length, 1);
+  duel.stop(p.ctx);
+});
+await test('rigid props leave the hand with measured momentum and remain rigid in flight', () => {
+  const p = pet();
+  p.paused = true;
+  const t = p.props.spawn('desk', 500, 450, 1)!;
+  t.grab(500, 450);
+  Object.assign(t.held!, { vx: 900, vy: -400 });
+  t.release();
+  const c = t.center,
+    vx = t.points.reduce((n, q) => n + (q.x - q.px) * 120, 0) / t.points.length;
+  assert(Math.abs(vx - 900) < 1);
+  for (let i = 0; i < 24; i++) p.props.update(1 / 120, i / 120, bounds, [], []);
+  assert(t.center.x > c.x + 100);
+  assert(t.center.y < c.y);
+  const widths = t.sticks.map(
+    (st) => Math.hypot(st.a.x - st.b.x, st.a.y - st.b.y) / st.len,
+  );
+  assert(widths.every((r) => Math.abs(r - 1) < 0.01));
+});
+await test('actual cursor pistols aim manually, consume their own ammo and reload after the delay', () => {
+  const p = pet();
+  p.paused = true;
+  const gun = p.items.give('gun', p.char)!;
+  gun.ammo = 1;
+  p.items.toCursor(gun, { x: 100, y: 500 });
+  const control = new CursorWeapon();
+  control.pointer(100, 500);
+  control.attach(gun, p);
+  control.update(1 / 60, [p]);
+  control.press(true);
+  control.pointer(100, 100);
+  control.update(1 / 60, [p]);
+  assert.equal(control.item, gun);
+  assert.equal(gun.ammo, 0);
+  assert.equal(control.projectiles.rounds.length, 1);
+  assert(control.projectiles.rounds[0].vy < -2000);
+  assert(
+    Math.abs(control.projectiles.rounds[0].vx) < 1,
+    'pistol auto-aimed at the figure',
+  );
+  control.press(false);
+  control.reload();
+  for (let i = 0; i < 60; i++) control.update(1 / 60, [p]);
+  assert.equal(gun.ammo, 0);
+  for (let i = 0; i < 12; i++) control.update(1 / 60, [p]);
+  assert.equal(gun.ammo, 6);
+  control.detach();
+  assert(!p.userWeaponControlled && !gun.cursorControlled);
+});
+await test('actual cursor bows draw while held, release an arcing arrow and cancel safely on blur', () => {
+  const p = pet();
+  p.paused = true;
+  const bow = p.items.give('bow', p.char)!;
+  p.items.toCursor(bow, { x: 100, y: 250 });
+  const control = new CursorWeapon();
+  control.pointer(100, 250);
+  control.attach(bow, p);
+  control.press(true);
+  control.pointer(600, 100);
+  for (let i = 0; i < 42; i++) control.update(1 / 60, [p]);
+  assert(bow.pull);
+  assert.equal(control.projectiles.rounds.length, 0);
+  control.press(false);
+  control.update(1 / 60, [p]);
+  assert.equal(control.projectiles.rounds.length, 1);
+  assert.equal(control.projectiles.rounds[0].kind, 'arrow');
+  const vy = control.projectiles.rounds[0].vy;
+  control.update(1 / 60, [p]);
+  assert(control.projectiles.rounds[0].vy > vy);
+  control.press(true);
+  for (let i = 0; i < 20; i++) control.update(1 / 60, [p]);
+  control.cancel();
+  const count = control.projectiles.rounds.length;
+  control.update(1 / 60, [p]);
+  assert(control.projectiles.rounds.length <= count);
+});
+await test('backward movement keeps facing its target and armed running does not lose the carrying pose', () => {
+  const p = pet();
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  p.char.faceLock = 1;
+  p.char.fightVX = -90;
+  for (let i = 0; i < 30; i++) p.update(1 / 120);
+  assert.equal(p.char.locomotion, 'backstep');
+  assert.equal(p.char.facing, 1);
+  p.char.faceLock = null;
+  p.char.fightVX = null;
+  const sword = p.items.give('sword', p.char)!;
+  p.items.wield(sword, 'R');
+  p.char.walkTo(p.char.x + 300, true);
+  let sawRun = false;
+  for (let i = 0; i < 240; i++) {
+    p.update(1 / 120);
+    sawRun ||= String(p.char.locomotion) === 'run';
+  }
+  assert(sawRun);
+  assert.equal(p.char.carryPose?.hand, 'R');
+  assert.equal(sword.where, 'hand');
+  assert(
+    p.char.body.points.every(
+      (q) => Number.isFinite(q.x) && Number.isFinite(q.y),
+    ),
+  );
+});
+await test('activity pacing is saved, mood-sensitive and long, without ignoring conversation or explicit requests', async () => {
+  const calm = pet();
+  calm.applyConfig({ ...calm.config, hyperactivity: 0 });
+  const restless = pet();
+  restless.applyConfig({ ...restless.config, hyperactivity: 1 });
+  Object.assign(calm.mood.s, {
+    energy: 0.5,
+    annoyance: 0,
+    happiness: 0.5,
+    boredom: 0.3,
+  });
+  Object.assign(restless.mood.s, calm.mood.s);
+  assert(activitySeconds(calm.ctx, 'watchtv') >= 1800);
+  assert(activitySeconds(restless.ctx, 'videogame') >= 180);
+  assert(
+    activitySeconds(calm.ctx, 'watchtv') >
+      activitySeconds(restless.ctx, 'watchtv') * 5,
+  );
+  assert.equal(
+    mergeConfig(DEFAULT_CONFIG, { hyperactivity: 5 }).hyperactivity,
+    1,
+  );
+  assert.equal(mergeConfig(DEFAULT_CONFIG, {}).hyperactivity, 0.25);
+  restless.mood.s.energy = 0.1;
+  assert(activitySeconds(restless.ctx, 'read') > 300);
+  calm.paused = true;
+  for (let i = 0; i < 360; i++) calm.update(1 / 120);
+  calm.paused = false;
+  calm.applyConfig({ ...calm.config, mind: 'offline' });
+  calm.command('do:read');
+  for (let i = 0; i < 150 * 120; i++) calm.update(1 / 120);
+  assert.equal(calm.mind.skill?.name, 'read');
+  assert.equal(calm.char.mode, 'sit');
+  assert(
+    calm.items.list.some((it) => it.def.id === 'book' && it.where === 'hand'),
+  );
+  calm.command('hear:hello');
+  await advance(calm);
+  assert.equal(calm.mind.skill?.name, 'read');
+  calm.command('hear:dance');
+  await advance(calm);
+  assert.equal(calm.mind.skill?.name, 'dance');
+  assert.deepEqual(offlineReply(calm.ctx, 'watch a movie').plan, [
+    { do: 'watchtv' },
+  ]);
+});
+await test('TV viewing and video gaming stay engaged past thirty seconds and release when furniture is removed', () => {
+  for (const kind of ['watchtv', 'videogame'] as const) {
+    const p = pet();
+    p.paused = true;
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    p.mind.reset(p.ctx);
+    const tv = tvAt(p, p.char.x + 80 * p.char.scale);
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    const skill = kind === 'watchtv' ? new WatchTV(tv) : new PlayVideoGame(tv);
+    skill.start(p.ctx);
+    let done = false;
+    for (let i = 0; i < 150 * 120 && !done; i++) {
+      skill.t += 1 / 120;
+      done = skill.update(p.ctx, 1 / 120);
+      p.update(1 / 120);
+    }
+    assert(!done, `${kind} ended after ${skill.t}s`);
+    assert(tv.watchers.has(p.ctx.who));
+    p.props.remove(tv);
+    assert(skill.update(p.ctx, 1 / 120));
+    skill.stop(p.ctx);
+    assert(!tv.watchers.has(p.ctx.who));
+  }
+});
+await test('sleeping figures stay asleep through pickup, gentle carrying and a soft placement', () => {
+  const p = pet();
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  p.mood.s.energy = 0.2;
+  p.paused = false;
+  p.command('do:sleep');
+  p.update(1 / 120);
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  assert(p.mood.asleep);
+  const hip = { ...p.char.body.j.hip };
+  assert(p.pointerDown(hip.x, hip.y, 0));
+  for (let i = 0; i < 120; i++) {
+    p.pointerMove(hip.x, hip.y - 6 - i * 0.25, 0, -30, 200 + (i * 1000) / 120);
+    p.update(1 / 120);
+  }
+  assert.equal(p.char.mode, 'held');
+  assert(p.mood.asleep);
+  assert.equal(p.mind.skill?.name, 'sleep');
+  p.pointerUp(hip.x, hip.y - 36);
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  assert(p.mood.asleep, 'a gentle release woke the figure');
+  assert(p.char.stayDown);
+  assert.equal(p.mind.skill?.name, 'sleep');
+});
+await test('sleepers wake on a hard floor or wall impact, and on being hit', () => {
+  for (const contact of ['floor', 'wall', 'hit', 'weapon'] as const) {
+    const p = pet();
+    p.paused = true;
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    p.mood.s.energy = 0.2;
+    p.paused = false;
+    p.command('do:sleep');
+    p.update(1 / 120);
+    p.paused = true;
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    if (contact === 'hit')
+      p.mind.onEvent(p.ctx, { type: 'bonked', speed: 800 });
+    else if (contact === 'weapon')
+      p.mind.onEvent(p.ctx, {
+        type: 'hitByFriend',
+        name: 'another figure',
+        power: 0.2,
+        cut: false,
+        stabbed: false,
+        play: true,
+      });
+    else {
+      const b = p.char.body;
+      p.char.grab('hip', b.j.hip.x, b.j.hip.y);
+      p.update(1 / 120);
+      p.char.release();
+      const dx =
+        contact === 'wall'
+          ? bounds.right - Math.max(...b.points.map((q) => q.x + q.r)) - 12
+          : 0;
+      const dy =
+        contact === 'floor'
+          ? bounds.floor - Math.max(...b.points.map((q) => q.y + q.r)) - 12
+          : -100;
+      b.translate(dx, dy);
+      for (const q of b.points) {
+        q.px = q.x - (contact === 'wall' ? 1400 : 0) / 120;
+        q.py = q.y - (contact === 'floor' ? 1400 : 0) / 120;
+      }
+      for (let i = 0; i < 30 && p.mood.asleep; i++) p.update(1 / 120);
+    }
+    assert(!p.mood.asleep, `${contact} did not wake the sleeper`);
+    assert.notEqual(p.mind.skill?.name, 'sleep');
+    assert(!p.char.stayDown);
+  }
+});
+await test('visible item heads and handles are selectable and stay above the floor at every orientation', () => {
+  for (const id of ['mace', 'bow', 'sword'])
+    for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const d = BUILTIN_ITEMS.find((d) => d.id === id)!;
+      const it = new Item(d, { x: 600, y: 795 }, 1.4);
+      it.dir = { x: Math.cos(angle), y: Math.sin(angle), z: 0 };
+      it.loosen();
+      const [lx, ly] = d.shape[0].pts[0];
+      const pick = {
+        x: it.at.x + (it.dir.x * lx - it.dir.y * ly) * it.scale,
+        y: it.at.y + (it.dir.y * lx + it.dir.x * ly) * it.scale,
+      };
+      assert(
+        it.distTo(pick.x, pick.y) < 0.1,
+        `${id} visible handle was not selectable`,
+      );
+      for (let i = 0; i < 240; i++) it.step(1 / 120, bounds, []);
+      for (const st of d.shape)
+        for (const [x, y] of st.pts) {
+          const bottom =
+            it.at.y +
+            (it.dir.y * x +
+              it.dir.x * y +
+              (st.width / 2) * (Math.abs(it.dir.x) + Math.abs(it.dir.y))) *
+              it.scale;
+          assert(
+            bottom <= bounds.floor + 0.1,
+            `${id} art crossed the floor: ${bottom}`,
+          );
+        }
+    }
+});
+await test('props include visible extensions and separate whole bodies without gaining explosive velocity', () => {
+  const p = pet();
+  p.paused = true;
+  const tv = p.props.spawn('tv', 600, 770, 1)!;
+  const chair = p.props.spawn('chair', 610, 775, 1)!;
+  for (const st of tv.def!.shape)
+    for (const [x, y] of st.pts) {
+      const q = tv.toWorld(x, y);
+      assert(tv.contains(q.x, q.y), 'visible TV detail cannot be grabbed');
+    }
+  for (let i = 0; i < 600; i++)
+    p.props.update(1 / 120, i / 120, bounds, [], []);
+  const overlap = overlapOffset(tv.collisionHull, chair.collisionHull);
+  assert(
+    !overlap || Math.hypot(overlap.x, overlap.y) < 0.1,
+    'furniture remains interpenetrated',
+  );
+  for (const t of [tv, chair]) {
+    assert(t.collisionHull.every((q) => q.y <= bounds.floor + 0.1));
+    assert(
+      t.points.every((q) => Math.hypot(q.x - q.px, q.y - q.py) * 120 < 100),
+      'overlap resolution added energy',
+    );
+    assert(
+      t.sticks.every(
+        (s) =>
+          Math.abs(Math.hypot(s.a.x - s.b.x, s.a.y - s.b.y) / s.len - 1) < 0.01,
+      ),
+    );
+  }
+});
+await test('a drawn ball bounces from a full furniture side instead of passing through it', () => {
+  const p = pet();
+  p.paused = true;
+  const desk = p.props.spawn('desk', 600, 740, 1)!;
+  for (let i = 0; i < 360; i++)
+    p.props.update(1 / 120, i / 120, bounds, [], []);
+  const left = Math.min(...desk.collisionHull.map((q) => q.x)),
+    y = desk.center.y;
+  const ball = new Ball(
+    { strokes: [], color: '#333333', born: 0, done: true },
+    left - 20,
+    y,
+    8,
+  );
+  ball.kick(900, 0);
+  let bounced = false;
+  for (let i = 0; i < 10; i++) {
+    ball.step(1 / 120, bounds, [], [desk]);
+    bounced ||= ball.vx < 0;
+  }
+  assert(bounced);
+  assert(ball.x < left);
+  assert(Number.isFinite(ball.vy));
+});
+await test('Chrome bridge requires pairing, refuses web origins, delivers only the connected tab, and validates cutouts', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ava-bridge-'));
+  const cutouts: unknown[] = [];
+  const bridge = new DesktopBridge({
+    dataDir: dir,
+    enabled: () => true,
+    changed: () => {},
+    cutout: (c) => cutouts.push(c),
+  });
+  try {
+    await bridge.start(0);
+    const base = `http://127.0.0.1:${bridge.port}`,
+      token = new URL(bridge.pairing).searchParams.get('token')!;
+    assert.equal((await fetch(`${base}/browser/commands`)).status, 401);
+    assert.equal(
+      (
+        await fetch(`${base}/browser/commands`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Origin: 'https://example.com',
+          },
+        })
+      ).status,
+      403,
+    );
+    const request = async (route: string, body?: unknown) =>
+      (
+        await fetch(base + route, {
+          method: body ? 'POST' : 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        })
+      ).json();
+    await request('/browser/state', {
+      tab: 7,
+      title: 'Actual page',
+      selected: true,
+      x: 200,
+      y: 200,
+      width: 100,
+      height: 60,
+    });
+    const response = bridge.browserAction('pluck', 1);
+    assert.deepEqual(await request('/browser/commands?tab=8'), []);
+    const [command] = await request('/browser/commands?tab=7');
+    assert.equal(command.owner, 1);
+    await request('/browser/result', {
+      id: command.id,
+      ok: true,
+      cutout: {
+        image: 'https://example.com/unsafe',
+        x: 1,
+        y: 2,
+        width: 3,
+        height: 4,
+      },
+    });
+    assert.equal((await response).ok, false);
+    assert.equal(cutouts.length, 0);
+    const closing = bridge.browserAction('closetab', 0);
+    const [close] = await request('/browser/commands?tab=7');
+    await request('/browser/result', { id: close.id, ok: true });
+    assert.equal((await closing).message, 'Tab closed.');
+  } finally {
+    await bridge.stop();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 console.log(`${passed} regression checks passed`);

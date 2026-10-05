@@ -6,6 +6,7 @@
 # (so he can comment on it). Nothing from inside the window.
 param([int]$SelfPid = -1)
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -50,6 +51,13 @@ public static class PetWindows {
     try { app = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; } catch { }
     return "{\"ui\":{\"app\":" + Json(app) + ",\"title\":" + Json(t.ToString()) + ",\"win\":" + h.ToInt64() + ",\"trusted\":true,\"els\":[]}}";
   }
+  [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint message, IntPtr w, IntPtr l);
+  static void CloseWin(int request, long id) {
+    var h = new IntPtr(id);
+    bool ok = IsWindow(h) && IsWindowVisible(h) && PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero);
+    string message = ok ? "Close requested. The app may ask you to save." : "The app refused to close its window.";
+    Console.Out.WriteLine("{\"action\":{\"id\":" + request + ",\"ok\":" + (ok ? "true" : "false") + ",\"message\":" + Json(message) + "}}"); Console.Out.Flush();
+  }
   public static void ListenForCursor() {
     var t = new Thread(() => {
       string line;
@@ -58,6 +66,7 @@ public static class PetWindows {
         int x, y; long id;
         if (p.Length == 3 && p[0] == "cursor" && int.TryParse(p[1], out x) && int.TryParse(p[2], out y)) SetCursorPos(x, y);
         else if (p.Length == 4 && p[0] == "win" && long.TryParse(p[1], out id) && int.TryParse(p[2], out x) && int.TryParse(p[3], out y)) MoveWin(id, x, y);
+        else if (p.Length == 3 && p[0] == "close" && int.TryParse(p[1], out x) && long.TryParse(p[2], out id)) CloseWin(x, id);
         else if (line == "ui on") UiOn = true;
         else if (line == "ui off") UiOn = false;
       }

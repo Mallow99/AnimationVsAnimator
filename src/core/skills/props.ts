@@ -1,3 +1,4 @@
+import { ActivityClock, activitySeconds, restlessness } from '../activity-pacing';
 // Furniture activities, separated from combat and climbing.
 import { Skill, arrive, type Ctx } from './context';
 import type { Thing, PropDef } from '../props';
@@ -37,9 +38,10 @@ export class SitOnProp extends Skill {
   private style: SeatStyle = 'up';
   private lastMid: { x: number; y: number } | null = null;
   private talk = { at: 6 + Math.random() * 6 };
-  constructor(private seat: Thing, private dur = rand(10, 25), private face: 1 | -1 | 0 = 0, readonly why = '') { super(); }
+  constructor(private seat: Thing, private dur: number | null = null, private face: 1 | -1 | 0 = 0, readonly why = '') { super(); }
   start(c: Ctx) {
     c.look = 'default';
+    this.dur ??= activitySeconds(c, 'sitdown');
     this.style = seatStyle(c, this.seat);
     // Lying along the couch needs it to himself.
     if (this.style === 'lie' && this.seat.sitters.size) this.style = 'lounge';
@@ -73,7 +75,7 @@ export class SitOnProp extends Skill {
     if (ch.seatStyle === 'lie' && seat.sitters.get(c.who)?.lying === false) { ch.seatStyle = 'lounge'; c.say(pick(['oh, ok', 'fine, sit', '*scoots*']), 1.2); }
     // Sharing the couch: a bit of small talk now and then.
     if (seat.sitters.size > 1) seatedTalk(c, this.t, this.talk);
-    if (this.t > this.dur) { ch.standUp(); return true; }
+    if (this.t > (this.dur ?? 90)) { ch.standUp(); return true; }
     return false;
   }
   stop(c: Ctx) { this.seat.leaveSeat(c.who); if (c.char.mode === 'sit' && c.char.seat) c.char.standUp(); }
@@ -138,7 +140,7 @@ export class WatchTV extends AtTheTV {
   readonly name = 'watchtv';
   private next = 2;
   private watched = 0;
-  private dur = rand(20, 40);
+  private clock = new ActivityClock('watchtv');
   update(c: Ctx, dt: number) {
     const s = this.settle(c, dt);
     if (s === 'gone') return true;
@@ -147,11 +149,12 @@ export class WatchTV extends AtTheTV {
     if (!tv.on) { tv.on = true; c.sound?.('click', 0.5); }
     this.watched += dt;
     if (this.watched > this.next) {
-      this.next = this.watched + rand(5, 10);
+      this.next = this.watched + rand(45, 100) * (1.5 - restlessness(c));
       c.say(pick(['haha', 'ooh', 'no way', 'lol', 'run, little guy!', 'this show is weird', 'he looks like me', '♪', 'again?', 'classic']), 1.6);
       c.mood.nudge({ boredom: -0.12, happiness: 0.02 });
     }
-    return this.watched > this.dur;
+    c.mood.s.boredom = Math.max(0, c.mood.s.boredom - dt / 500);
+    return this.clock.tick(c, dt);
   }
 }
 
@@ -162,7 +165,8 @@ export class WatchTV extends AtTheTV {
 export class PlayVideoGame extends AtTheTV {
   readonly name = 'videogame';
   private played = 0;
-  private dur = rand(25, 45);
+  private clock = new ActivityClock('videogame');
+  private readyToFinish = false;
   private chatter = 6;
   private mine: Runner | null = null;
   update(c: Ctx, dt: number) {
@@ -206,12 +210,13 @@ export class PlayVideoGame extends AtTheTV {
     const near = g.blocks.some((b) => b.x > g.x && b.x - g.x < 0.25);
     ch.padMash += ((near ? 1 : 0.25) - ch.padMash) * Math.min(1, dt * 8);
     this.played += dt;
-    if (this.played > this.chatter) { this.chatter = this.played + rand(8, 14); c.mood.nudge({ boredom: -0.1, happiness: 0.02 }); if (other) c.feel.bond = Math.min(1, c.feel.bond + 0.01); }
-    if (this.played > this.dur && g.crashedAt >= 0 && g.time - g.crashedAt < 1) {
+    if (this.played > this.chatter) { this.chatter = this.played + rand(45, 100) * (1.5 - restlessness(c)); c.mood.nudge({ boredom: -0.1, happiness: 0.02 }); if (other) c.feel.bond = Math.min(1, c.feel.bond + 0.01); }
+    this.readyToFinish = this.clock.tick(c, dt);
+    if (this.readyToFinish && g.crashedAt >= 0 && g.time - g.crashedAt < 1) {
       if (chance(0.5)) c.say(pick(['ok, one more— no. done.', 'enough for now', 'I was winning']), 1.6);
       return true;
     }
-    return this.played > this.dur + 20;
+    return this.readyToFinish && this.played > activitySeconds(c, 'videogame', 1.1) + 30;
   }
   stop(c: Ctx) {
     const tv = this.tv, me = c.who;
@@ -297,6 +302,9 @@ export class RideScooter extends Skill {
         return false;
       }
       if (!arrive(c, (deck.x1 + deck.x2) / 2, 4)) return false;
+      // The complete wheel art now supports the scooter, so its deck is too high to walk through.
+      // Make the advertised hop explicit instead of waiting forever underneath the deck.
+      if (ch.ready) ch.jump(((deck.x1 + deck.x2) / 2 - ch.x) * 5, -300 * ch.scale);
       return false;
     }
     if (ch.support !== deck.id) return this.t > 0.5 ? (ch.handTarget = null, true) : false; // fell off

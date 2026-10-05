@@ -38,7 +38,17 @@ export const DEFAULT_LESSONS: Lessons = { safeDrop: 420 };
 /** Everything a skill can see and touch. */
 export interface Ctx {
   /** Which figure this is (unique while the app runs): who's sitting where, who's watching the TV. */
+  desktopAction?: (action:import('../../shared/desktop').DesktopAction)=>Promise<import('../../shared/desktop').DesktopResult>;
+  desktopState?: ()=>import('../../shared/desktop').DesktopState;
   who: string;
+  hyperactivity?: number;
+  personality?: import('../config').Personality;
+  drawTools?: boolean;
+  peers?: () => FighterView[];
+  selectPeer?: (id: string) => boolean;
+  looseWeapons?: () => import('../combat/armament').LooseWeapon[];
+  claimWeapon?: (weapon: import('../combat/armament').LooseWeapon) => import('../items').Item | null;
+  fire?: (x: number, y: number, vx: number, vy: number, at: 'friend' | 'cursor') => void;
   char: Character;
   mood: Mood;
   world: World;
