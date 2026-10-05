@@ -22,15 +22,11 @@ import type { FighterView } from '../peer';
 import { chance, clamp, pick, rand } from '../math';
 import { HIT_HEIGHT } from '../fighting';
 import { currentKey, guardPose, MOVES, SwordMove, type MoveName } from './swordplay';
+import { chooseExchange, type CombatGoal } from '../combat/tactics';
+import { ShootGun } from './gun';
 import { ShootBow } from './archery';
 
 type Height = 'mid' | 'high' | 'low';
-/** Strings of moves he chains in one exchange (the next goes the moment the last one ends). */
-const STRINGS: MoveName[][] = [
-  ['cut'], ['thrust'], ['cut', 'rising'], ['thrust', 'cut'], ['flurry'], ['flurry', 'spin'], ['cut', 'heavy'],
-  ['rising', 'aircut'], ['thrust', 'thrust'], ['spin'], ['heavy'],
-];
-
 export class Duel extends Skill {
   readonly name = 'duel';
   /** Always with swords now (the constructor still takes the old armed flag, so callers don't change). */
@@ -63,21 +59,25 @@ export class Duel extends Skill {
   private theirHp = 1;
   private foeGone = 0;
   /** Shooting his bow (at range), and when he last did. */
-  private shooting: ShootBow | null = null;
+  private shooting: ShootBow | ShootGun | null = null;
   private shotAt = -10;
   private hasBow = false;
   hits = 0;
+  goal: CombatGoal='probe';
+  private lastAttack: MoveName|null=null;
   constructor(_armed = true, readonly why = '') { super(); }
 
   start(c: Ctx) {
     const ch = c.char, real = c.fightMode === 'real', foe = c.foe?.(), L = c.mood.label;
     c.look = 'target';
-    ch.hp = 1; ch.poise = 1; ch.stagger = 0;
+    ch.hp = 1; ch.poise = 1; ch.stagger = 0;ch.poiseDelay=0;ch.breakCount=0;
     // His mood is his fighting style.
     this.reaction = L === 'angry' ? 0.14 : L === 'sleepy' || L === 'sad' ? 0.3 : L === 'scared' ? 0.17 : 0.2;
     this.aggression = L === 'angry' ? 0.85 : L === 'scared' ? 0.3 : L === 'playful' ? 0.6 : 0.5;
     this.finesse = L === 'angry' ? 0.3 : L === 'scared' ? 0.6 : 0.5;
     this.showy = real ? 0.05 : L === 'playful' || c.mood.emotion === 'excited' ? 0.6 : 0.3;
+    if(c.personality==='competitive'){this.aggression+=0.12;this.showy+=0.15;}
+    if(c.personality==='gentle'){this.finesse+=0.2;this.aggression-=0.1;}
     this.sword = this.pickSword(c);
     // (No room on his belt for it: straight into his hand.)
     if (this.sword?.where === 'world' && ch.useHand) c.items.toHand(this.sword, ch.useHand);
@@ -91,7 +91,7 @@ export class Duel extends Skill {
   private pickSword(c: Ctx): Item | null {
     const real = c.fightMode === 'real';
     // His own (on his belt, in his hand, or lying around: not one you're holding), else a new one.
-    const usable = (id: string) => c.items.list.find((it) => it.def.id === id && it.where !== 'cursor') ?? null;
+    const usable = (id: string) => c.items.list.find((it) => (it.def.id === id || it.def.id === `ink-${id}`) && it.where !== 'cursor') ?? null;
     const it = real ? usable('katana') ?? c.items.give('katana', c.char) : usable('foam-sword') ?? usable('sword') ?? c.items.give('foam-sword', c.char);
     return !it || it.def.wear ? null : it;
   }
@@ -183,7 +183,7 @@ export class Duel extends Skill {
 
     // ── Reading him ──
     const R = this.reach('cut', ch.scale);
-    const fm = foe.move, theirR = fm?.name === 'shoot' ? Infinity : (fm && fm.name in MOVES ? MOVES[fm.name as MoveName].reach * sc : R) * 1.15;
+    const fm = foe.move, theirR = ['shoot','gun'].includes(fm?.name??'') ? Infinity : (fm && fm.name in MOVES ? MOVES[fm.name as MoveName].reach * sc : R) * 1.15;
     if (!fm) this.reacted = false;
     if (foe.block) this.blocksSeen = Math.min(6, this.blocksSeen + dt * 2); else this.blocksSeen = Math.max(0, this.blocksSeen - dt * 0.5);
     // Defense: an attack coming that can reach him.
@@ -205,7 +205,7 @@ export class Duel extends Skill {
     }
     // ── Footwork: hold a distance (depends on the tempo), bouncing in and out a little ──
     // (Circling, the blade tips just about touch; breaking off, well clear; pressing, just inside the next move's reach.)
-    let want = this.tempo === 'circle' ? R * 1.3 : this.tempo === 'break' ? R * 1.9 : this.plan.length ? this.reach(this.plan[0], sc) * 0.85 : R;
+    let want = this.tempo === 'circle' ? R * 1.3 : this.tempo === 'break' ? R * 1.9 : this.plan.length ? this.reach(this.plan[0], sc) * 0.68 : R;
     want += Math.sin(this.t * 2.4 + this.zSeed) * 7 * sc;
     if (foe.mode === 'ragdoll' || foe.mode === 'getup' || foe.mode === 'lie') want = Math.max(want, R * 2); // he's down: give him room
     const err = dist - want;
@@ -218,7 +218,7 @@ export class Duel extends Skill {
     // Pressing: in range of the next move? Go.
     if (this.tempo === 'press' && this.plan.length) {
       const next = this.plan[0];
-      if (dist <= this.reach(next, sc) * 1.05 && dist > this.reach(next, sc) * 0.35) { this.plan.shift(); this.startMove(c, next); return false; }
+      if (dist <= this.reach(next, sc) * 0.82 && dist > this.reach(next, sc) * 0.35) { this.plan.shift(); this.startMove(c, next); return false; }
       // Taking too long to get there (he keeps backing off): go for the long ones instead.
       if (this.t > this.tempoUntil - 0.4 && next !== 'thrust' && next !== 'dash') this.plan[0] = dist < this.reach('thrust', sc) * 1.05 ? 'thrust' : 'dash';
     }
@@ -235,6 +235,7 @@ export class Duel extends Skill {
   private startMove(c: Ctx, m: MoveName) {
     if (!this.sword || this.sword.where !== 'hand') return;
     this.move = new SwordMove(m, this.sword, currentKey(c), this.twoHand);
+    if(MOVES[m].power>0)this.lastAttack=m;
     if (m !== 'parry' && m !== 'twirl' && m !== 'draw') c.sound?.('whoosh', 0.6);
   }
 
@@ -251,7 +252,7 @@ export class Duel extends Skill {
     const guess: Height = chance(0.75) ? h : pick(['mid', 'high', 'low'] as Height[]);
     if (this.move && this.move.t > this.move.def.windup) return false; // already swinging (or showing off): let it ride
     const r = Math.random(), p = 0.25 + this.finesse * 0.25, cautious = 1 - this.aggression;
-    if (fm.name === 'shoot') {
+    if (fm.name === 'shoot' || fm.name==='gun') {
       // An arrow's coming: sword up across it (it glances off), or out of the way, or charge him while he's drawing.
       const dist = Math.abs(foe.x - ch.x), flight = dist / 900;
       if (r < 0.5) { this.move = null; this.blockHeight = 'mid'; this.blockUntil = this.t + fm.hitIn + flight + 0.25; }
@@ -296,7 +297,7 @@ export class Duel extends Skill {
     if (fDown) { this.setTempo('break', 0.8); this.plan = []; this.taunt(c, foe); return; }
     // Punish: he's staggered (wide open) or reeling: a big move right now.
     if ((foe.stagger > 0 || foe.hitstun > 0.25) && dist < R * 1.5) {
-      this.plan = [pick(foe.stagger > 0 ? ['heavy', 'spin', 'rising', 'flurry'] as MoveName[] : ['cut', 'thrust', 'flurry'] as MoveName[])];
+      this.goal='punish';this.plan=[foe.stagger>0?'heavy':'thrust'];
       this.setTempo('press', 1.2);
       return;
     }
@@ -310,9 +311,9 @@ export class Duel extends Skill {
       return;
     }
     // Far apart: out with the bow for an arrow or two (not too often: it's slow, and he's open while he draws).
-    if (this.hasBow && dist > R * 2.4 && this.t - this.shotAt > 5 && this.tempo !== 'press' && chance(0.35)) {
+    if ((this.hasBow || c.items.find('gun')) && dist > R * 2.4 && this.t - this.shotAt > 5 && this.tempo !== 'press' && chance(0.35)) {
       const target = () => { const v = c.foe?.(); const n = v?.joints.neck, h = v?.joints.hip; return n && h ? { x: (n.x + h.x) / 2, y: (n.y + h.y) / 2 } : null; };
-      this.shooting = new ShootBow(chance(0.5) ? 1 : 2, target, 'friend', false);
+      this.shooting = c.items.find('gun') ? new ShootGun(target,'friend',2) : new ShootBow(chance(0.5) ? 1 : 2, target, 'friend', false);
       this.shooting.start(c);
       ch.fightPose = null; ch.fightVX = null; ch.fightZ = null;
       if (chance(0.3)) c.say(pick(['pew pew', 'eat this', 'from range!']), 1.2);
@@ -331,11 +332,11 @@ export class Duel extends Skill {
     if (this.tempo === 'break') { this.setTempo('circle', rand(0.5, 1.6) * (1.3 - this.aggression)); return; }
     // Time to commit (or circle a bit longer).
     if (!chance(0.35 + this.aggression * 0.55)) { this.setTempo('circle', rand(0.4, 1)); return; }
+    const tactical=chooseExchange(foe,ch.poise,dist,R,c.personality,this.lastAttack);
+    this.goal=tactical.goal;
+    if(tactical.goal==='recover'){this.plan=[];this.setTempo('break',1.8);return;}
     const far = dist > R * 1.7;
-    let plan: MoveName[];
-    if (far && chance(0.35)) plan = [chance(0.55) ? 'dash' : 'aircut'];
-    else if (this.blocksSeen > 2 && chance(0.6)) plan = [pick(['heavy', 'heavy', 'spin'] as MoveName[])];
-    else plan = [...pick(STRINGS)];
+    const plan=tactical.moves;
     // Mix in a kick to shove him off a guard (it's a gesture, not a sword move).
     if (this.blocksSeen > 1.5 && chance(0.3) && dist < R) { ch.doGesture('frontkick', { x: foe.x, y: (foe.joints.hip?.y ?? 0) - 6 * sc }); this.blocksSeen = 0; return; }
     if (foe.block === 'high' && chance(0.4) && dist < R * 1.1) { ch.doGesture('sweep', { x: foe.x, y: (foe.joints.footL?.y ?? 0) }); return; }

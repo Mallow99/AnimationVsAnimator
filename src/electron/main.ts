@@ -6,16 +6,19 @@
 //    with every window. A few settings are about the app, not one of them (climbing windows, the AI
 //    service, fights...): those are kept the same in both.
 
-import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray, dialog } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_CONFIG, friendConfig, mergeConfig, PROVIDERS, type PetConfig, type ProviderId } from '../core/config';
+import { DEFAULT_CONFIG, friendConfig, companionConfig, mergeConfig, PROVIDERS, type PetConfig, type ProviderId } from '../core/config';
 import type { WinRect } from '../core/world';
 import { watchWindows, type UiReport, type WindowWatcher } from './windows';
 import * as llm from './llm';
 import type { BrainRequest } from '../core/brain';
 import { writeAtomic } from './storage';
 import { unchangedExample } from './builtin-files';
+import {DesktopBridge} from './desktop-bridge';
+import {watchFileWindows} from './file-windows';
+import type {FileWindow,DesktopAction,DesktopState} from '../shared/desktop';
 import builtinHistory from '../../assets/builtin-history.json';
 
 let win: BrowserWindow | null = null;
@@ -25,15 +28,21 @@ let tray: Tray | null = null;
 const preload = path.join(__dirname, 'preload.js');
 let watcher: WindowWatcher | null = null;
 let lastWins: WinRect[] = [];
+let desktop:DesktopBridge|null=null;
+let desktopError='';
+let fileWatcher:ReturnType<typeof watchFileWindows>|null=null;
+let folderWindows:FileWindow[]=[];
+let documentWindow:FileWindow|null=null;
+let homes:{id:number;path:string}[]=[];
 
 // ───────────── settings files ─────────────
 
 const configPath = (id: number) => path.join(app.getPath('userData'), id ? `pet-${id + 1}.json` : 'pet.json');
 /** Their settings, by id. `config` is the first one's (the app-wide settings are the same in both). */
-const configs: PetConfig[] = [structuredClone(DEFAULT_CONFIG), friendConfig(DEFAULT_CONFIG)];
+const configs: PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(DEFAULT_CONFIG,id));
 let config = configs[0];
 /** Settings that are about the app (or both of them), kept the same in both stick figures. */
-const SHARED: (keyof PetConfig)[] = ['windows', 'moveWindows', 'screenAware', 'knockCursor', 'mischief', 'fightMode', 'friend', 'provider', 'model', 'sfx', 'volume'];
+const SHARED: (keyof PetConfig)[] = ['windows', 'moveWindows', 'screenAware', 'knockCursor', 'mischief', 'fightMode', 'friend', 'provider', 'model', 'sfx', 'volume', 'figureCount', 'debugCombat', 'closeWindows', 'browserPlay', 'fileHomes'];
 let saveTimer: NodeJS.Timeout | undefined;
 const dirty = new Set<number>();
 
@@ -51,21 +60,26 @@ function loadConfig() {
   const second = mergeConfig(DEFAULT_CONFIG, { ...friendConfig(configs[0]), name: configs[0].friend.name, look: { ...configs[0].look, color: configs[0].friend.color } });
   try { configs[1] = mergeConfig(second, JSON.parse(fs.readFileSync(configPath(1), 'utf8'))); }
   catch { configs[1] = second; dirty.add(1); }
-  for (const k of SHARED) (configs[1] as unknown as Record<string, unknown>)[k] = structuredClone(configs[0][k]);
+  for(let id=2;id<5;id++) {
+    const defaults=companionConfig(configs[0],id);
+    try{configs[id]=mergeConfig(defaults,JSON.parse(fs.readFileSync(configPath(id),'utf8')));}catch{configs[id]=defaults;}
+  }
+  for(let id=1;id<5;id++)for (const k of SHARED) (configs[id] as unknown as Record<string, unknown>)[k] = structuredClone(configs[0][k]);
   config = configs[0];
 }
 
 function setConfig(id: number, patch: unknown) {
-  if (id !== 0 && id !== 1) return;
+  if (!Number.isInteger(id) || id<0 || id>=configs.length) return;
   configs[id] = mergeConfig(configs[id], patch);
   dirty.add(id);
   // App-wide settings changed in either window: the other one gets them too.
-  const other = 1 - id, p = (patch && typeof patch === 'object' ? patch : {}) as Record<string, unknown>;
+  const p = (patch && typeof patch === 'object' ? patch : {}) as Record<string, unknown>;
   const changed: number[] = [id];
   if (SHARED.some((k) => k in p)) {
-    for (const k of SHARED) (configs[other] as unknown as Record<string, unknown>)[k] = structuredClone(configs[id][k]);
-    dirty.add(other);
-    changed.push(other);
+    for(let other=0;other<configs.length;other++)if(other!==id){
+      for (const k of SHARED) (configs[other] as unknown as Record<string, unknown>)[k] = structuredClone(configs[id][k]);
+      dirty.add(other);changed.push(other);
+    }
   }
   config = configs[0];
   clearTimeout(saveTimer);
@@ -82,7 +96,7 @@ function setConfig(id: number, patch: unknown) {
 
 const memoryPath = (id: number) => path.join(app.getPath('userData'), id ? `memory-${id + 1}.json` : 'memory.json');
 function saveMemory(id: number, json: string) {
-  if ((id !== 0 && id !== 1) || typeof json !== 'string' || json.length > 2_000_000) return;
+  if ((!Number.isInteger(id) || id<0 || id>=configs.length) || typeof json !== 'string' || json.length > 2_000_000) return;
   try { JSON.parse(json); writeAtomic(memoryPath(id), json); }
   catch (err) { console.error('[save] could not save memories:', (err as Error).message); }
 }
@@ -150,26 +164,58 @@ function toScreen(x: number, y: number, w = 1, h = 1) {
 
 // The helper runs whenever he needs it: to see windows, or to move your cursor (mischief, knocking it around).
 function updateWatcher() {
-  const need = config.windows || config.mischief || config.knockCursor || config.screenAware;
+  const need = config.fileHomes || config.closeWindows || config.windows || config.mischief || config.knockCursor || config.screenAware;
   if (need && !watcher) {
     watcher = watchWindows((wins) => {
-      lastWins = config.windows ? toOverlay(wins) : [];
+      lastWins = (config.windows || config.fileHomes || config.closeWindows) ? toOverlay(wins) : [];
+      sendFileWindows();
       win?.webContents.send('world:windows', lastWins);
     }, (m) => { console.log('[windows]', m); win?.webContents.send('world:log', m); }, (ui) => sendUi(ui));
   } else if (!need && watcher) {
     watcher.stop();
     watcher = null;
   }
-  if (!config.windows && lastWins.length) { lastWins = []; win?.webContents.send('world:windows', []); }
-  watcher?.setUi(config.screenAware);
+  if (!(config.windows || config.fileHomes || config.closeWindows) && lastWins.length) { lastWins = []; win?.webContents.send('world:windows', []); }
+  watcher?.setUi(config.screenAware || config.fileHomes);
+  if(config.fileHomes && !fileWatcher)fileWatcher=watchFileWindows(files=>{folderWindows=files;sendFileWindows();},text=>win?.webContents.send('world:fileNote',text));
+  else if(!config.fileHomes && fileWatcher){fileWatcher.stop();fileWatcher=null;folderWindows=[];documentWindow=null;sendFileWindows();}
   if (!config.screenAware) win?.webContents.send('world:ui', null);
 }
 
 /** What you're doing (app, title, where things are in its window): to the overlay, in its coordinates. */
 function sendUi(ui: UiReport) {
+  if(config.fileHomes && ui.document && path.isAbsolute(ui.document)) {
+    const frame=lastWins.find(w=>w.id===ui.win);
+    if(frame){let kind:'folder'|'file'='file';try{if(fs.statSync(ui.document).isDirectory())kind='folder';}catch{}
+      documentWindow={id:ui.win,path:ui.document,kind,x:frame.x,y:frame.y,width:frame.w,height:frame.h,tops:toOverlay(ui.els.map(([x,y,w,h],i)=>({id:i,x,y,w,h}))).map(r=>[r.x,r.y,r.w,r.h])};}
+  } else documentWindow=null;
+  sendFileWindows();
   if (!config.screenAware) return;
   const els = toOverlay(ui.els.map(([x, y, w, h], i) => ({ id: i, x, y, w, h }))).map((r) => [r.x, r.y, r.w, r.h]);
   win?.webContents.send('world:ui', { app: String(ui.app ?? '').slice(0, 60), title: String(ui.title ?? '').slice(0, 80), win: ui.win, trusted: ui.trusted, els });
+}
+
+function sendFileWindows() {
+  const files:FileWindow[]=[];
+  for(const f of folderWindows){
+    let source=lastWins.find(w=>w.id===f.id);
+    if(!source && process.platform==='darwin') {
+      const converted=toOverlay([{id:0,x:f.x,y:f.y,w:f.width,h:f.height}])[0];
+      source=lastWins.find(w=>Math.abs(w.x-converted.x)<5 && Math.abs(w.y-converted.y)<5 && Math.abs(w.w-converted.w)<10 && Math.abs(w.h-converted.h)<10);
+    }
+    if(source)files.push({...f,path:normalizedPath(f.path),id:source.id,x:source.x,y:source.y,width:source.w,height:source.h});
+  }
+  if(documentWindow && lastWins.some(w=>w.id===documentWindow!.id) && !files.some(f=>f.id===documentWindow!.id))files.push({...documentWindow,path:normalizedPath(documentWindow.path)});
+  win?.webContents.send('world:files',files);
+}
+function normalizedPath(file:string){let full=path.resolve(file);try{full=fs.realpathSync(full);}catch{}return process.platform==='win32'?full.toLowerCase():full;}
+async function chooseHabitat(id:number){
+  const result=await dialog.showOpenDialog({title:'Choose the real file or folder for this figure to enter',properties:['openDirectory','openFile']});
+  if(result.canceled || !result.filePaths[0])return {ok:false,message:'No place selected.'};
+  const target=normalizedPath(fs.realpathSync(result.filePaths[0]));
+  setConfig(id,{fileHomes:true});
+  win?.webContents.send('desktop:habitat',{id,path:target});
+  return {ok:true,message:'Entered. Open that folder in Finder / Explorer, or that file in an app that reports its document path.'};
 }
 
 // ───────────── windows ─────────────
@@ -221,7 +267,7 @@ function createOverlay() {
 }
 
 function openSettings(id = 0, tab?: string) {
-  if (id !== 0 && id !== 1) id = 0;
+  if (!Number.isInteger(id) || id<0 || id>=configs.length) id=0;
   const existing = settingsWins.get(id);
   const goTo = () => { if (typeof tab === 'string') settingsWins.get(id)?.webContents.send('settings:tab', tab); };
   if (existing) { existing.show(); existing.focus(); goTo(); return; }
@@ -253,7 +299,7 @@ function openSettings(id = 0, tab?: string) {
 
 function buildTrayMenu() {
   if (!tray) return;
-  const both = config.friend.on ? [0, 1] : [0];
+  const both = Array.from({length:config.friend.on ? config.figureCount : 1},(_,id)=>id);
   tray.setToolTip(both.map((i) => configs[i].name).join(' & '));
   const all = (patch: Partial<PetConfig>) => { for (const i of both) setConfig(i, patch); };
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -288,18 +334,18 @@ function createTray() {
 // ───────────── messages between windows ─────────────
 
 ipcMain.on('pet:clickThrough', (_e, ignore: boolean) => win?.setIgnoreMouseEvents(ignore, { forward: true }));
-const petIndex = (id: unknown) => (id === 1 ? 1 : 0);
+const petIndex = (id: unknown) => typeof id==='number' && Number.isInteger(id) && id>=0 && id<configs.length ? id : 0;
 ipcMain.handle('config:all', () => configs);
 ipcMain.handle('config:get', (_e, id: unknown) => configs[petIndex(id)]);
 ipcMain.on('config:set', (_e, id: unknown, patch: unknown) => setConfig(petIndex(id), patch));
 // Reset: back to defaults (keeping who they are: the second one keeps their own name and color).
 ipcMain.on('config:reset', (_e, id: unknown) => {
   const i = petIndex(id);
-  setConfig(i, i ? { ...DEFAULT_CONFIG, name: configs[1].name, look: { ...DEFAULT_CONFIG.look, color: configs[1].look.color } } : DEFAULT_CONFIG);
+  setConfig(i, i ? { ...DEFAULT_CONFIG, name: configs[i].name, personality:configs[i].personality, look: { ...DEFAULT_CONFIG.look, color: configs[i].look.color } } : DEFAULT_CONFIG);
 });
 ipcMain.on('pet:stats', (_e, id: unknown, stats: unknown) => settingsWins.get(petIndex(id))?.webContents.send('pet:stats', stats));
 ipcMain.on('pet:collections', (_e, id: unknown, data: unknown) => settingsWins.get(petIndex(id))?.webContents.send('pet:collections', data));
-ipcMain.on('pet:command', (_e, id: unknown, cmd: string) => win?.webContents.send('pet:command', { id: petIndex(id), cmd }));
+ipcMain.on('pet:command',(_e,id:unknown,cmd:string)=>{if(cmd==='returnHome')homes=homes.filter(h=>h.id!==petIndex(id));win?.webContents.send('pet:command',{id:petIndex(id),cmd});});
 ipcMain.on('settings:open', (_e, id: unknown, tab?: string) => openSettings(petIndex(id), typeof tab === 'string' ? tab : undefined));
 ipcMain.handle('memory:load', (_e, id: unknown) => { try { return fs.readFileSync(memoryPath(petIndex(id)), 'utf8'); } catch { return null; } });
 ipcMain.handle('items:defs', () => readItemDefs());
@@ -341,6 +387,22 @@ ipcMain.on('pet:moveWindow', (_e, id: number, x: number, y: number, w: number, h
   watcher.moveWindow(id, r.x, r.y);
 });
 
+ipcMain.handle('desktop:info',()=>({pairing:desktop?.pairing??'',error:desktopError,homes,connected:!!desktop?.state.browser}));
+ipcMain.on('desktop:extensionFolder',()=>shell.openPath(path.join(__dirname,'../extension/chrome')));
+ipcMain.handle('desktop:chooseHabitat',(_e,id)=>chooseHabitat(petIndex(id)));
+ipcMain.on('desktop:fileHomes',(_e,value:unknown)=>{if(Array.isArray(value))homes=value.slice(0,5).filter(h=>h&&Number.isInteger(h.id)&&h.id>=0&&h.id<5&&typeof h.path==='string'&&h.path.length<4096);});
+ipcMain.handle('desktop:action',async (_e,id:unknown,action:DesktopAction)=>{
+  const i=petIndex(id);
+  if(action==='folder')return chooseHabitat(i);
+  if(action==='closewindow'){
+    if(!config.closeWindows)return {ok:false,message:'Enable window closing in General first.'};
+    const target=lastWins[0];if(!target || !watcher)return {ok:false,message:'No accessible window is available.'};
+    return watcher.closeWindow(target.id);
+  }
+  if(['closetab','pluck','restorepage'].includes(action))return desktop?.browserAction(action as 'closetab'|'pluck'|'restorepage',i)??{ok:false,message:desktopError || 'The Chrome bridge is unavailable.'};
+  return {ok:false,message:'Unknown desktop action.'};
+});
+
 // His talking blips should play without you having to click first.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
@@ -353,6 +415,10 @@ app.whenReady().then(() => {
   createOverlay();
   createTray();
   updateWatcher();
+  desktop=new DesktopBridge({dataDir:app.getPath('userData'),enabled:()=>config.browserPlay,
+    changed:(state:DesktopState)=>{const b=state.browser,wa=screen.getPrimaryDisplay().workArea;win?.webContents.send('desktop:state',{browser:b?{...b,x:b.x-wa.x,y:b.y-wa.y}:null});},
+    cutout:cutout=>{const wa=screen.getPrimaryDisplay().workArea;win?.webContents.send('desktop:cutout',{...cutout,x:cutout.x-wa.x,y:cutout.y-wa.y});}});
+  desktop.start().catch(err=>{desktopError=`Chrome bridge could not start: ${(err as Error).message}`;console.error(desktopError);desktop=null;});
 });
-app.on('will-quit', () => { clearTimeout(saveTimer); saveConfig(); watcher?.stop(); });
+app.on('will-quit', () => { clearTimeout(saveTimer); saveConfig(); watcher?.stop();fileWatcher?.stop();void desktop?.stop(); });
 app.on('window-all-closed', () => app.quit());

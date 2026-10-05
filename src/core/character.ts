@@ -243,6 +243,9 @@ export class Character {
   /** In a fight: health (0 = knocked out) and poise (balance; it runs out from taking or blocking hits). */
   hp = 1;
   poise = 1;
+  /** Pressure persists through an exchange; recovery begins only after a quiet gap. */
+  poiseDelay = 0;
+  breakCount = 0;
   /** Poise broken: stumbling, wide open, for this long (seconds). */
   stagger = 0;
   private fightDrop = 0;
@@ -1015,9 +1018,14 @@ export class Character {
     this.modeTime += dt;
     this.stun = Math.max(0, this.stun - dt);
     this.hitstun = Math.max(0, this.hitstun - dt);
+    const wasBroken=this.stagger>0;
     this.stagger = Math.max(0, this.stagger - dt);
-    // Poise comes back while he isn't being hit (faster when he's not on guard against an attack).
-    if (this.stagger <= 0 && this.hitstun <= 0) this.poise = Math.min(1, this.poise + dt * (this.poise < 0.3 ? 0.35 : 0.2));
+    if(wasBroken && this.stagger===0){this.poise=Math.max(this.poise,0.65);this.poiseDelay=0.6;}
+    this.poiseDelay = Math.max(0, this.poiseDelay - dt);
+    if (this.stagger <= 0 && this.hitstun <= 0 && this.poiseDelay <= 0) {
+      const recovering = !this.fightPose?.block && !this.fightPose?.act;
+      this.poise = Math.min(1, this.poise + dt * (recovering ? 0.16 : 0.035));
+    }
     this.strike = null;
     const t: Targets = {};
     const s: Strengths = {};

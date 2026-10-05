@@ -2,6 +2,50 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest work: combat, cursor weapons, a larger group, and native integration (in progress)
+
+The owner uses Chrome on Mac. They asked for cleaner physics/code, guns and cursor weapons, broader
+combat animation with purposeful hidden guard pressure, more pen-created tools, richer offline/AI life,
+and up to five interacting figures. Exporting separate pet apps is explicitly postponed.
+Break pressure stays hidden; General has a developer toggle. Existing appearance and movement presets remain.
+
+- Combat: wider winding/follow-through poses, full arm extension, a telegraphed feint, and state-based
+  attack sequences (recover, approach, probe, break a guard, punish). Match approach distances to physical
+  blade reach rather than the animation's nominal reach. Pressure takes time to recover and a broken
+  guard leaves a punish window. Separate swept-projectile and cursor-weapon modules.
+- Pistol: foam rounds in play mode, aimed bursts and recoil, an item-owned six-round magazine, reloads,
+  and swept hits against figures/window tops. Cursor sword/mace/pistol in General; hold to swing/fire.
+  Arming catches desktop clicks, with a visible Put away control. It does not require a paid service.
+- Pen: drawtool/drawgun draw a functional ink item, including its original use. Replacements do not
+  accumulate. Duel picks an existing ink version before handing out a replacement built-in.
+- Group: 2–5 via General. Every figure has stable identity, config/memory, its own relationship map,
+  a selected partner, and a distinct default personality. All peer exchanges remain snapshots/messages.
+  Shared prop subscriptions can be removed when a figure leaves, avoiding callback accumulation.
+- Offline: ordered requests, named partners, simple memory/mood conversation and varied replies.
+  AI sees the group and available actions, can target a companion with `with`, and falls back locally
+  when a request fails. Autonomous failed requests back off; explicit chat can retry immediately.
+- Chrome: unpacked extension in dist/extension/chrome. Per-page activeTab permission, explicit element
+  picker, local authenticated loopback bridge, screenshot fragments rather than executable page HTML,
+  reversible visibility changes, restoration, and actual tab closing. Native window closing presses
+  the normal close button / posts WM_CLOSE; success means requested, since an app may show a save prompt.
+- **File request correction:** the owner rejected HTML rooms opened in Chrome. That approach was removed
+  before integration. FileHabitats now associates a figure with an **existing** file/folder path and
+  follows its actual Finder/Explorer/document window. It hides when the window closes and clips behind
+  other windows. No placeholder files are written. This is still rendering through our overlay, not
+  arbitrary animated content injected into Finder. Do not describe it as native Finder content.
+  Finder enumeration is a fixed read-only JXA script, Explorer uses Shell.Application. Accessibility's
+  document URL supports Mac document apps that expose it; universal file-app detection is not established.
+
+Verified so far: typecheck/build, 50 focused checks, full simulation seed 1, baseline two-figure
+300-second soak seed 1, Chromium functional smoke. Magazine persistence checks and a five-figure 300-second soak seed 1 pass; both soaks report no trouble seen.
+Actual Mac Accessibility/Automation, real Chrome extension permissions, and native window close need
+hardware checks. No real AI calls or provider keys were used. Do not claim those hardware paths verified.
+
+Next: finish new checks, five-figure soak and browser integration checks; review native path handling and
+clipping; finish docs and a runnable commit. Ask for Mac feedback on real-folder visits before treating
+that request as fully satisfied. Primary references: Apple Finder Sync supports badges/menus/toolbars,
+not an arbitrary animation pane; kAXDocumentAttribute is the represented document's URL.
+
 ## Latest: two figures that live together, rigid furniture, bows, a soak test, and the desktop-switch bug
 
 Owner's asks: they walk into each other and stall; they hardly interact; things pop in and out of each other

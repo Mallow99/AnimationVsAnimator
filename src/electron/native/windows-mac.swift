@@ -31,6 +31,8 @@ let lock = NSLock()
 var refocusWanted = false
 // Window moves waiting to happen (only the newest per window matters), done on the main loop.
 var pendingMoves: [Int: CGPoint] = [:]
+var pendingCloses: [(Int, Int)] = []
+var inputBuffer = ""
 var pidOf: [Int: pid_t] = [:]
 var axCache: [Int: AXUIElement] = [:]
 var askedTrust = false
@@ -102,9 +104,9 @@ func frameOf(_ e: AXUIElement) -> CGRect? {
   AXValueGetValue(s as! AXValue, .cgSize, &sz)
   return CGRect(origin: pt, size: sz)
 }
-func jsonString(_ s: String) -> String {
+func jsonString(_ s: String, _ limit: Int = 80) -> String {
   var out = "\""
-  for ch in s.prefix(80).unicodeScalars {
+  for ch in s.prefix(limit).unicodeScalars {
     switch ch {
     case "\"": out += "\\\""
     case "\\": out += "\\\\"
@@ -119,7 +121,7 @@ var lastUIAt = Date.distantPast
 func scanUI() {
   lock.lock(); let pid = frontPid, name = frontName; lock.unlock()
   if pid < 0 { return }
-  var title = "", wid: CGWindowID = 0
+  var title = "", document = "", wid: CGWindowID = 0
   var els: [CGRect] = []
   if AXIsProcessTrusted() {
     let app = AXUIElementCreateApplication(pid)
@@ -128,6 +130,7 @@ func scanUI() {
     if !manualAX.contains(pid) { manualAX.insert(pid); AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue) }
     if let w = attr(app, kAXFocusedWindowAttribute) {
       let win = w as! AXUIElement
+      if let doc = attr(win, kAXDocumentAttribute) as? String, let url = URL(string: doc), url.isFileURL { document = url.standardizedFileURL.path }
       title = attr(win, kAXTitleAttribute) as? String ?? ""
       _ = _AXUIElementGetWindow(win, &wid)
       if let wf = frameOf(win) {
@@ -149,7 +152,7 @@ func scanUI() {
     }
   }
   let rects = els.map { "[\(Int($0.minX)),\(Int($0.minY)),\(Int($0.width)),\(Int($0.height))]" }.joined(separator: ",")
-  let json = "{\"ui\":{\"app\":\(jsonString(name)),\"title\":\(jsonString(title)),\"win\":\(wid),\"trusted\":\(AXIsProcessTrusted()),\"els\":[\(rects)]}}"
+  let json = "{\"ui\":{\"app\":\(jsonString(name)),\"title\":\(jsonString(title)),\"document\":\(jsonString(document, 4096)),\"win\":\(wid),\"trusted\":\(AXIsProcessTrusted()),\"els\":[\(rects)]}}"
   if json != lastUI || Date().timeIntervalSince(lastUIAt) > 10 { lastUI = json; lastUIAt = Date(); emit(json) }
 }
 DispatchQueue.global(qos: .utility).async {
@@ -162,25 +165,33 @@ DispatchQueue.global(qos: .utility).async {
 
 FileHandle.standardInput.readabilityHandler = { h in
   let data = h.availableData
-  if data.isEmpty { exit(0) } // the pet app quit
-  let text = String(decoding: data, as: UTF8.self)
-  if text.contains("refocus") { lock.lock(); refocusWanted = true; lock.unlock() }
-  if text.contains("ui on") { lock.lock(); uiOn = true; lock.unlock() }
-  if text.contains("ui off") { lock.lock(); uiOn = false; lock.unlock() }
-  for line in text.split(separator: "\n") where line.hasPrefix("win ") {
+  if data.isEmpty { exit(0) }
+  inputBuffer += String(decoding: data, as: UTF8.self)
+  while let end = inputBuffer.firstIndex(of: "\n") {
+    let line = String(inputBuffer[..<end]); inputBuffer.removeSubrange(...end)
     let parts = line.split(separator: " ")
-    if parts.count == 4, let id = Int(parts[1]), let x = Double(parts[2]), let y = Double(parts[3]) {
+    if line == "refocus" { lock.lock(); refocusWanted = true; lock.unlock() }
+    else if line == "ui on" || line == "ui off" { lock.lock(); uiOn = line == "ui on"; lock.unlock() }
+    else if parts.count == 4, parts[0] == "win", let id = Int(parts[1]), let x = Double(parts[2]), let y = Double(parts[3]) {
       lock.lock(); pendingMoves[id] = CGPoint(x: x, y: y); lock.unlock()
+    } else if parts.count == 3, parts[0] == "close", let request = Int(parts[1]), let id = Int(parts[2]) {
+      lock.lock(); pendingCloses.append((request, id)); lock.unlock()
+    } else if parts.count == 3, parts[0] == "cursor", let x = Double(parts[1]), let y = Double(parts[2]) {
+      CGWarpMouseCursorPosition(CGPoint(x: x, y: y)); CGAssociateMouseAndMouseCursorPosition(1)
     }
   }
-  // Only the newest cursor position matters.
-  if let line = text.split(separator: "\n").last(where: { $0.hasPrefix("cursor ") }) {
-    let parts = line.split(separator: " ")
-    if parts.count == 3, let x = Double(parts[1]), let y = Double(parts[2]) {
-      CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
-      CGAssociateMouseAndMouseCursorPosition(1) // keep the mouse responsive right after the move
-    }
+}
+func closeWindow(_ request: Int, _ id: Int) {
+  var ok = false, message = "This window has no accessible close button."
+  if !AXIsProcessTrusted() { message = "Allow Accessibility in System Settings to close windows." }
+  else if let w = axWindow(id), let button = attr(w, kAXCloseButtonAttribute) {
+    AXUIElementSetMessagingTimeout(w, 0.25)
+    let err = AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString)
+    ok = err == .success
+    message = ok ? "Close requested. The app may ask you to save." : "The app refused its close button (AX error \(err.rawValue))."
+    if !ok { axCache[id] = nil }
   }
+  emit("{\"action\":{\"id\":\(request),\"ok\":\(ok),\"message\":\(jsonString(message))}}")
 }
 
 while true {
@@ -189,9 +200,10 @@ while true {
       userApp = front
       lock.lock(); frontPid = front.processIdentifier; frontName = front.localizedName ?? ""; lock.unlock()
     }
-    lock.lock(); let want = refocusWanted; refocusWanted = false; let moves = pendingMoves; pendingMoves = [:]; lock.unlock()
+    lock.lock(); let want = refocusWanted; refocusWanted = false; let moves = pendingMoves; pendingMoves = [:]; let closes = pendingCloses; pendingCloses = []; lock.unlock()
     if want, let app = userApp { app.activate(options: []) }
     for (id, p) in moves { moveWindow(id, p) }
+    for (request, id) in closes { closeWindow(request, id) }
     var out: [String] = []
     let opts: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
     if let list = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] {

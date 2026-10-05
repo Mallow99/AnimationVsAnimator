@@ -13,6 +13,8 @@ import type { HitKind } from './fighting';
 import type { V3, Vec } from './math';
 
 export interface FighterView {
+  id?: string;
+  partner?: string | null;
   name: string;
   color: string;
   /** Doing something of his own that he wouldn't drop for a fight (a game, sleeping...). */

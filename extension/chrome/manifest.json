@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Stick figures — Chrome bridge",
+  "version": "0.2.0",
+  "description": "Let your desktop stick figures interact with a page you connect, and take a selected page fragment onto the desktop.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "action": { "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js" }
+}

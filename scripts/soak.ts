@@ -6,6 +6,7 @@
 //   other; sitting but not on the seat; furniture losing its shape, sinking into the floor, or off screen.
 // Run: npm run soak            (5 minutes, seed 1)
 //      SOAK_SECONDS=120 SOAK_SEED=4 npm run soak
+import {companionConfig} from '../src/core/config';
 import { Pet, DEFAULT_CONFIG, friendConfig } from '../src/core/pet';
 
 const seconds = Number(process.env.SOAK_SECONDS ?? 300), seed = Number(process.env.SOAK_SEED ?? 1);
@@ -15,16 +16,18 @@ Math.random = () => { st = (st + 0x6d2b79f5) >>> 0; let t = st; t = Math.imul(t 
 const bounds = { left: 0, right: 1400, top: 0, floor: 800 };
 const cfg = { ...structuredClone(DEFAULT_CONFIG), destructible: true };
 const a = new Pet(bounds, cfg), b = new Pet(bounds, friendConfig(cfg), { props: a.props });
-const pets = [a, b];
-a.others = [b]; b.others = [a];
+const count=Math.max(2,Math.min(5,Number(process.env.SOAK_FIGURES??2)));
+const pets=[a,b];for(let id=2;id<count;id++)pets.push(new Pet(bounds,companionConfig(cfg,id),{props:a.props}));
+for(const p of pets)p.others=pets.filter(other=>other!==p);
 const wins = [{ id: 1, x: 120, y: 520, w: 360, h: 280 }, { id: 2, x: 900, y: 380, w: 420, h: 420 }];
 for (const p of pets) p.setWindows(wins.map((w) => ({ ...w })));
 for (const p of pets) p.onMoveWindow = (id, x, y) => { const w = wins.find((v) => v.id === id); if (w) { w.x = x; w.y = y; } for (const q of pets) q.setWindows(wins.map((v) => ({ ...v }))); };
 a.props.spawn('couch', 640, 600, a.char.scale);
 a.props.spawn('tv', 640 + 230 * a.char.scale, 600, a.char.scale);
 a.props.spawn('chair', 300, 300, a.char.scale);
-b.char.body.translate(200, 0);
+b.char.body.translate(200,0);for(let id=2;id<count;id++)pets[id].char.body.translate(100+id*190-pets[id].char.x,0);
 
+const overlaps=new Map<string,number>();
 const issues = new Map<string, { n: number; first: number; note: string }>();
 const report = (key: string, t: number, note: string) => {
   const i = issues.get(key);
@@ -77,6 +80,7 @@ for (let i = 0; i < seconds * 120; i++) {
 
   pets.forEach((p, k) => {
     const ch = p.char, j = ch.body.j, tr = track[k], name = p.config.name;
+    const other=pets.filter(other=>other!==p).sort((a,b)=>Math.abs(a.char.x-ch.x)-Math.abs(b.char.x-ch.x))[0];
     const sk = p.mind.skill?.name ?? '-';
     seenSkills.add(sk);
     if (sk !== tr.skill) starts.set(sk, (starts.get(sk) ?? 0) + 1);
@@ -93,20 +97,20 @@ for (let i = 0; i < seconds * 120; i++) {
     // Walking without getting anywhere.
     if (ch.walking && ch.mode === 'ground') {
       if (tr.walkT === 0) { tr.walkT = t; tr.walkFrom = ch.x; }
-      else if (t - tr.walkT > 3) { if (Math.abs(ch.x - tr.walkFrom) < 6) report(`${name}: walking but stuck${Math.abs(ch.x - pets[1 - k].char.x) < 30 * ch.scale ? ' (blocked by the other one)' : ''}`, t, `x=${ch.x.toFixed(0)} goal=${(ch as unknown as { goalX: number }).goalX?.toFixed(0)} skill=${sk} other at ${pets[1 - k].char.x.toFixed(0)} (${pets[1 - k].mind.skill?.name})`); tr.walkT = t; tr.walkFrom = ch.x; }
+      else if (t - tr.walkT > 3) { if (Math.abs(ch.x - tr.walkFrom) < 6) report(`${name}: walking but stuck${Math.abs(ch.x - other.char.x) < 30 * ch.scale ? ' (blocked by the other one)' : ''}`, t, `x=${ch.x.toFixed(0)} goal=${(ch as unknown as { goalX: number }).goalX?.toFixed(0)} skill=${sk} other at ${other.char.x.toFixed(0)} (${other.mind.skill?.name})`); tr.walkT = t; tr.walkFrom = ch.x; }
     } else tr.walkT = 0;
     // Sitting, but not on the seat.
     const seat = (ch as unknown as { seat: { x: number; y: number } | null }).seat;
     // (For more than half a second: sitting down, his hips take a moment to get there.)
     tr.offSeat = ch.mode === 'sit' && seat && Math.hypot(j.hip.x - seat.x, j.hip.y - seat.y) > 18 * ch.scale ? tr.offSeat + DT : 0;
-    if (seat && tr.offSeat > 0.5) report(`${name}: sitting off the seat`, t, `off=${Math.hypot(j.hip.x - seat.x, j.hip.y - seat.y).toFixed(0)} skill=${sk} hip=${j.hip.x.toFixed(0)},${j.hip.y.toFixed(0)} seat=${seat.x.toFixed(0)},${seat.y.toFixed(0)} other=${pets[1 - k].char.mode}/${pets[1 - k].mind.skill?.name}`);
+    if (seat && tr.offSeat > 0.5) report(`${name}: sitting off the seat`, t, `off=${Math.hypot(j.hip.x - seat.x, j.hip.y - seat.y).toFixed(0)} skill=${sk} hip=${j.hip.x.toFixed(0)},${j.hip.y.toFixed(0)} seat=${seat.x.toFixed(0)},${seat.y.toFixed(0)} other=${other.char.mode}/${other.mind.skill?.name}`);
   });
-  // Standing inside each other (outside a fight).
-  {
-    const ha = a.char.body.j.hip, hb = b.char.body.j.hip;
-    const close = Math.abs(ha.x - hb.x) < 10 * a.char.scale && Math.abs(ha.y - hb.y) < 20 && Math.abs(ha.z - hb.z) < 12 && a.char.mode === 'ground' && b.char.mode === 'ground';
-    track[0].overlapT = close ? track[0].overlapT + DT : 0;
-    if (track[0].overlapT > 2) { report('standing inside each other', t, `${a.mind.skill?.name}/${b.mind.skill?.name}`); track[0].overlapT = 0; }
+  // Check every pair for sustained overlap, including the additional figures.
+  for(let ai=0;ai<pets.length;ai++)for(let bi=ai+1;bi<pets.length;bi++){
+    const a=pets[ai],b=pets[bi],ha=a.char.body.j.hip,hb=b.char.body.j.hip;
+    const close=Math.abs(ha.x-hb.x)<10*a.char.scale && Math.abs(ha.y-hb.y)<20 && Math.abs(ha.z-hb.z)<12 && a.char.mode==='ground' && b.char.mode==='ground';
+    const key=`${ai}-${bi}`,value=close?(overlaps.get(key)??0)+DT:0;overlaps.set(key,value);
+    if(value>2){report(`standing inside each other (${a.config.name}/${b.config.name})`,t,`${a.mind.skill?.name}/${b.mind.skill?.name}`);overlaps.set(key,0);}
   }
   // Furniture keeps its shape, stays out of the floor and on screen.
   for (const th of a.props.things) {
@@ -122,7 +126,9 @@ for (let i = 0; i < seconds * 120; i++) {
   }
 }
 
-console.log(`soak: ${seconds}s, seed ${seed}. They did: ${[...starts].filter(([s]) => s !== '-').sort((x, y) => y[1] - x[1]).map(([s, n]) => `${s}×${n}`).join(', ')}. Bond: ${a.ctx.feel.bond.toFixed(2)} / ${b.ctx.feel.bond.toFixed(2)}`);
+console.log(`soak: ${seconds}s, seed ${seed}, ${count} figures. They did: ${[...starts].filter(([s]) => s !== '-').sort((x, y) => y[1] - x[1]).map(([s, n]) => `${s}×${n}`).join(', ')}. Bond: ${a.ctx.feel.bond.toFixed(2)} / ${b.ctx.feel.bond.toFixed(2)}`);
 if (process.env.SOAK_SOCIAL) console.log('social blockers:', JSON.stringify([...socialWhy].sort((x, y) => y[1] - x[1])));
 if (!issues.size) console.log('no trouble seen');
 for (const [k, i] of [...issues].sort((x, y) => y[1].n - x[1].n)) console.log(`  ${k}: ${i.n}x, first at ${i.first.toFixed(1)}s  ${i.note}`);
+
+if(issues.size)process.exitCode=1;

@@ -774,9 +774,12 @@ export class Props {
   things: Thing[] = [];
   /** Wet ink: a line he's drawing right now that's already solid enough to stand on (a ramp or bridge on its way). */
   wet = new Map<number, Platform>();
-  setWet(id: number, p: Platform | null) { if (p) this.wet.set(id, p); else this.wet.delete(id); this.onPlatforms?.(); }
+  setWet(id: number, p: Platform | null) { if (p) this.wet.set(id, p); else this.wet.delete(id); this.changedPlatforms(); }
   /** Called when platforms change (appear, vanish, or move): the world's platforms need updating. */
   onPlatforms: (() => void) | null = null;
+  private platformListeners=new Set<()=>void>();
+  subscribePlatforms(listener:()=>void) {this.platformListeners.add(listener);return ()=>{this.platformListeners.delete(listener);};}
+  private changedPlatforms(){this.onPlatforms?.();for(const listener of this.platformListeners)listener();}
 
   /** A finished drawing comes to life. */
   bringToLife(d: Doodle, kind: 'ball' | 'box' | 'platform' | 'ramp' | 'bridge', bounds: Bounds) {
@@ -805,10 +808,10 @@ export class Props {
     this.things.push(t);
     const drawn = this.things.filter((x) => !x.forever);
     if (drawn.length > 8) this.things.splice(this.things.indexOf(drawn[0]), 1);
-    this.onPlatforms?.();
+    this.changedPlatforms();
   }
 
-  remove(t: Thing) { this.things = this.things.filter((x) => x !== t); this.onPlatforms?.(); }
+  remove(t: Thing) { this.things = this.things.filter((x) => x !== t); this.changedPlatforms(); }
 
   // ── props from his inventory ──
   defs = new Map<string, PropDef>(BUILTIN_PROPS.map((d) => [d.id, d]));
@@ -858,7 +861,7 @@ export class Props {
     for (const t of this.things) t.end(bounds);
     const all = [...world, ...this.platforms];
     for (const b of this.balls) b.step(dt, bounds, all);
-    if (moved) this.onPlatforms?.();
+    if (moved) this.changedPlatforms();
     return moved;
   }
 

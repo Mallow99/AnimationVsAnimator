@@ -255,9 +255,16 @@
         <input type="text" id="name" maxlength="40" />
       </div>
       <div class="group">
-        <h2>Two stick figures</h2>
+        <h2>The group</h2>
         <div class="card">
-          <label class="switch"><span><span class="row-label">Second stick figure</span><br /><small class="note">Another one just like him, with their own settings window (in their color), their own name, look, mind, memories and AI brain. Talk to either one; they share the furniture, spar with each other, and back each other up against your cursor. Open their settings from the tray icon or their right-click menu.</small></span><input type="checkbox" id="friendOn" /></label>
+          <label class="switch"><span><span class="row-label">Companions</span><br /><small class="note">Another one just like him, with their own settings window (in their color), their own name, look, mind, memories and AI brain. Talk to either one; they share the furniture, spar with each other, and back each other up against your cursor. Open their settings from the tray icon or their right-click menu.</small></span><input type="checkbox" id="friendOn" /></label>
+          <label class="row-label" for="figureCount">Figures on the desktop</label>
+          <select id="figureCount"><option value="2">Blurp and Leonard</option><option value="3">Three figures</option><option value="4">Four figures</option><option value="5">Five figures</option></select>
+          <small class="note">Each has their own settings in the tray. Keep their current size, or adjust Size below if the desktop feels crowded.</small>
+          <label class="row-label" for="personality">His offline personality</label>
+          <select id="personality"><option value="inventive">Inventive</option><option value="competitive">Competitive</option><option value="gentle">Gentle</option><option value="mischievous">Mischievous</option><option value="adventurous">Adventurous</option></select>
+          <label class="switch"><span>Make tools with his pen</span><input type="checkbox" id="drawTools" /></label>
+          <label class="switch"><span>Developer: show break pressure during fights</span><input type="checkbox" id="debugCombat" /></label>
           <label class="row-label" for="fightMode">Fights</label>
           <select id="fightMode">
             <option value="play">Play fights: fists, foam and wooden swords (nobody gets hurt)</option>
@@ -284,6 +291,20 @@
           <label class="switch"><span><span class="row-label">Smack mode</span><br /><small class="note">Swipe the cursor through him fast to smack him. Off so it doesn't happen by accident.</small></span><input type="checkbox" id="smacking" /></label>
         </div>
       </div>
+      <div class="group"><h2>Chrome and your files</h2><div class="card">
+        <label class="switch"><span><span class="row-label">Play with connected Chrome pages</span><br><small class="note">The extension grants one page at a time. They can close that tab, take a selected element onto the desktop, and restore it. Page fragments stay on your computer.</small></span><input type="checkbox" id="browserPlay"></label>
+        <div class="btns"><button class="btn ghost small" id="extensionFolder">Open Chrome extension folder</button><button class="btn ghost small" id="pairChrome">Copy Chrome pairing link</button></div>
+        <small class="note">In Chrome, open chrome://extensions, enable Developer mode, then Load unpacked and choose that folder. Open the extension, paste the pairing link, and connect the page.</small>
+        <small class="note" id="chromeInfo"></small>
+        <label class="switch"><span><span class="row-label">Allow requested window closing</span><br><small class="note">When you ask, they press the front window's normal close button. The app may still ask you to save. On Mac this needs Accessibility.</small></span><input type="checkbox" id="closeWindows"></label>
+        <label class="switch"><span><span class="row-label">Visit real files and folders</span><br><small class="note">A visiting figure appears inside the matching Finder / Explorer window and hides when it closes. Finder may request Automation permission. Files work when their app reports the document path. Your files are not modified.</small></span><input type="checkbox" id="fileHomes"></label>
+        <div class="btns"><button class="btn ghost small" id="chooseHabitat">Enter a file / folder…</button><button class="btn ghost small" id="returnHome">Return to desktop</button></div>
+        <small class="note" id="fileInfo"></small>
+      </div></div>
+      <div class="group"><h2>Your cursor weapons</h2><div class="card">
+        <p class="note">Hold the mouse button and swing. The pistol aims at the nearest figure. This mode catches desktop clicks; use Put away to return to normal.</p>
+        <div class="btns"><button class="btn ghost" data-weapon="sword">Sword</button><button class="btn ghost" data-weapon="mace">Mace</button><button class="btn ghost" data-weapon="gun">Pistol</button><button class="btn ghost" data-weapon="none">Put away</button></div>
+      </div></div>
       <div class="group">
         <h2>Brain</h2>
         <div class="card">

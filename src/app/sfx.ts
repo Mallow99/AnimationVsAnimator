@@ -94,6 +94,7 @@ export function playSfx(name: string, strength = 1, volume = 0.6, pitch = 1) {
       tone(a, out, 'square', 900, 900, 0.03, 0.06);
       tone(a, out, 'square', 1300, 1300, 0.04, 0.06, 0.06);
       break;
+    case 'shot': hiss(a,out,'highpass',2400,600,0.08,s*0.55); tone(a,out,'square',160,50,0.1,s*0.25); break;
     case 'whoosh': // sword swing
       hiss(a, out, 'bandpass', 500, 2600, 0.2, 0.22, 0, 2.5);
       break;

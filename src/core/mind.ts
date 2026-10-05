@@ -20,6 +20,9 @@ import {
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 import { AskTogether, isAct, NapTogether, ShoulderBump, Together, WaveAt, type Act } from './skills/together';
+import { DrawTool } from './skills/draw-tool';
+import { ShootGun } from './skills/gun';
+import { DesktopInteraction } from './skills/desktop';
 import { ShootBow } from './skills/archery';
 import type { FighterView } from './peer';
 
@@ -74,7 +77,7 @@ const APP_LINES: Record<string, string[]> = {
 
 /** One step of a plan (from his AI brain): done in order. */
 export type PlanStep =
-  | { do: string }
+  | { do: string; with?: string }
   | { say: string }
   | { wait: number }
   | { walk: 'left' | 'right' | 'cursor' | 'away' }
@@ -108,6 +111,7 @@ class PlanSkill extends Skill {
     this.settle = 0;
     if (++this.i >= this.steps.length) return true;
     const st = this.steps[this.i];
+    if('do' in st && st.with){const peer=c.peers?.().find(p=>p.id===st.with || p.name.toLowerCase()===st.with!.toLowerCase());if(!peer?.id || !c.selectPeer?.(peer.id)){c.say('I cannot find that friend.',1.5);return false;}}
     if ('say' in st) { c.say(st.say); this.waitLeft = Math.min(3, 0.8 + st.say.length * 0.04); return false; }
     if ('wait' in st) { this.waitLeft = Math.min(5, Math.max(0, st.wait)); return false; }
     const sub = 'do' in st ? this.mind.makeSkill(c, st.do)
@@ -199,6 +203,10 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'highfive', label: 'High five his friend' }, { name: 'fistbump', label: 'Fist bump his friend' }, { name: 'handshake', label: 'Shake hands with his friend' },
   { name: 'pattycake', label: 'Patty cake with his friend' }, { name: 'hug', label: 'Hug his friend' }, { name: 'bump', label: 'Bump into his friend (rude)' },
   { name: 'chat', label: 'Go talk to his friend' }, { name: 'waveat', label: 'Wave at his friend' }, { name: 'sitwith', label: 'Sit with his friend' }, { name: 'naptogether', label: 'Nap next to his friend' }, { name: 'jointv', label: 'Join his friend at the TV' },
+  {name:'closetab',label:'Close connected Chrome tab'}, {name:'closewindow',label:'Close front window'},
+  {name:'pluck',label:'Take selected page element'}, {name:'restorepage',label:'Restore the Chrome page'}, {name:'folder',label:'Enter a real file / folder'},
+  { name: 'drawtool', label: 'Draw a working tool' }, { name: 'drawgun', label: 'Draw a pistol' },
+  { name: 'gun', label: 'Fire pistol at the cursor' },
   { name: 'shoot', label: 'Shoot arrows at the cursor' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
@@ -413,6 +421,9 @@ export class Mind {
 
   /** Build the skill for a command name (null if he can't do it right now). */
   makeSkill(c: Ctx, name: string): Skill | null {
+    if(['closetab','closewindow','pluck','restorepage','folder'].includes(name))return new DesktopInteraction(name as import('../shared/desktop').DesktopAction);
+    if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun',true) : null;
+    if(name==='drawtool')return c.items.find('draw') && c.char.useHand ? new DrawTool('foam-sword',true) : null;
     if (name === 'wake') { c.mood.asleep = false; return new Sequence('wake', [{ wait: 0.1 }]); }
     if (name === 'grabcursor' && !c.canGrabCursor) return null;
     if (name === 'loseArm' || name === 'loseLeg') {
@@ -472,7 +483,7 @@ export class Mind {
     // Square the scores so strong urges win more often; avoid repeating himself.
     let total = 0;
     const weights = opts.map((o) => {
-      const wt = o.score > 0 ? o.score * o.score * (o.name === this.last ? 0.3 : 1) * rand(0.7, 1.3) : 0;
+      const wt = o.score > 0 ? o.score * o.score * (o.name === this.last ? 0.3 : 1) / (1+this.history.slice(-6).filter(name=>name===o.name).length*0.6) * rand(0.85, 1.15) : 0;
       total += wt;
       return wt;
     });
@@ -542,6 +553,8 @@ export class Mind {
     const fun = L === 'playful' ? 0.25 : L === 'bored' ? 0.2 : 0.04;
     const swordTaken = c.items.list.some((it) => it.def.use === 'swing' && it.where === 'cursor') && !c.items.list.some((it) => it.def.use === 'swing' && it.where !== 'cursor');
     const opts: Option[] = [];
+    if(canDraw && c.drawTools && fresh)opts.push({name:'drawtool',why:'making something useful with his pen',
+      score:0.18+s.boredom*0.4,make:()=>{this.lastDoodle=w.time;const tool=c.items.list.find(it=>!it.def.drawn && ['swing','smash','gun'].includes(it.def.use) && ['belt','hand'].includes(it.where));return new DrawTool(tool?.def.id ?? 'foam-sword',true);}});
     const draw = (name: string, shape: keyof typeof LIVE_SHAPES, becomes: Becomes, then: PlanStep[], why: string, score: number) =>
       opts.push({ name, why, score: canDraw && fresh ? score : 0, make: () => { this.lastDoodle = w.time; return new PlanSkill(this, [{ draw: LIVE_SHAPES[shape], title: shape, becomes }, ...then]); } });
     draw('drawball', 'ball', 'ball', [{ do: 'kick' }], 'wants something to kick around', fun * 0.8 + s.boredom * 0.1);
@@ -598,6 +611,9 @@ export class Mind {
         score: d > 120 && d < 900 && cur.y < ch.body.j.hip.y ? (L === 'angry' ? 0.9 : L === 'playful' ? 0.35 : L === 'bored' ? 0.25 : 0.02) : 0,
         make: () => new ShootBow(L === 'angry' ? 3 : 2, () => w.cursor, 'cursor') });
     }
+    const gun=c.items.find('gun');
+    if(gun && ['belt','hand'].includes(gun.where) && ch.useHand && cur)opts.push({name:'gun',why:'aiming his pistol',
+      score:L==='angry'?0.65:L==='playful'?0.3:0.05,make:()=>new ShootGun(()=>w.cursor,'cursor',3)});
     const ball = c.items.find('throw');
     if (ball && ball.where !== 'cursor' && ch.useHand && ch.legCount === 2) {
       const active = !!cur && w.time - w.cursorMovedAt < 8;

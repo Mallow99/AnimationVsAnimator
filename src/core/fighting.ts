@@ -5,7 +5,7 @@ import type { AttackKind } from './character';
 /** Sword moves (see skills/swordplay.ts). */
 export type SwordKind = 'cut' | 'thrust' | 'rising' | 'heavy' | 'spin' | 'flurry' | 'dash' | 'aircut';
 /** What kind of hit landed: a fist or a foot, a sword move, any swung thing, something thrown. */
-export type HitKind = AttackKind | SwordKind | 'slash' | 'thrown' | 'arrow';
+export type HitKind = AttackKind | SwordKind | 'slash' | 'thrown' | 'arrow' | 'bullet';
 
 /**
  * push: px/s away from the hitter. up: px/s (negative = up). launch: the whole body flies (he recovers in
@@ -33,13 +33,14 @@ export const HITS: Record<HitKind, { push: number; up: number; launch: boolean; 
   aircut: { push: 380, up: 120, launch: false, down: false, stun: 0.45, dmg: 0.15, poise: 0.4 },
   slash: { push: 440, up: -60, launch: false, down: false, stun: 0.36, dmg: 0.1, poise: 0.2 },
   thrown: { push: 300, up: -80, launch: false, down: false, stun: 0.3, dmg: 0.05, poise: 0.12 },
+  bullet: { push: 330, up: -80, launch: false, down: false, stun: 0.26, dmg: 0.09, poise: 0.18 },
   arrow: { push: 240, up: -40, launch: false, down: false, stun: 0.3, dmg: 0.1, poise: 0.12 },
 };
 
 /** Where each attack comes in (what height a block has to be at to stop it). */
 export const HIT_HEIGHT: Record<string, 'high' | 'mid' | 'low'> = {
   cut: 'mid', thrust: 'mid', flurry: 'mid', spin: 'mid', dash: 'mid', slash: 'mid', heavy: 'high', aircut: 'high', rising: 'low', sweep: 'low',
-  jab: 'mid', punch: 'mid', cross: 'mid', swat: 'mid', kick: 'mid', uppercut: 'mid', frontkick: 'mid', highkick: 'high', roundhouse: 'high', air: 'high', thrown: 'mid', arrow: 'mid', shoot: 'mid',
+  jab: 'mid', punch: 'mid', cross: 'mid', swat: 'mid', kick: 'mid', uppercut: 'mid', frontkick: 'mid', highkick: 'high', roundhouse: 'high', air: 'high', thrown: 'mid', arrow: 'mid', bullet: 'mid', gun: 'mid', shoot: 'mid',
 };
 
 /** Closest distance between segments ab and cd (in x, y): do two blades cross? */
