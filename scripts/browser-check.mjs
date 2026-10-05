@@ -192,9 +192,85 @@ try {
   assert.equal(await evaluate('window.habitats.activePets[0].ctx.who===window.pet.ctx.who'),true);
   await evaluate('window.habitats.refresh([])');assert.equal(await evaluate('window.habitats.activePets.length'),0);
   await evaluate('window.habitats.returnHome(0)');assert.equal(await evaluate('window.pet.paused'),false);
+  // The physical bag uses real pointer input, and removed objects restore their original identity.
+  await evaluate('for (const p of window.pets) { p.mind.reset(p.ctx); p.paused = true; p.setWindows([]); }');
+  const centerOf = async selector => evaluate(`(() => {const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+  const mouse = async (type, at, down = false) => send('Input.dispatchMouseEvent', {type,...at,button:type==='mouseMoved'?'none':'left',buttons:down?1:0,clickCount:1});
+  const click = async selector => { const at=await centerOf(selector);await mouse('mouseMoved',at);await mouse('mousePressed',at,true);await mouse('mouseReleased',at); };
+  await click('#grabBag');
+  assert.equal(await evaluate('document.querySelector("#bagPanel").hidden'),false);
+  assert(await evaluate('document.querySelectorAll(".bag-choice canvas").length >= 17'));
+  const bagShot=await send('Page.captureScreenshot',{format:'png'});
+  writeFileSync(join(root,'.build/browser-grab-bag.png'),Buffer.from(bagShot.data,'base64'));
+  // Pull a book into empty world space.
+  const booksBefore = await evaluate('JSON.parse(window.pet.save()).items.filter(i=>i.id==="book").length');
+  const bookCard=await centerOf('.bag-choice[data-id="book"]');
+  await mouse('mousePressed',bookCard,true);
+  assert(await evaluate('window.toolBag.dragging'));
+  await evaluate('window.bagBook = window.toolBag.tools.held.object');
+  await mouse('mouseMoved',{x:300,y:240},true);await mouse('mouseReleased',{x:300,y:240});
+  assert.equal(await evaluate('window.bagBook.where'),'world');assert.equal(await evaluate('window.toolBag.dragging'),false);
+  // Pull a pistol directly onto the second figure, preserving one object and its magazine.
+  await click('#grabBag');
+  const gunCard=await centerOf('.bag-choice[data-id="gun"]');
+  await mouse('mousePressed',gunCard,true);
+  await evaluate('window.bagGun = window.toolBag.tools.held.object;window.bagGun.ammo=2');
+  const target=await evaluate('({x:window.friend.char.body.j.hip.x,y:window.friend.char.body.j.hip.y})');
+  await mouse('mouseMoved',target,true);await mouse('mouseReleased',target);
+  assert(await evaluate('window.friend.items.list.includes(window.bagGun) && !window.pet.items.list.includes(window.bagGun)'));
+  assert.equal(await evaluate('window.bagGun.ammo'),2);assert.equal(await evaluate('window.cursorWeapon.active'),false);
+  // Activating the bin without a mouse release must also end an actual weapon controller.
+  await evaluate('window.friend.takeItem(window.bagGun)');
+  await until(()=>evaluate('window.cursorWeapon.item === window.bagGun'));
+  await evaluate('document.querySelector("#trashCan").click()');
+  await until(()=>evaluate('!window.cursorWeapon.active && !window.friend.items.list.includes(window.bagGun)'));
+  await click('#undoTrash');assert(await evaluate('window.friend.items.list.includes(window.bagGun) && window.bagGun.ammo===2'));
+  // Pick that same book up from the world, drag it into the can, then click Undo.
+  await evaluate('window.bagBook.at={x:300,y:240,z:0};window.bagBook.dir={x:0,y:1,z:0};window.bagBook.loosen();window.bagBook.resetMotion()');
+  const grip=await evaluate('({x:window.bagBook.a.x,y:window.bagBook.a.y})');
+  await mouse('mousePressed',grip,true);
+  assert(await evaluate('window.toolBag.tools.held?.object===window.bagBook'));
+  const bin=await centerOf('#trashCan');
+  await mouse('mouseMoved',bin,true);await mouse('mouseReleased',bin);
+  assert(await evaluate('!window.pet.items.list.includes(window.bagBook)'));
+  assert.equal(await evaluate('document.querySelector("#undoTrash").hidden'),false);
+  assert.equal(await evaluate('JSON.parse(window.pet.save()).items.filter(i=>i.id==="book").length'), booksBefore);
+  await click('#undoTrash');
+  assert.equal(await evaluate('window.pet.items.list.filter(i=>i===window.bagBook).length'),1);
+  assert.equal(await evaluate('window.bagBook.where'),'world');assert.equal(await evaluate('document.querySelector("#undoTrash").hidden'),true);
+  // Furniture follows the same bag → can → undo path, without replacing its platform identity.
+  await click('#grabBag');
+  const chairCard=await centerOf('.bag-choice[data-kind="prop"][data-id="chair"]');
+  await mouse('mousePressed',chairCard,true);
+  await evaluate('window.bagChair=window.toolBag.tools.held.object');
+  await mouse('mouseMoved',bin,true);await mouse('mouseReleased',bin);
+  assert(await evaluate('!window.pet.props.things.includes(window.bagChair)'));
+  await click('#undoTrash');assert.equal(await evaluate('window.pet.props.things.filter(t=>t===window.bagChair).length'),1);
+  // Click-to-place and keyboard selection work without relying on a drag.
+  await click('#grabBag');await click('.bag-choice[data-id="bouncy-ball"]');
+  assert(await evaluate('window.toolBag.dragging'));
+  await mouse('mousePressed',{x:520,y:220},true);await mouse('mouseReleased',{x:520,y:220});
+  assert.equal(await evaluate('window.toolBag.dragging'),false);
+  await click('#grabBag');
+  await evaluate('document.querySelector(".bag-choice[data-id=book]").focus()');
+  assert.equal(await evaluate('document.activeElement.dataset.id'), 'book');
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  assert(await evaluate('window.toolBag.dragging'), JSON.stringify(await evaluate('({focus:document.activeElement.outerHTML,hint:document.querySelector("#bagHint").textContent,weapon:window.cursorWeapon.kind,carried:window.pets.map(p=>p.items.carried?.def.id),open:window.toolBag.isOpen})')));
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});
+  await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+  assert.equal(await evaluate('window.toolBag.dragging'),false);
+  assert(await evaluate('!window.pets.some(p=>p.userWeaponControlled || p.items.carried)'));
+  // The open bag remains inside a small viewport, with a scrollable catalog.
+  await send('Emulation.setDeviceMetricsOverride',{width:360,height:480,deviceScaleFactor:1,mobile:false});
+  await click('#grabBag');
+  assert(await evaluate('(() => {const r=document.querySelector("#bagPanel").getBoundingClientRect();return r.left>=0 && r.top>=0 && r.right<=innerWidth && r.bottom<=innerHeight;})()'));
+  const smallBagShot=await send('Page.captureScreenshot',{format:'png'});
+  writeFileSync(join(root,'.build/browser-grab-bag-small.png'),Buffer.from(smallBagShot.data,'base64'));
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
   console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close, actual cursor pistol aim/ammo/reload/return, bow charge/release, book rendering, page-fragment images, native-window visit controller and rendering');
   console.log('Screenshot: .build/browser-smoke.png');
+  console.log('PASS browser: physical bag art, mouse pull/drop/give, ammo preservation, loose item selection, trash/undo identity, furniture undo, click-to-place, keyboard/Escape, small-screen bag bounds');
 } finally {
   socket?.close(); browser.kill();
   await new Promise((done) => { if (browser.exitCode !== null) done(); else browser.once('close', done); });

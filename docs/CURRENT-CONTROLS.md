@@ -1,7 +1,37 @@
 # Current controls and Mac acceptance
 
-This milestone adds adaptive combat, actual cursor weapons, quiet activities, sleeping pickup,
-and full item/prop hitboxes. Future expansions are in [UPDATE-PLAN.md](UPDATE-PLAN.md).
+The latest milestone adds the overlay grab bag and reversible trash. Adaptive combat, actual cursor
+weapons, quiet activities, sleeping pickup and full hitboxes remain available. Future expansions are
+in [UPDATE-PLAN.md](UPDATE-PLAN.md).
+
+## Grab bag, giving and trash
+
+Open the **bag at bottom left**. Choose a figure under **For**, then drag an illustrated tool or
+furniture out of the catalog. Drop a tool on any figure to give it to that figure, or elsewhere to
+drop/throw it. Loose items can be picked up and passed the same way. The same item and ammunition
+travel together. Transporting a weapon this way does not fire/swing it; use Take for combat controls.
+
+Click a catalog choice, or focus it with Tab and press Enter/Space, to hold an object until your next
+click places it. **Escape** or right-click ends transport and drops it safely. Settings and the
+existing equipped-item Take menu remain available.
+
+Drag a held item, furniture or live drawing into the **trash can at bottom right**. **Undo** beside
+the can retrieves the last object. Undo is one object deep and lasts until the app closes. Occupied
+furniture releases its activity when trashed; restored furniture is available to use again. Trash
+only handles in-app objects. Sponge cleaning and saved world storage are still future work.
+
+## Bag/trash checks on your Mac
+
+1. On `codex/roadmap-continuation`, run `npm ci`, then `npm start`. Open the bag and drag out a
+   book, pistol and chair. Verify opening/closing the catalog does not switch Spaces.
+2. Give the book to Leonard; drop the pistol, then pick it up and pass it. Take it through the menu,
+   fire one round, drop it and pass it again. Check the magazine stays with the same item.
+3. Trash an item and click Undo. Repeat with a chair, an occupied TV/couch and a live drawn object.
+   Check activities stop, nothing duplicates, and the restored object can be used again.
+4. Hold still after dragging furniture, then release; it should fall without a surprise throw.
+   Try Tab/Enter/Space, Escape, a smaller viewport, and returning clicks/focus to Chrome afterward.
+5. Trash an item, quit/restart and confirm it stays removed. Repeat with Undo before quitting and
+   confirm the restored item reloads. Undo itself does not survive restart.
 
 ## Use a figure's actual weapon
 

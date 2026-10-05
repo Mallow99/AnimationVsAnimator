@@ -5,10 +5,12 @@ to build all ten at once. Keep the existing procedural stick figures, current lo
 personalities, Mac + Chrome support, and offline usefulness. Separate-app production/export stays
 postponed until the owner is satisfied with the project.
 
-The current batch is combat (Update 1), plus the owner's immediate activity-pacing/sleep-carry requests
-from Update 5 and full visible-shape collision fixes from Update 2.
+The combat (Update 1), immediate activity-pacing/sleep-carry requests from Update 5, and full
+visible-shape collision fixes from Update 2 have a tested cloud milestone; Mac acceptance is still open.
+The current continuation is Update 2's grab bag and reversible trash. It is a focused first part,
+not completion of all physical tools, inventory and furniture work.
 Physical tools and the desk belong to Update 2. Drawing/workshop crafting belongs to Update 3, moving
-furniture to Update 4, and real games to Update 6. Finish the current batch before expanding those systems.
+furniture to Update 4, and real games to Update 6. Finish each focused milestone before expanding those systems.
 
 ## Rules for every update
 
@@ -22,7 +24,7 @@ furniture to Update 4, and real games to Update 6. Finish the current batch befo
 - No paid AI is required for combat, locomotion, prop physics, drawing, inventory or social behavior.
   Optional provider requests need the user's configured service; a ChatGPT subscription is separate from API usage.
 
-## 1. Combat, movement and usable weapons — current batch
+## 1. Combat, movement and usable weapons — cloud milestone built, Mac acceptance open
 
 **Goal:** they fight according to the situation, with readable movement and consistent item ownership.
 
@@ -51,6 +53,12 @@ adding many more attacks. Keep toy rounds/practice behavior in play mode.
 ## 2. Physical tools, inventory and useful furniture
 
 **Goal:** common actions happen in the world, with fewer trips through settings.
+
+**Current milestone:** the overlay grab bag and session-only, one-object trash undo are implemented
+and checked in Chromium and Linux Electron. Bag/loose items can be dragged onto a figure to give/pass
+the original object. Taking equipped items still uses the existing menu; direct taking is unfinished.
+The sponge, saved world storage, desk work, satchel evaluation and full prop-use audit remain open.
+This update is not complete. See [HANDOFF.md](HANDOFF.md) for exact test evidence and limits.
 
 1. A grab bag in the overlay: pull out a tool or prop directly, using a compact illustrated selection only when opened.
 2. Drag-and-drop item giving, taking and passing without needing a context-menu action each time.
@@ -282,12 +290,14 @@ Move additions into the right future update, preserving the current batch's focu
 
 1. Finish Update 1, the requested basic activity-pacing/sleep-carry changes from Update 5,
    and full item/prop hitboxes from Update 2.
-2. Physical tools/storage and useful desk (Update 2).
+2. Physical tools/storage and useful desk (Update 2): grab bag and reversible trash have a cloud
+   milestone; next are sponge and desk/storage. Mac acceptance remains open.
 3. Pen/workshop crafting (Update 3), then movement/arrangement (Update 4).
 4. Expand companion life/pacing (Update 5) and actual entertainment (Update 6).
 5. Verify and extend Chrome/native windows (Update 7), then real folder/file entry (Update 8).
 6. Expand local/optional AI understanding (Update 9); clean up, test hardware and package (Update 10).
 
-Current file/folder support is a prototype; workshops, ink lifespans, furniture-moving skills,
-physical grab bag/trash/sponge, handhelds and a new companion game are **planned, not implemented**.
+Current file/folder support is a prototype. The physical grab bag and reversible trash have a tested
+cloud implementation. Workshops, ink lifespans, furniture-moving skills, sponge, saved world storage,
+useful desk work, handhelds and a new companion game are **planned, not implemented**.
 Avoid counting a feature complete because it has a name in this document.

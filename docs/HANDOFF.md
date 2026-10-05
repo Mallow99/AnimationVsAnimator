@@ -2,6 +2,42 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest milestone: overlay grab bag and reversible trash — Update 2, first part
+
+Continued [UPDATE-PLAN.md](UPDATE-PLAN.md) from the last tested `codex/desktop-life` build
+(`a674a44`). This focused batch adds two connected systems: pulling objects into the world and
+removing/retrieving them. The combat/pacing milestone below remains the baseline; Mac acceptance
+is still outstanding. Work is on `codex/roadmap-continuation`.
+
+- A small illustrated grab bag at the bottom left opens a scrollable catalog using actual item/prop
+  art, including custom definitions. Choose a current figure as the initial owner, drag a tool or
+  furniture out, or click/keyboard-select it and place it with the next click. Escape/right-click
+  cancels transport by dropping the object safely. The catalog stays inside small viewports.
+- Drop a pulled or loose item onto either figure to give/pass the original item. Weapons carried
+  this way do not swing or fire; taking an equipped weapon through the existing menu still enables
+  its combat controls. Transfers preserve identity, magazine and saved ownership. This is user input,
+  not a new autonomous cross-figure exchange; those continue through `peer.ts`.
+- A trash can at bottom right accepts user-held items, furniture and live drawn objects. Undo beside
+  the can retrieves the last object with its identity/ammo/artwork intact. Removing occupied furniture
+  releases its activities and shared claims. Retrieved drawings retain their remaining lifetime and
+  leave old window anchors behind. A removed companion's trashed item returns through a current owner.
+- Trash is limited to in-app objects. Undo is one object deep and lasts for this session; it is not
+  serialized. Normal item/prop saves omit trashed objects and include restored objects. Existing
+  inventory formats, belt silhouette, shared props and character presets are retained.
+
+Verified in this cloud: typecheck/build; 72 focused checks; full simulation seed 1; two-figure and
+five-figure 300-second soaks seed 1, both reporting no trouble. Actual Chromium mouse checks cover
+bag pull/drop/give, magazine retention, loose-item selection, item/furniture trash and undo,
+controller cleanup, click-to-place, keyboard/Escape and a 360×480 catalog. Inspected normal/small
+bag screenshots. Linux Electron/Xvfb covers actual preload focus IPC, native mouse pull/trash/undo,
+continued drag after catalog close, returning to non-focusable state, and existing settings/chat/game
+checks. No provider calls were used. These do not establish Mac Spaces/click-through or Windows behavior.
+
+Next: run the short [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md) bag/trash acceptance list on Mac.
+Continue Update 2 with a local sponge and a useful desk/storage activity. Taking equipped objects
+directly by dragging, saved world storage, satchel replacement and the prop-use audit remain open.
+Workshop, furniture-moving skills, handhelds and a new companion game remain later updates.
+
 ## Latest milestone: adaptive weapons, quiet activities, sleeping pickup and full hitboxes
 
 The owner asked to plan future work in focused updates instead of rediscovering the whole project.

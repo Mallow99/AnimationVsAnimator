@@ -19,6 +19,7 @@ import type {FileWindow,DesktopAction,DesktopResult,DesktopState,PageCutout} fro
 import { companionConfig } from '../core/config';
 import { CursorWeapon, type CursorWeaponKind } from '../core/combat/cursor-weapon';
 import { SwordMove, MOVES, STANCES, guardPose } from '../core/skills/swordplay';
+import { ToolBag } from './tool-bag';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -224,9 +225,9 @@ resize();
 // in their color. Whatever you type goes to that one.
 const talk = document.getElementById('talk') as HTMLFormElement;
 const talkText = document.getElementById('talkText') as HTMLInputElement;
-let talkOpen = false, talkIdle = 0, gameTyping = false;
+let talkOpen = false, talkIdle = 0, gameTyping = false, toolsTyping = false;
 let talkPet: Pet = pets[0];
-const syncTyping = () => shell?.setTyping(talkOpen || gameTyping);
+const syncTyping = () => shell?.setTyping(talkOpen || gameTyping || toolsTyping);
 function openTalk(p: Pet = talkPet) {
   if (talkOpen && talkPet !== p) talkPet.listening = false;
   talkPet = p;
@@ -287,7 +288,7 @@ const gamePanel = createGamePanel(gamePet, (on) => { gameTyping = on; syncTyping
 let ignoring = true;
 const onPet = (p: Pet, x: number, y: number) => p.dragging || p.hit(x, y) || p.uiHit(x, y) || p.carrying;
 function updateClickThrough(x: number, y: number) {
-  const want = !cursorWeapon.active && !(gamePanel.dragging || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
+  const want = !cursorWeapon.active && !(toolBag.dragging || toolBag.over(x, y) || gamePanel.dragging || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);
@@ -336,6 +337,8 @@ Object.assign(window, { cursorWeapon, equipCursor });
 // ── mouse ──
 let last = { x: 0, y: 0, t: performance.now() };
 let vel = { x: 0, y: 0 };
+const toolBag = new ToolBag(desktopPets, save, on => { toolsTyping = on; syncTyping(); }, () => !cursorWeapon.active);
+Object.assign(window, { toolBag });
 window.addEventListener('mousemove', (e) => {
   const now = performance.now();
   const dt = Math.max((now - last.t) / 1000, 1 / 240);
@@ -346,12 +349,14 @@ window.addEventListener('mousemove', (e) => {
   cursorWeapon.pointer(e.clientX,e.clientY);
   cutouts.move(e.clientX,e.clientY,vel.x,vel.y);
   for (const p of activePets()) { p.cursor(e.clientX, e.clientY, vel.x, vel.y); p.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now); }
+  toolBag.move(e.clientX, e.clientY, vel.x, vel.y);
   updateClickThrough(e.clientX, e.clientY);
 });
 /** Which of them the mouse is on (the one drawn on top first), or null. */
 const petAt = (x: number, y: number) => habitats.hit(x,y,lastWins) ?? [...desktopPets()].reverse().find((p) => p.hit(x, y) || p.uiHit(x, y) || p.carrying) ?? null;
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  if (toolBag.dragging) { toolBag.cancel(); updateClickThrough(e.clientX, e.clientY); return; }
   if (gamePanel.over(e.clientX, e.clientY)) return;
   if (cursorWeapon.owner && cursorWeapon.item) {
     const owner = cursorWeapon.owner, item = cursorWeapon.item;
@@ -369,12 +374,19 @@ window.addEventListener('contextmenu', (e) => {
 window.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   if((e.target as Element).closest('#weaponBar'))return;
+  if (toolBag.over(e.clientX, e.clientY)) return;
+  if (toolBag.dragging) { shell?.pressed(); return; }
   if(cursorWeapon.active){cursorWeapon.pointer(e.clientX,e.clientY);cursorWeapon.press(true);shell?.pressed();return;}
   if (overTalk(e.clientX, e.clientY) || gamePanel.over(e.clientX, e.clientY)) return;
   if(cutouts.grab(e.clientX,e.clientY)){shell?.pressed();return;}
   if (talkOpen && !talkPet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
   // Whoever you clicked right on; otherwise the first one (and the furniture), then the other one's things.
   const now = performance.now(), who = petAt(e.clientX, e.clientY);
+  // Items have one owner even when furniture and several figures overlap their hitboxes.
+  for (const p of [...desktopPets()].reverse()) {
+    const item = p.items.hitWorld(e.clientX, e.clientY);
+    if (item && toolBag.tools.beginItem(p, item, { x: e.clientX, y: e.clientY })) { shell?.pressed(); return; }
+  }
   const took = who ? who.pointerDown(e.clientX, e.clientY, now) : desktopPets().some((p) => p.pointerDown(e.clientX, e.clientY, now));
   if (took) {
     canvas.style.cursor = 'grabbing';
@@ -382,13 +394,26 @@ window.addEventListener('mousedown', (e) => {
   }
 });
 window.addEventListener('mouseup', (e) => {
+  if (e.button !== 0) return;
+  if (toolBag.release(e.clientX, e.clientY, vel.x, vel.y)) { shell?.pressed(); updateClickThrough(e.clientX, e.clientY); return; }
+  if (toolBag.overTrash(e.clientX, e.clientY)) {
+    // End a weapon controller before inventory removes its actual item.
+    if (cursorWeapon.owner) { cursorWeapon.detach(); weaponBar.style.display = 'none'; }
+    if (toolBag.tools.trashHeld()) toolBag.trashed();
+  } else if (!cursorWeapon.active) {
+    const owner = desktopPets().find(p => p.items.carried);
+    const recipient = [...desktopPets()].reverse().find(p => p.char.hitTest(e.clientX, e.clientY, 12));
+    if (owner?.items.carried && recipient && recipient !== owner) {
+      const item = owner.items.carried; owner.items.remove(item); recipient.items.list.push(item); recipient.giveBack(item);
+    }
+  }
   cursorWeapon.press(false);cutouts.release();
   if (activePets().some((p) => p.dragging)) shell?.pressed(); // hand focus back once more after letting go
   for (const p of activePets()) if (!p.userWeaponControlled) p.pointerUp(e.clientX, e.clientY);
   updateClickThrough(e.clientX, e.clientY);
 });
 // If the mouse leaves the window mid-drag, let go.
-window.addEventListener('blur', () => { cursorWeapon.cancel();cutouts.release(); for (const p of activePets()) if (!p.userWeaponControlled) p.pointerUp(last.x, last.y); });
+window.addEventListener('blur', () => { toolBag.cancel(); cursorWeapon.cancel();cutouts.release(); for (const p of activePets()) if (!p.userWeaponControlled) p.pointerUp(last.x, last.y); });
 
 // ── preview mode: a couple of fake windows to climb on ──
 const fakeWins: WinRect[] = [];
@@ -411,6 +436,7 @@ function drawFakeWindows() {
 // ── frame loop ──
 let prev = performance.now();
 let propAccumulator=0,propTime=0;
+let toolsRefreshAt = 0;
 function frame(now: number) {
   const dt = (now - prev) / 1000;
   prev = now;
@@ -420,6 +446,7 @@ function frame(now: number) {
     vel.y *= 0.8;
     for (const p of activePets())
       p.pointerMove(last.x, last.y, vel.x, vel.y, now);
+    toolBag.move(last.x, last.y, vel.x, vel.y);
   }
   // A knockout: everyone in slow motion for a moment.
   const slow = activePets().some((p) => p.slowmo > 0);
@@ -442,8 +469,12 @@ function frame(now: number) {
     }
   }
   habitats.update(slow ? dt * 0.3 : dt);
+  if (now > toolsRefreshAt) { toolBag.refresh(); toolsRefreshAt = now + 1000; }
+  if (cursorWeapon.owner && cursorWeapon.item && (!cursorWeapon.owner.items.list.includes(cursorWeapon.item) || cursorWeapon.item.where !== 'cursor')) {
+    cursorWeapon.detach(); weaponBar.style.display = 'none';
+  }
   const owner = desktopPets().find(p => p.items.carried && isWeapon(p.items.carried.def));
-  if (owner && owner.items.carried && cursorWeapon.item !== owner.items.carried) {
+  if (!toolBag.dragging && owner && owner.items.carried && cursorWeapon.item !== owner.items.carried) {
     cursorWeapon.attach(owner.items.carried, owner);
     weaponBar.style.display = 'flex'; updateClickThrough(last.x, last.y);
   }

@@ -29,6 +29,7 @@ if (what === 'lab') {
   mkdirSync('dist/app', { recursive: true });
   cpSync('src/app/index.html', 'dist/app/index.html');
   cpSync('src/app/game.css', 'dist/app/game.css');
+  cpSync('src/app/tools.css', 'dist/app/tools.css');
   // Example item and prop files (and the how-to) for your items folder. Start clean, so an example
   // that was retired (the Othello table, the mallet) doesn't linger from an older build.
   rmSync('dist/items', { recursive: true, force: true });
