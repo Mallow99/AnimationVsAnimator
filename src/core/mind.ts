@@ -19,6 +19,9 @@ import {
   Chain, routeTo, Brawl, HangCursor, DrawRamp, BridgeTo, rampPlan, bridgePlan, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PlayBoardGame, PaintCanvas, Duel, propsOf, ThrowItem, PushWindow, KickWindow, WindowSurf, KnockWindow, LedgeSit, windowSidesAtHand,
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
+import { AskTogether, isAct, NapTogether, ShoulderBump, Together, WaveAt, type Act } from './skills/together';
+import { ShootBow } from './skills/archery';
+import type { FighterView } from './peer';
 
 export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { type: 'smacked'; speed: number }
   | { type: 'itemTaken'; name: string } | { type: 'itemGiven'; name: string } | { type: 'itemDropped'; name: string; uid: number }
@@ -26,6 +29,10 @@ export type MindEvent = CharEvent | { type: 'poked' } | { type: 'petted' } | { t
   | { type: 'propSpawned'; id: string; name: string }   // a prop (a chair, a TV...) dropped in
   | { type: 'hitByFriend'; name: string; power: number; cut: boolean; stabbed: boolean; play: boolean; ko?: boolean } // his friend hit him
   | { type: 'wasParried'; name: string } // his friend parried his hit: he's off balance
+  | { type: 'invited'; act: string; name: string }   // his friend wants to do something together (a high five...)
+  | { type: 'replied'; act: string; yes: boolean; name: string } // ...and the answer to his own asking
+  | { type: 'socialCancel'; name: string }           // his friend backed out
+  | { type: 'bumped'; name: string }                 // his friend shouldered him on purpose
   | { type: 'disarmed'; name: string }   // ...and his sword went flying
   | { type: 'friendFighting'; angry: boolean } // his friend squared up to your cursor: back him up
   | { type: 'blocked'; name: string } // he blocked his friend's hit
@@ -189,13 +196,18 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'videogame', label: 'Play video games' }, { name: 'ride', label: 'Ride the scooter' },
   { name: 'paint', label: 'Paint on his canvas' }, { name: 'playgame', label: 'Play Othello with you on the TV' }, { name: 'duel', label: 'Spar with his friend' },
+  { name: 'highfive', label: 'High five his friend' }, { name: 'fistbump', label: 'Fist bump his friend' }, { name: 'handshake', label: 'Shake hands with his friend' },
+  { name: 'pattycake', label: 'Patty cake with his friend' }, { name: 'hug', label: 'Hug his friend' }, { name: 'bump', label: 'Bump into his friend (rude)' },
+  { name: 'chat', label: 'Go talk to his friend' }, { name: 'waveat', label: 'Wave at his friend' }, { name: 'sitwith', label: 'Sit with his friend' }, { name: 'naptogether', label: 'Nap next to his friend' }, { name: 'jointv', label: 'Join his friend at the TV' },
+  { name: 'shoot', label: 'Shoot arrows at the cursor' },
   { name: 'loseArm', label: 'Lose an arm' }, { name: 'loseLeg', label: 'Lose a leg' },
 ];
 
 export class Mind {
   skill: Skill | null = null;
-  /** When he last started a duel with his friend (so they don't fight nonstop). */
+  /** When he last started a duel with his friend (so they don't fight nonstop), and did something with him. */
   private duelAt = -60;
+  private socialAt = -20;
   private last = '';
   private queued: Skill | null = null;
   private pokes: number[] = [];
@@ -259,8 +271,10 @@ export class Mind {
         this.restUntil = c.world.time + rand(1.5, 4) * (1.5 - c.mood.s.energy * 0.5);
       }
     } else if (this.queued && (c.char.ready || c.char.mode === 'sit')) {
-      this.begin(c, this.queued);
+      // (Take it off the queue first: starting it can queue what comes next, like his friend's instant "yes".)
+      const next = this.queued;
       this.queued = null;
+      this.begin(c, next);
     } else if (c.char.ready && c.world.time >= this.restUntil && c.world.time >= this.holdUntil) {
       const o = this.choose(c);
       this.why = o.why;
@@ -432,10 +446,12 @@ export class Mind {
   }
 
   private end(c: Ctx) {
-    if (!this.skill) return;
-    this.skill.stop(c);
-    this.last = this.skill.name;
+    // (Let go of it before stopping it: stopping can tell his friend, whose answer can land back here.)
+    const s = this.skill;
+    if (!s) return;
     this.skill = null;
+    s.stop(c);
+    this.last = s.name;
     c.look = 'default';
   }
 
@@ -574,6 +590,14 @@ export class Mind {
       opts.push({ name: 'smash', why: near ? 'going after your cursor with his mace' : onWin ? 'bonking the window he\'s on' : 'practicing with his mace',
         score: L === 'angry' ? (near ? 1.1 : 0.3) : L === 'playful' ? (onWin ? 0.3 : 0.12) : L === 'bored' ? 0.2 : 0.03, make: () => new SwordSwing(near ? 2 : 3, near, 'smash') });
     }
+    // His bow: target practice at your cursor (from a distance), or, mad at you, a volley.
+    const bow = c.items.find('shoot');
+    if (bow && (bow.where === 'belt' || bow.where === 'hand') && ch.useHand && ch.legCount === 2 && cur && w.time - w.cursorMovedAt < 8) {
+      const d = Math.abs(cur.x - ch.x);
+      opts.push({ name: 'shoot', why: L === 'angry' ? 'shooting arrows at you' : 'target practice at your cursor',
+        score: d > 120 && d < 900 && cur.y < ch.body.j.hip.y ? (L === 'angry' ? 0.9 : L === 'playful' ? 0.35 : L === 'bored' ? 0.25 : 0.02) : 0,
+        make: () => new ShootBow(L === 'angry' ? 3 : 2, () => w.cursor, 'cursor') });
+    }
     const ball = c.items.find('throw');
     if (ball && ball.where !== 'cursor' && ch.useHand && ch.legCount === 2) {
       const active = !!cur && w.time - w.cursorMovedAt < 8;
@@ -685,12 +709,81 @@ export class Mind {
   private friendOptions(c: Ctx): Option[] {
     const foe = c.foe?.(), ch = c.char, L = c.mood.label, E = c.mood.emotion, s = c.mood.s;
     if (!foe) { if (this.forced) this.cant.duel = 'nobody to spar with (turn his friend on in Settings)'; return []; }
-    if (ch.legCount < 2 || !ch.useHand || ch.support >= 0 && !c.props?.thingOf(ch.support)) { if (this.forced) this.cant.duel = 'not from up here'; return []; }
-    if (foe.busy && !this.forced) return [];
+    // (Up on a window he can still call out to him; fighting, he has to be down on the floor.)
+    if (ch.legCount < 2 || !ch.useHand || ch.support >= 0 && !c.props?.thingOf(ch.support)) { if (this.forced) this.cant.duel = 'not from up here'; return ch.mode === 'ground' ? this.socialOptions(c, foe).filter((o) => o.name === 'waveat') : []; }
+    if (foe.busy && !this.forced) return this.socialOptions(c, foe).filter((o) => o.name === 'waveat' || o.name === 'sitwith' || o.name === 'jointv' || o.name === 'naptogether');
     const armed = c.fightMode === 'real' || chance(0.7);
-    const score = c.world.time - this.duelAt < 90 ? 0 : L === 'playful' || E === 'excited' ? 0.55 : L === 'bored' ? 0.4 : L === 'angry' ? 0.35 : L === 'sleepy' || L === 'sad' ? 0 : 0.1 + s.energy * 0.1;
-    return [{ name: 'duel', why: c.fightMode === 'real' ? `a real duel with ${foe.name}` : `play fighting with ${foe.name}`, score,
+    const bond = c.feel.bond;
+    // (Best friends spar less in anger and more for fun; rivals fight more.)
+    const score = c.world.time - this.duelAt < 90 ? 0 : (L === 'playful' || E === 'excited' ? 0.55 : L === 'bored' ? 0.4 : L === 'angry' ? 0.35 + Math.max(0, -bond) * 0.6 : L === 'sleepy' || L === 'sad' ? 0 : 0.1 + s.energy * 0.1);
+    const opts: Option[] = [{ name: 'duel', why: c.fightMode === 'real' ? `a real duel with ${foe.name}` : `play fighting with ${foe.name}`, score,
       make: () => { this.duelAt = c.world.time; return new Duel(armed); } }];
+    return [...opts, ...this.socialOptions(c, foe)];
+  }
+
+  /**
+   * Doing things with his friend: a high five, a fist bump, a handshake, patty cake, a hug (he asks; the
+   * other one decides), joining him at the TV, curling up next to him when he's asleep, or, in a mood,
+   * shouldering him on purpose. How he feels about him (`c.feel.bond`) and his mood decide which.
+   */
+  private socialOptions(c: Ctx, f: FighterView): Option[] {
+    const s = c.mood.s, L = c.mood.label, E = c.mood.emotion, ch = c.char, w = c.world, bond = c.feel.bond;
+    const fh = f.joints.hip, hip = ch.body.j.hip;
+    // Same floor (or the same window top), both on their feet, and he isn't busy with something of his own.
+    const together = !!fh && Math.abs(fh.y - hip.y) < 40 * ch.scale && ch.legCount === 2 && !!ch.useHand;
+    const free = together && f.mode === 'ground' && !f.busy && !f.asleep && f.doing !== 'together' && f.doing !== 'duel' && f.doing !== 'ask';
+    const ready = this.forced || w.time - this.socialAt > 30;
+    const happy = L === 'playful' || E === 'happy' || E === 'content' || E === 'excited';
+    const opts: Option[] = [];
+    const ask = (act: Act, score: number, why: string) => opts.push({ name: act, score: free && ready ? score : 0, why,
+      make: () => { this.socialAt = w.time; return new AskTogether(act); } });
+    if (this.forced && !free) this.cant[L] = `${f.name} is busy`;
+    // (They're friends: something together comes up every minute or two, more when he's bored or in a good mood.)
+    const sociable = L !== 'angry' && L !== 'scared' && L !== 'sleepy' && bond > -0.3;
+    ask('chat', sociable ? 0.75 + s.boredom * 0.4 + bond * 0.3 : 0, `going over to talk to ${f.name}`);
+    ask('highfive', (happy || L === 'bored') && bond > -0.1 ? 0.6 + bond * 0.3 : 0, `high five with ${f.name}`);
+    ask('fistbump', sociable ? 0.45 + bond * 0.2 : 0, `fist bump with ${f.name}`);
+    ask('handshake', L !== 'angry' && bond < 0.25 && bond > -0.5 ? 0.45 : happy ? 0.12 : 0, bond < 0.25 ? `making up with ${f.name}` : `shaking hands with ${f.name}`);
+    ask('pattycake', (L === 'playful' || L === 'bored' && happy) && bond > 0 ? 0.65 + bond * 0.3 : L === 'playful' ? 0.3 : 0, `patty cake with ${f.name}`);
+    ask('hug', bond > 0.45 && (happy || L === 'sad' || f.mood === 'sad') ? 0.3 + (f.mood === 'sad' ? 0.6 : 0) : 0, f.mood === 'sad' ? `${f.name} looks down` : `hugging ${f.name}`);
+    // In a mood, and not that fond of him: shoulder him on purpose.
+    const mood = L === 'angry' || E === 'annoyed';
+    opts.push({ name: 'bump', score: free && ready && mood && bond < 0.4 ? 0.45 + s.annoyance * 0.5 - bond * 0.4 : 0, why: `taking it out on ${f.name}`,
+      make: () => { this.socialAt = w.time; return new ShoulderBump(); } });
+    // He's asleep and this one's sleepy too: curl up next to him.
+    opts.push({ name: 'naptogether', score: f.asleep && together && (s.energy < 0.4 || this.forced) && bond > 0.1 ? 1.4 + bond : 0, why: `napping next to ${f.name}`,
+      make: () => new NapTogether() });
+    // Not on the same level (one up on a window), or he's sitting down: call out to him, and wave.
+    const apart = !together || f.mode === 'sit';
+    opts.push({ name: 'waveat', score: apart && !f.asleep && f.doing !== 'duel' && (ready || this.forced) && Math.abs(f.x - ch.x) < 800 && L !== 'angry' && bond > -0.4 ? 0.5 + s.boredom * 0.3 : 0,
+      why: `calling out to ${f.name}`, make: () => { this.socialAt = w.time; return new WaveAt(); } });
+    // He's sitting on the couch with room next to him: go sit with him.
+    const seatOf = f.mode === 'sit' && together ? (c.props?.placed ?? []).find((t) => t.def!.use === 'seat' && t.sitters.size === 1 && t.seatRoom > 1 && !t.sitters.has(c.who) && Math.abs(t.center.x - f.x) < 80 * ch.scale) : undefined;
+    opts.push({ name: 'sitwith', score: seatOf && bond > -0.2 && L !== 'angry' ? 0.65 + bond * 0.3 + (1 - s.energy) * 0.3 : 0, why: `sitting with ${f.name}`,
+      make: () => { this.socialAt = w.time; return new SitOnProp(seatOf!, rand(15, 30)); } });
+    // He's at the TV: join him (watch with him, or play against him).
+    const tv = (f.doing === 'watchtv' || f.doing === 'videogame') ? propsOf(c, 'tv').find((t) => t.watchers.size > 0) : undefined;
+    opts.push({ name: 'jointv', score: tv && bond > -0.2 && L !== 'angry' ? 0.45 + bond * 0.4 + s.boredom * 0.3 : 0, why: f.doing === 'videogame' ? `playing video games with ${f.name}` : `watching TV with ${f.name}`,
+      make: () => (f.doing === 'videogame' ? new PlayVideoGame(tv!) : new WatchTV(tv!)) });
+    return opts;
+  }
+
+  /** His friend asked to do something together: yes or no (mood, how he feels about him, whether he's busy). */
+  private answerInvite(c: Ctx, act: string, name: string) {
+    const L = c.mood.label, bond = c.feel.bond, ch = c.char;
+    const busy = this.skill && ['duel', 'playgame', 'reattach', 'sleep', 'nap', 'together', 'ask', 'videogame', 'paint'].includes(this.skill.name);
+    const able = ch.mode === 'ground' && ch.legCount === 2 && !!ch.useHand && !c.mood.asleep;
+    let yes = !busy && able && isAct(act) && L !== 'angry' && L !== 'scared';
+    if (yes) yes = chance(act === 'hug' ? (bond > 0.3 || L === 'sad' ? 0.9 : 0.3) : bond < -0.3 ? 0.25 : 0.65 + bond * 0.35);
+    c.tell?.({ type: 'reply', act, yes });
+    if (!yes) {
+      if (able && !c.mood.asleep) c.say(L === 'angry' ? pick(['not now.', 'no.', 'leave me alone']) : busy ? pick(['busy!', 'later']) : pick(['nah', 'maybe later', 'eh']), 1.4);
+      return;
+    }
+    this.why = `${name} wanted a ${act}`;
+    if (chance(0.5)) c.say(pick(['yeah!', 'ok!', 'sure', act === 'hug' ? 'aww' : 'heh']), 1.2);
+    this.socialAt = c.world.time;
+    this.interrupt(c, new Together(act as Act, false));
   }
 
   /** Climbing onto windows and getting back down. */
@@ -805,10 +898,37 @@ export class Mind {
         } else if (this.skill?.name !== 'duel' && chance(0.5)) c.say(pick(e.play ? ['hey!', 'oof', 'cheap shot'] : ['OW', 'hey!!', 'what was that for']), 1.2);
         return;
       }
+      case 'invited': this.answerInvite(c, e.act, e.name); return;
+      case 'replied': {
+        if (!(this.skill instanceof AskTogether) || this.skill.act !== e.act) return;
+        if (e.yes) { this.interrupt(c, new Together(this.skill.act, true)); return; }
+        c.mood.nudge({ happiness: -0.04, annoyance: 0.03 });
+        c.feel.bond = Math.max(-1, c.feel.bond - 0.02);
+        this.interrupt(c);
+        if (chance(0.6)) c.say(pick(['aw', 'fine.', 'rude', 'ok...']), 1.2);
+        return;
+      }
+      case 'socialCancel':
+        if (this.skill instanceof Together || this.skill instanceof AskTogether) this.interrupt(c);
+        return;
+      case 'bumped': {
+        // Shouldered on purpose: he takes it personally. Sometimes that's a fight.
+        m.nudge({ annoyance: 0.18, happiness: -0.05 });
+        c.feel.bond = Math.max(-1, c.feel.bond - 0.1);
+        this.why = `${e.name} bumped him`;
+        const fight = (m.s.annoyance > 0.55 || m.label === 'angry' || c.feel.bond < 0) && chance(0.55) && ch.legCount === 2 && !!ch.useHand && this.skill?.name !== 'playgame';
+        if (fight) { c.say(pick(['oh it\'s ON', 'you wanna go?', 'excuse ME?']), 1.4); this.duelAt = c.world.time; this.interrupt(c, new Duel(true)); }
+        else if (ch.mode === 'ground' && !(this.skill instanceof Reattach)) {
+          c.say(pick(['hey!', 'watch it', 'rude.', 'excuse you']), 1.4);
+          if (this.skill?.name !== 'playgame' && this.skill?.name !== 'videogame' && this.skill?.name !== 'watchtv') this.interrupt(c, new Sequence('hey', [{ face: 'friend' }, { gesture: chance(0.5) ? 'shrug' : 'stomp' }]));
+        }
+        return;
+      }
       case 'challenged': {
         // His friend wants to fight: he squares up too (same weapons), unless he's busy with something of his own.
         const keep = ['playgame', 'reattach', 'sleep', 'duel'];
-        if (this.skill && keep.includes(this.skill.name) || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand) return;
+        const upHigh = c.char.support >= 0 && !c.props?.thingOf(c.char.support); // (up on a window: he can't fight from there)
+        if (this.skill && keep.includes(this.skill.name) || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand || upHigh) return;
         this.why = `${e.name} wants to fight`;
         this.interrupt(c, new Duel(e.armed));
         return;

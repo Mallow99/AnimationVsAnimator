@@ -59,6 +59,7 @@ An item hangs on his belt, he takes it out to use it, and you can take it from h
 | `swing` | swings it like a sword: practice slashes, and at your cursor when he's mad. |
 | `smash` | brings it down overhead like a hammer: on your cursor, or on the window he's standing on. |
 | `throw` | throws it at your cursor, or bounces it off the floor and catches it. Give it a `bounce`. |
+| `shoot` | shoots arrows with it like a bow (see `bow.json`): at your cursor, and in fights from a distance. Draw it with its middle at 0 along, `grip` as long as `length` (so it's centered in his hand), the limbs bowing forward; copy `bow.json` and change the colors. |
 | `none`  | just carries it around. |
 
 ### Drawing it

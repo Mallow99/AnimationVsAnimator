@@ -201,8 +201,18 @@ export class Thing {
       if (Math.hypot(a.x - b.x, a.y - b.y) > this.sticks.reduce((sum, s) => sum + s.len, 0) * 1.1) this.unstick();
     }
   }
-  /** You're holding it by one point. */
-  held: { idx: number; x: number; y: number; vx: number; vy: number; from: Vec } | null = null;
+  /**
+   * You're holding it: where your cursor is, and where on the thing you grabbed it (`local`: in its own
+   * rest shape, so you can pick it up from anywhere and it hangs from that spot). Bridges are held by a point.
+   */
+  held: { idx: number; x: number; y: number; vx: number; vy: number; from: Vec; local?: Vec } | null = null;
+  /**
+   * Its shape at rest (each point relative to the middle). Everything but a bridge is rigid: after each
+   * physics pass it's snapped back to exactly this shape (moved and turned to fit where its points got to).
+   * That's "shape matching": however hard it's shaken, what you see and what it bumps into stay the same.
+   */
+  private rest: Vec[] | null = null;
+  get rigid() { return this.kind !== 'bridge'; }
   /** The drawing, in the thing's own frame (so it turns and moves with it). */
   private local: { x: number; y: number }[][] = [];
   /** Extra weight on points this step (him standing on it), px/s² per point. */
@@ -222,6 +232,9 @@ export class Thing {
   channel = 0;
   /** A TV with its console on: what's on screen instead of a show (his own game, or the board you two are playing). */
   arcade: Runner | null = null;
+  /** Two players: the second one's game (split screen), and who's playing (player one first). */
+  arcade2: Runner | null = null;
+  players: string[] = [];
   board: readonly Disc[] | null = null;
   art: { shape: Vec[][]; color: string; title: string } | null = null;
   /** Size it was made at (props scale with him). */
@@ -252,6 +265,41 @@ export class Thing {
   }
   /** Where he sits, if it's a seat. */
   get seatAt(): Vec | null { return this.def?.seat ? this.toWorld(this.def.seat[0], this.def.seat[1]) : null; }
+
+  /**
+   * Who's sitting on it, and on which side (-1 left, 0 the middle, 1 right). A couch holds two side by side
+   * (whoever was there first scoots over to make room); a chair holds one; someone lying along it takes it all.
+   */
+  readonly sitters = new Map<string, { side: -1 | 0 | 1; lying: boolean }>();
+  /** Who's watching (a TV): it stays on while anyone is. */
+  readonly watchers = new Set<string>();
+  get seatRoom() { return this.def?.bounds && this.def.bounds[2] - this.def.bounds[0] > 90 ? 2 : 1; }
+  /** Take a seat, coming from x. False if it's full. */
+  claimSeat(who: string, fromX: number, lying = false): boolean {
+    if (this.sitters.has(who)) return true;
+    const others = [...this.sitters.values()];
+    if (others.length >= this.seatRoom || (lying && others.length)) return false;
+    // Someone lying along the couch sits up to make room.
+    for (const [k, o] of this.sitters) if (o.lying) this.sitters.set(k, { ...o, lying: false });
+    const mid = this.seatAt;
+    if (!others.length || !mid) { this.sitters.set(who, { side: 0, lying }); return true; }
+    // The second one sits on the side he came from; the first one scoots to the other side.
+    const side: -1 | 1 = fromX < mid.x ? -1 : 1;
+    for (const [k, o] of this.sitters) this.sitters.set(k, { ...o, side: (-side) as -1 | 1 });
+    this.sitters.set(who, { side, lying });
+    return true;
+  }
+  leaveSeat(who: string) {
+    this.sitters.delete(who);
+    if (this.sitters.size === 1) for (const [k, o] of this.sitters) this.sitters.set(k, { ...o, side: 0 });
+  }
+  /** Where this one sits (his side of the couch). */
+  seatFor(who: string): Vec | null {
+    const s = this.def?.seat;
+    if (!s) return null;
+    const side = this.sitters.get(who)?.side ?? 0, w = this.def!.bounds ? this.def!.bounds[2] - this.def!.bounds[0] : 0;
+    return this.toWorld(s[0] + side * w * 0.2, s[1]);
+  }
   /** How far it's tipped over (radians; 0 = upright). */
   get tilt() { const f = this.frame(); return Math.atan2(f.uy, f.ux); }
 
@@ -312,13 +360,67 @@ export class Thing {
   grab(x: number, y: number) {
     const idx = this.nearest(x, y);
     this.held = { idx, x, y, vx: 0, vy: 0, from: { x, y } };
+    if (this.rigid) { const f = this.fit(); this.held.local = f.toLocal(x, y); }
   }
   release() {
     const h = this.held;
     if (!h) return;
     this.held = null;
+    if (this.rigid) { this.limitSpeed(2500); return; } // it flies on with the speed your hand gave it
     const p = this.points[h.idx];
     if (!this.stuck || !this.pins.includes(h.idx)) { p.invMass = 1; p.px = p.x - Math.max(-2500, Math.min(2500, h.vx)) / 120; p.py = p.y - Math.max(-2500, Math.min(2500, h.vy)) / 120; }
+  }
+
+  /** Where its middle is and how far it's turned from its rest shape (the best fit to where its points are). */
+  private fit() {
+    const pts = this.points;
+    this.rest ??= (() => { const c = this.center; return pts.map((p) => ({ x: p.x - c.x, y: p.y - c.y })); })();
+    const c = this.center, r = this.rest;
+    let sx = 0, sy = 0;
+    for (let i = 0; i < pts.length; i++) { const qx = pts[i].x - c.x, qy = pts[i].y - c.y; sx += r[i].x * qx + r[i].y * qy; sy += r[i].x * qy - r[i].y * qx; }
+    const a = Math.atan2(sy, sx), cos = Math.cos(a), sin = Math.sin(a);
+    return {
+      c, a, cos, sin,
+      toWorld: (lx: number, ly: number) => ({ x: c.x + lx * cos - ly * sin, y: c.y + lx * sin + ly * cos }),
+      toLocal: (x: number, y: number) => ({ x: (x - c.x) * cos + (y - c.y) * sin, y: -(x - c.x) * sin + (y - c.y) * cos }),
+    };
+  }
+
+  /** Snap the points back onto its rigid shape (keeping where it is and how it's turned). */
+  private matchShape() {
+    if (!this.rigid || this.stuck) return;
+    const f = this.fit(), r = this.rest!;
+    this.points.forEach((p, i) => { const w = f.toWorld(r[i].x, r[i].y); p.x = w.x; p.y = w.y; });
+  }
+
+  /**
+   * Your hand pulls the spot you grabbed toward your cursor, the way a real rigid thing moves: pulling
+   * off-center both moves it and turns it, so it swings and hangs below where you hold it.
+   */
+  private pullHeld() {
+    const h = this.held;
+    if (!h?.local || this.stuck) return;
+    const f = this.fit(), g = f.toWorld(h.local.x, h.local.y);
+    const dx = h.x - g.x, dy = h.y - g.y, d = Math.hypot(dx, dy);
+    if (d < 1e-4) return;
+    const nx = dx / d, ny = dy / d, rx = g.x - f.c.x, ry = g.y - f.c.y;
+    const m = this.points.length, I = this.rest!.reduce((s, q) => s + q.x * q.x + q.y * q.y, 0) || 1;
+    const rn = rx * ny - ry * nx, w = 1 / m + (rn * rn) / I, lam = d / w;
+    const mx = (nx * lam) / m, my = (ny * lam) / m, turn = (rn * lam) / I, cos = Math.cos(turn), sin = Math.sin(turn);
+    for (const p of this.points) {
+      const ox = p.x - f.c.x, oy = p.y - f.c.y;
+      p.x = f.c.x + mx + ox * cos - oy * sin;
+      p.y = f.c.y + my + ox * sin + oy * cos;
+    }
+  }
+
+  /** Nothing moves faster than this (px/s): fast enough to throw, slow enough not to skip through things. */
+  private limitSpeed(max: number) {
+    const k = max / 120;
+    for (const p of this.points) {
+      const vx = p.x - p.px, vy = p.y - p.py, v = Math.hypot(vx, vy);
+      if (v > k) { p.px = p.x - (vx / v) * k; p.py = p.y - (vy / v) * k; }
+    }
   }
 
   private above: [Point, Platform][] = [];
@@ -332,8 +434,9 @@ export class Thing {
     // His weight on whatever he's standing on.
     for (const [i, g] of this.load) { const p = pts[i]; if (p.invMass) p.y += g * dt * dt; }
     this.load.clear();
+    this.limitSpeed(3000);
     integrate(pts, dt, 0.998);
-    if (h) {
+    if (h && !h.local) {
       const p = pts[h.idx];
       if (!this.stuck || !this.pins.includes(h.idx)) { p.invMass = 0; p.px = p.x; p.py = p.y; p.x = h.x; p.y = h.y; }
     }
@@ -349,7 +452,7 @@ export class Thing {
 
   /** One pass of keeping its shape and keeping it out of the floor and off surfaces. */
   pass(bounds: Bounds) {
-    solveSticks(this.sticks);
+    if (this.rigid && !this.stuck) { this.matchShape(); this.pullHeld(); } else solveSticks(this.sticks);
     collide(this.points, bounds, this.friction, 0.15);
     for (const [p, pl] of this.above) {
       if (p.x < pl.x1 || p.x > pl.x2) continue;
@@ -362,7 +465,22 @@ export class Thing {
   }
 
   /** Finish the step: what landed stops falling; work out its platforms. */
-  end() {
+  end(bounds?: Bounds) {
+    if (this.rigid && !this.stuck) {
+      // Exactly its own shape again, then lifted (or pushed) out of anything that shape now pokes into:
+      // the floor, the screen's sides, and the tops it landed on.
+      this.matchShape();
+      if (bounds) {
+        let up = 0, side = 0;
+        for (const p of this.points) {
+          up = Math.max(up, p.y + p.r - bounds.floor);
+          if (p.x - p.r < bounds.left) side = Math.max(side, bounds.left - (p.x - p.r));
+          if (p.x + p.r > bounds.right) side = Math.min(side, bounds.right - (p.x + p.r));
+        }
+        for (const [p, pl] of this.above) if (p.x >= pl.x1 && p.x <= pl.x2) up = Math.max(up, p.y - (platY(pl, p.x) - p.r));
+        if (up > 0 || side) for (const p of this.points) { p.y -= Math.max(0, up); p.x += side; if (up > 0 && p.py > p.y) p.py = p.y; }
+      }
+    }
     for (const [p] of this.above) if (p.grounded && p.py > p.y) p.py = p.y;
     this.refresh();
   }
@@ -419,7 +537,11 @@ export class Thing {
     if (this.on && def.use === 'tv') {
       ctx.save(); ctx.clip();
       if (this.board) this.drawBoard(ctx, this.board, sx, sy, sw, sh);
-      else if (this.arcade) this.drawArcade(ctx, this.arcade, sx, sy, sw, sh);
+      else if (this.arcade && this.arcade2) {
+        // Split screen: player one on top, player two below.
+        this.drawArcade(ctx, this.arcade, sx, sy, sw, sh / 2, '#ffd23f');
+        this.drawArcade(ctx, this.arcade2, sx, sy + sh / 2, sw, sh / 2, '#7fd6ff');
+      } else if (this.arcade) this.drawArcade(ctx, this.arcade, sx, sy, sw, sh);
       else this.drawShow(ctx, sx, sy, sw, sh, now);
       ctx.restore();
     }
@@ -449,14 +571,14 @@ export class Thing {
   }
 
   /** His own game on the TV: a little guy hopping over blocks, and his score. */
-  private drawArcade(ctx: Ctx2D, g: Runner, sx: number, sy: number, sw: number, sh: number) {
+  private drawArcade(ctx: Ctx2D, g: Runner, sx: number, sy: number, sw: number, sh: number, player = '#ffd23f') {
     const box = (u: number, v: number, w: number, h: number, color: string) => {
       ctx.beginPath(); this.roundRect(ctx, [sx + u * sw, sy + v * sh, w * sw, h * sh], 1); ctx.fillStyle = color; ctx.fill();
     };
     box(0, 0.8, 1, 0.2, '#3d5a3a'); // the ground
     for (const o of g.blocks) box(o.x - BLOCK_W / 2, 0.8 - o.h, BLOCK_W, o.h, '#e0704a');
     const hurt = g.crashedAt >= 0 && g.time - g.crashedAt < 0.6;
-    box(g.x - PLAYER_W / 2, 0.8 - 0.14 - g.y, PLAYER_W, 0.14, hurt ? '#ff5a5a' : '#ffd23f');
+    box(g.x - PLAYER_W / 2, 0.8 - 0.14 - g.y, PLAYER_W, 0.14, hurt ? '#ff5a5a' : player);
     // The score: one tick per point, up in the corner (big enough to read as pixels).
     for (let i = 0; i < Math.min(g.score, 10); i++) box(0.05 + i * 0.06, 0.07, 0.04, 0.08, '#cfe8ff');
   }
@@ -733,7 +855,7 @@ export class Props {
       for (const t of this.things) t.pass(bounds);
       this.restOnEachOther();
     }
-    for (const t of this.things) t.end();
+    for (const t of this.things) t.end(bounds);
     const all = [...world, ...this.platforms];
     for (const b of this.balls) b.step(dt, bounds, all);
     if (moved) this.onPlatforms?.();

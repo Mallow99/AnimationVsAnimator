@@ -317,7 +317,8 @@ function frame(now: number) {
   if (talkOpen) { placeTalk(); if (now - talkIdle > 45000 && document.activeElement !== talkText) closeTalk(); }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   if (fakeWins.length) drawFakeWindows();
-  // Whoever's nearer to you is drawn in front (a dash passes in front of the other one).
+  // Furniture first (behind both of them), then whoever's nearer to you in front (a dash passes in front of the other one).
+  for (const p of pets) p.drawProps(ctx);
   for (const p of [...pets].sort((a, b) => a.char.body.j.hip.z - b.char.body.j.hip.z)) p.draw(ctx);
   requestAnimationFrame(frame);
 }

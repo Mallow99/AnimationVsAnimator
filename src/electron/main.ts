@@ -190,10 +190,12 @@ function createOverlay() {
     fullscreenable: false,
     alwaysOnTop: true,
     backgroundColor: '#00000000',
-    // Clicking him shouldn't steal focus from the app you're using.
-    // macOS: a "panel" window takes clicks without activating the app.
-    // Windows: a non-focusable window does the same.
-    ...(process.platform === 'darwin' ? { type: 'panel' } : { focusable: false }),
+    // Clicking him shouldn't steal focus from the app you're using (or, on macOS, switch you to another desktop:
+    // activating our app jumps to whichever desktop holds one of its windows, like a settings window).
+    // macOS: a "panel" window that can't take focus; Windows: a non-focusable window. Only the talk box makes
+    // it focusable, for as long as you're typing.
+    ...(process.platform === 'darwin' ? { type: 'panel' as const } : {}),
+    focusable: false,
     webPreferences: {
       preload,
       contextIsolation: true,
@@ -203,7 +205,8 @@ function createOverlay() {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   // macOS: follow you across desktops (Spaces) and over full-screen apps.
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // (skipTransformProcessType: he's already out of the Dock; flipping the app's type here can activate it.)
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   // Start click-through. `forward` still lets us see mouse movement so we know
   // when the cursor is over him.
   win.setIgnoreMouseEvents(true, { forward: true });
@@ -306,12 +309,12 @@ ipcMain.on('items:openFolder', () => { readItemDefs(); shell.openPath(itemsDir()
 ipcMain.on('pet:typing', (_e, on: boolean) => {
   if (!win) return;
   if (on) {
-    if (process.platform !== 'darwin') win.setFocusable(true);
+    win.setFocusable(true);
     win.focus();
     if (process.platform === 'darwin') win.focusOnWebView();
   } else {
-    if (process.platform !== 'darwin') { win.setFocusable(false); win.blur(); }
-    else watcher?.refocus();
+    win.setFocusable(false); win.blur();
+    if (process.platform === 'darwin') watcher?.refocus();
   }
 });
 ipcMain.on('memory:save', (_e, id: unknown, json: string) => saveMemory(petIndex(id), json));

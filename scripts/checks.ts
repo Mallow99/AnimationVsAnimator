@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { Pet, DEFAULT_CONFIG, friendConfig } from '../src/core/pet';
 import type { Peer } from '../src/core/peer';
+import { aimAngle, ARROW_SPEED } from '../src/core/skills/archery';
+import { guardPose } from '../src/core/skills/swordplay';
 import { mergeConfig } from '../src/core/config';
 import { parseItemDef } from '../src/core/items';
 import { parsePropDef, makeBridge } from '../src/core/props';
@@ -444,6 +446,119 @@ await test('figures only see each other through plain data: a fight works when e
   run(60, () => seen.a.includes('hit') && seen.b.includes('hit'));
   assert.equal(b.mind.skill?.name === 'duel' || seen.b.length > 0, true, 'the challenge never arrived');
   assert(seen.a.includes('hit') && seen.b.includes('hit'), `hits didn't cross: ${seen.a.join(',')} / ${seen.b.join(',')}`);
+  Math.random = realRandom;
+});
+await test('furniture stays rigid when shaken hard, never sinks into the floor, and you can pick it up from the middle', () => {
+  const p = pet(); p.paused = true;
+  const tv = p.props.spawn('tv', 700, 600, p.char.scale)!;
+  for (let i = 0; i < 240; i++) p.update(1 / 120);
+  const rest = tv.sticks.map((st) => st.len), c = tv.center;
+  p.cursor(c.x, c.y, 0, 0);
+  assert(p.pointerDown(c.x, c.y, 0), 'pressing the middle of the TV did nothing');
+  let worst = 0, sunk = 0;
+  for (let i = 0; i < 360; i++) {
+    const k = (i / 120) * 14, x = c.x + Math.cos(k) * 160, y = c.y - 140 + Math.sin(k * 1.3) * 120;
+    p.cursor(x, y, -Math.sin(k) * 2240, Math.cos(k * 1.3) * 2000); p.pointerMove(x, y, -Math.sin(k) * 2240, Math.cos(k * 1.3) * 2000, i * 8); p.update(1 / 120);
+    tv.sticks.forEach((st, n) => { worst = Math.max(worst, Math.abs(Math.hypot(st.a.x - st.b.x, st.a.y - st.b.y) - rest[n]) / rest[n]); });
+    if (tv.points.some((q) => q.y > bounds.floor + 1)) sunk++;
+  }
+  // Held still: it hangs from where you grabbed it, so your cursor is still on it.
+  const hold = { x: c.x, y: c.y - 150 };
+  for (let i = 0; i < 240; i++) { p.cursor(hold.x, hold.y, 0, 0); p.pointerMove(hold.x, hold.y, 0, 0, 3000 + i * 8); p.update(1 / 120); }
+  const still = tv.contains(hold.x, hold.y, 6);
+  p.pointerUp(hold.x, hold.y);
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  assert(worst < 0.02, `it stretched ${Math.round(worst * 100)}% while shaken`);
+  assert.equal(sunk, 0, 'it went into the floor');
+  assert(still, 'it slipped out from under the cursor');
+  assert(tv.points.every((q) => q.y <= bounds.floor + 0.5), 'it ended up in the floor');
+});
+await test('walking toward each other, they step aside and pass instead of getting stuck', () => {
+  const { a, b, run } = duo('play', 3);
+  a.paused = b.paused = true;
+  const ax = a.char.x, bx = b.char.x;
+  a.char.walkTo(bx + 140); b.char.walkTo(ax - 140);
+  run(10, () => !a.char.walking && !b.char.walking);
+  assert(a.char.x > bx + 80 && b.char.x < ax - 80, `stuck: ${a.char.x.toFixed(0)} (from ${ax.toFixed(0)}), ${b.char.x.toFixed(0)} (from ${bx.toFixed(0)})`);
+  Math.random = realRandom;
+});
+await test('two on the couch: side by side, and the TV stays on for whoever is still watching', () => {
+  const { a, b, run } = duo('play', 5);
+  a.props.spawn('couch', 560, 600, a.char.scale);
+  const tv = a.props.spawn('tv', 560 + 240 * a.char.scale, 600, a.char.scale)!;
+  run(2);
+  a.command('do:watchtv'); run(7);
+  b.command('do:watchtv'); run(9, () => !!a.char.seat && !!b.char.seat && Math.abs(a.char.seat.x - b.char.seat.x) > 15);
+  assert(a.char.seat && b.char.seat, `not both on the couch: ${a.char.mode}/${a.mind.skill?.name} ${b.char.mode}/${b.mind.skill?.name}`);
+  assert(Math.abs(a.char.seat.x - b.char.seat.x) > 15 * a.char.scale, 'they sat in the same spot');
+  assert(tv.on, 'the TV is off');
+  a.command('do:wander'); run(1.5);
+  assert(tv.on, 'the TV went off while his friend was still watching');
+  Math.random = realRandom;
+});
+await test('a high five: one asks, the other says yes, they meet in the middle, hands meet, and they like each other a bit more', () => {
+  const { a, b, run } = duo('play', 3);
+  a.ctx.feel.bond = b.ctx.feel.bond = 0.6;
+  let met = Infinity;
+  a.command('do:highfive');
+  run(8, () => {
+    const ta = a.mind.skill as { phase?: string } | null, tb = b.mind.skill as { phase?: string } | null;
+    if (ta?.phase === 'do' && tb?.phase === 'do') {
+      const ja = a.char.body.j, jb = b.char.body.j;
+      for (const h of [ja.handL, ja.handR]) for (const k of [jb.handL, jb.handR]) met = Math.min(met, Math.hypot(h.x - k.x, h.y - k.y));
+    }
+    return a.mind.skill?.name !== 'together' && met < Infinity;
+  });
+  assert(met < 9 * a.char.scale, `their hands never met (closest ${met.toFixed(1)}px)`);
+  assert(a.ctx.feel.bond > 0.6 && b.ctx.feel.bond > 0.6, `bond ${a.ctx.feel.bond} / ${b.ctx.feel.bond}`);
+  Math.random = realRandom;
+});
+await test('a shoulder bump on purpose: he stumbles, takes it personally, and they like each other less', () => {
+  const { a, b, run } = duo('play', 3);
+  const before = b.ctx.feel.bond;
+  let bumped = false;
+  const orig = b.mind.onEvent.bind(b.mind); b.mind.onEvent = (c, e) => { if (e.type === 'bumped') bumped = true; orig(c, e); };
+  a.command('do:bump');
+  run(6, () => bumped);
+  assert(bumped, 'never bumped him'); assert(b.ctx.feel.bond < before, 'he didn\'t mind');
+  Math.random = realRandom;
+});
+await test('sleepy, he curls up next to his sleeping friend', () => {
+  const { a, b, run } = duo('play', 3);
+  b.command('do:sleep'); run(2);
+  a.mood.s.energy = 0.2; a.command('do:naptogether'); run(8, () => a.char.mode === 'lie');
+  assert.equal(a.char.mode, 'lie'); assert(Math.abs(a.char.x - b.char.x) < 45 * a.char.scale, `slept ${Math.abs(a.char.x - b.char.x).toFixed(0)}px away`);
+  Math.random = realRandom;
+});
+await test('two-player video games: his friend grabs the other controller and the TV goes split screen', () => {
+  const { a, b, run } = duo('play', 5);
+  a.props.spawn('couch', 560, 600, a.char.scale);
+  const tv = a.props.spawn('tv', 560 + 240 * a.char.scale, 600, a.char.scale)!;
+  run(2);
+  a.command('do:videogame'); run(8);
+  b.command('do:jointv'); run(12, () => !!tv.arcade2);
+  assert(tv.arcade && tv.arcade2, 'no second game'); assert.equal(tv.players.length, 2);
+  Math.random = realRandom;
+});
+await test('arrows: shot at his friend they arc over and hit him; a sword held up to block knocks them aside', () => {
+  const { a, b, seen, run } = duo('play', 3);
+  a.paused = b.paused = true;
+  b.char.body.translate(380, -10); b.char.mode = 'air'; run(1.5);
+  const shootAt = () => {
+    const n = a.char.body.j.neck, jb = b.char.body.j, t = { x: (jb.neck.x + jb.hip.x) / 2, y: (jb.neck.y + jb.hip.y) / 2 };
+    const ang = aimAngle(t.x - n.x, n.y - t.y);
+    a.ctx.shoot!(n.x + 20, n.y, Math.cos(ang) * ARROW_SPEED, -Math.sin(ang) * ARROW_SPEED, 'friend');
+  };
+  shootAt(); run(1.5);
+  assert(seen.b.includes('hit'), `the arrow missed: ${seen.b.join(',')}`);
+  // Now with his sword up across his chest.
+  const sword = b.items.give('foam-sword', b.char)!; b.items.toHand(sword, b.char.facing > 0 ? 'R' : 'L');
+  b.char.facing = -1; b.char.faceLock = -1;
+  const hits = seen.b.length;
+  for (let i = 0; i < 60; i++) { guardPose(b.ctx, sword, 'mid', true, false); b.update(1 / 120); a.update(1 / 120); }
+  shootAt();
+  run(1.5, () => { guardPose(b.ctx, sword, 'mid', true, false); return false; });
+  assert.equal(seen.b.length, hits, 'the arrow went through his block');
   Math.random = realRandom;
 });
 await test('squaring up to your cursor: his friend comes to back him up', () => {

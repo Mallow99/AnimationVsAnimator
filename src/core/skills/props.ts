@@ -4,6 +4,7 @@ import type { Thing, PropDef } from '../props';
 import type { SeatStyle } from '../character';
 import { chance, pick, rand } from '../math';
 import { Runner } from '../tv-game';
+import { seatedTalk } from './together';
 
 /** The props of a kind (seat, tv, ride, canvas) that are standing up on the floor, nearest first. */
 export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
@@ -26,36 +27,56 @@ function seatStyle(c: Ctx, seat: Thing): SeatStyle {
   return 'up';
 }
 
-/** Sit down on a chair or a couch for a while (lean back on a couch). He falls off if you tip it over. */
+/**
+ * Sit down on a chair or a couch for a while (lean back on a couch). He falls off if you tip it over.
+ * Someone already there: on a couch he sits next to them (they scoot over); a chair that's taken, he doesn't.
+ */
 export class SitOnProp extends Skill {
   readonly name = 'sitdown';
   private phase: 'go' | 'sit' = 'go';
+  private style: SeatStyle = 'up';
+  private lastMid: { x: number; y: number } | null = null;
+  private talk = { at: 6 + Math.random() * 6 };
   constructor(private seat: Thing, private dur = rand(10, 25), private face: 1 | -1 | 0 = 0, readonly why = '') { super(); }
-  start(c: Ctx) { c.look = 'default'; }
+  start(c: Ctx) {
+    c.look = 'default';
+    this.style = seatStyle(c, this.seat);
+    // Lying along the couch needs it to himself.
+    if (this.style === 'lie' && this.seat.sitters.size) this.style = 'lounge';
+  }
   update(c: Ctx) {
-    const ch = c.char, at = this.seat.seatAt;
-    if (!at || !c.props?.things.includes(this.seat)) return true;
+    const ch = c.char, seat = this.seat;
+    if (!seat.seatAt || !c.props?.things.includes(seat)) return true;
     if (this.phase === 'go') {
       if (this.t > 12) return true;
+      if (!seat.claimSeat(c.who, ch.x, this.style === 'lie')) { if (this.t < 0.1) c.say(pick(['taken.', 'oh, you\'re there']), 1.2); return true; }
+      const at = seat.seatFor(c.who)!;
       if (!arrive(c, at.x, 5)) return false;
-      if (!ch.sitOn(at, this.face || (chance(0.5) ? 1 : -1), seatStyle(c, this.seat))) return true;
-      this.phase = 'sit'; this.t = 0;
-      if (chance(0.5)) c.say(pick(this.seat.def!.id === 'couch' ? ['ahh', 'comfy', '*flop*'] : ['ahh', 'nice chair', 'much better']), 1.4);
+      if (!ch.sitOn(at, this.face || (chance(0.5) ? 1 : -1), this.style)) return true;
+      this.phase = 'sit'; this.t = 0; this.lastMid = seat.seatAt;
+      if (chance(0.5)) c.say(pick(seat.def!.id === 'couch' ? ['ahh', 'comfy', '*flop*'] : ['ahh', 'nice chair', 'much better']), 1.4);
       return false;
     }
     if (ch.mode !== 'sit' || !ch.seat) return true;
-    // The seat moved: so does he. Tipped over or yanked away: he falls off.
-    const prev = ch.seat;
-    if (Math.abs(this.seat.tilt) > 0.6 || Math.hypot(at.x - prev.x, at.y - prev.y) > 18 * ch.scale) {
-      ch.standUp(); ch.poke('hip', (at.x - prev.x) * 20, -100);
+    // The seat itself moved a lot (shoved, picked up) or tipped over: he falls off. His spot on it changing
+    // (someone sat down next to him) just means he scoots over.
+    const mid = seat.seatAt!, was = this.lastMid ?? mid;
+    this.lastMid = mid;
+    if (Math.abs(seat.tilt) > 0.6 || Math.hypot(mid.x - was.x, mid.y - was.y) > 6 * ch.scale || seat.held) {
+      ch.standUp(); ch.poke('hip', (mid.x - was.x) * 60, -100);
       c.say(pick(['WHOA', 'hey!', 'my seat!']), 1.2);
       return true;
     }
-    ch.seat = at;
+    const at = seat.seatFor(c.who)!;
+    ch.seat = { x: ch.seat.x + (at.x - ch.seat.x) * 0.12, y: at.y };
+    // Someone wants to sit too: up he gets from lying along it, and leans back instead.
+    if (ch.seatStyle === 'lie' && seat.sitters.get(c.who)?.lying === false) { ch.seatStyle = 'lounge'; c.say(pick(['oh, ok', 'fine, sit', '*scoots*']), 1.2); }
+    // Sharing the couch: a bit of small talk now and then.
+    if (seat.sitters.size > 1) seatedTalk(c, this.t, this.talk);
     if (this.t > this.dur) { ch.standUp(); return true; }
     return false;
   }
-  stop(c: Ctx) { if (c.char.mode === 'sit' && c.char.seat) c.char.standUp(); }
+  stop(c: Ctx) { this.seat.leaveSeat(c.who); if (c.char.mode === 'sit' && c.char.seat) c.char.standUp(); }
 }
 
 /**
@@ -68,7 +89,7 @@ abstract class AtTheTV extends Skill {
   constructor(protected tv: Thing) { super(); }
   start(c: Ctx) {
     const tvx = this.tv.center.x;
-    const seat = propsOf(c, 'seat').filter((s) => Math.abs(s.center.x - tvx) < 320 && Math.abs(s.center.x - tvx) > 40)
+    const seat = propsOf(c, 'seat').filter((s) => Math.abs(s.center.x - tvx) < 320 && Math.abs(s.center.x - tvx) > 40 && (s.sitters.has(c.who) || s.sitters.size < s.seatRoom))
       .sort((a, b) => (b.def!.id === 'couch' ? 1 : 0) - (a.def!.id === 'couch' ? 1 : 0))[0];
     if (seat) { this.sub = new SitOnProp(seat, 3600, Math.sign(tvx - seat.center.x) as 1 | -1); this.sub.start(c); }
     c.look = 'target';
@@ -80,22 +101,32 @@ abstract class AtTheTV extends Skill {
     c.look = 'target'; c.lookTarget = tv.center;
     if (this.sub) {
       this.sub.t += dt;
-      if (this.sub.update(c)) return 'gone';
+      if (this.sub.update(c)) {
+        // (The seat filled up on the way: the floor in front of the TV, then.)
+        if (this.sub.t < 0.2 && ch.mode !== 'sit') { this.sub = null; return 'go'; }
+        return 'gone';
+      }
+      if (ch.mode === 'sit') tv.watchers.add(c.who);
       return ch.mode === 'sit' ? 'settled' : 'go';
     }
     if (this.phase === 'go') {
       if (this.t > 12) return 'gone';
-      const spot = tv.center.x + (ch.x < tv.center.x ? -1 : 1) * 70 * ch.scale;
+      // (Someone else already on the floor there: a bit further along.)
+      const others = [...tv.watchers].filter((w) => w !== c.who).length;
+      const spot = tv.center.x + (ch.x < tv.center.x ? -1 : 1) * (70 + others * 34) * ch.scale;
       if (!arrive(c, spot, 8)) return 'go';
       ch.facing = Math.sign(tv.center.x - ch.x) as 1 | -1;
       ch.sit();
       this.phase = 'settled';
+      tv.watchers.add(c.who);
     }
     return ch.mode === 'sit' ? 'settled' : 'gone';
   }
   stop(c: Ctx) {
     const tv = this.tv;
-    tv.on = false; tv.arcade = null; tv.board = null;
+    // Off only if nobody else is still watching.
+    tv.watchers.delete(c.who);
+    if (!tv.watchers.size) { tv.on = false; tv.arcade = null; tv.board = null; }
     c.char.gamepad = false; c.char.padMash = 0;
     this.sub?.stop(c);
     if (!this.sub && c.char.mode === 'sit') c.char.standUp();
@@ -124,30 +155,42 @@ export class WatchTV extends AtTheTV {
   }
 }
 
-/** Video games on his own: controller in hand, his little runner game on the TV, and he takes it personally. */
+/**
+ * Video games: controller in hand, his little runner game on the TV, and he takes it personally. If his
+ * friend's already playing, he grabs the other controller: split screen, player two, and trash talk.
+ */
 export class PlayVideoGame extends AtTheTV {
   readonly name = 'videogame';
   private played = 0;
   private dur = rand(25, 45);
   private chatter = 6;
+  private mine: Runner | null = null;
   update(c: Ctx, dt: number) {
     const s = this.settle(c, dt);
     if (s === 'gone') return true;
     if (s === 'go') return false;
-    const ch = c.char, tv = this.tv;
-    if (!tv.on || !tv.arcade) {
+    const ch = c.char, tv = this.tv, me = c.who;
+    // Better at it when he's on form; worse when he's sleepy or upset.
+    const L = c.mood.label, skill = L === 'sleepy' || L === 'sad' ? 0.45 : L === 'angry' ? 0.55 : 0.8;
+    if (!this.mine || (tv.arcade !== this.mine && tv.arcade2 !== this.mine)) {
       tv.on = true; tv.board = null;
-      // Better at it when he's on form; worse when he's sleepy or upset.
-      const L = c.mood.label;
-      tv.arcade = new Runner(L === 'sleepy' || L === 'sad' ? 0.45 : L === 'angry' ? 0.55 : 0.8);
+      if (tv.arcade && tv.players.length === 1 && tv.players[0] !== me) {
+        // His friend's playing: player two.
+        this.mine = tv.arcade2 = new Runner(skill);
+        tv.players.push(me);
+        c.say(pick(['player two!', 'move over', 'I got next', 'you\'re going down']), 1.4);
+      } else if (!tv.arcade || !tv.players.length) {
+        this.mine = tv.arcade = new Runner(skill);
+        tv.arcade2 = null; tv.players = [me];
+        if (chance(0.6)) c.say(pick(['game time', "let's go", 'ok. focus.']), 1.4);
+      } else return this.t > 3; // two already playing: he just watches (and gives up after a moment)
       c.sound?.('click', 0.5);
-      if (chance(0.6)) c.say(pick(['game time', "let's go", 'ok. focus.']), 1.4);
     }
     ch.gamepad = true;
-    const g = tv.arcade;
+    const g = this.mine, other = g === tv.arcade ? tv.arcade2 : tv.arcade;
     for (const e of g.step(dt)) {
       if (e === 'crash') {
-        c.say(pick(['NO', 'noooo', 'that was lag', 'come ON', 'ugh', 'it jumped late!']), 1.4);
+        c.say(other && other.score > 2 ? pick(['NO', 'you got lucky', 'stop looking at my screen']) : pick(['NO', 'noooo', 'that was lag', 'come ON', 'ugh', 'it jumped late!']), 1.4);
         c.mood.nudge({ annoyance: 0.05, boredom: -0.05 });
       } else if (e === 'record') {
         c.say(pick(['new record!', 'YES', "let's GO"]), 1.6);
@@ -155,18 +198,31 @@ export class PlayVideoGame extends AtTheTV {
       } else {
         c.sound?.('click', 0.15);
         if (g.score === 8) c.say(pick(['ooh, a good run', "don't choke", 'easy']), 1.4);
+        // Ahead of him by a few after his crash: rub it in.
+        if (other && other.crashedAt >= 0 && other.time - other.crashedAt < 0.3 && g.score > 3) c.say(pick(['HA', 'too slow', 'git gud']), 1.2);
       }
     }
     // Thumbs: busy as a block comes up, easy otherwise.
     const near = g.blocks.some((b) => b.x > g.x && b.x - g.x < 0.25);
     ch.padMash += ((near ? 1 : 0.25) - ch.padMash) * Math.min(1, dt * 8);
     this.played += dt;
-    if (this.played > this.chatter) { this.chatter = this.played + rand(8, 14); c.mood.nudge({ boredom: -0.1, happiness: 0.02 }); }
+    if (this.played > this.chatter) { this.chatter = this.played + rand(8, 14); c.mood.nudge({ boredom: -0.1, happiness: 0.02 }); if (other) c.feel.bond = Math.min(1, c.feel.bond + 0.01); }
     if (this.played > this.dur && g.crashedAt >= 0 && g.time - g.crashedAt < 1) {
       if (chance(0.5)) c.say(pick(['ok, one more— no. done.', 'enough for now', 'I was winning']), 1.6);
       return true;
     }
     return this.played > this.dur + 20;
+  }
+  stop(c: Ctx) {
+    const tv = this.tv, me = c.who;
+    if (tv.players.includes(me)) {
+      // Player one leaves: player two's game becomes the whole screen.
+      if (tv.players[0] === me && tv.arcade2) { tv.arcade = tv.arcade2; tv.arcade2 = null; tv.players = tv.players.slice(1); }
+      else if (tv.players[0] === me) { tv.players = []; }
+      else { tv.arcade2 = null; tv.players = tv.players.filter((p) => p !== me); }
+    }
+    super.stop(c);
+    if (!tv.watchers.size) { tv.players = []; tv.arcade2 = null; }
   }
 }
 

@@ -22,7 +22,9 @@ import { WindowAccess } from './window-access';
 import { BoardGame } from './board-game';
 import { controllerPart } from './render';
 import { distToSegment, type Vec } from './math';
+import { platY } from './physics';
 import { HIT_HEIGHT, HITS, segDist, viewHitTest, type HitKind } from './fighting';
+import { TALK, Together } from './skills/together';
 import type { FighterView, Peer, PeerMsg } from './peer';
 import { Memory } from './memory';
 import { CursorBody, drawCursorFlight } from './cursor';
@@ -50,6 +52,7 @@ export interface Drawing { title: string; shape: Vec[][]; color: string; at: num
 export { DEFAULT_CONFIG, friendConfig, type PetConfig } from './config';
 
 const STEP = 1 / 120; // physics runs at a fixed 120 steps per second
+let nextFigure = 1;
 
 export type { HitKind } from './fighting';
 const SMACK_SPEED = 1400; // cursor speed (px/s) that counts as a smack rather than a brush
@@ -79,6 +82,8 @@ export class Pet implements Peer {
    * does to them, goes through `Peer` (a snapshot and messages), so later they can live in other apps.
    */
   others: Peer[] = [];
+  /** An answer he's about to give his friend (a beat after he spoke). */
+  private pendingTalk: { text: string; at: number; wave: boolean } | null = null;
   /** A knockout: everything runs in slow motion for this long (real seconds). The app slows every figure. */
   slowmo = 0;
   /** Just clashed blades: don't count another clash for a moment. */
@@ -199,6 +204,12 @@ export class Pet implements Peer {
       props: this.props,
       onBecome: (d) => this.becomeReal(d),
       foe: () => pet.others[0]?.view() ?? null,
+      who: `figure-${nextFigure++}`,
+      tell: (m) => { for (const o of pet.others) o.receive(m, pet); },
+      feel: { bond: 0.4 },
+      burst: (x, y, n) => pet.burstAt(x, y, n),
+      shoot: (x, y, vx, vy, at) => { pet.arrows.push({ x, y, vx, vy, real: pet.config.fightMode === 'real', at, t: 0, stuck: null, life: 0 }); },
+      hearts: (x, y) => { for (let i = 0; i < 3; i++) pet.hearts.push({ x: x + (Math.random() - 0.5) * 24, y, t: 0, drift: (Math.random() - 0.5) * 30 }); },
       get fightMode() { return pet.config.fightMode; },
     };
     if (shared) { const first = this.props.onPlatforms; this.props.onPlatforms = () => { first?.(); this.refreshPlatforms(); }; }
@@ -245,6 +256,7 @@ export class Pet implements Peer {
     this.strikes();
     this.bladeHits();
     this.flyingItems();
+    this.stepArrows(dt);
     this.flyCursor(dt);
     this.anchorDoodles();
     for (const e of this.char.drainEvents()) { this.effects(e); this.emit(e); }
@@ -268,6 +280,12 @@ export class Pet implements Peer {
     if (sk && sk.name === 'duel' && this.backupAsked !== sk) {
       this.backupAsked = sk;
       for (const o of this.others) if (o.view().doing !== 'duel') o.receive({ type: 'challenge', armed: (sk as { armed?: boolean }).armed ?? true }, this);
+    }
+    if (this.pendingTalk && this.ctx.world.time > this.pendingTalk.at) {
+      const pt = this.pendingTalk; this.pendingTalk = null;
+      this.say(pt.text);
+      const o = this.others[0]?.view();
+      if (pt.wave && this.char.ready && o) { this.char.facing = (Math.sign(o.x - this.char.x) || this.char.facing) as 1 | -1; this.char.doGesture('wave'); }
     }
     if (this.bubble) this.typeOut(this.bubble, dt);
     if (this.bubble && this.bubble.t > this.bubble.ttl) this.bubble = null;
@@ -361,10 +379,16 @@ export class Pet implements Peer {
     if (this.speech.length) this.say(this.speech.shift()!);
   }
 
+  /**
+   * His drawings that came to life, and the furniture: drawn before (behind) every figure, by the app,
+   * so whoever's drawn first never ends up behind the couch the other one's sitting on.
+   */
+  drawProps(ctx: CanvasRenderingContext2D) {
+    if (this.ownsProps) this.props.draw(ctx, this.ctx.world.time, Math.round(this.config.look.pixel));
+  }
+
   draw(ctx: CanvasRenderingContext2D) {
     const look = this.config.look;
-    // His drawings that came to life, and his furniture: behind him (he sits on them, stands on them).
-    if (this.ownsProps) this.props.draw(ctx, this.ctx.world.time, Math.round(look.pixel));
     // Squash and stretch (drawing only): scale him about his feet for a moment.
     const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
@@ -383,6 +407,7 @@ export class Pet implements Peer {
     }
     restore();
     if (this.smear.length > 1) this.drawSmear(ctx);
+    this.drawBowAndArrows(ctx);
     if (this.sparks.length) drawSparks(ctx, this.sparks, Math.max(1, Math.round(look.pixel)));
     if (this.puffs.length) drawPuffs(ctx, this.puffs, Math.max(1, Math.round(look.pixel)), 'rgba(200,204,214,1)');
     drawDoodles(ctx, this.ctx.doodles, this.ctx.world.time);
@@ -1010,14 +1035,151 @@ export class Pet implements Peer {
     else paint(ctx);
   }
 
-  /** Standing right on top of another figure: shuffle apart (unless one of them is passing by in front). */
+  /**
+   * Sharing the floor with another figure. Walking toward him (or he's in the way): step out of the way in
+   * depth and walk on past, like people in a hallway (the one walking moves; if both are, they go opposite
+   * ways). Standing right on top of each other otherwise: shuffle apart. In a fight, the fight decides.
+   */
   private bumpOthers(dt: number) {
     const ch = this.char, sc = ch.scale, hip = ch.body.j.hip;
+    const doing = this.mind.skill?.name;
+    if (ch.mode !== 'ground' || doing === 'duel' || doing === 'together' || doing === 'bump' || doing === 'nap') return;
     for (const o of this.others) {
       const v = o.view(), oh = v.joints.hip;
-      if (!oh || v.mode !== 'ground' || Math.abs(oh.z - hip.z) > 14 * sc || Math.abs(oh.y - hip.y) > 30 * sc) continue;
-      const dx = hip.x - oh.x, gap = 18 * sc;
-      if (Math.abs(dx) < gap) ch.nudge((Math.sign(dx) || (this.config.name < v.name ? -1 : 1)) * (gap - Math.abs(dx)) * Math.min(1, dt * 8));
+      if (!oh || v.mode !== 'ground' || Math.abs(oh.y - hip.y) > 30 * sc) continue;
+      const dx = oh.x - hip.x, dz = hip.z - oh.z;
+      const heading = ch.walking ? Math.sign(ch.goalDir) : 0;
+      // On a collision course: he's ahead, close, and on about the same line in depth.
+      if (heading && Math.sign(dx) === heading && Math.abs(dx) < 46 * sc && Math.abs(dz) < 16 * sc) {
+        const side = dz !== 0 ? Math.sign(dz) : this.config.name < v.name ? 1 : -1;
+        ch.stepAside(side * 24 * sc);
+        continue;
+      }
+      if (ch.sidestepping || Math.abs(dz) > 14 * sc) continue;
+      const gap = 18 * sc;
+      if (Math.abs(dx) < gap) ch.nudge((Math.sign(-dx) || (this.config.name < v.name ? -1 : 1)) * (gap - Math.abs(dx)) * Math.min(1, dt * 8));
+    }
+  }
+
+  /**
+   * Arrows he's shot. In flight they arc down (gravity), point the way they're going, and stop at the first
+   * thing they meet: a sword held up to block (or swung through them) knocks them aside; another figure
+   * gets hit (the arrow sticks in him for a moment: a suction cup in a play fight); your cursor gets knocked
+   * flying (if he's allowed); the floor, a window top or a piece of furniture: they stick in, and fade.
+   */
+  private arrows: { x: number; y: number; vx: number; vy: number; real: boolean; at: 'friend' | 'cursor'; t: number; life: number;
+    stuck: null | { on: 'world' } | { on: 'peer'; peer: Peer; joint: string; dx: number; dy: number }; spin?: number }[] = [];
+  private stepArrows(dt: number) {
+    if (!this.arrows.length) return;
+    const w = this.ctx.world, sc = this.char.scale, b = w.bounds;
+    for (const a of this.arrows) {
+      a.t += dt;
+      if (a.stuck) {
+        a.life += dt;
+        if (a.stuck.on === 'peer') {
+          const j = a.stuck.peer.view().joints[a.stuck.joint as JointName];
+          if (j) { a.x = j.x + a.stuck.dx; a.y = j.y + a.stuck.dy; }
+        }
+        continue;
+      }
+      // A few small steps a frame, so a fast arrow can't skip through someone.
+      const n = Math.max(1, Math.ceil(Math.hypot(a.vx, a.vy) * dt / (4 * sc)));
+      for (let k = 0; k < n && !a.stuck; k++) {
+        const h = dt / n, px = a.x, py = a.y;
+        a.vy += 900 * h;
+        a.x += a.vx * h; a.y += a.vy * h;
+        if (a.spin !== undefined) a.spin += 14 * h;
+        this.arrowHits(a, px, py, sc);
+      }
+      if (!a.stuck && (a.x < b.left - 40 || a.x > b.right + 40 || a.t > 6)) a.life = 99;
+    }
+    this.arrows = this.arrows.filter((a) => a.life < (a.stuck?.on === 'peer' ? (a.real ? 2.5 : 3.5) : 4));
+  }
+
+  private arrowHits(a: Pet['arrows'][number], px: number, py: number, sc: number) {
+    const w = this.ctx.world, b = w.bounds, flying = a.spin === undefined;
+    // Knocked aside earlier: it just tumbles to the floor.
+    if (flying) {
+      for (const o of this.others) {
+        if (a.at !== 'friend') break;
+        const ov = o.view(), bl = ov.blade;
+        // His sword held up to block (or parrying, or swinging through it): it glances off.
+        if (bl && (ov.block || ov.parrying || bl.speed > 350) && segDist({ x: px, y: py }, a, bl.a, bl.b) < 3 * sc) {
+          a.vx = -a.vx * 0.25 + (Math.random() - 0.5) * 120; a.vy = -260; a.spin = 0;
+          this.burstAt(a.x, a.y, 8); this.sound('clang', 0.8);
+          return;
+        }
+        for (const u of [0.5, 1]) {
+          const x = px + (a.x - px) * u, y = py + (a.y - py) * u, jn = viewHitTest(ov, x, y, 3.5 * sc) as JointName | null;
+          if (!jn) continue;
+          const j = ov.joints[jn]!;
+          a.stuck = { on: 'peer', peer: o, joint: jn, dx: x - j.x, dy: y - j.y }; a.x = x; a.y = y;
+          o.receive({ type: 'hit', joint: jn, vx: a.vx * 0.35, vy: a.vy * 0.35, power: 0.8, weapon: { id: a.real ? 'arrow' : 'suction-arrow', hit: a.real ? 0.9 : 0.5, cuts: false }, at: { x, y }, kind: 'arrow', ranged: true }, this);
+          if (!a.real) this.sound('bonk', 0.5);
+          return;
+        }
+      }
+      const cur = w.cursor;
+      if (a.at === 'cursor' && cur && distToSegment(cur.x, cur.y, px, py, a.x, a.y) < 8 * sc) {
+        this.knockCursor({ x: cur.x, y: cur.y }, a.vx * 0.7, a.vy * 0.7 - 200, 0.7, 'item');
+        a.vx *= -0.2; a.vy = -150; a.spin = 0;
+        return;
+      }
+    }
+    // The floor, a window top, or a piece of furniture: it sticks in.
+    const into = a.y >= b.floor - 1 ? 'floor' : w.platforms.find((pl) => a.x >= pl.x1 && a.x <= pl.x2 && py <= platY(pl, a.x) && a.y >= platY(pl, a.x)) ? 'top' : this.props.thingAt(a.x, a.y) ? 'prop' : null;
+    if (into) {
+      if (into === 'floor') a.y = b.floor - 1;
+      if (flying) { a.stuck = { on: 'world' }; this.sound(into === 'prop' ? 'knock' : 'step', 0.5); }
+      else { a.vx *= 0.5; a.vy = Math.min(0, -a.vy * 0.3); if (Math.abs(a.vy) < 40) a.stuck = { on: 'world' }; }
+    }
+  }
+
+  /** His bow's string (straight, or pulled back to his hand with an arrow on it), and his arrows. */
+  private drawBowAndArrows(ctx: CanvasRenderingContext2D) {
+    const sc = this.char.scale, look = this.config.look;
+    const bow = this.items.list.find((it) => it.where === 'hand' && it.def.use === 'shoot');
+    if (!bow && !this.arrows.length) return;
+    const paint = (g: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) => {
+      g.lineCap = 'round';
+      if (bow) {
+        const t = bow.tip, u = bow.butt, p = bow.pull;
+        g.strokeStyle = '#4a4552'; g.lineWidth = 1.3 * sc;
+        g.beginPath(); g.moveTo(t.x, t.y); if (p) g.lineTo(p.x, p.y); g.lineTo(u.x, u.y); g.stroke();
+        if (p) {
+          // The nocked arrow: from the string, past the bow.
+          const hx = bow.at.x, hy = bow.at.y, dx = hx - p.x, dy = hy - p.y, l = Math.hypot(dx, dy) || 1;
+          this.drawArrow(g, p.x - (dx / l) * 2 * sc, p.y - (dy / l) * 2 * sc, Math.atan2(dy, dx), this.config.fightMode === 'real', l + 6 * sc);
+        }
+      }
+      for (const a of this.arrows) {
+        const fade = a.stuck ? Math.max(0, 1 - Math.max(0, a.life - (a.stuck.on === 'peer' ? 2 : 3)) ) : 1;
+        if (fade <= 0) continue;
+        g.globalAlpha = fade;
+        const ang = a.spin !== undefined ? a.spin : Math.atan2(a.vy, a.vx), len = 22 * sc;
+        this.drawArrow(g, a.x - Math.cos(ang) * len, a.y - Math.sin(ang) * len, ang, a.real, len);
+        g.globalAlpha = 1;
+      }
+    };
+    const pts = [...this.arrows.map((a) => ({ x: a.x, y: a.y })), ...(bow ? [bow.tip, bow.butt] : [])];
+    if (look.pixel > 1) this.pixels.paint(ctx, pts, 30 * sc, { ...look, outline: false }, paint);
+    else paint(ctx);
+  }
+
+  /** One arrow: from its tail at (x, y), pointing at `ang`, `len` long. A steel head, or a red suction cup. */
+  private drawArrow(g: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, x: number, y: number, ang: number, real: boolean, len: number) {
+    const sc = this.char.scale, c = Math.cos(ang), s = Math.sin(ang), tx = x + c * len, ty = y + s * len;
+    g.strokeStyle = '#c9a26b'; g.lineWidth = 1.3 * sc;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(tx, ty); g.stroke();
+    // Fletching, in his color.
+    g.strokeStyle = this.config.look.color; g.lineWidth = 1.2 * sc;
+    for (const side of [1, -1]) { g.beginPath(); g.moveTo(x + c * 4 * sc, y + s * 4 * sc); g.lineTo(x - s * side * 2.5 * sc, y + c * side * 2.5 * sc); g.stroke(); }
+    if (real) {
+      g.fillStyle = '#8f96a3';
+      g.beginPath(); g.moveTo(tx + c * 4 * sc, ty + s * 4 * sc); g.lineTo(tx - s * 2 * sc, ty + c * 2 * sc); g.lineTo(tx + s * 2 * sc, ty - c * 2 * sc); g.closePath(); g.fill();
+    } else {
+      g.fillStyle = '#e04848';
+      g.beginPath(); g.ellipse(tx + c * 1.5 * sc, ty + s * 1.5 * sc, 1.6 * sc, 3 * sc, ang, 0, Math.PI * 2); g.fill();
     }
   }
 
@@ -1037,6 +1199,8 @@ export class Pet implements Peer {
       hitstun: ch.hitstun, stagger: ch.stagger, hp: ch.hp, poise: ch.poise,
       blade: sword ? { a: sword.butt, b: sword.tip, speed: sword.tipSpeed, id: sword.def.id } : null,
       armed: this.items.list.some((it) => it.def.use === 'swing' && (it.where === 'hand' || it.where === 'belt')),
+      social: this.mind.skill instanceof Together ? { act: this.mind.skill.act, phase: this.mind.skill.phase } : null,
+      asleep: this.mood.asleep, mood: this.mood.label,
     };
   }
 
@@ -1074,6 +1238,25 @@ export class Pet implements Peer {
         return;
       }
       case 'challenge': this.emit({ type: 'challenged', name: fv.name, armed: m.armed }); return;
+      case 'invite': this.emit({ type: 'invited', act: m.act, name: fv.name }); return;
+      case 'reply': this.emit({ type: 'replied', act: m.act, yes: m.yes, name: fv.name }); return;
+      case 'go': if (this.mind.skill instanceof Together && this.mind.skill.act === m.act) this.mind.skill.go(m.topic); return;
+      case 'cancel': this.emit({ type: 'socialCancel', name: fv.name }); return;
+      case 'talk': {
+        // Someone said something to him: he answers (and waves back at a "hey!"), if he's awake and able.
+        if (this.mood.asleep || this.mind.skill?.name === 'duel') return;
+        const line = m.topic >= 0 && TALK[m.topic] ? TALK[m.topic][1][Math.floor(Math.random() * TALK[m.topic][1].length)] : ['hey!', 'yo', 'hi!', `hey ${fv.name}`][Math.floor(Math.random() * 4)];
+        this.pendingTalk = { text: line, at: w.time + 1.4, wave: m.topic < 0 };
+        this.ctx.feel.bond = Math.min(1, this.ctx.feel.bond + 0.01);
+        return;
+      }
+      case 'bump': {
+        // Shouldered on purpose: a stumble, and he takes it personally.
+        if (ch.mode === 'ground') ch.knock(m.vx, 0, false, 0.3);
+        this.sound('thud', 0.5);
+        this.emit({ type: 'bumped', name: fv.name });
+        return;
+      }
       case 'backup': this.emit({ type: 'friendFighting', angry: m.angry }); return;
       case 'ko': this.slowmo = Math.max(this.slowmo, 1.1); return;
     }
@@ -1096,7 +1279,7 @@ export class Pet implements Peer {
     const facingHim = Math.sign(fv.x - ch.x) === ch.facing;
     const fp = ch.fightPose, low = kind === 'sweep', standing = ch.mode === 'ground';
     // Parried: the blade (or fist) bounces off his, and the attacker reels.
-    if (fp?.parry && facingHim && standing && !low) {
+    if (fp?.parry && facingHim && standing && !low && !m.ranged) {
       this.burstAt(at.x, at.y, 16);
       this.sound('clang', 1);
       this.freeze = Math.max(this.freeze, 0.1);
@@ -1109,7 +1292,7 @@ export class Pet implements Peer {
     // A block has to be at the right height (one height off catches it half the time; a low block never stops a high cut).
     const blade = !!this.swordInHand, comes = HIT_HEIGHT[kind] ?? 'mid';
     const covered = !!fp?.block && (fp.block === comes || (fp.block !== 'low' && comes !== 'low' || fp.block === 'mid' && comes === 'low') && Math.random() < 0.5);
-    const blocks = standing && facingHim && (low ? fp?.block === 'low' : m.onBlade || ch.guard || covered || (blade && !!fp && !fp.move && !!weapon && Math.random() < 0.2));
+    const blocks = standing && facingHim && (low ? fp?.block === 'low' : m.onBlade || ch.guard || covered || (!m.ranged && blade && !!fp && !fp.move && !!weapon && Math.random() < 0.2));
     if (blocks) {
       ch.poise -= k.poise * (kind === 'heavy' ? 1.3 : 0.7);
       this.burstAt(at.x, at.y, weapon ? 8 : 4);
@@ -1121,7 +1304,7 @@ export class Pet implements Peer {
         ch.stumble(0.85);
         this.sound('snap', 0.6);
       } else ch.knock(dir * k.push * 0.3 * soft, 0, false, 0.08);
-      from.receive({ type: 'blocked', parried: false, push: 150, disarm: false }, this);
+      if (!m.ranged) from.receive({ type: 'blocked', parried: false, push: 150, disarm: false }, this);
       this.freeze = Math.max(this.freeze, 0.05);
       this.emit({ type: 'blocked', name: fv.name });
       return;
@@ -1670,13 +1853,14 @@ export class Pet implements Peer {
 
   // ── saving between runs ──
   save() {
-    return JSON.stringify({ v: 1, mood: this.mood.save(), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], ...(this.ownsProps ? { props: this.props.savePlaced() } : {}) });
+    return JSON.stringify({ v: 1, mood: this.mood.save(), bond: Math.round(this.ctx.feel.bond * 100) / 100, lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], ...(this.ownsProps ? { props: this.props.savePlaced() } : {}) });
   }
   load(json: string | null) {
     if (!json) return;
     try {
       const d = JSON.parse(json);
       this.mood.load(d.mood);
+      if (Number.isFinite(d.bond)) this.ctx.feel.bond = Math.max(-1, Math.min(1, d.bond));
       if (Number.isFinite(d.lessons?.safeDrop)) this.ctx.lessons.safeDrop = Math.max(40, Math.min(600, d.lessons.safeDrop));
       if (Array.isArray(d.gallery)) this.gallery = d.gallery.slice(-40).flatMap((g: unknown) => {
         const art = parseCanvasArt(g);

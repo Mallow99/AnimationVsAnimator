@@ -22,6 +22,7 @@ import type { FighterView } from '../peer';
 import { chance, clamp, pick, rand } from '../math';
 import { HIT_HEIGHT } from '../fighting';
 import { currentKey, guardPose, MOVES, SwordMove, type MoveName } from './swordplay';
+import { ShootBow } from './archery';
 
 type Height = 'mid' | 'high' | 'low';
 /** Strings of moves he chains in one exchange (the next goes the moment the last one ends). */
@@ -61,6 +62,10 @@ export class Duel extends Skill {
   /** The other one's health last time he looked (to notice his own hits landing). */
   private theirHp = 1;
   private foeGone = 0;
+  /** Shooting his bow (at range), and when he last did. */
+  private shooting: ShootBow | null = null;
+  private shotAt = -10;
+  private hasBow = false;
   hits = 0;
   constructor(_armed = true, readonly why = '') { super(); }
 
@@ -77,6 +82,8 @@ export class Duel extends Skill {
     // (No room on his belt for it: straight into his hand.)
     if (this.sword?.where === 'world' && ch.useHand) c.items.toHand(this.sword, ch.useHand);
     this.twoHand = !!this.sword?.def.cuts; // a katana takes both hands; a foam sword is a fencer's one hand
+    // And his bow, for when they're far apart (suction-cup arrows in a play fight).
+    this.hasBow = !!(c.items.list.find((it) => it.def.use === 'shoot' && it.where !== 'cursor') ?? c.items.give('bow', ch));
     c.say(real ? pick(['draw.', "this time it's real", '...', `${foe?.name ?? 'you'}. now.`]) : pick(['en garde!', 'spar?', 'square up', 'have at you!', `come on ${foe?.name ?? ''}`.trim()]), 1.4);
   }
 
@@ -129,12 +136,21 @@ export class Duel extends Skill {
     if (this.t > this.dur) { if (ch.mode === 'ground') this.finish(c, 'time'); return false; }
     // He stopped fighting (called it, or wandered off): so does this one.
     this.foeGone = foe.doing === 'duel' ? 0 : this.foeGone + dt;
-    if (this.foeGone > 1.2 && this.t > 3) { if (ch.mode === 'ground') this.finish(c, 'time'); return false; }
+    if (this.foeGone > 1.2 && this.t > 3) { if (ch.mode === 'ground') this.finish(c, 'time'); return this.foeGone > 12; }
+    // Sitting (or lying) when it started: up he gets.
+    if ((ch.mode === 'sit' || ch.mode === 'lie') && !ch.stayDown) ch.standUp();
     if (foe.hp < this.theirHp - 0.01) this.hits++;
     this.theirHp = foe.hp;
 
     const dx = foe.x - ch.x, dist = Math.abs(dx), dir = (Math.sign(dx) || ch.facing) as 1 | -1;
     const it = this.sword;
+    // Shooting: that plays out (his sword's on his belt meanwhile; he draws it again after).
+    if (this.shooting) {
+      this.shooting.t += dt;
+      if (!this.shooting.update(c, dt)) return false;
+      this.shooting.stop(c); this.shooting = null; this.shotAt = this.t;
+      this.setTempo('circle', rand(0.3, 0.8));
+    }
     // A move in progress plays out (it ends itself if he gets hit out of it).
     if (this.move) {
       if (!this.move.update(c, dt)) return false;
@@ -167,7 +183,7 @@ export class Duel extends Skill {
 
     // ── Reading him ──
     const R = this.reach('cut', ch.scale);
-    const fm = foe.move, theirR = (fm && fm.name in MOVES ? MOVES[fm.name as MoveName].reach * sc : R) * 1.15;
+    const fm = foe.move, theirR = fm?.name === 'shoot' ? Infinity : (fm && fm.name in MOVES ? MOVES[fm.name as MoveName].reach * sc : R) * 1.15;
     if (!fm) this.reacted = false;
     if (foe.block) this.blocksSeen = Math.min(6, this.blocksSeen + dt * 2); else this.blocksSeen = Math.max(0, this.blocksSeen - dt * 0.5);
     // Defense: an attack coming that can reach him.
@@ -235,6 +251,14 @@ export class Duel extends Skill {
     const guess: Height = chance(0.75) ? h : pick(['mid', 'high', 'low'] as Height[]);
     if (this.move && this.move.t > this.move.def.windup) return false; // already swinging (or showing off): let it ride
     const r = Math.random(), p = 0.25 + this.finesse * 0.25, cautious = 1 - this.aggression;
+    if (fm.name === 'shoot') {
+      // An arrow's coming: sword up across it (it glances off), or out of the way, or charge him while he's drawing.
+      const dist = Math.abs(foe.x - ch.x), flight = dist / 900;
+      if (r < 0.5) { this.move = null; this.blockHeight = 'mid'; this.blockUntil = this.t + fm.hitIn + flight + 0.25; }
+      else if (r < 0.75 && ch.whole) { this.move = null; if (chance(0.5)) ch.flipJump(-1, -dir * 160, -560); else ch.leap(dir * 120, -520); }
+      else if (dist > this.reach('dash', ch.scale) * 0.6 && dist < this.reach('dash', ch.scale) * 1.4) this.startMove(c, 'dash');
+      return true;
+    }
     if (fm.name === 'sweep' || (guess === 'low' && fm.name === 'rising' && chance(0.3))) {
       // Over it.
       this.move = null;
@@ -283,6 +307,15 @@ export class Duel extends Skill {
     if (behind < 60 * sc && dist < R * 2.2 && chance(0.6)) {
       if (chance(0.5) && ch.whole) { ch.flipJump(1, dir * Math.min(520, (dist + 60 * sc) * 1.9), -720); }
       else this.startMove(c, 'dash');
+      return;
+    }
+    // Far apart: out with the bow for an arrow or two (not too often: it's slow, and he's open while he draws).
+    if (this.hasBow && dist > R * 2.4 && this.t - this.shotAt > 5 && this.tempo !== 'press' && chance(0.35)) {
+      const target = () => { const v = c.foe?.(); const n = v?.joints.neck, h = v?.joints.hip; return n && h ? { x: (n.x + h.x) / 2, y: (n.y + h.y) / 2 } : null; };
+      this.shooting = new ShootBow(chance(0.5) ? 1 : 2, target, 'friend', false);
+      this.shooting.start(c);
+      ch.fightPose = null; ch.fightVX = null; ch.fightZ = null;
+      if (chance(0.3)) c.say(pick(['pew pew', 'eat this', 'from range!']), 1.2);
       return;
     }
     if (this.tempo === 'press') {
@@ -384,6 +417,7 @@ export class Duel extends Skill {
 
   stop(c: Ctx) {
     const ch = c.char;
+    this.shooting?.stop(c); this.shooting = null;
     this.endPose(c);
     ch.airPunch = null; ch.hp = 1; ch.poise = 1;
     if (this.sword?.where === 'hand') c.items.stow(this.sword);

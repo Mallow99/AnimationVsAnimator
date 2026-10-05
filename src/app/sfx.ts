@@ -110,6 +110,10 @@ export function playSfx(name: string, strength = 1, volume = 0.6, pitch = 1) {
       hiss(a, out, 'highpass', 2200, 900, 0.07, 0.25 * s);
       tone(a, out, 'sine', 170, 80, 0.08, 0.15 * s);
       break;
+    case 'clap': // hands meeting (high fives, patty cake)
+      hiss(a, out, 'bandpass', 2200, 1400, 0.05, 0.3 * s, 0, 2);
+      tone(a, out, 'sine', 240, 150, 0.04, 0.08 * s);
+      break;
     case 'poke':
       tone(a, out, 'sine', 520, 760, 0.07, 0.08);
       break;

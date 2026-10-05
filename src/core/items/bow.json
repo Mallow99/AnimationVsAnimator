@@ -1,0 +1,68 @@
+{
+  "id": "bow",
+  "name": "Bow",
+  "about": "A bow and a quiver of arrows: suction-cup arrows in a play fight, real ones in a real fight. He shoots at your cursor when he's in the mood.",
+  "use": "shoot",
+  "length": 19,
+  "grip": 19,
+  "belt": "side",
+  "hit": 0.2,
+  "shape": [
+    {
+      "pts": [
+        [
+          -19,
+          -1.5
+        ],
+        [
+          -15,
+          1.5
+        ],
+        [
+          -9,
+          3.6
+        ],
+        [
+          -3,
+          4.6
+        ],
+        [
+          0,
+          4.8
+        ],
+        [
+          3,
+          4.6
+        ],
+        [
+          9,
+          3.6
+        ],
+        [
+          15,
+          1.5
+        ],
+        [
+          19,
+          -1.5
+        ]
+      ],
+      "color": "#8a5a2b",
+      "width": 2.4
+    },
+    {
+      "pts": [
+        [
+          -2.5,
+          4.8
+        ],
+        [
+          2.5,
+          4.8
+        ]
+      ],
+      "color": "#3a2a22",
+      "width": 3.4
+    }
+  ]
+}

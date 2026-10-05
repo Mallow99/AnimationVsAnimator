@@ -43,14 +43,20 @@ export interface FighterView {
   blade: { a: V3; b: V3; speed: number; id: string } | null;
   /** He has a sword (in his hand or on his belt). */
   armed: boolean;
+  /** Something the two of them are doing together (a high five, patty cake...), and how far along: going to
+   * meet, in place and ready, or doing it. */
+  social: { act: string; phase: 'meet' | 'ready' | 'do' } | null;
+  asleep: boolean;
+  /** His mood, in a word ('happy', 'angry'...): the other one reads it before asking him anything. */
+  mood: string;
 }
 
 /** A weapon, as much as the one being hit needs to know about it. */
 export interface WeaponInfo { id: string; hit: number; cuts: boolean }
 
 export type PeerMsg =
-  /** One of my hits reached you (`onBlade`: it met your sword, not you). You decide what it does (blocked? parried? a cut?) and answer. */
-  | { type: 'hit'; joint: JointName; vx: number; vy: number; power: number; weapon: WeaponInfo | null; at: Vec; kind: HitKind; onBlade?: boolean }
+  /** One of my hits reached you (`onBlade`: it met your sword, not you; `ranged`: an arrow, from afar). You decide what it does (blocked? parried? a cut?) and answer. */
+  | { type: 'hit'; joint: JointName; vx: number; vy: number; power: number; weapon: WeaponInfo | null; at: Vec; kind: HitKind; onBlade?: boolean; ranged?: boolean }
   /** Your hit didn't land clean: blocked (I was guarding) or parried (and you're thrown off balance). */
   | { type: 'blocked'; parried: boolean; push: number; disarm: boolean }
   /** Our blades met mid-swing: both of us bounce off. */
@@ -60,7 +66,19 @@ export type PeerMsg =
   /** I'm fighting the cursor: come help. */
   | { type: 'backup'; angry: boolean }
   /** I'm down and out (or you are): the fight's over. Everyone slows down for a moment. */
-  | { type: 'ko' };
+  | { type: 'ko' }
+  /** Want to do this together? (a handshake, a high five, a fist bump, patty cake, a hug) */
+  | { type: 'invite'; act: string }
+  /** The answer. */
+  | { type: 'reply'; act: string; yes: boolean }
+  /** We're both in place: starting now (both count the beats from when this arrives). */
+  | { type: 'go'; act: string; topic?: number }
+  /** Never mind (something came up). */
+  | { type: 'cancel' }
+  /** A line of small talk (TALK[topic] in skills/together.ts; -1 = just "hey!"): answer it. */
+  | { type: 'talk'; topic: number }
+  /** My shoulder into yours, on purpose (px/s): not a fight hit, just rude. */
+  | { type: 'bump'; vx: number };
 
 export interface Peer {
   /** A fresh snapshot of him. */

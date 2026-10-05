@@ -1,6 +1,6 @@
 // Skill contracts and shared movement helper. No platform APIs.
 import type { Character, Keyframe } from '../character';
-import type { FighterView } from '../peer';
+import type { FighterView, PeerMsg } from '../peer';
 import type { Mood } from '../mood';
 import type { Bounds, Platform } from '../physics';
 import type { Wall, WinRect } from '../world';
@@ -37,6 +37,8 @@ export const DEFAULT_LESSONS: Lessons = { safeDrop: 420 };
 
 /** Everything a skill can see and touch. */
 export interface Ctx {
+  /** Which figure this is (unique while the app runs): who's sitting where, who's watching the TV. */
+  who: string;
   char: Character;
   mood: Mood;
   world: World;
@@ -88,6 +90,15 @@ export interface Ctx {
   game?: BoardGame;
   /** His friend (the other stick figure on screen), if there is one: a snapshot (see peer.ts). */
   foe?: () => FighterView | null;
+  /** Send his friend a message (see peer.ts). */
+  tell?: (m: PeerMsg) => void;
+  /** How he feels about his friend: -1 (can't stand him) … 1 (best friends). Saved with him. */
+  feel: { bond: number };
+  /** Loose an arrow from (x, y) at (vx, vy) px/s. `at`: what it's meant for (his friend, or your cursor). */
+  shoot?: (x: number, y: number, vx: number, vy: number, at: 'friend' | 'cursor') => void;
+  /** A little burst of sparks (hands slapping together), and hearts (a hug). */
+  burst?: (x: number, y: number, n: number) => void;
+  hearts?: (x: number, y: number) => void;
   /** How fights with his friend go: play (foam and wooden swords) or real (katanas that cut). */
   fightMode?: 'play' | 'real';
   /** A finished drawing comes to life (the pet turns it into a ball, a box, an item...). */
@@ -106,7 +117,11 @@ export abstract class Skill {
 export function arrive(c: Ctx, x: number, tol = 8) {
   const ch = c.char;
   if (!ch.ready || ch.walking) return false;
-  if (Math.abs(ch.x - x) <= tol * ch.scale) return true;
-  ch.walkTo(x, Math.abs(x - ch.x) > 200);
+  // (Never tighter than where his own walking calls it "there", or he'd stop short and wait forever.)
+  if (Math.abs(ch.x - x) <= Math.max(tol, 6) * ch.scale) return true;
+  // Up on a piece of furniture (or something he drew) and the spot's past its edge: he hops down rather than
+  // waiting at the edge forever. (Off a window, getting down is its own skill.)
+  const offProp = ch.support >= 0 && !!c.props?.thingOf(ch.support);
+  ch.walkTo(x, Math.abs(x - ch.x) > 200, offProp);
   return false;
 }

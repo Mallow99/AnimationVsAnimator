@@ -9,7 +9,9 @@ and pixelated at his own pixel size (see the reference notes in docs/HANDOFF.md)
 removed; Othello is played on the TV (as is his own runner game). The owner has resumed multiple characters: two equal stick figures (own settings windows,
 configs, memories, brains) that fight each other with a fighting-game AI. Fights are sword fights now
 (stances, keyframed moves, parries, clashes, health instead of knockdowns; skills/swordplay.ts, skills/duel.ts),
-and figures only interact through src/core/peer.ts so they can become separate apps. See docs/HANDOFF.md.
+and figures only interact through src/core/peer.ts so they can become separate apps. They also do things together
+(skills/together.ts: high fives, patty cake, hugs, naps, shoulder bumps; a saved `bond`), share the couch/TV, and
+have bows (skills/archery.ts). `npm run soak` runs both for minutes and reports bugs. See docs/HANDOFF.md.
 
 A desktop pet: a procedural stick figure living in a transparent, always-on-top,
 click-through overlay. Inspired by Alan Becker's *Animator vs. Animation*.
@@ -370,4 +372,5 @@ never on the owner's Mac. Ask the owner what actually happened on their machine;
 - `npm start`     build + launch the pet (Electron)
 - `npm run preview` build + open in a normal browser window (no click-through)
 - `npm run sim`   headless physics tests
+- `npm run soak`  both figures for 5 minutes (SOAK_SECONDS, SOAK_SEED), reports anything odd
 - `npm run typecheck`

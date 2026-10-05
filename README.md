@@ -67,6 +67,13 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   a big hit while staggered, or the knockout (a moment of slow motion). *Play fights*: foam swords.
   *Real fights*: katanas in both hands; once someone's worn down a cut can take a limb off (they put it back on)
   or run him through. No gore, just sparks. When one squares up to your cursor, the other comes to back him up.
+- **Together**: they high-five, fist-bump, shake hands, play patty cake and hug (one asks, the other decides,
+  depending on his mood and how much he likes him right now), share the couch, watch TV together or play the
+  video game against each other (split screen), and curl up to nap next to each other. In a mood, one might
+  shoulder the other on purpose, which can start a fight. What they do together changes how they feel about each other.
+- **Bow and arrows**: in fights, at range, they sometimes switch to a bow (suction-cup arrows in play fights);
+  a sword held up knocks arrows aside. He'll also shoot at your cursor (Items → Inventory has the bow).
+- **Furniture** is solid: grab it anywhere, swing it around, throw it; it keeps its shape.
 - **Optional gear**: helmet and boots in Items → Inventory. **Wear** puts them on; **Drop it in**
   lets him fetch them. Take them back or **Put away** whenever you like.
 - **Make your own items and props**: it's just a text file. See [docs/MAKING-THINGS.md](docs/MAKING-THINGS.md)

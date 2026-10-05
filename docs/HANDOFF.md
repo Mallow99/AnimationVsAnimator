@@ -2,7 +2,73 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest: sword fights rebuilt (stances, real moves, health instead of knockdowns), and the line between figures
+## Latest: two figures that live together, rigid furniture, bows, a soak test, and the desktop-switch bug
+
+Owner's asks: they walk into each other and stall; they hardly interact; things pop in and out of each other
+(the second one flickers in and out of the couch), props break when shaken (the old "TV glitch") and can only be
+picked up by a corner; give them ranged weapons; run a long simulation and fix what turns up; more together
+(patty cake, handshakes, bumping shoulders when mad, sleeping in a pile like cubs); clicking a figure switched
+macOS to the desktop the app was started on.
+
+- **Soak test** (`npm run soak`, `SOAK_SECONDS`, `SOAK_SEED`, `SOAK_PROBE=<time>` dumps state): both figures,
+  couch + TV + chair, two windows, a wandering cursor, furniture grabbed and shaken hard every 20 s. Reports NaN,
+  off screen, stuck modes, same skill for minutes, walking but stuck, standing inside each other, sitting off the
+  seat, furniture stretched/in the floor/off screen, and prints how often they did each thing and their bond.
+  Bugs it found and fixed: furniture losing its shape when shaken; figures stopping 4-5 px short of where they
+  walk (balance compliance vs a crawl-speed approach; now a 24 px/s minimum and a 5*scale arrival, `arrive()`
+  never tighter than 6*scale); hopping down off furniture to reach a spot past its edge (`arrive` uses offEdge);
+  both figures sitting on the same couch point; one figure switching the TV off on the other; hips landing on a
+  couch's armrest/back while sitting down; a ramp drawn over the couch lifting the sitter (`rampPlan` keeps clear
+  of furniture); the Mind queue dropping a follow-up queued while a skill starts; `Mind.end` re-entrance (an
+  endless cancel loop between the two); Reattach looping forever when the limb fell far below him (now hops down,
+  and gives up into a redraw after a few misses); a gesture started while hopping on one leg never finishing (hop/crawl
+poses don't play gestures: now refused and cleared) and a leftover crouch freezing a crawl; walking to a spot off the
+edge of furniture he's standing on (now steps off, in `walkTo`); a duel accepted while sitting on a window ledge
+(sat in "fight mode" forever: now declined from up high, stands up otherwise, and ends if the other one left).
+16 seeds x 5 min end with "no trouble seen". Typical 5 minutes: 2-4 things together, 1-3 call-outs, couch
+small talk, 2-4 fights.
+- **Furniture** (`props.ts`): every thing except a bridge is rigid by shape matching (`Thing.fit/matchShape`: after
+  each pass its points are snapped back to its rest shape, moved and turned to fit), so the drawing and the hitbox
+  can't disagree; after the passes it's lifted out of the floor/sides/tops it pokes into; speed limited to 3000 px/s.
+  Grab anywhere (`held.local`, `pullHeld`: a rigid-body point constraint, so pulling off-center turns it and it
+  hangs from where you hold it). Props are drawn by the app before both figures (`Pet.drawProps`), fixing the
+  couch flicker (figures are depth-sorted, and props used to be drawn inside the first figure's draw).
+- **Seats and TV are shared** (`Thing.sitters`, `claimSeat/leaveSeat/seatFor`, `seatRoom`): a couch holds two side
+  by side (the first scoots over; someone lying along it sits up to make room), a chair one. `Thing.watchers`: the
+  TV stays on while anyone watches. Floor spots in front of the TV spread out. `Ctx.who` identifies a figure.
+- **Passing** (`Pet.bumpOthers`, `Character.stepAside/goalDir/nudge`): walking toward the other one, he steps
+  toward/away from you in depth and walks past; standing on top of each other they shuffle apart.
+- **Together** (`skills/together.ts`, messages `invite`/`reply`/`go`/`cancel`/`bump` in peer.ts, `FighterView.social/
+  asleep/mood`): high five, fist bump, handshake, patty cake, hug. `AskTogether` asks; the other decides
+  (`Mind.answerInvite`: mood, bond, busy); both run `Together` (meet in the middle, face each other, the asker
+  says `go` when both show `ready`, beats counted from then; hands go where the other's actually are;
+  `Character.handsAt` places both hands). `ShoulderBump` (annoyed, low bond): walks through him; the bumped one
+  takes it personally and may start a fight. `NapTogether`: sleepy and he's asleep: curls up beside him.
+  `jointv`: join him watching, or as player two (split screen: `Thing.arcade2/players`, PlayVideoGame).
+  `chat` (walk over, a line of small talk each: `TALK`, the topic sent with `go`), `WaveAt` (across levels: up on a
+  window, or he's sitting: a wave and a "hey!"; the `talk` message makes the other answer and wave back, see
+  `Pet.pendingTalk`), `sitwith` (sit next to him on the couch), and small talk while sharing a seat (`seatedTalk`).
+  The soak showed why they rarely interacted: most of the time they're on different levels (`SOAK_SOCIAL=1`).
+  **Bond** (`ctx.feel.bond`, -1..1, saved as `bond`): up with things done together and shared games, down
+  with refusals and bumps; it shapes what they choose (and real-fight anger). Options in `Mind.socialOptions`.
+- **Bow** (`items/bow.json`, use `shoot`; `skills/archery.ts` `ShootBow`, `aimAngle`; arrows in `Pet.stepArrows/
+  arrowHits/drawBowAndArrows`): turns side-on, aims with a real arc (950 px/s, gravity 900), draws the string to
+  his cheek (`Item.pull`), looses. Arrows stick in floors/window tops/furniture and in whoever they hit (a red
+  suction cup in play fights, steel in real ones); a sword held up to block, parrying or swinging knocks them
+  aside; at your cursor they knock it flying. In duels (`Duel.shooting`): at range he may sheathe, shoot once or
+  twice, and draw again; the other reads `move: 'shoot'` (hitIn) and blocks, dodges or dashes in. Hits with
+  `ranged: true` skip the random guard block and don't recoil the shooter. New: `Character.actionMove`.
+- **Desktop switching (macOS)**: clicking activated the app and macOS jumped to the desktop holding its other
+  window. The overlay is now `focusable: false` on macOS too (and `setVisibleOnAllWorkspaces(..., skipTransformProcessType)`),
+  made focusable only while the talk box is open. NOT verified: needs the owner's Mac. If it still switches, the next
+  step is moving the settings windows to the active Space, or a tiny native call.
+
+Checked: typecheck, 42 focused checks (new: rigid furniture shaken + held from the middle, passing, two on the
+couch + TV, high five, shoulder bump, nap together, split-screen games, arrows hit / blocked), sim seeds 1-3,
+soak 16 seeds x 5 min, fight lab (play fights 30-57 s with bows used 1-2 times), Chromium and Electron checks.
+Pictures: docs/images/together.png, docs/images/bow.png.
+
+## Earlier: sword fights rebuilt (stances, real moves, health instead of knockdowns), and the line between figures
 
 Owner's asks: fights felt flat, they knocked each other over again and again, didn't always draw their weapons,
 and the basic swing "looks so basic". Look at references and upgrade. Keep in mind: later Blurp and Leonard

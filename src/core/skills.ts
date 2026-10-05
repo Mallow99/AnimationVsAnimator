@@ -48,7 +48,7 @@ export type Step =
   | { wait: number }
   | { walkTo: 'cursor' | 'away' | 'edge' | number; run?: boolean }
   | { jump: number; vx?: number | 'cursor' }
-  | { face: 'cursor' | 'away' | 'flip' }
+  | { face: 'cursor' | 'away' | 'flip' | 'friend' }
   | { look: LookMode }
   | { sit: number }
   | { pop: LimbId }
@@ -101,7 +101,8 @@ export class Sequence extends Skill {
       return true;
     }
     if ('face' in st) {
-      const target = st.face === 'flip' ? ch.x - ch.facing * 100
+      const friend = st.face === 'friend' ? c.foe?.() : null;
+      const target = friend ? friend.x : st.face === 'flip' ? ch.x - ch.facing * 100
         : cur ? (st.face === 'cursor' ? cur.x : 2 * ch.x - cur.x) : ch.x + ch.facing * 100;
       c.look = st.face === 'away' ? 'away' : st.face === 'cursor' ? 'cursor' : 'none';
       ch.facing = sign(target - ch.x);
@@ -503,7 +504,7 @@ export class KickBall extends Skill {
     if (this.t < this.next || !ch.ready) return this.t > 30;
     this.next = this.t + 0.25;
     const spot = b.x - dir * (b.r + 13 * ch.scale);
-    if (Math.abs(spot - ch.x) > 5 * ch.scale || Math.abs(b.vx) > 80) { ch.walkTo(spot, Math.abs(spot - ch.x) > 150); return false; }
+    if (Math.abs(spot - ch.x) > 9 * ch.scale || Math.abs(b.vx) > 80) { ch.walkTo(spot, Math.abs(spot - ch.x) > 150); return false; }
     ch.stop();
     ch.facing = dir;
     ch.doGesture('kick');
@@ -1072,6 +1073,12 @@ function penTo(c: Ctx, pen: Item, tip: Vec) {
 }
 
 /** Is there a ramp he could draw from where he stands up onto `target`? (Floor space for it, his pen, not too high.) */
+/** Is the floor between a and b clear of furniture? (A ramp drawn over the couch would lift whoever's on it.) */
+function clearOfProps(c: Ctx, a: number, b: number) {
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  return !(c.props?.placed ?? []).some((t) => { const xs = t.points.map((p) => p.x); return Math.max(...xs) > lo && Math.min(...xs) < hi; });
+}
+
 export function rampPlan(c: Ctx, target: Platform | null): { x0: number; xe: number; dir: 1 | -1; floor: number; top: number } | null {
   const ch = c.char, sc = ch.scale, pen = c.items.find('draw');
   if (!pen || pen.where === 'cursor' || !ch.useHand || ch.legCount < 2) return null;
@@ -1081,14 +1088,14 @@ export function rampPlan(c: Ctx, target: Platform | null): { x0: number; xe: num
   if (!target) {
     // Just a ramp, in front of him: something to walk up and jump off.
     const h = 70 * sc, dir = (ch.facing > 0 ? 1 : -1) as 1 | -1, x0 = ch.x + dir * 30 * sc, xe = x0 + dir * (h / RAMP_SLOPE);
-    return canStandAt(ch, xe + dir * 5) && canStandAt(ch, x0 - dir * 30 * sc) ? { x0, xe, dir, floor, top: floor - h } : null;
+    return canStandAt(ch, xe + dir * 5) && canStandAt(ch, x0 - dir * 30 * sc) && clearOfProps(c, x0, xe) ? { x0, xe, dir, floor, top: floor - h } : null;
   }
   const h = floor - target.y;
   if (h < 40 * sc || h > 330 * sc || target.x2 - target.x1 < 40 || target.y2 !== undefined) return null;
   // Lean it on whichever end of the window is nearer, coming from outside the window.
   for (const dir of (ch.x < (target.x1 + target.x2) / 2 ? [1, -1] : [-1, 1]) as (1 | -1)[]) {
     const xe = dir > 0 ? target.x1 : target.x2, x0 = xe - dir * (h / RAMP_SLOPE);
-    if (canStandAt(ch, x0 - dir * 36 * sc) && canStandAt(ch, xe - dir * 4)) return { x0, xe, dir, floor, top: target.y };
+    if (canStandAt(ch, x0 - dir * 36 * sc) && canStandAt(ch, xe - dir * 4) && clearOfProps(c, x0, xe)) return { x0, xe, dir, floor, top: target.y };
   }
   return null;
 }
@@ -1826,10 +1833,15 @@ export class Reattach extends Skill {
         } else {
           const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y, ch.body.j.hip.y);
           const tooHigh = piece.root.y < feet - 70 * ch.scale && Math.max(...piece.points.map((p) => p.y)) < feet - 40 * ch.scale;
-          if (tooHigh) this.stuck += 0.3;
+          // Way down below him (he's up on a window, it fell to the floor): hop down off the edge nearest it.
+          const below = Math.min(...piece.points.map((p) => p.y)) > feet + 50 * ch.scale;
+          if (tooHigh || below) this.stuck += 0.3;
           const dx = piece.root.x - ch.x;
-          if (Math.abs(dx) > 14 * ch.scale) ch.walkTo(piece.root.x - Math.sign(dx) * 8 * ch.scale, Math.abs(dx) > 200);
-          else if (!tooHigh) { ch.stop(); ch.facing = Math.sign(dx) || ch.facing; this.phase = 'pick'; this.next = this.t; }
+          if (below && ch.support >= 0) {
+            const r = ch.surfaceRange(), edge = piece.root.x < (r.x1 + r.x2) / 2 ? r.x1 - 12 * ch.scale : r.x2 + 12 * ch.scale;
+            ch.walkTo(Math.abs(piece.root.x - edge) < 60 * ch.scale ? piece.root.x : edge, false, true);
+          } else if (Math.abs(dx) > 14 * ch.scale) ch.walkTo(piece.root.x - Math.sign(dx) * 8 * ch.scale, Math.abs(dx) > 200);
+          else if (!tooHigh && !below) { ch.stop(); ch.facing = Math.sign(dx) || ch.facing; this.phase = 'pick'; this.next = this.t; }
         }
         if (this.stuck > 25) {
           this.phase = 'redraw'; this.redrawAt = this.t;
@@ -1849,7 +1861,7 @@ export class Reattach extends Skill {
         ch.handTarget = { x: piece.root.x, y: piece.root.y };
         const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
         if (Math.hypot(h.x - piece.root.x, h.y - piece.root.y) < 7 * ch.scale && ch.holdLimb(piece, hand)) { this.phase = 'bring'; this.next = this.t; }
-        else if (this.t - this.next > 3 || Math.abs(piece.root.x - ch.x) > 40 * ch.scale) { ch.handTarget = null; this.phase = 'go'; }
+        else if (this.t - this.next > 3 || Math.abs(piece.root.x - ch.x) > 40 * ch.scale) { ch.handTarget = null; this.phase = 'go'; this.stuck += 4; } // (a few misses and he draws a new one)
         return false;
       }
       case 'bring': {

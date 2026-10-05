@@ -195,7 +195,7 @@ function frame(now: number) {
   pet.update(dt);
   const g = stage.getContext('2d')!;
   paintDesk(g, stageSize.w, stageSize.h, false);
-  pet.draw(g);
+  pet.drawProps(g); pet.draw(g);
   for (const c of cells) { c.update(dt); c.draw(); }
   requestAnimationFrame(frame);
 }

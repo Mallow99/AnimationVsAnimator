@@ -17,13 +17,14 @@ import ballDef from './items/bouncy-ball.json';
 import maceDef from './items/mace.json';
 import foamDef from './items/foam-sword.json';
 import katanaDef from './items/katana.json';
+import bowDef from './items/bow.json';
 import helmetDef from './items/helmet.json';
 import bootsDef from './items/boots.json';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import type { DepthPart } from './render';
 
-/** What he does with it: draw (a pen), swing (a sword), smash (a mace, overhead), throw (a ball), none (just carries it). */
-export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'none';
+/** What he does with it: draw (a pen), swing (a sword), smash (a mace, overhead), throw (a ball), shoot (a bow), none (just carries it). */
+export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'shoot' | 'none';
 export type BeltSpot = 'side' | 'back' | 'pocket' | 'none';
 /** A line through `pts`, or (with `fill`) a flat filled shape, optionally with an edge line. */
 export interface ItemStroke { pts: [number, number][]; color: string; width: number; fill?: string }
@@ -74,7 +75,7 @@ export function parseItemDef(raw: unknown): ItemDef | null {
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 140) : '',
-    use: o.use === 'draw' || o.use === 'swing' || o.use === 'smash' || o.use === 'throw' ? o.use : 'none',
+    use: o.use === 'draw' || o.use === 'swing' || o.use === 'smash' || o.use === 'throw' || o.use === 'shoot' ? o.use : 'none',
     length, grip,
     belt: o.belt === 'side' || o.belt === 'back' || o.belt === 'pocket' ? o.belt : o.belt === 'none' ? 'none' : 'side',
     hit: num(o.hit, 0, 0, 3), bounce: num(o.bounce, 0.3, 0, 0.92), shape, sprite,
@@ -102,7 +103,7 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
 export const SLOT_NAMES = ['left hip', 'right hip', 'back', 'pocket'];
@@ -127,6 +128,8 @@ export class Item {
   aim: V3 | null = null;
   /** Aimed in his own frame instead ([forward, up]): turns with him (a sword in a fight, through a spin). */
   aimLocal: [number, number] | null = null;
+  /** A bow being drawn: where its string is pulled back to (his hand), or null (the string's straight). */
+  pull: V3 | null = null;
   /** Physics for when it's lying around or dangling from your cursor: a = grip, b = tip. */
   readonly a: Point; readonly b: Point;
   private readonly sticks: Stick[];
