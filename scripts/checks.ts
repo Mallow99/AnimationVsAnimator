@@ -9,7 +9,7 @@ import { aimAngle, ARROW_SPEED } from '../src/core/skills/archery';
 import { guardPose } from '../src/core/skills/swordplay';
 import { companionConfig, mergeConfig } from '../src/core/config';
 import { parseItemDef } from '../src/core/items';
-import { parsePropDef, makeBridge } from '../src/core/props';
+import { parsePropDef, makeBridge, Ball } from '../src/core/props';
 import { WindowAccess } from '../src/core/window-access';
 import { writeAtomic } from '../src/electron/storage';
 import { unchangedExample } from '../src/electron/builtin-files';
@@ -22,6 +22,11 @@ import {ShootGun} from '../src/core/skills/gun';
 import {Projectiles} from '../src/core/combat/projectiles';
 import {CursorWeapon} from '../src/core/combat/cursor-weapon';
 import {offlineReply} from '../src/core/brains/offline';
+import {carriedWeapon, nearestWeapon} from '../src/core/combat/armament';
+import {Duel} from '../src/core/skills/duel';
+import {overlapOffset} from '../src/core/geometry';
+import {WatchTV, PlayVideoGame} from '../src/core/skills/props';
+import {activitySeconds} from '../src/core/activity-pacing';
 import {FileHabitats} from '../src/app/file-habitats';
 import {DesktopBridge} from '../src/electron/desktop-bridge';
 
@@ -827,6 +832,536 @@ await test('a file visit follows its exact real path, hides when closed, and res
   assert.equal(habitats.petFor(0), null);
   assert.equal(a.props.placed.length, 1);
   assert(a.memory.notes.some((n) => n.text === 'a real folder visit'));
+});
+await test('wielding reserves both hands and effective equipment depends on distance', () => {
+  const p = pet(),
+    pen = p.items.find('draw')!,
+    gun = p.items.give('gun', p.char)!;
+  p.items.toHand(pen, 'L');
+  p.items.toHand(gun, 'R');
+  const blade = p.items.give('katana', p.char)!;
+  p.items.wield(blade, 'L');
+  assert.deepEqual(
+    p.items.list.filter((it) => it.where === 'hand').map((it) => it.def.id),
+    ['katana'],
+  );
+  assert.equal(pen.where, 'belt');
+  assert.equal(gun.where, 'belt');
+  assert.equal(carriedWeapon(p.items.list, true, 60), blade);
+  assert.equal(carriedWeapon(p.items.list, true, 300), gun);
+  p.items.toCursor(blade, { x: 100, y: 100 });
+  p.items.toCursor(gun, { x: 100, y: 100 });
+  const bow = p.items.give('bow', p.char)!;
+  assert.equal(carriedWeapon(p.items.list, true, 300), bow);
+});
+await test('recovery chooses the closest reachable weapon rather than crossing the opponent', () => {
+  const def = BUILTIN_ITEMS.find((d) => d.id === 'sword')!;
+  const w = (uid: number, x: number, y = 797, speed = 0) => ({
+    owner: 'other',
+    uid,
+    def,
+    at: { x, y },
+    speed,
+    ammo: 6,
+  });
+  const near = w(1, 460),
+    powerfulButFar = {
+      ...w(2, 300),
+      def: BUILTIN_ITEMS.find((d) => d.id === 'katana')!,
+    };
+  assert.equal(
+    nearestWeapon(
+      [powerfulButFar, w(3, 710), w(4, 501, 300), w(5, 480, 790, 1000), near],
+      500,
+      800,
+      650,
+      1,
+    ),
+    near,
+  );
+});
+await test('loose weapons transfer over JSON peer messages exactly once, retaining their magazine', () => {
+  const { a, b, c } = (() => {
+    const d = duo();
+    return { ...d, c: new Pet(bounds, structuredClone(DEFAULT_CONFIG)) };
+  })();
+  c.paused = true;
+  for (let i = 0; i < 360; i++) c.update(1 / 120);
+  const wire = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
+  const remote = (p: Pet): Peer => ({
+    view: () => wire(p.view()),
+    receive: (m, from) =>
+      p.receive(wire(m), {
+        view: () => wire(from.view()),
+        receive: (r, src) => from.receive(wire(r), src),
+      }),
+  });
+  a.others = [remote(b), remote(c)];
+  b.others = [remote(a)];
+  c.others = [remote(a)];
+  const gun = a.items.give('gun', a.char)!;
+  gun.ammo = 2;
+  gun.at = { ...b.char.body.j.hip };
+  a.items.drop(gun, 0, 0);
+  const weapon = a.view().looseWeapons![0];
+  const picked = b.ctx.claimWeapon!(weapon);
+  assert(picked);
+  assert.equal(picked.def.id, 'gun');
+  assert.equal(picked.ammo, 2);
+  assert(!a.items.list.includes(gun));
+  assert.equal(a.view().looseWeapons!.length, 0);
+  c.char.body.translate(b.char.x - c.char.x, 0);
+  assert.equal(c.ctx.claimWeapon!(weapon), null);
+  assert.equal(
+    [...a.items.list, ...b.items.list, ...c.items.list].filter(
+      (it) => it.def.use === 'gun',
+    ).length,
+    1,
+  );
+  Math.random = realRandom;
+});
+await test('disarmed fighters retreat and draw a replacement when no safe loose weapon is available', () => {
+  const p = pet();
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  const foe = {
+    ...p.view(),
+    id: 'dummy',
+    name: 'dummy',
+    doing: 'duel',
+    x: p.char.x + 230,
+    joints: { ...p.view().joints },
+  };
+  p.ctx.foe = () => foe;
+  p.ctx.looseWeapons = () => [];
+  const duel = new Duel();
+  duel.start(p.ctx);
+  for (
+    let i = 0;
+    i < 180 &&
+    !p.items.list.some((it) => it.where === 'hand' && it.def.use === 'swing');
+    i++
+  ) {
+    duel.t += 1 / 120;
+    duel.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+  }
+  const sword = p.items.list.find(
+    (it) => it.where === 'hand' && it.def.use === 'swing',
+  )!;
+  assert(sword);
+  p.items.toCursor(sword, { x: 50, y: 50 });
+  for (const it of [...p.items.list])
+    if (it.def.use === 'shoot') p.items.remove(it);
+  const before = p.char.x;
+  let retreated = false;
+  for (let i = 0; i < 4200; i++) {
+    duel.t += 1 / 120;
+    duel.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+    retreated ||= p.char.x < before - 10;
+    if (
+      p.items.list.some(
+        (it) => it.def.id === 'ink-foam-sword' && it.where === 'hand',
+      )
+    )
+      break;
+  }
+  assert(retreated, 'no space made after disarm');
+  assert(
+    p.items.list.some(
+      (it) => it.def.id === 'ink-foam-sword' && it.where === 'hand',
+    ),
+    'no functional drawn replacement',
+  );
+  assert.equal(sword.where, 'cursor', 'recovery stole the user-held sword');
+  duel.stop(p.ctx);
+});
+await test('a disarmed fighter fetches its nearby dropped weapon before creating another', () => {
+  const p = pet();
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  const foe = {
+    ...p.view(),
+    id: 'dummy',
+    name: 'dummy',
+    doing: 'duel',
+    x: p.char.x + 230,
+  };
+  p.ctx.foe = () => foe;
+  const duel = new Duel();
+  duel.start(p.ctx);
+  for (
+    let i = 0;
+    i < 180 &&
+    !p.items.list.some((it) => it.where === 'hand' && it.def.use === 'swing');
+    i++
+  ) {
+    duel.t += 1 / 120;
+    duel.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+  }
+  const sword = p.items.list.find(
+    (it) => it.where === 'hand' && it.def.use === 'swing',
+  )!;
+  assert(sword);
+  for (const it of [...p.items.list])
+    if (it.def.use === 'shoot') p.items.remove(it);
+  p.items.drop(sword, 0, 0);
+  sword.at = { x: p.char.x - 80, y: bounds.floor - 8, z: 0 };
+  // Begin above the surface, then let the dropped blade settle before the recovery decision.
+  // Spawning its tip underground manufactures a launch instead of a nearby loose weapon.
+  sword.at.y = bounds.floor - sword.def.length * sword.scale - 30;
+  sword.dir = { x: 0, y: 1, z: 0 };
+  sword.loosen();
+  for (let i = 0; i < 240; i++) p.update(1 / 120);
+  let recovered = false;
+  for (let i = 0; i < 1200 && !recovered; i++) {
+    duel.t += 1 / 120;
+    duel.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+    recovered = String(sword.where) === 'hand';
+  }
+  assert(recovered, 'the nearby reachable weapon was not recovered');
+  assert(
+    !p.items.list.some((it) => it.def.drawn),
+    'made a duplicate instead of retrieving the weapon',
+  );
+  assert.equal(p.items.list.filter((it) => it.where === 'hand').length, 1);
+  duel.stop(p.ctx);
+});
+await test('rigid props leave the hand with measured momentum and remain rigid in flight', () => {
+  const p = pet();
+  p.paused = true;
+  const t = p.props.spawn('desk', 500, 450, 1)!;
+  t.grab(500, 450);
+  Object.assign(t.held!, { vx: 900, vy: -400 });
+  t.release();
+  const c = t.center,
+    vx = t.points.reduce((n, q) => n + (q.x - q.px) * 120, 0) / t.points.length;
+  assert(Math.abs(vx - 900) < 1);
+  for (let i = 0; i < 24; i++) p.props.update(1 / 120, i / 120, bounds, [], []);
+  assert(t.center.x > c.x + 100);
+  assert(t.center.y < c.y);
+  const widths = t.sticks.map(
+    (st) => Math.hypot(st.a.x - st.b.x, st.a.y - st.b.y) / st.len,
+  );
+  assert(widths.every((r) => Math.abs(r - 1) < 0.01));
+});
+await test('actual cursor pistols aim manually, consume their own ammo and reload after the delay', () => {
+  const p = pet();
+  p.paused = true;
+  const gun = p.items.give('gun', p.char)!;
+  gun.ammo = 1;
+  p.items.toCursor(gun, { x: 100, y: 500 });
+  const control = new CursorWeapon();
+  control.pointer(100, 500);
+  control.attach(gun, p);
+  control.update(1 / 60, [p]);
+  control.press(true);
+  control.pointer(100, 100);
+  control.update(1 / 60, [p]);
+  assert.equal(control.item, gun);
+  assert.equal(gun.ammo, 0);
+  assert.equal(control.projectiles.rounds.length, 1);
+  assert(control.projectiles.rounds[0].vy < -2000);
+  assert(
+    Math.abs(control.projectiles.rounds[0].vx) < 1,
+    'pistol auto-aimed at the figure',
+  );
+  control.press(false);
+  control.reload();
+  for (let i = 0; i < 60; i++) control.update(1 / 60, [p]);
+  assert.equal(gun.ammo, 0);
+  for (let i = 0; i < 12; i++) control.update(1 / 60, [p]);
+  assert.equal(gun.ammo, 6);
+  control.detach();
+  assert(!p.userWeaponControlled && !gun.cursorControlled);
+});
+await test('actual cursor bows draw while held, release an arcing arrow and cancel safely on blur', () => {
+  const p = pet();
+  p.paused = true;
+  const bow = p.items.give('bow', p.char)!;
+  p.items.toCursor(bow, { x: 100, y: 250 });
+  const control = new CursorWeapon();
+  control.pointer(100, 250);
+  control.attach(bow, p);
+  control.press(true);
+  control.pointer(600, 100);
+  for (let i = 0; i < 42; i++) control.update(1 / 60, [p]);
+  assert(bow.pull);
+  assert.equal(control.projectiles.rounds.length, 0);
+  control.press(false);
+  control.update(1 / 60, [p]);
+  assert.equal(control.projectiles.rounds.length, 1);
+  assert.equal(control.projectiles.rounds[0].kind, 'arrow');
+  const vy = control.projectiles.rounds[0].vy;
+  control.update(1 / 60, [p]);
+  assert(control.projectiles.rounds[0].vy > vy);
+  control.press(true);
+  for (let i = 0; i < 20; i++) control.update(1 / 60, [p]);
+  control.cancel();
+  const count = control.projectiles.rounds.length;
+  control.update(1 / 60, [p]);
+  assert(control.projectiles.rounds.length <= count);
+});
+await test('backward movement keeps facing its target and armed running does not lose the carrying pose', () => {
+  const p = pet();
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  p.char.faceLock = 1;
+  p.char.fightVX = -90;
+  for (let i = 0; i < 30; i++) p.update(1 / 120);
+  assert.equal(p.char.locomotion, 'backstep');
+  assert.equal(p.char.facing, 1);
+  p.char.faceLock = null;
+  p.char.fightVX = null;
+  const sword = p.items.give('sword', p.char)!;
+  p.items.wield(sword, 'R');
+  p.char.walkTo(p.char.x + 300, true);
+  let sawRun = false;
+  for (let i = 0; i < 240; i++) {
+    p.update(1 / 120);
+    sawRun ||= String(p.char.locomotion) === 'run';
+  }
+  assert(sawRun);
+  assert.equal(p.char.carryPose?.hand, 'R');
+  assert.equal(sword.where, 'hand');
+  assert(
+    p.char.body.points.every(
+      (q) => Number.isFinite(q.x) && Number.isFinite(q.y),
+    ),
+  );
+});
+await test('activity pacing is saved, mood-sensitive and long, without ignoring conversation or explicit requests', async () => {
+  const calm = pet();
+  calm.applyConfig({ ...calm.config, hyperactivity: 0 });
+  const restless = pet();
+  restless.applyConfig({ ...restless.config, hyperactivity: 1 });
+  Object.assign(calm.mood.s, {
+    energy: 0.5,
+    annoyance: 0,
+    happiness: 0.5,
+    boredom: 0.3,
+  });
+  Object.assign(restless.mood.s, calm.mood.s);
+  assert(activitySeconds(calm.ctx, 'watchtv') >= 1800);
+  assert(activitySeconds(restless.ctx, 'videogame') >= 180);
+  assert(
+    activitySeconds(calm.ctx, 'watchtv') >
+      activitySeconds(restless.ctx, 'watchtv') * 5,
+  );
+  assert.equal(
+    mergeConfig(DEFAULT_CONFIG, { hyperactivity: 5 }).hyperactivity,
+    1,
+  );
+  assert.equal(mergeConfig(DEFAULT_CONFIG, {}).hyperactivity, 0.25);
+  restless.mood.s.energy = 0.1;
+  assert(activitySeconds(restless.ctx, 'read') > 300);
+  calm.paused = true;
+  for (let i = 0; i < 360; i++) calm.update(1 / 120);
+  calm.paused = false;
+  calm.applyConfig({ ...calm.config, mind: 'offline' });
+  calm.command('do:read');
+  for (let i = 0; i < 150 * 120; i++) calm.update(1 / 120);
+  assert.equal(calm.mind.skill?.name, 'read');
+  assert.equal(calm.char.mode, 'sit');
+  assert(
+    calm.items.list.some((it) => it.def.id === 'book' && it.where === 'hand'),
+  );
+  calm.command('hear:hello');
+  await advance(calm);
+  assert.equal(calm.mind.skill?.name, 'read');
+  calm.command('hear:dance');
+  await advance(calm);
+  assert.equal(calm.mind.skill?.name, 'dance');
+  assert.deepEqual(offlineReply(calm.ctx, 'watch a movie').plan, [
+    { do: 'watchtv' },
+  ]);
+});
+await test('TV viewing and video gaming stay engaged past thirty seconds and release when furniture is removed', () => {
+  for (const kind of ['watchtv', 'videogame'] as const) {
+    const p = pet();
+    p.paused = true;
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    p.mind.reset(p.ctx);
+    const tv = tvAt(p, p.char.x + 80 * p.char.scale);
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    const skill = kind === 'watchtv' ? new WatchTV(tv) : new PlayVideoGame(tv);
+    skill.start(p.ctx);
+    let done = false;
+    for (let i = 0; i < 150 * 120 && !done; i++) {
+      skill.t += 1 / 120;
+      done = skill.update(p.ctx, 1 / 120);
+      p.update(1 / 120);
+    }
+    assert(!done, `${kind} ended after ${skill.t}s`);
+    assert(tv.watchers.has(p.ctx.who));
+    p.props.remove(tv);
+    assert(skill.update(p.ctx, 1 / 120));
+    skill.stop(p.ctx);
+    assert(!tv.watchers.has(p.ctx.who));
+  }
+});
+await test('sleeping figures stay asleep through pickup, gentle carrying and a soft placement', () => {
+  const p = pet();
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  p.mood.s.energy = 0.2;
+  p.paused = false;
+  p.command('do:sleep');
+  p.update(1 / 120);
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  assert(p.mood.asleep);
+  const hip = { ...p.char.body.j.hip };
+  assert(p.pointerDown(hip.x, hip.y, 0));
+  for (let i = 0; i < 120; i++) {
+    p.pointerMove(hip.x, hip.y - 6 - i * 0.25, 0, -30, 200 + (i * 1000) / 120);
+    p.update(1 / 120);
+  }
+  assert.equal(p.char.mode, 'held');
+  assert(p.mood.asleep);
+  assert.equal(p.mind.skill?.name, 'sleep');
+  p.pointerUp(hip.x, hip.y - 36);
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  assert(p.mood.asleep, 'a gentle release woke the figure');
+  assert(p.char.stayDown);
+  assert.equal(p.mind.skill?.name, 'sleep');
+});
+await test('sleepers wake on a hard floor or wall impact, and on being hit', () => {
+  for (const contact of ['floor', 'wall', 'hit', 'weapon'] as const) {
+    const p = pet();
+    p.paused = true;
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    p.mood.s.energy = 0.2;
+    p.paused = false;
+    p.command('do:sleep');
+    p.update(1 / 120);
+    p.paused = true;
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    if (contact === 'hit')
+      p.mind.onEvent(p.ctx, { type: 'bonked', speed: 800 });
+    else if (contact === 'weapon')
+      p.mind.onEvent(p.ctx, {
+        type: 'hitByFriend',
+        name: 'another figure',
+        power: 0.2,
+        cut: false,
+        stabbed: false,
+        play: true,
+      });
+    else {
+      const b = p.char.body;
+      p.char.grab('hip', b.j.hip.x, b.j.hip.y);
+      p.update(1 / 120);
+      p.char.release();
+      const dx =
+        contact === 'wall'
+          ? bounds.right - Math.max(...b.points.map((q) => q.x + q.r)) - 12
+          : 0;
+      const dy =
+        contact === 'floor'
+          ? bounds.floor - Math.max(...b.points.map((q) => q.y + q.r)) - 12
+          : -100;
+      b.translate(dx, dy);
+      for (const q of b.points) {
+        q.px = q.x - (contact === 'wall' ? 1400 : 0) / 120;
+        q.py = q.y - (contact === 'floor' ? 1400 : 0) / 120;
+      }
+      for (let i = 0; i < 30 && p.mood.asleep; i++) p.update(1 / 120);
+    }
+    assert(!p.mood.asleep, `${contact} did not wake the sleeper`);
+    assert.notEqual(p.mind.skill?.name, 'sleep');
+    assert(!p.char.stayDown);
+  }
+});
+await test('visible item heads and handles are selectable and stay above the floor at every orientation', () => {
+  for (const id of ['mace', 'bow', 'sword'])
+    for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const d = BUILTIN_ITEMS.find((d) => d.id === id)!;
+      const it = new Item(d, { x: 600, y: 795 }, 1.4);
+      it.dir = { x: Math.cos(angle), y: Math.sin(angle), z: 0 };
+      it.loosen();
+      const [lx, ly] = d.shape[0].pts[0];
+      const pick = {
+        x: it.at.x + (it.dir.x * lx - it.dir.y * ly) * it.scale,
+        y: it.at.y + (it.dir.y * lx + it.dir.x * ly) * it.scale,
+      };
+      assert(
+        it.distTo(pick.x, pick.y) < 0.1,
+        `${id} visible handle was not selectable`,
+      );
+      for (let i = 0; i < 240; i++) it.step(1 / 120, bounds, []);
+      for (const st of d.shape)
+        for (const [x, y] of st.pts) {
+          const bottom =
+            it.at.y +
+            (it.dir.y * x +
+              it.dir.x * y +
+              (st.width / 2) * (Math.abs(it.dir.x) + Math.abs(it.dir.y))) *
+              it.scale;
+          assert(
+            bottom <= bounds.floor + 0.1,
+            `${id} art crossed the floor: ${bottom}`,
+          );
+        }
+    }
+});
+await test('props include visible extensions and separate whole bodies without gaining explosive velocity', () => {
+  const p = pet();
+  p.paused = true;
+  const tv = p.props.spawn('tv', 600, 770, 1)!;
+  const chair = p.props.spawn('chair', 610, 775, 1)!;
+  for (const st of tv.def!.shape)
+    for (const [x, y] of st.pts) {
+      const q = tv.toWorld(x, y);
+      assert(tv.contains(q.x, q.y), 'visible TV detail cannot be grabbed');
+    }
+  for (let i = 0; i < 600; i++)
+    p.props.update(1 / 120, i / 120, bounds, [], []);
+  const overlap = overlapOffset(tv.collisionHull, chair.collisionHull);
+  assert(
+    !overlap || Math.hypot(overlap.x, overlap.y) < 0.1,
+    'furniture remains interpenetrated',
+  );
+  for (const t of [tv, chair]) {
+    assert(t.collisionHull.every((q) => q.y <= bounds.floor + 0.1));
+    assert(
+      t.points.every((q) => Math.hypot(q.x - q.px, q.y - q.py) * 120 < 100),
+      'overlap resolution added energy',
+    );
+    assert(
+      t.sticks.every(
+        (s) =>
+          Math.abs(Math.hypot(s.a.x - s.b.x, s.a.y - s.b.y) / s.len - 1) < 0.01,
+      ),
+    );
+  }
+});
+await test('a drawn ball bounces from a full furniture side instead of passing through it', () => {
+  const p = pet();
+  p.paused = true;
+  const desk = p.props.spawn('desk', 600, 740, 1)!;
+  for (let i = 0; i < 360; i++)
+    p.props.update(1 / 120, i / 120, bounds, [], []);
+  const left = Math.min(...desk.collisionHull.map((q) => q.x)),
+    y = desk.center.y;
+  const ball = new Ball(
+    { strokes: [], color: '#333333', born: 0, done: true },
+    left - 20,
+    y,
+    8,
+  );
+  ball.kick(900, 0);
+  let bounced = false;
+  for (let i = 0; i < 10; i++) {
+    ball.step(1 / 120, bounds, [], [desk]);
+    bounced ||= ball.vx < 0;
+  }
+  assert(bounced);
+  assert(ball.x < left);
+  assert(Number.isFinite(ball.vy));
 });
 await test('Chrome bridge requires pairing, refuses web origins, delivers only the connected tab, and validates cutouts', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ava-bridge-'));

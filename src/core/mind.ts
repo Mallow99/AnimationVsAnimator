@@ -1,3 +1,5 @@
+import { ReadBook } from './skills/read-book';
+import { restlessness, isSettledActivity } from './activity-pacing';
 // The offline mind ("Mode 0"): instinct, no AI.
 //
 // Two jobs:
@@ -199,6 +201,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'ropebridge', label: 'Draw a rope bridge' },
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'videogame', label: 'Play video games' }, { name: 'ride', label: 'Ride the scooter' },
+  { name: 'read', label: 'Read a book' },
   { name: 'paint', label: 'Paint on his canvas' }, { name: 'playgame', label: 'Play Othello with you on the TV' }, { name: 'duel', label: 'Spar with his friend' },
   { name: 'highfive', label: 'High five his friend' }, { name: 'fistbump', label: 'Fist bump his friend' }, { name: 'handshake', label: 'Shake hands with his friend' },
   { name: 'pattycake', label: 'Patty cake with his friend' }, { name: 'hug', label: 'Hug his friend' }, { name: 'bump', label: 'Bump into his friend (rude)' },
@@ -276,7 +279,7 @@ export class Mind {
         this.afterThat = null;
         if (next) { this.queued = next.make(); this.why = next.why; return; }
         // Catch his breath before the next thing (longer when tired) — keeps him from twitching between activities.
-        this.restUntil = c.world.time + rand(1.5, 4) * (1.5 - c.mood.s.energy * 0.5);
+        this.restUntil = c.world.time + rand(4, 12) * (2 - restlessness(c));
       }
     } else if (this.queued && (c.char.ready || c.char.mode === 'sit')) {
       // (Take it off the queue first: starting it can queue what comes next, like his friend's instant "yes".)
@@ -309,7 +312,7 @@ export class Mind {
     // You coming back after a while: he's glad to see you.
     if (w.cursorMovedAt - this.lastCursorSeen > 120 && this.lastCursorSeen > 0 && !m.asleep) {
       m.nudge({ happiness: 0.08 * m.s.trust * 2, boredom: -0.25 });
-      if (m.s.trust > 0.35 && ch.ready) {
+      if (m.s.trust > 0.35 && ch.ready && !isSettledActivity(this.skill?.name)) {
         const line = c.memory.recall('greet') ?? pick(['oh hi!', 'hey!', "you're back"]);
         this.interrupt(c, new Sequence('greet', [{ face: 'cursor' }, { say: line }, { gesture: 'wave' }]));
         this.why = 'you came back';
@@ -421,6 +424,7 @@ export class Mind {
 
   /** Build the skill for a command name (null if he can't do it right now). */
   makeSkill(c: Ctx, name: string): Skill | null {
+    if (name === 'read') return new ReadBook();
     if(['closetab','closewindow','pluck','restorepage','folder','file'].includes(name))return new DesktopInteraction(name as import('../shared/desktop').DesktopAction);
     if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun',true) : null;
     if(name==='drawtool')return c.items.find('draw') && c.char.useHand ? new DrawTool('foam-sword',true) : null;
@@ -483,7 +487,8 @@ export class Mind {
     // Square the scores so strong urges win more often; avoid repeating himself.
     let total = 0;
     const weights = opts.map((o) => {
-      const wt = o.score > 0 ? o.score * o.score * (o.name === this.last ? 0.3 : 1) / (1+this.history.slice(-6).filter(name=>name===o.name).length*0.6) * rand(0.85, 1.15) : 0;
+      const pace = ['idle', 'sit', 'sitdown', 'watchtv', 'read'].includes(o.name) ? 1.3 - restlessness(c) * 0.5 : ['duel', 'dance', 'ride', 'backflip', 'grabcursor'].includes(o.name) ? 0.45 + restlessness(c) : 1;
+      const wt = o.score > 0 ? pace * o.score * o.score * (o.name === this.last ? 0.3 : 1) / (1+this.history.slice(-6).filter(name=>name===o.name).length*0.6) * rand(0.85, 1.15) : 0;
       total += wt;
       return wt;
     });
@@ -507,7 +512,7 @@ export class Mind {
     const cursorActive = !!cur && w.time - w.cursorMovedAt < 6;
     const near = cursorActive && Math.abs(cur!.x - ch.x) < 250;
     const opts: Option[] = [
-      { name: 'idle', score: 1.3, why: 'taking it easy', make: () => new Idle(rand(4, 10)) },
+      { name: 'idle', score: 1.3, why: 'taking it easy', make: () => new Idle(rand(4, 10) * (2 + 5 * (1 - restlessness(c)))) },
       { name: 'wander', score: 0.5 + s.boredom + s.energy * 0.3, why: s.boredom > 0.5 ? 'bored' : 'stretching his legs', make: () => new Wander() },
       { name: 'sit', score: 0.3 + (1 - s.energy) * 0.9, why: s.energy < 0.4 ? 'tired' : 'resting', make: () => new SitFor(rand(8, 20)) },
       { name: 'sleep', score: s.energy < 0.25 && s.annoyance < 0.5 && s.fear < 0.3 ? 2 + (0.25 - s.energy) * 8 : 0, why: 'worn out', make: () => new Sleep() },
@@ -712,6 +717,7 @@ export class Mind {
     }
     if (seat) opts.push({ name: 'sitdown', why: s.energy < 0.5 ? 'tired: having a sit on the ' + seat.def!.name.toLowerCase() : 'taking a seat',
       score: 0.15 + (1 - s.energy) * 0.7 + (L === 'sad' ? 0.3 : 0), make: () => new SitOnProp(seat) });
+    if (c.items.defs.has('book')) opts.push({ name: 'read', why: 'settling into a book', score: 0.3 + (1 - restlessness(c)) * 0.6, make: () => new ReadBook() });
     if (tv) opts.push({ name: 'watchtv', why: 'watching TV', score: L === 'bored' ? 0.9 : E === 'lonely' || L === 'sad' ? 0.6 : L === 'sleepy' ? 0.3 : 0.25, make: () => new WatchTV(tv) });
     if (tv) opts.push({ name: 'videogame', why: 'playing video games', score: L === 'bored' ? 0.7 : L === 'playful' || E === 'excited' ? 0.5 : L === 'sleepy' || L === 'sad' ? 0.05 : 0.2, make: () => new PlayVideoGame(tv) });
     if (scooter && ch.legCount === 2 && ch.useHand) opts.push({ name: 'ride', why: 'scooter time', score: E === 'excited' ? 1 : L === 'playful' ? 0.7 : L === 'bored' ? 0.5 : 0.08, make: () => new RideScooter(scooter) });
@@ -904,7 +910,7 @@ export class Mind {
       }
       case 'hitByFriend': {
         // Play fight: it's a game, he hits back. Real fight: it hurts, and it makes him mad (or scared).
-        m.asleep = false;
+        this.wakeFromSleep(c);
         m.nudge(e.play ? { boredom: -0.2, happiness: 0.02 } : { annoyance: 0.1 + e.power * 0.1, fear: e.stabbed ? 0.2 : 0.05, happiness: -0.05, boredom: -0.3 });
         if (e.cut || e.stabbed || !c.char.whole) return; // losing a limb (or going down) comes first
         // (Not in the middle of your Othello match, though: he just complains.)
@@ -936,7 +942,7 @@ export class Mind {
         if (fight) { c.say(pick(['oh it\'s ON', 'you wanna go?', 'excuse ME?']), 1.4); this.duelAt = c.world.time; this.interrupt(c, new Duel(true)); }
         else if (ch.mode === 'ground' && !(this.skill instanceof Reattach)) {
           c.say(pick(['hey!', 'watch it', 'rude.', 'excuse you']), 1.4);
-          if (this.skill?.name !== 'playgame' && this.skill?.name !== 'videogame' && this.skill?.name !== 'watchtv') this.interrupt(c, new Sequence('hey', [{ face: 'friend' }, { gesture: chance(0.5) ? 'shrug' : 'stomp' }]));
+          if (!isSettledActivity(this.skill?.name)) this.interrupt(c, new Sequence('hey', [{ face: 'friend' }, { gesture: chance(0.5) ? 'shrug' : 'stomp' }]));
         }
         return;
       }
@@ -1055,6 +1061,7 @@ export class Mind {
 
       case 'hangOn': return;
       case 'grabbed': {
+        if (m.asleep) { ch.stayDown = true; return; }
         this.interrupt(c);
         m.asleep = false;
         m.nudge({ boredom: -0.3, fear: 0.08 * (1 - m.s.trust) });
@@ -1069,6 +1076,7 @@ export class Mind {
       }
 
       case 'released':
+        if (m.asleep) { ch.stayDown = true; return; }
         if (e.speed > 900) {
           const fun = m.label === 'playful' && m.s.trust > 0.6;
           m.nudge(fun ? { happiness: 0.05, fear: 0.1 } : { fear: 0.25, annoyance: 0.12, trust: -0.02 });
@@ -1076,7 +1084,14 @@ export class Mind {
         }
         return;
 
+      case 'hardImpact':
+        if (!this.wakeFromSleep(c)) return;
+        c.say('WHA-', 1.3);
+        this.why = 'a hard impact woke him';
+        return;
+
       case 'crashed':
+        if (m.asleep && e.speed <= 600) { ch.stayDown = true; return; }
         // Knocked down in a fight: part of the fight. He gets up and keeps going (the duel handles it).
         if (this.skill?.name === 'duel' && ch.whole) { if (chance(0.5)) c.say(pick(['oof', 'ow!', 'lucky', 'ugh']), 1); return; }
         if (this.skill instanceof GetDown) {
@@ -1116,6 +1131,7 @@ export class Mind {
         return;
 
       case 'bonked':
+        if (this.wakeFromSleep(c)) { c.say('!?', 1.2); return; }
         if (m.label === 'playful') { c.say(pick(['hey!', 'haha', 'ow, nice shot']), 1.2); m.nudge({ boredom: -0.2 }); }
         else { c.say(pick(['OW', 'who threw that', 'ow!']), 1.2); m.nudge({ annoyance: 0.08, boredom: -0.2 }); }
         return;
@@ -1131,6 +1147,7 @@ export class Mind {
         if (chance(0.3)) c.say(pick(['hup!', 'parkour', 'easy']), 1);
         return;
       case 'landed':
+        if (e.speed > 600 && this.wakeFromSleep(c)) { c.say('WHA-', 1.3); this.why = 'a hard landing woke him'; return; }
         if (this.skill instanceof GetDown && e.speed > 600) {
           // Landed a big drop fine: a little braver next time.
           c.lessons.safeDrop = Math.min(600, Math.max(c.lessons.safeDrop, (this.skill.drop / ch.scale) * 1.05));
@@ -1165,6 +1182,16 @@ export class Mind {
         c.say(pick(["huh. it won't move", 'stuck?', '...heavy']), 1.6);
         return;
     }
+  }
+
+  private wakeFromSleep(c: Ctx) {
+    if (!c.mood.asleep) return false;
+    this.interrupt(c);
+    c.mood.asleep = false;
+    c.char.sleeping = false;
+    c.char.stayDown = false;
+    if (!c.char.isHeld()) c.char.standUp();
+    return true;
   }
 
   private onPoke(c: Ctx) {

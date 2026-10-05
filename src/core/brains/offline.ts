@@ -10,6 +10,8 @@ export interface OfflineReply {
 }
 const choose = (a: string[]) => a[Math.floor(Math.random() * a.length)];
 const ACTIONS: [RegExp, string][] = [
+  [/\b(?:watch|watching)(?: a| the| some)? (?:tv|television|movie|film)\b/, 'watchtv'],
+  [/\b(?:read|reading)(?: a| your| the)?(?: book)?\b/, 'read'],
   [/\b(?:close|shut) (?:this |the |that )?tab\b/, 'closetab'],
   [/\b(?:close|shut) (?:this |the |that )?window\b/, 'closewindow'],
   [

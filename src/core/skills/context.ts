@@ -41,10 +41,13 @@ export interface Ctx {
   desktopAction?: (action:import('../../shared/desktop').DesktopAction)=>Promise<import('../../shared/desktop').DesktopResult>;
   desktopState?: ()=>import('../../shared/desktop').DesktopState;
   who: string;
+  hyperactivity?: number;
   personality?: import('../config').Personality;
   drawTools?: boolean;
   peers?: () => FighterView[];
   selectPeer?: (id: string) => boolean;
+  looseWeapons?: () => import('../combat/armament').LooseWeapon[];
+  claimWeapon?: (weapon: import('../combat/armament').LooseWeapon) => import('../items').Item | null;
   fire?: (x: number, y: number, vx: number, vy: number, at: 'friend' | 'cursor') => void;
   char: Character;
   mood: Mood;

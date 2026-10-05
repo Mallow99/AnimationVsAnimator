@@ -2,6 +2,62 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest milestone: adaptive weapons, quiet activities, sleeping pickup and full hitboxes
+
+The owner asked to plan future work in focused updates instead of rediscovering the whole project.
+Read [UPDATE-PLAN.md](UPDATE-PLAN.md): ten updates, each with 8–12 features, dependencies, completion
+criteria and a new-ideas inbox. It includes every request about combat, fewer GUI controls, satchel
+storage, drawing/moving furniture, TV orientation/previews, real companion games, handhelds/console,
+workshop refinement and possible ink lifespans, quiet pacing, sleep-carry, Chrome, real folders,
+offline/optional AI and eventual distribution. Workshop/TV/game suggestions are roadmap additions,
+not permission to replace the current combat batch.
+
+Implemented in this milestone:
+
+- Adaptive Duel equipment: contextual weapon preference, a short commitment to a choice, clearing
+  both hands through one `Items.wield` operation, backward retreat on disarm, fetching a nearby safe
+  loose weapon, and drawing a functional replacement when recovery is unavailable. Drawing can be
+  interrupted by a nearby opponent. Recovery reaches down before foot contact so the figure does
+  not repeatedly kick away the weapon it is trying to retrieve. A companion's loose weapon is
+  transferred through plain peer request/grant messages with exclusive ownership and ammunition intact.
+- Actual taken weapons use the cursor controller: held fast sword/mace swipes, pistol manual aim,
+  its own magazine and R reload, bow charge/release and arcing swept arrows. Return/drop controls
+  preserve the original item. Legacy cursor practice tools remain available.
+- Directional backsteps maintain facing; speed-matched run stance/swing and carrying poses improve
+  armed locomotion. Existing combat moves, hidden health/pressure, looks and movement presets remain.
+- Mind → Hyperactivity (0–1, default 0.25) changes activity choice and commitment together with mood.
+  TV viewing, video gaming, reading and furniture sitting last minutes; calm movie sessions can last
+  around half an hour. A book has a seated reading/page-turn pose. Ordinary chat and ambient AI plans
+  preserve settled activities; explicit activity requests can replace them. No real provider calls were used.
+- Gentle pickup/carry/release preserves sleeping and a limp held body. Actual hard contacts at the
+  floor, platforms, walls or ceiling wake them; hits wake them and stop the sleep skill. The hard-contact
+  threshold is 600 px/s. Soft placement and floor/wall/ball/weapon waking have dedicated regressions.
+- Item selection uses visible strokes/fills/sprites, including handles and wide heads. Loose item
+  floor/wall/furniture contact covers all art rather than only the grip and tip. Custom definition reload
+  refreshes cached contours. Prop contours include artwork, wheel radii and sprite bounds; whole rigid
+  bodies separate from each other without adding artificial velocity. Drawn balls bounce from furniture
+  sides. Rigid prop releases retain measured hand momentum. Scooter boarding now explicitly hops
+  onto its raised deck instead of waiting below it after the wheel collision fix.
+
+Validation: typecheck/build; 66 focused checks; full simulation seed 1; two-figure and five-figure
+300-second soaks seed 1 with no trouble reported; actual Chromium mouse checks for owned pistol aim,
+ammo/reload/return and bow charge/release, plus book rendering and existing Othello/chat/gear controls.
+Linux Electron/Xvfb passed preload IPC, group add/remove, the local Chrome bridge/cutout controls,
+and the actual Mind slider applying to its own figure independently through IPC. Inspected browser
+book/bow screenshots, the settings page, and several armed locomotion phases in Electron.
+AI cadence/fallback simulation fixtures omit the new book capability so those tests still exercise
+their original timing assertions; separate checks verify long reading and interruption behavior.
+
+These are cloud/Linux checks, not a Mac/Windows hardware acceptance pass. Full art collision uses
+conservative convex contours, not precise concave shapes between chair legs. Flexible bridges retain
+their plank constraints. Review run/backstep feel and resting/stacked props on the owner's Mac.
+
+Next: Mac acceptance using [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md), then Update 2's physical
+grab bag, reversible trash, sponge, inventory/storage and useful desk activity. Those tools, bag
+replacement, workshop, furniture-moving skills, handhelds and new companion games are planned.
+The real-file prototype still needs Mac testing and a crawl/entry animation; no mock folder rooms
+were reintroduced. Native integration boundaries and checks in the following section still apply.
+
 ## Latest work: combat, cursor weapons, a larger group, and native integration
 
 The owner uses Chrome on Mac. They asked for cleaner physics/code, guns and cursor weapons, broader

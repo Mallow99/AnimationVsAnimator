@@ -92,7 +92,7 @@ for (let i = 0; i < seconds * 120; i++) {
     if (ch.mode === 'ragdoll' && inMode > 14 && !ch.stayDown) report(`${name}: ragdoll for ages`, t, `skill=${sk}`);
     if (ch.mode === 'air' && inMode > 6) report(`${name}: in the air for ages`, t, `hip=${j.hip.x.toFixed(0)},${j.hip.y.toFixed(0)} skill=${sk}`);
     if (sk !== tr.skill) { tr.skill = sk; tr.skillT = t; }
-    const long = ['sleep', 'watch', 'videogame', 'playgame', 'sit', 'lounge', 'paint', 'duel'].includes(sk) ? 150 : 70;
+    const long = ['watchtv', 'sitdown', 'read', 'videogame'].includes(sk) ? 2400 : ['sleep', 'watch', 'videogame', 'playgame', 'sit', 'lounge', 'paint', 'duel'].includes(sk) ? 150 : 70;
     if (sk !== '-' && t - tr.skillT > long) report(`${name}: same skill for ${long}s+ (${sk})`, t, `mode=${ch.mode}`);
     // Walking without getting anywhere.
     if (ch.walking && ch.mode === 'ground') {

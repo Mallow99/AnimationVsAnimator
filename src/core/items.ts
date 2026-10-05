@@ -1,3 +1,5 @@
+import { convexHull, paddedVertices, polygonDistance, segmentDistance, overlapOffset } from './geometry';
+import type { Thing } from './props';
 // Items: things he carries on his belt and uses with his hands — his pen (he draws
 // with it), a wooden sword (he swings it). Each kind of item is described by a small
 // definition file (see src/core/items/*.json, and your own in the app's items folder).
@@ -9,7 +11,7 @@
 //   cursor — you took it: it dangles from your mouse pointer, and you can hit him with it
 
 import { basis, clamp, cross3, dot3, norm3, scale3, sub3, add3, type V3, type Vec } from './math';
-import { collide, collidePlatforms, integrate, makePoint, solveSticks, type Bounds, type Platform, type Point, type Stick } from './physics';
+import { collide, collidePlatforms, integrate, makePoint, platY, solveSticks, type Bounds, type Platform, type Point, type Stick } from './physics';
 import type { Character } from './character';
 import penDef from './items/pen.json';
 import swordDef from './items/wooden-sword.json';
@@ -19,6 +21,7 @@ import foamDef from './items/foam-sword.json';
 import katanaDef from './items/katana.json';
 import bowDef from './items/bow.json';
 import gunDef from './items/gun.json';
+import bookDef from './items/book.json';
 import helmetDef from './items/helmet.json';
 import bootsDef from './items/boots.json';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
@@ -104,7 +107,7 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
 export const SLOT_NAMES = ['left hip', 'right hip', 'back', 'pocket'];
@@ -133,10 +136,14 @@ export class Item {
   pull: V3 | null = null;
   /** Physics for when it's lying around or dangling from your cursor: a = grip, b = tip. */
   readonly a: Point; readonly b: Point;
+  private contour: Vec[] = [];
+  private contourDef: ItemDef | null = null;
   private readonly sticks: Stick[];
   /** How fast its tip is moving (px/s), and which way (px/s), for hits. */
   /** Pistol magazine stays with the item across bursts and saves. */
   ammo = 6;
+  /** A user controller owns its pose while aiming/swinging. */
+  cursorControlled = false;
   tipSpeed = 0;
   tipVel: Vec = { x: 0, y: 0 };
   private lastTip: V3 | null = null;
@@ -146,7 +153,11 @@ export class Item {
   /** Who sent it flying. Something you threw never hits your own cursor (it leaves your hand right there). */
   thrownBy: 'him' | 'you' = 'him';
 
-  constructor(readonly def: ItemDef, at: Vec = { x: 0, y: 0 }, public scale = 1) {
+  constructor(
+    readonly def: ItemDef,
+    at: Vec = { x: 0, y: 0 },
+    public scale = 1,
+  ) {
     this.a = makePoint(at.x, at.y, 2);
     this.b = makePoint(at.x, at.y + def.length * scale, 2);
     this.sticks = [{ a: this.a, b: this.b, len: def.length * scale }];
@@ -164,7 +175,7 @@ export class Item {
     this.sticks[0].len = this.def.length * this.scale;
   }
 
-  step(dt: number, bounds: Bounds, platforms: Platform[]) {
+  step(dt: number, bounds: Bounds, platforms: Platform[], solids: Thing[] = []) {
     integrate([this.a, this.b], dt, 0.995);
     this.a.grounded = this.b.grounded = false;
     const bounce = this.def.bounce, grip = bounce > 0.6 ? 0.05 : 0.5;
@@ -173,8 +184,98 @@ export class Item {
       collide([this.a, this.b], bounds, grip, bounce);
       collidePlatforms([this.a, this.b], platforms, grip, bounce * 0.85);
     }
+    this.collideArt(bounds, platforms, solids);
     this.at = { x: this.a.x, y: this.a.y, z: this.a.z };
     this.dir = norm3(sub3(this.b, this.a));
+  }
+
+  private hull(previous = false) {
+    // Custom definitions can be reloaded while their existing item stays in the world.
+    if (this.contourDef !== this.def) {
+      const { sprite, shape } = this.def;
+      this.contour = convexHull([
+        ...shape.flatMap((st) => paddedVertices(st.pts, st.width)),
+        ...(sprite
+          ? paddedVertices([
+              [sprite.x, sprite.y],
+              [sprite.x + sprite.rows[0].length * sprite.pixel, sprite.y],
+              [
+                sprite.x + sprite.rows[0].length * sprite.pixel,
+                sprite.y + sprite.rows.length * sprite.pixel,
+              ],
+              [sprite.x, sprite.y + sprite.rows.length * sprite.pixel],
+            ])
+          : []),
+      ]);
+      this.contourDef = this.def;
+    }
+    const a = previous ? { x: this.a.px, y: this.a.py } : this.a;
+    const b = previous ? { x: this.b.px, y: this.b.py } : this.b;
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1,
+      ux = (b.x - a.x) / len,
+      uy = (b.y - a.y) / len;
+    return this.contour.map((p) => ({
+      x: a.x + (ux * p.x - uy * p.y) * this.scale,
+      y: a.y + (uy * p.x + ux * p.y) * this.scale,
+    }));
+  }
+
+  private moveCollision(dx: number, dy: number, normal: Vec) {
+    for (const p of [this.a, this.b]) {
+      const vx = p.x - p.px,
+        vy = p.y - p.py,
+        into = vx * normal.x + vy * normal.y;
+      p.x += dx;
+      p.y += dy;
+      p.px += dx;
+      p.py += dy;
+      if (into < 0) {
+        p.px += normal.x * into * (1 + this.def.bounce * 0.5);
+        p.py += normal.y * into * (1 + this.def.bounce * 0.5);
+      }
+      if (normal.y < -0.5) {
+        p.px += (p.x - p.px) * 0.08;
+        p.grounded = true;
+      }
+    }
+  }
+
+  /** The entire visible item participates in floor/wall/furniture contact, not just its grip and tip. */
+  private collideArt(bounds: Bounds, platforms: Platform[], solids: Thing[]) {
+    for (const solid of solids) {
+      if (!solid.rigid) continue;
+      const offset = overlapOffset(this.hull(), solid.collisionHull);
+      if (offset) {
+        const len = Math.hypot(offset.x, offset.y);
+        this.moveCollision(offset.x, offset.y, {
+          x: offset.x / len,
+          y: offset.y / len,
+        });
+      }
+    }
+    const hull = this.hull(),
+      was = this.hull(true);
+    let up = Math.max(0, ...hull.map((p) => p.y - bounds.floor));
+    for (const pl of platforms)
+      for (let i = 0; i < hull.length; i++) {
+        const p = hull[i],
+          previous = was[i];
+        if (
+          p.x < pl.x1 ||
+          p.x > pl.x2 ||
+          previous.y > platY(pl, previous.x) + 2 ||
+          p.y <= platY(pl, p.x)
+        )
+          continue;
+        up = Math.max(up, p.y - platY(pl, p.x));
+      }
+    if (up > 0) this.moveCollision(0, -up, { x: 0, y: -1 });
+    const left = Math.min(...hull.map((p) => p.x)),
+      right = Math.max(...hull.map((p) => p.x));
+    if (left < bounds.left)
+      this.moveCollision(bounds.left - left, 0, { x: 1, y: 0 });
+    else if (right > bounds.right)
+      this.moveCollision(bounds.right - right, 0, { x: -1, y: 0 });
   }
 
   /** Forget how it was moving (after it jumps somewhere new, like from his belt to your cursor). */
@@ -200,20 +301,48 @@ export class Item {
 
   /** Distance from (x, y) to the item on screen. */
   distTo(x: number, y: number) {
-    if (this.def.sprite) {
-      const s = this.def.sprite;
-      return Math.min(...(this.where === 'worn' ? this.poses : [this]).map((pose) => {
-        const dx = x - pose.at.x, dy = y - pose.at.y;
-        const length = Math.hypot(pose.dir.x, pose.dir.y) || 1;
-        const ux = pose.dir.x / length, uy = pose.dir.y / length;
-        const localX = (dx * ux + dy * uy) / pose.scale * ('mirror' in pose && pose.mirror ? -1 : 1), localY = (-dx * uy + dy * ux) / pose.scale;
-        const right = s.x + s.rows[0].length * s.pixel, bottom = s.y + s.rows.length * s.pixel;
-        return Math.hypot(Math.max(s.x - localX, 0, localX - right), Math.max(s.y - localY, 0, localY - bottom)) * pose.scale;
-      }));
-    }
-    const p = this.butt, q = this.tip, dx = q.x - p.x, dy = q.y - p.y, l2 = dx * dx + dy * dy || 1e-9;
-    const t = clamp(((x - p.x) * dx + (y - p.y) * dy) / l2, 0, 1);
-    return Math.hypot(x - (p.x + dx * t), y - (p.y + dy * t));
+    const poses = this.where === 'worn' ? this.poses : [this];
+    return Math.min(
+      ...poses.map((pose) => {
+        const dx = x - pose.at.x,
+          dy = y - pose.at.y,
+          len = Math.hypot(pose.dir.x, pose.dir.y) || 1;
+        const ux = pose.dir.x / len,
+          uy = pose.dir.y / len;
+        const point = {
+          x: (dx * ux + dy * uy) / pose.scale,
+          y: (-dx * uy + dy * ux) / pose.scale,
+        };
+        if (this.def.sprite) {
+          const s = this.def.sprite,
+            localX = point.x * ('mirror' in pose && pose.mirror ? -1 : 1);
+          const right = s.x + s.rows[0].length * s.pixel,
+            bottom = s.y + s.rows.length * s.pixel;
+          return (
+            Math.hypot(
+              Math.max(s.x - localX, 0, localX - right),
+              Math.max(s.y - point.y, 0, point.y - bottom),
+            ) * pose.scale
+          );
+        }
+        let distance = Infinity;
+        for (const stroke of this.def.shape) {
+          const points = stroke.pts.map(([x, y]) => ({ x, y }));
+          if (stroke.fill)
+            distance = Math.min(distance, polygonDistance(point, points));
+          for (let i = 1; i < points.length; i++)
+            distance = Math.min(
+              distance,
+              Math.max(
+                0,
+                segmentDistance(point, points[i - 1], points[i]) -
+                  stroke.width / 2,
+              ),
+            );
+        }
+        return distance * pose.scale;
+      }),
+    );
   }
 
   /** Fast swings can cross a cursor between frames. Include the path of the tip. */
@@ -290,10 +419,18 @@ export class Items {
 
   private unslot(it: Item) { if (it.slot >= 0 && this.belt[it.slot] === it) this.belt[it.slot] = null; it.slot = -1; }
 
+  /** One combat tool owns the hands. Stow other held things, dropping only if storage is full. */
+  wield(it: Item, hand: 'L' | 'R') {
+    for (const other of this.list)
+      if (other !== it && other.where === 'hand' && !this.stow(other))
+        this.drop(other, 0, -40);
+    this.toHand(it, hand);
+  }
+
   /** Into his hand. */
   toHand(it: Item, hand: 'L' | 'R') {
     const other = this.inHand(hand);
-    if (other && other !== it) this.drop(other, 0, 0);
+    if (other && other !== it && !this.stow(other)) this.drop(other, 0, 0);
     this.unslot(it);
     it.where = 'hand'; it.hand = hand; it.aim = null; it.aimLocal = null;
     this.onChange?.();
@@ -302,7 +439,7 @@ export class Items {
   /** Let go of it: it falls from where it is with this speed. */
   drop(it: Item, vx: number, vy: number) {
     this.unslot(it);
-    it.where = 'world'; it.aim = null; it.aimLocal = null;
+    it.where = 'world'; it.cursorControlled = false; it.pull = null; it.aim = null; it.aimLocal = null;
     it.loosen(vx, vy);
     this.onChange?.();
   }
@@ -370,8 +507,8 @@ export class Items {
   }
 
   /** Physics for the things lying around (and flying through the air): one fixed step. */
-  stepWorld(dt: number, bounds: Bounds, platforms: Platform[]) {
-    for (const it of this.list) if (it.where === 'world') it.step(dt, bounds, platforms);
+  stepWorld(dt: number, bounds: Bounds, platforms: Platform[], solids: Thing[] = []) {
+    for (const it of this.list) if (it.where === 'world') it.step(dt, bounds, platforms, solids);
   }
 
   /** Move every item to where it belongs this frame (loose ones move in `stepWorld`). */
@@ -396,7 +533,7 @@ export class Items {
         it.at = { x: it.a.x, y: it.a.y, z: it.a.z };
         it.dir = norm3(sub3(it.b, it.a));
       } else if (it.where === 'cursor') {
-        if (cursor) this.followCursor(it, cursor, dt);
+        if (cursor && !it.cursorControlled) this.followCursor(it, cursor, dt);
       }
       it.measure(dt);
     }

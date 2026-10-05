@@ -14,17 +14,15 @@ export class ShootGun extends Skill {
     private target: () => Vec | null,
     private at: 'friend' | 'cursor',
     private shots = 3,
+    private selected: Item | null = null,
   ) {
     super();
   }
   start(c: Ctx) {
-    const gun = c.items.find('gun'),
+    const gun = this.selected ?? c.items.find('gun'),
       hand = c.char.useHand;
     if (!gun || !hand || !['belt', 'hand'].includes(gun.where)) return;
-    for (const it of c.items.list)
-      if (it.where === 'hand' && it !== gun && !c.items.stow(it))
-        c.items.drop(it, 0, -30);
-    c.items.toHand(gun, hand);
+    c.items.wield(gun, hand);
     this.item = gun;
     c.look = 'target';
   }

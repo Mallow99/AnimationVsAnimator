@@ -1,3 +1,4 @@
+import { convexHull, paddedVertices, polygonDistance, overlapOffset } from './geometry';
 // His drawings coming to life, Animator vs. Animation style. A ball he drew turns into a
 // real ball (he kicks it around; you can grab and throw it). Boxes, ramps, ledges and bridges
 // turn into real things with weight: they fall, tip over, stack, and you can drag them around.
@@ -46,14 +47,47 @@ export class Ball {
   release() { if (this.heldBy) { this.heldBy = null; this.kick(Math.max(-2500, Math.min(2500, this.hold.vx)), Math.max(-2500, Math.min(2500, this.hold.vy))); } }
 
   /** One physics step (1/120 s). Bouncy, and it rolls: its spin follows how far it travels. */
-  step(dt: number, bounds: Bounds, platforms: Platform[]) {
+  step(
+    dt: number,
+    bounds: Bounds,
+    platforms: Platform[],
+    solids: Thing[] = [],
+  ) {
     const p = this.p;
-    if (this.heldBy) { p.px = p.x; p.py = p.y; p.x = this.hold.x; p.y = this.hold.y; return; }
+    if (this.heldBy) {
+      p.px = p.x;
+      p.py = p.y;
+      p.x = this.hold.x;
+      p.y = this.hold.y;
+      return;
+    }
     const x0 = p.x;
     integrate([p], dt, 0.999);
     p.grounded = false;
     collide([p], bounds, 0.01, 0.62);
     collidePlatforms([p], platforms, 0.01, 0.55);
+    for (const solid of solids) {
+      if (!solid.rigid) continue;
+      const radius = this.r / Math.cos(Math.PI / 16);
+      const circle = Array.from({ length: 16 }, (_, i) => ({
+        x: p.x + radius * Math.cos((i * Math.PI) / 8),
+        y: p.y + radius * Math.sin((i * Math.PI) / 8),
+      }));
+      const offset = overlapOffset(circle, solid.collisionHull);
+      if (!offset) continue;
+      const len = Math.hypot(offset.x, offset.y),
+        nx = offset.x / len,
+        ny = offset.y / len;
+      const into = (p.x - p.px) * nx + (p.y - p.py) * ny;
+      p.x += offset.x;
+      p.y += offset.y;
+      p.px += offset.x;
+      p.py += offset.y;
+      if (into < 0) {
+        p.px += nx * into * 1.55;
+        p.py += ny * into * 1.55;
+      }
+    }
     if (p.grounded) p.px += (p.x - p.px) * 0.004; // rolling resistance
     this.angle += (p.x - x0) / this.r;
   }
@@ -212,6 +246,7 @@ export class Thing {
    * That's "shape matching": however hard it's shaken, what you see and what it bumps into stay the same.
    */
   private rest: Vec[] | null = null;
+  private visualContour: Vec[] | null = null;
   get rigid() { return this.kind !== 'bridge'; }
   /** The drawing, in the thing's own frame (so it turns and moves with it). */
   private local: { x: number; y: number }[][] = [];
@@ -263,6 +298,50 @@ export class Thing {
     const f = this.frame(), o = this.def!.outline[0], x = (lx - o[0]) * this.scale, y = (ly - o[1]) * this.scale;
     return { x: f.ox + x * f.ux - y * f.uy, y: f.oy + x * f.uy + y * f.ux };
   }
+  /** A conservative convex contour covers all visible art, including handles, wheels and antennae. */
+  get collisionHull(): Vec[] {
+    if (!this.def)
+      return this.outline.map((i) => ({
+        x: this.points[i].x,
+        y: this.points[i].y,
+      }));
+    if (!this.visualContour) {
+      const d = this.def,
+        sprite = d.sprite;
+      this.visualContour = convexHull([
+        ...paddedVertices(d.outline),
+        ...(d.wheels ?? []).flatMap((i) =>
+          paddedVertices([d.outline[i]], (d.wheel ?? 4) * 2),
+        ),
+        ...d.shape.flatMap((st) =>
+          paddedVertices(
+            st.rect
+              ? [
+                  [st.rect[0], st.rect[1]],
+                  [st.rect[0] + st.rect[2], st.rect[1]],
+                  [st.rect[0] + st.rect[2], st.rect[1] + st.rect[3]],
+                  [st.rect[0], st.rect[1] + st.rect[3]],
+                ]
+              : st.pts,
+            st.width,
+          ),
+        ),
+        ...(sprite
+          ? paddedVertices([
+              [sprite.x, sprite.y],
+              [sprite.x + sprite.rows[0].length * sprite.pixel, sprite.y],
+              [
+                sprite.x + sprite.rows[0].length * sprite.pixel,
+                sprite.y + sprite.rows.length * sprite.pixel,
+              ],
+              [sprite.x, sprite.y + sprite.rows.length * sprite.pixel],
+            ])
+          : []),
+      ]);
+    }
+    return this.visualContour.map((p) => this.toWorld(p.x, p.y));
+  }
+
   /** Where he sits, if it's a seat. */
   get seatAt(): Vec | null { return this.def?.seat ? this.toWorld(this.def.seat[0], this.def.seat[1]) : null; }
 
@@ -327,6 +406,7 @@ export class Thing {
       }
       return false;
     }
+    if (this.def && polygonDistance({x,y},this.collisionHull) <= pad) return true;
     // Point in polygon (even-odd), with a little padding at the edges.
     const o = this.outline.map((i) => this.points[i]);
     let inside = false;
@@ -366,7 +446,22 @@ export class Thing {
     const h = this.held;
     if (!h) return;
     this.held = null;
-    if (this.rigid) { this.limitSpeed(2500); return; } // it flies on with the speed your hand gave it
+    if (this.rigid) {
+      // Solver corrections are not a throw velocity. Apply the measured hand velocity explicitly,
+      // preserving a bounded angular component from the off-center grab.
+      const speed = Math.hypot(h.vx, h.vy), k = Math.min(1, 2500 / (speed || 1));
+      const c = this.center;
+      const vx = this.points.reduce((v, p) => v + (p.x - p.px) * 120, 0) / this.points.length;
+      const vy = this.points.reduce((v, p) => v + (p.y - p.py) * 120, 0) / this.points.length;
+      const inertia = this.points.reduce((v, p) => v + (p.x - c.x) ** 2 + (p.y - c.y) ** 2, 0) || 1;
+      const omega = Math.max(-8, Math.min(8, this.points.reduce((v, p) => v + (p.x - c.x) * ((p.y - p.py) * 120 - vy) - (p.y - c.y) * ((p.x - p.px) * 120 - vx), 0) / inertia));
+      for (const p of this.points) {
+        p.px = p.x - (h.vx * k - omega * (p.y - c.y)) / 120;
+        p.py = p.y - (h.vy * k + omega * (p.x - c.x)) / 120;
+      }
+      this.limitSpeed(3000);
+      return;
+    }
     const p = this.points[h.idx];
     if (!this.stuck || !this.pins.includes(h.idx)) { p.invMass = 1; p.px = p.x - Math.max(-2500, Math.min(2500, h.vx)) / 120; p.py = p.y - Math.max(-2500, Math.min(2500, h.vy)) / 120; }
   }
@@ -472,10 +567,10 @@ export class Thing {
       this.matchShape();
       if (bounds) {
         let up = 0, side = 0;
-        for (const p of this.points) {
-          up = Math.max(up, p.y + p.r - bounds.floor);
-          if (p.x - p.r < bounds.left) side = Math.max(side, bounds.left - (p.x - p.r));
-          if (p.x + p.r > bounds.right) side = Math.min(side, bounds.right - (p.x + p.r));
+        for (const p of this.collisionHull) {
+          up = Math.max(up, p.y + 1.5 - bounds.floor);
+          if (p.x - 1.5 < bounds.left) side = Math.max(side, bounds.left - (p.x - 1.5));
+          if (p.x + 1.5 > bounds.right) side = Math.min(side, bounds.right - (p.x + 1.5));
         }
         for (const [p, pl] of this.above) if (p.x >= pl.x1 && p.x <= pl.x2) up = Math.max(up, p.y - (platY(pl, p.x) - p.r));
         if (up > 0 || side) for (const p of this.points) { p.y -= Math.max(0, up); p.x += side; if (up > 0 && p.py > p.y) p.py = p.y; }
@@ -859,9 +954,66 @@ export class Props {
       this.restOnEachOther();
     }
     for (const t of this.things) t.end(bounds);
+    for (let i=0;i<4;i++) {
+      if (!this.separateSolids()) break;
+      for (const t of this.things) t.end(bounds);
+    }
     const all = [...world, ...this.platforms];
-    for (const b of this.balls) b.step(dt, bounds, all);
+    for (const b of this.balls) b.step(dt, bounds, all, this.things);
     if (moved) this.changedPlatforms();
+    return moved;
+  }
+
+  /** Resolve whole-body overlap, with no positional correction added as artificial velocity. */
+  private separateSolids() {
+    let moved = false;
+    for (let i = 0; i < this.things.length; i++)
+      for (let j = i + 1; j < this.things.length; j++) {
+        const a = this.things[i],
+          b = this.things[j];
+        if (!a.rigid || !b.rigid) continue;
+        const wa = a.stuck || a.held ? 0 : 1 / a.points.length,
+          wb = b.stuck || b.held ? 0 : 1 / b.points.length;
+        if (!(wa + wb)) continue;
+        const offset = overlapOffset(a.collisionHull, b.collisionHull);
+        if (!offset) continue;
+        const length = Math.hypot(offset.x, offset.y);
+        if (length < 0.05) continue;
+        moved = true;
+        const nx = offset.x / length,
+          ny = offset.y / length;
+        const velocity = (t: Thing) => ({
+          x:
+            t.points.reduce((v, p) => v + (p.x - p.px) * 120, 0) /
+            t.points.length,
+          y:
+            t.points.reduce((v, p) => v + (p.y - p.py) * 120, 0) /
+            t.points.length,
+        });
+        const av = velocity(a),
+          bv = velocity(b),
+          closing = (av.x - bv.x) * nx + (av.y - bv.y) * ny;
+        for (const [t, w, sign] of [
+          [a, wa, 1],
+          [b, wb, -1],
+        ] as const) {
+          if (!w) continue;
+          const fraction = w / (wa + wb),
+            dx = offset.x * fraction * sign,
+            dy = offset.y * fraction * sign;
+          for (const p of t.points) {
+            p.x += dx;
+            p.y += dy;
+            p.px += dx;
+            p.py += dy;
+            if (closing < 0) {
+              const impulse = -Math.max(-3000, closing) * fraction * sign;
+              p.px -= (nx * impulse) / 120;
+              p.py -= (ny * impulse) / 120;
+            }
+          }
+        }
+      }
     return moved;
   }
 

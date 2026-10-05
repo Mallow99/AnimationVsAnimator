@@ -45,6 +45,7 @@ export interface FighterView {
   blade: { a: V3; b: V3; speed: number; id: string } | null;
   /** He has a sword (in his hand or on his belt). */
   armed: boolean;
+  looseWeapons?: import('./combat/armament').LooseWeapon[];
   /** Something the two of them are doing together (a high five, patty cake...), and how far along: going to
    * meet, in place and ready, or doing it. */
   social: { act: string; phase: 'meet' | 'ready' | 'do' } | null;
@@ -57,6 +58,9 @@ export interface FighterView {
 export interface WeaponInfo { id: string; hit: number; cuts: boolean }
 
 export type PeerMsg =
+  | { type: 'weaponRequest'; uid: number }
+  | { type: 'weaponGrant'; uid: number; weapon: import('./combat/armament').LooseWeapon }
+
   /** One of my hits reached you (`onBlade`: it met your sword, not you; `ranged`: an arrow, from afar). You decide what it does (blocked? parried? a cut?) and answer. */
   | { type: 'hit'; joint: JointName; vx: number; vy: number; power: number; weapon: WeaponInfo | null; at: Vec; kind: HitKind; onBlade?: boolean; ranged?: boolean }
   /** Your hit didn't land clean: blocked (I was guarding) or parried (and you're thrown off balance). */

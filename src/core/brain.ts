@@ -1,3 +1,4 @@
+import { isSettledActivity } from './activity-pacing';
 // The AI brain (milestone 4). A language model plays him: it talks as him, and in
 // "full" mode it also decides what he does next.
 //
@@ -26,7 +27,7 @@ import type { Memory, NoteKind } from './memory';
 
 const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // Ordinary conversation during a match should not replace the seated game skill.
-const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:close|take|restore|enter|shoot|fire|high five|hug|dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
+const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:read|watch|play|close|take|restore|enter|shoot|fire|high five|hug|dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
 
 /** What he has and where, in words: "pen (on your belt), wooden sword (the person took it)". */
 function itemsText(c: Ctx) {
@@ -370,7 +371,7 @@ export class Brain {
     let did = '';
     if (
       reply.plan.length &&
-      (!c.game || c.game.state === 'closed' || asksForActivity(text)) &&
+      ((!c.game || c.game.state === 'closed') && !isSettledActivity(mind.skill?.name) || asksForActivity(text)) &&
       mind.perform(c, reply.plan, 'you asked')
     )
       did = describePlan(reply.plan);
@@ -483,7 +484,7 @@ export class Brain {
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
       'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling), "perch" (hop up and sit on something in their window, like a chat message).',
       'DRAWING YOUR WAY: "ramp" draws a ramp up onto a window and walks up it; "bridge" draws a bridge across a gap to a window; "drawramp" draws one to jump off. Your drawings are solid and have weight.',
-      'PROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV, alone), "playgame" (invite the person to Othello on the TV), "ride" (the scooter). Only if they\'re out. "duel": spar with your friend (the other stick figure), if they\'re around.',
+      'QUIET ACTIVITIES: read (get a book and settle into it), watchtv and videogame last minutes depending on hyperactivity and mood. Ordinary chat can continue without leaving a settled activity.\nPROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV, alone), "playgame" (invite the person to Othello on the TV), "ride" (the scooter). Only if they\'re out. "duel": spar with your friend (the other stick figure), if they\'re around.',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
       ...(bodyGuide ? BODY_GUIDE : []),
       ...(drawGuide ? DRAW_GUIDE : []),
@@ -631,7 +632,7 @@ export class Brain {
           why === 'you' &&
           asksForActivity(prompt.replace(/^You hear: "|"$/g, ''));
         const recordedPlan =
-          c.game && c.game.state !== 'closed' && !interruptGame
+          ((c.game && c.game.state !== 'closed') || isSettledActivity(mind.skill?.name)) && !interruptGame
             ? reply.plan.filter((step) => 'say' in step)
             : reply.plan;
         this.history.push(user, {
@@ -673,7 +674,7 @@ export class Brain {
   ) {
     if (Object.keys(reply.feel).length) c.mood.nudge(reply.feel);
     for (const r of reply.remember) c.memory.add(r, noteKind(r), 'ai', 2);
-    const playing = c.game && c.game.state !== 'closed';
+    const playing = (c.game && c.game.state !== 'closed') || isSettledActivity(mind.skill?.name);
     const allowed =
       why === 'you'
         ? reply.plan

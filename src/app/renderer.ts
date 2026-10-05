@@ -1,3 +1,4 @@
+import { isWeapon } from '../core/combat/armament';
 // The overlay page: sets up the canvas, runs the frame loop, feeds mouse input to the stick figures,
 // and tells the desktop shell when clicks should pass through.
 //
@@ -286,7 +287,7 @@ const gamePanel = createGamePanel(gamePet, (on) => { gameTyping = on; syncTyping
 let ignoring = true;
 const onPet = (p: Pet, x: number, y: number) => p.dragging || p.hit(x, y) || p.uiHit(x, y) || p.carrying;
 function updateClickThrough(x: number, y: number) {
-  const want = cursorWeapon.kind==='none' && !(gamePanel.dragging || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
+  const want = !cursorWeapon.active && !(gamePanel.dragging || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);
@@ -299,20 +300,24 @@ const weaponBar = document.createElement('div');
 weaponBar.id = 'weaponBar';
 weaponBar.style.cssText =
   'position:fixed;right:12px;top:12px;display:none;gap:5px;padding:8px;background:#fff;color:#172033;font:13px system-ui;border-radius:6px;z-index:20';
-for (const kind of ['none', 'sword', 'mace', 'gun'] as CursorWeaponKind[]) {
+for (const kind of ['none', 'sword', 'mace', 'gun', 'bow'] as CursorWeaponKind[]) {
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = kind === 'none' ? 'Put away' : kind;
   button.onclick = () => {
-    cursorWeapon.equip(kind);
-    if (kind === 'none') weaponBar.style.display = 'none';
+    equipCursor(kind);
     updateClickThrough(last.x, last.y);
   };
   weaponBar.append(button);
 }
+const weaponHint = document.createElement('span');
+weaponHint.style.cssText = 'max-width:260px;align-self:center;font-size:12px';
+weaponBar.append(weaponHint);
 document.body.append(weaponBar);
 function equipCursor(kind: CursorWeaponKind) {
-  if (!['none', 'sword', 'mace', 'gun'].includes(kind)) return;
+  if (!['none', 'sword', 'mace', 'gun', 'bow'].includes(kind)) return;
+  const held = cursorWeapon.item, owner = cursorWeapon.owner;
+  if (owner && held) owner.giveBack(held);
   cursorWeapon.equip(kind);
   weaponBar.style.display = kind === 'none' ? 'none' : 'flex';
   closeTalk();
@@ -320,6 +325,7 @@ function equipCursor(kind: CursorWeaponKind) {
 }
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') equipCursor('none');
+  if ((e.key === 'r' || e.key === 'R') && !(e.target instanceof HTMLInputElement) && cursorWeapon.active) { cursorWeapon.reload(); e.preventDefault(); }
 });
 if (shell)
   shell.onCommand(({ cmd }) => {
@@ -347,6 +353,15 @@ const petAt = (x: number, y: number) => habitats.hit(x,y,lastWins) ?? [...deskto
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (gamePanel.over(e.clientX, e.clientY)) return;
+  if (cursorWeapon.owner && cursorWeapon.item) {
+    const owner = cursorWeapon.owner, item = cursorWeapon.item;
+    cursorWeapon.detach();
+    const recipient = [...desktopPets()].find(p => p.char.hitTest(e.clientX, e.clientY, 12));
+    if (recipient && recipient !== owner) { owner.items.remove(item); recipient.items.list.push(item); recipient.giveBack(item); }
+    else if (recipient) owner.giveBack(item);
+    else owner.items.drop(item, vel.x, vel.y);
+    weaponBar.style.display = 'none'; updateClickThrough(e.clientX, e.clientY); return;
+  }
   const who = petAt(e.clientX, e.clientY) ?? pets[0];
   if (who.contextMenu(e.clientX, e.clientY)) shell?.pressed();
   updateClickThrough(e.clientX, e.clientY);
@@ -354,7 +369,7 @@ window.addEventListener('contextmenu', (e) => {
 window.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   if((e.target as Element).closest('#weaponBar'))return;
-  if(cursorWeapon.kind!=='none'){cursorWeapon.press(true);return;}
+  if(cursorWeapon.active){cursorWeapon.pointer(e.clientX,e.clientY);cursorWeapon.press(true);shell?.pressed();return;}
   if (overTalk(e.clientX, e.clientY) || gamePanel.over(e.clientX, e.clientY)) return;
   if(cutouts.grab(e.clientX,e.clientY)){shell?.pressed();return;}
   if (talkOpen && !talkPet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
@@ -369,11 +384,11 @@ window.addEventListener('mousedown', (e) => {
 window.addEventListener('mouseup', (e) => {
   cursorWeapon.press(false);cutouts.release();
   if (activePets().some((p) => p.dragging)) shell?.pressed(); // hand focus back once more after letting go
-  for (const p of activePets()) p.pointerUp(e.clientX, e.clientY);
+  for (const p of activePets()) if (!p.userWeaponControlled) p.pointerUp(e.clientX, e.clientY);
   updateClickThrough(e.clientX, e.clientY);
 });
 // If the mouse leaves the window mid-drag, let go.
-window.addEventListener('blur', () => { cursorWeapon.press(false);cutouts.release(); for (const p of activePets()) p.pointerUp(last.x, last.y); });
+window.addEventListener('blur', () => { cursorWeapon.cancel();cutouts.release(); for (const p of activePets()) if (!p.userWeaponControlled) p.pointerUp(last.x, last.y); });
 
 // ── preview mode: a couple of fake windows to climb on ──
 const fakeWins: WinRect[] = [];
@@ -427,7 +442,16 @@ function frame(now: number) {
     }
   }
   habitats.update(slow ? dt * 0.3 : dt);
+  const owner = desktopPets().find(p => p.items.carried && isWeapon(p.items.carried.def));
+  if (owner && owner.items.carried && cursorWeapon.item !== owner.items.carried) {
+    cursorWeapon.attach(owner.items.carried, owner);
+    weaponBar.style.display = 'flex'; updateClickThrough(last.x, last.y);
+  }
   cursorWeapon.update(dt, desktopPets());
+  const hint = cursorWeapon.item?.def.use === 'gun' ? 'Hold and drag to aim/fire · R reload' : cursorWeapon.item?.def.use === 'shoot' ? 'Hold and drag to aim · release to shoot' : 'Hold and swipe to swing';
+  weaponHint.textContent = `${cursorWeapon.status} · ${hint}`;
+  weaponBar.title = `${cursorWeapon.status} · ${hint} · right-click to drop or hand back · Esc to return`;
+  weaponBar.setAttribute('aria-label', weaponBar.title);
   cutouts.update(
     dt,
     bounds(),

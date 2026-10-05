@@ -12,6 +12,7 @@ export interface Round extends Vec {
   life: number;
   toy: boolean;
   cursor: boolean;
+  kind: 'round' | 'arrow';
 }
 export class Projectiles {
   readonly rounds: Round[] = [];
@@ -22,6 +23,7 @@ export class Projectiles {
     vy: number,
     toy: boolean,
     cursor = false,
+    kind: 'round' | 'arrow' = 'round',
   ) {
     if (![x, y, vx, vy].every(Number.isFinite)) return;
     const speed = Math.hypot(vx, vy);
@@ -30,7 +32,7 @@ export class Projectiles {
       vy = (vy / speed) * 5000;
     }
     if (this.rounds.length >= 32) this.rounds.shift();
-    this.rounds.push({ x, y, vx, vy, toy, cursor, life: 0 });
+    this.rounds.push({ x, y, vx, vy, toy, cursor, kind, life: 0 });
   }
   update(
     dt: number,
@@ -49,7 +51,7 @@ export class Projectiles {
       const r = this.rounds[i],
         from = { x: r.x, y: r.y };
       r.life += dt;
-      r.vy += (r.toy ? 120 : 0) * dt;
+      r.vy += (r.kind === 'arrow' ? 900 : r.toy ? 120 : 0) * dt;
       const to = { x: r.x + r.vx * dt, y: r.y + r.vy * dt };
       let landed = false;
       // Sample in travel order, never farther apart than a limb's collision padding.
@@ -107,12 +109,12 @@ export class Projectiles {
                 vy: r.vy * 0.3,
                 power: r.toy ? 0.65 : 1,
                 weapon: {
-                  id: r.toy ? 'foam-round' : 'round',
+                  id: r.kind === 'arrow' ? (r.toy ? 'suction-arrow' : 'arrow') : r.toy ? 'foam-round' : 'round',
                   hit: r.toy ? 0.3 : 0.8,
                   cuts: false,
                 },
                 at,
-                kind: 'bullet',
+                kind: r.kind === 'arrow' ? 'arrow' : 'bullet',
                 ranged: true,
                 onBlade: true,
               },
@@ -132,12 +134,12 @@ export class Projectiles {
               vy: r.vy * 0.3,
               power: r.toy ? 0.65 : 1,
               weapon: {
-                id: r.toy ? 'foam-round' : 'round',
+                id: r.kind === 'arrow' ? (r.toy ? 'suction-arrow' : 'arrow') : r.toy ? 'foam-round' : 'round',
                 hit: r.toy ? 0.3 : 0.8,
                 cuts: false,
               },
               at,
-              kind: 'bullet',
+              kind: r.kind === 'arrow' ? 'arrow' : 'bullet',
               ranged: true,
             },
             source,

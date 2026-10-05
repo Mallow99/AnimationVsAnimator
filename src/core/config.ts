@@ -40,6 +40,8 @@ export interface PetConfig {
   puppet: boolean;
   /** Seconds between unsolicited AI thoughts. Direct conversation is always immediate. */
   aiInterval: number;
+  /** 0 = calm and settled, 1 = restless. Independent of AI call frequency. */
+  hyperactivity: number;
   /** Swiping the cursor through him fast smacks him. Off by default so it doesn't happen by accident. */
   smacking: boolean;
   /** Stand on, climb and get carried by the windows on screen. */
@@ -93,6 +95,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   model: PROVIDERS.gemini.model,
   puppet: true,
   aiInterval: 40,
+  hyperactivity: 0.25,
   smacking: false,
   windows: true,
   mischief: false,
@@ -132,6 +135,7 @@ const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 80, provider
 /** Every adjustable number: its limits, and how the settings window labels it. */
 export const RANGES: Record<string, Range> = {
   'figureCount': { min: 2, max: 5, step: 1, label: 'Figures', hint: 'A small group, each with their own settings' },
+  'hyperactivity': { min: 0, max: 1, step: 0.05, label: 'Hyperactivity', hint: 'Calm ← → restless. Mood also changes how long he settles into activities.' },
   'aiInterval': { min: 40, max: 300, step: 10, label: 'AI thinking interval', hint: 'Full mode: seconds between his own ideas (higher uses fewer calls)' },
   'scale': { min: 0.6, max: 2.5, step: 0.05, label: 'Size', hint: 'How big he is on screen' },
   'volume': { min: 0, max: 1, step: 0.05, label: 'Volume', hint: 'His voice and sound effects' },

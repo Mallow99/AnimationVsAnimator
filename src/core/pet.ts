@@ -1,3 +1,4 @@
+import { isWeapon, type LooseWeapon } from './combat/armament';
 // The Pet ties everything together: body + mood + mind + speech, and turns
 // raw mouse input into things that happen to him (poke, grab, throw, pet).
 
@@ -194,6 +195,9 @@ export class Pet implements Peer {
   listening = false;
   /** You're holding the mouse button down on one of his things (let go = drop or throw it). */
   private carryHeld = false;
+  private weaponRequests = new Map<string, number>();
+  /** The app's actual-item cursor controller handles hits while equipped. */
+  userWeaponControlled = false;
   /** Your cursor as a thing he can hit (and send flying). */
   readonly cursorBody = new CursorBody();
   /** The last punch/kick that connected (one hit per swing), and where the fist was last frame. */
@@ -264,8 +268,11 @@ export class Pet implements Peer {
       desktopAction: async action => pet.onDesktopAction?.(action) ?? {ok:false,message:'This needs the desktop app.'},
       desktopState: ()=>pet.desktopState,
       foe: () => pet.partner()?.view() ?? null,
+      looseWeapons: () => [...pet.looseWeapons(), ...pet.others.flatMap(o => o.view().looseWeapons ?? [])],
+      claimWeapon: weapon => pet.claimWeapon(weapon),
       peers: () => pet.others.map(o=>o.view()),
       selectPeer: (id) => pet.selectPeer(id),
+      get hyperactivity() {return pet.config.hyperactivity;},
       get personality() {return pet.config.personality;},
       get drawTools() {return pet.config.drawTools;},
       who: shared?.identity ?? `figure-${nextFigure++}`,
@@ -304,12 +311,16 @@ export class Pet implements Peer {
     this.stepWindows(dt);
     this.smoothWindows(dt);
     while (this.acc >= STEP) {
+      this.char.sleeping = this.mood.asleep;
+      const held = this.items.list.find(it => it.where === 'hand' && isWeapon(it.def));
+      this.char.carryPose = held ? { hand: held.hand, use: held.def.use, twoHand: !!held.def.cuts || held.def.use === 'shoot' } : null;
+      if (held && this.char.locomotion === 'run' && !this.char.fightPose && !this.char.handsAt && !this.char.handTarget) held.aimLocal = [0.55, 0.83];
       this.char.step(STEP);
       // Standing on something he drew: his weight pushes on it (a bridge sags under him).
       const under = this.props.thingOf(this.char.support);
       if (under && (this.char.mode === 'ground' || this.char.mode === 'sit')) under.carry(this.char.support, this.char.x);
       if (this.ownsProps) this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.uiPlats.length ? [...this.windowPlats, ...this.uiPlats] : this.windowPlats, this.ctx.world.windows);
-      this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms);
+      this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms, this.props.things);
       this.ballContact();
       this.acc -= STEP;
     }
@@ -948,7 +959,7 @@ export class Pet implements Peer {
     }
     if (p.thing?.held) Object.assign(p.thing.held, { x, y, vx, vy });
     if (p.ball) p.ball.moveHold(x, y, vx, vy);
-    else if (p.grabbed) this.char.moveHold(x, y, vx, vy);
+    else if (p.grabbed && !p.thing) this.char.moveHold(x, y, vx, vy);
   }
 
   pointerUp(x: number, y: number) {
@@ -1058,7 +1069,7 @@ export class Pet implements Peer {
   /** Swinging one of his things at him (you took his sword): hits him like a smack, only harder. */
   private itemHits() {
     const it = this.items.carried, w = this.ctx.world;
-    if (!it || it.def.hit <= 0 || it.tipSpeed < 450 || Math.hypot(this.cursorVel.x, this.cursorVel.y) < 300 || w.time < this.itemHitCooldown) return;
+    if (this.userWeaponControlled || !it || it.def.hit <= 0 || it.tipSpeed < 450 || Math.hypot(this.cursorVel.x, this.cursorVel.y) < 300 || w.time < this.itemHitCooldown) return;
     const a = it.butt, b = it.tip;
     for (let i = 0; i <= 6; i++) {
       const px = a.x + ((b.x - a.x) * i) / 6, py = a.y + ((b.y - a.y) * i) / 6;
@@ -1279,6 +1290,39 @@ export class Pet implements Peer {
     }
   }
 
+  private looseWeapons(): LooseWeapon[] {
+    return this.items.list
+      .filter((it) => it.where === 'world' && isWeapon(it.def))
+      .map((it) => ({
+        owner: this.ctx.who,
+        uid: it.uid,
+        def: it.def,
+        at: { x: it.at.x, y: it.at.y },
+        speed: it.speed,
+        ammo: it.ammo,
+      }));
+  }
+
+  private claimWeapon(weapon: LooseWeapon): Item | null {
+    if (weapon.owner === this.ctx.who)
+      return (
+        this.items.list.find(
+          (it) => it.uid === weapon.uid && it.where === 'world',
+        ) ?? null
+      );
+    const peer = this.others.find((o) => o.view().id === weapon.owner);
+    if (!peer) return null;
+    const key = `${weapon.owner}:${weapon.uid}`,
+      now = this.ctx.world.time;
+    if ((this.weaponRequests.get(key) ?? -Infinity) > now - 0.3) return null;
+    for (const [old, at] of this.weaponRequests)
+      if (at < now - 2) this.weaponRequests.delete(old);
+    this.weaponRequests.set(key, now);
+    const previous = new Set(this.items.list);
+    peer.receive({ type: 'weaponRequest', uid: weapon.uid }, this);
+    return this.items.list.find((it) => !previous.has(it)) ?? null;
+  }
+
   /** A snapshot of him, for the other figures (see peer.ts). */
   view(): FighterView {
     const ch = this.char, j = ch.body.j, sword = this.swordInHand;
@@ -1294,6 +1338,7 @@ export class Pet implements Peer {
       move: ch.attack, guard: ch.guard, block: fp?.block ?? null, parrying: !!fp?.parry,
       hitstun: ch.hitstun, stagger: ch.stagger, hp: ch.hp, poise: ch.poise,
       blade: sword ? { a: sword.butt, b: sword.tip, speed: sword.tipSpeed, id: sword.def.id } : null,
+      looseWeapons: this.looseWeapons(),
       armed: this.items.list.some((it) => it.def.use === 'swing' && (it.where === 'hand' || it.where === 'belt')),
       social: this.mind.skill instanceof Together ? { act: this.mind.skill.act, phase: this.mind.skill.phase } : null,
       asleep: this.mood.asleep, mood: this.mood.label,
@@ -1315,6 +1360,25 @@ export class Pet implements Peer {
     }
     if(fv.id && this.partnerId && fv.id!==this.partnerId && ['go','reply','cancel'].includes(m.type))return;
     switch (m.type) {
+      case 'weaponRequest': {
+        if (!this.others.some(o => o.view().id === fv.id)) return;
+        const it = this.items.list.find(it => it.uid === m.uid && it.where === 'world' && isWeapon(it.def));
+        const hand = fv.joints.handR ?? fv.joints.handL;
+        if (!it || !hand || Math.abs(fv.x - it.at.x) > 24 * fv.scale || Math.abs(hand.y - it.at.y) > 90 * fv.scale) return;
+        const weapon = this.looseWeapons().find(w => w.uid === it.uid)!;
+        this.items.remove(it); // Ownership leaves before the grant; two claimants cannot duplicate it.
+        from.receive({ type: 'weaponGrant', uid: m.uid, weapon }, this);
+        return;
+      }
+      case 'weaponGrant': {
+        const key = `${fv.id}:${m.uid}`;
+        if ((this.weaponRequests.get(key) ?? -Infinity) < w.time - 2) return;
+        this.weaponRequests.delete(key);
+        this.items.defs.set(m.weapon.def.id, m.weapon.def);
+        const made = this.items.spawn(m.weapon.def.id, m.weapon.at, this.char.scale);
+        if (made) made.ammo = m.weapon.ammo;
+        return;
+      }
       case 'hit': this.takeHit(m, from, fv); return;
       case 'blocked': {
         // My hit was blocked: I bounce off. Parried: thrown off balance, wide open (and maybe my sword goes flying).
