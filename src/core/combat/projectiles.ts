@@ -1,10 +1,10 @@
 // Platform-free swept projectiles. Guns and cursor weapons use the same collision rules.
-import type { Bounds, Platform } from "../physics";
-import { platY } from "../physics";
-import { segDist, viewHitTest } from "../fighting";
-import type { JointName } from "../body";
-import type { FighterView, Peer } from "../peer";
-import type { Vec } from "../math";
+import type { Bounds, Platform } from '../physics';
+import { platY } from '../physics';
+import { segDist, viewHitTest } from '../fighting';
+import type { JointName } from '../body';
+import type { FighterView, Peer } from '../peer';
+import type { Vec } from '../math';
 
 export interface Round extends Vec {
   vx: number;
@@ -99,25 +99,45 @@ export class Projectiles {
         for (const { p, v } of views) {
           if (v.hp <= 0) continue;
           if (blocksRound(v, from, at)) {
-            p.receive({type:'hit',joint:'handR',vx:r.vx*0.3,vy:r.vy*0.3,power:r.toy?0.65:1,weapon:{id:r.toy?'foam-round':'round',hit:r.toy?0.3:0.8,cuts:false},at,kind:'bullet',ranged:true,onBlade:true},source);
-            impact(at); landed=true; break;
+            p.receive(
+              {
+                type: 'hit',
+                joint: 'handR',
+                vx: r.vx * 0.3,
+                vy: r.vy * 0.3,
+                power: r.toy ? 0.65 : 1,
+                weapon: {
+                  id: r.toy ? 'foam-round' : 'round',
+                  hit: r.toy ? 0.3 : 0.8,
+                  cuts: false,
+                },
+                at,
+                kind: 'bullet',
+                ranged: true,
+                onBlade: true,
+              },
+              source,
+            );
+            impact(at);
+            landed = true;
+            break;
           }
           const joint = viewHitTest(v, at.x, at.y, 5 * v.scale);
           if (!joint) continue;
           p.receive(
             {
-              type: "hit",
+              type: 'hit',
               joint: joint as JointName,
               vx: r.vx * 0.3,
               vy: r.vy * 0.3,
               power: r.toy ? 0.65 : 1,
               weapon: {
-                id: r.toy ? "foam-round" : "round",
+                id: r.toy ? 'foam-round' : 'round',
                 hit: r.toy ? 0.3 : 0.8,
                 cuts: false,
               },
               at,
-              kind: "bullet",
+              kind: 'bullet',
               ranged: true,
             },
             source,
@@ -134,10 +154,10 @@ export class Projectiles {
   }
   draw(g: CanvasRenderingContext2D) {
     g.save();
-    g.lineCap = "round";
+    g.lineCap = 'round';
     for (const r of this.rounds) {
       const speed = Math.hypot(r.vx, r.vy) || 1;
-      g.strokeStyle = r.toy ? "#ffbe62" : "#fff0ad";
+      g.strokeStyle = r.toy ? '#ffbe62' : '#fff0ad';
       g.lineWidth = r.toy ? 4 : 2;
       g.beginPath();
       g.moveTo(r.x - (r.vx / speed) * 12, r.y - (r.vy / speed) * 12);

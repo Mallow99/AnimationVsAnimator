@@ -1,5 +1,5 @@
-import { Skill, arrive, type Ctx } from "./context";
-import type { DesktopAction } from "../../shared/desktop";
+import { Skill, arrive, type Ctx } from './context';
+import type { DesktopAction } from '../../shared/desktop';
 
 /** Reach toward a connected page / window before asking the native shell to act. */
 export class DesktopInteraction extends Skill {
@@ -15,7 +15,7 @@ export class DesktopInteraction extends Skill {
     if (this.finished || this.t > 14 || !c.desktopAction) return true;
     const page = c.desktopState?.().browser;
     const target =
-      this.name === "pluck" && page
+      this.name === 'pluck' && page
         ? Math.max(
             c.world.bounds.left + 20,
             Math.min(c.world.bounds.right - 20, page.x + page.width / 2),
@@ -24,7 +24,7 @@ export class DesktopInteraction extends Skill {
     if (!this.requested && this.t < 4 && !arrive(c, target, 25)) return false;
     if (!this.requested) {
       this.requested = true;
-      if (c.char.ready) c.char.doGesture("wave");
+      if (c.char.ready) c.char.doGesture('wave');
       void c.desktopAction(this.name).then(
         (result) => {
           if (!this.cancelled) {
@@ -34,7 +34,7 @@ export class DesktopInteraction extends Skill {
         },
         () => {
           if (!this.cancelled) {
-            c.say("That did not respond.", 2);
+            c.say('That did not respond.', 2);
             this.finished = true;
           }
         },

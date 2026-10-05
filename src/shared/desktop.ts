@@ -1,5 +1,5 @@
 export type DesktopAction =
-  "closetab" | "closewindow" | "pluck" | "restorepage" | "folder";
+  'closetab' | 'closewindow' | 'pluck' | 'restorepage' | 'folder' | 'file';
 export interface DesktopResult {
   ok: boolean;
   message: string;
@@ -26,7 +26,7 @@ export interface PageCutout {
 export interface FileWindow {
   id: number;
   path: string;
-  kind: "folder" | "file";
+  kind: 'folder' | 'file';
   x: number;
   y: number;
   width: number;

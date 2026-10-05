@@ -1,9 +1,9 @@
-import type { Personality } from "./config";
+import type { Personality } from './config';
 
 /** Offline preferences, not just text sent to an AI. User neuron edits override these. */
 export function personalityBiases(p: Personality): Record<string, number> {
   switch (p) {
-    case "competitive":
+    case 'competitive':
       return {
         duel: 1.5,
         spar: 1.35,
@@ -12,7 +12,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
         drawtool: 0.8,
         chat: 0.9,
       };
-    case "gentle":
+    case 'gentle':
       return {
         duel: 0.45,
         bump: 0.2,
@@ -22,7 +22,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
         watchtv: 1.3,
         handshake: 1.4,
       };
-    case "mischievous":
+    case 'mischievous':
       return {
         grabcursor: 1.5,
         drawtool: 1.4,
@@ -30,7 +30,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
         pattycake: 1.35,
         chat: 1.2,
       };
-    case "adventurous":
+    case 'adventurous':
       return {
         explore: 1.5,
         climb: 1.4,

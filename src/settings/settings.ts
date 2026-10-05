@@ -40,7 +40,7 @@ interface Shell {
   reloadItems(): void;
   desktopInfo?():Promise<{pairing:string;error:string;homes:{id:number;path:string}[];connected:boolean}>;
   openExtensionFolder?():void;
-  chooseHabitat?():Promise<{ok:boolean;message:string}>;
+  chooseHabitat?(kind?:'folder'|'file'):Promise<{ok:boolean;message:string}>;
   onFileNote?(cb:(message:string)=>void):void;
 }
 const shell = (window as unknown as { petShell: Shell }).petShell;
@@ -860,7 +860,9 @@ shell.command('sync');
 
 $('extensionFolder').onclick=()=>shell.openExtensionFolder?.();
 $('pairChrome').onclick=async()=>{try{const info=await shell.desktopInfo?.();if(!info?.pairing)throw new Error(info?.error || 'The Chrome bridge is unavailable.');await navigator.clipboard.writeText(info.pairing);$('chromeInfo').textContent='Pairing link copied. Paste it into the Chrome extension.';}catch(error){$('chromeInfo').textContent=(error as Error).message;}};
-$('chooseHabitat').onclick=async()=>{try{const result=await shell.chooseHabitat?.();$('fileInfo').textContent=result?.message??'Use the desktop app for file visits.';}catch(error){$('fileInfo').textContent=(error as Error).message;}};
+$('chooseHabitat').onclick=async()=>{try{const result=await shell.chooseHabitat?.('folder');$('fileInfo').textContent=result?.message??'Use the desktop app for file visits.';}catch(error){$('fileInfo').textContent=(error as Error).message;}};
 $('returnHome').onclick=()=>shell.command('returnHome');
 shell.onFileNote?.(message=>{$('fileInfo').textContent=message;});
 setInterval(async()=>{try{const info=await shell.desktopInfo?.();if(!info)return;const home=info.homes.find(h=>h.id===shell.petId);if(home)$('fileInfo').textContent=`Visiting ${home.path}. Open it in Finder / Explorer to see him.`;if(info.error)$('chromeInfo').textContent=info.error;else if(info.connected)$('chromeInfo').textContent='A Chrome page is connected.';}catch{}},3000);
+
+$('chooseFile').onclick=async()=>{try{const result=await shell.chooseHabitat?.('file');$('fileInfo').textContent=result?.message??'Use the desktop app.';}catch(error){$('fileInfo').textContent=(error as Error).message;}};

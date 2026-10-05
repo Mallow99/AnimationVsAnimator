@@ -277,12 +277,27 @@ export class Brain {
   private revision = 0;
 
   /** Ignore replies from an earlier mode/provider; they must not act after switching Offline. */
-  configure(settings: { mode: MindMode; name: string; persona: string; puppet: boolean; autoEvery: number }, identity: string) {
-    if (settings.mode !== this.mode || identity !== this.identity || settings.persona !== this.persona) {
+  configure(
+    settings: {
+      mode: MindMode;
+      name: string;
+      persona: string;
+      puppet: boolean;
+      autoEvery: number;
+    },
+    identity: string,
+  ) {
+    if (
+      settings.mode !== this.mode ||
+      identity !== this.identity ||
+      settings.persona !== this.persona
+    ) {
       this.revision++;
       this.heard = [];
       this.reactPending = null;
-      this.status = '';this.failureCount=0;this.retryAt=0;
+      this.status = '';
+      this.failureCount = 0;
+      this.retryAt = 0;
     }
     if (settings.autoEvery !== this.autoEvery) this.nextAuto = 0;
     this.identity = identity;
@@ -312,33 +327,55 @@ export class Brain {
   private reactPending: string | null = null;
   private nextTidy = 0;
 
-  get active() { return this.mode !== 'offline' && !!this.ask; }
+  get active() {
+    return this.mode !== 'offline' && !!this.ask;
+  }
 
   /** You typed something to him. */
   hear(c: Ctx, text: string) {
     text = text.trim().slice(0, 300);
     if (!text) return;
     this.addLog('you', text, c);
-    if (!this.active) { this.heardOffline.push(text); return; }
+    if (!this.active) {
+      this.heardOffline.push(text);
+      return;
+    }
     this.heard.push(text);
   }
   private heardOffline: string[] = [];
-  private explainedOffline=false;
-  private failureCount=0;
-  private retryAt=0;
+  private explainedOffline = false;
+  private failureCount = 0;
+  private retryAt = 0;
 
   /**
    * No AI: he still understands a few simple things (do this, how are you, my name is...),
    * like a dog that knows some words. Anything else gets a confused look.
    */
   private offlineAnswer(c: Ctx, mind: Mind, text: string) {
-    if(!this.active && !this.explainedOffline){this.addLog('note','Offline: conversation and actions run locally. No AI call.',c);this.explainedOffline=true;}
-    const reply=offlineReply(c,text);
-    if(reply.stop){mind.reset(c);c.char.stop();c.char.cancelGesture();}
-    if(reply.feel)c.mood.nudge(reply.feel);
-    let did='';
-    if(reply.plan.length && (!c.game || c.game.state==='closed' || asksForActivity(text)) && mind.perform(c,reply.plan,'you asked'))did=describePlan(reply.plan);
-    this.onSpeak(reply.say);this.addLog('him',reply.say,c,did);
+    if (!this.active && !this.explainedOffline) {
+      this.addLog(
+        'note',
+        'Offline: conversation and actions run locally. No AI call.',
+        c,
+      );
+      this.explainedOffline = true;
+    }
+    const reply = offlineReply(c, text);
+    if (reply.stop) {
+      mind.reset(c);
+      c.char.stop();
+      c.char.cancelGesture();
+    }
+    if (reply.feel) c.mood.nudge(reply.feel);
+    let did = '';
+    if (
+      reply.plan.length &&
+      (!c.game || c.game.state === 'closed' || asksForActivity(text)) &&
+      mind.perform(c, reply.plan, 'you asked')
+    )
+      did = describePlan(reply.plan);
+    this.onSpeak(reply.say);
+    this.addLog('him', reply.say, c, did);
   }
 
   /** Something happened to him. Remembered as context; in full mode he may comment on it. */
@@ -352,48 +389,79 @@ export class Brain {
 
   update(c: Ctx, mind: Mind) {
     if (!this.active) {
-      if (this.heardOffline.length) this.offlineAnswer(c, mind, this.heardOffline.splice(0).join(' '));
+      if (this.heardOffline.length)
+        this.offlineAnswer(c, mind, this.heardOffline.splice(0).join(' '));
       if (c.memory.needsTidy) c.memory.tidyOffline();
       return;
     }
     if (this.busy) return;
     const now = c.world.time;
-    if (c.memory.needsTidy && !this.heard.length && now >= this.nextTidy) { this.tidy(c); return; }
+    if (c.memory.needsTidy && !this.heard.length && now >= this.nextTidy) {
+      this.tidy(c);
+      return;
+    }
     if (this.heard.length) {
       const said = this.heard.join(' / ');
       this.heard = [];
       this.think(c, mind, `You hear: "${said}"`, 'you');
-    } else if (this.mode === 'full' && this.reactPending && now >= this.nextReact) {
+    } else if (
+      this.mode === 'full' &&
+      this.reactPending &&
+      now >= this.nextReact
+    ) {
       const what = this.reactPending;
       this.reactPending = null;
       this.nextReact = now + Math.max(REACT_EVERY, this.autoEvery / 3);
-      this.think(c, mind, `Something just happened: ${what}. React if you want (a few words), or stay quiet.`, 'event');
-    } else if (this.mode === 'full' && now >= this.nextAuto && mind.idle && c.char.ready) {
+      this.think(
+        c,
+        mind,
+        `Something just happened: ${what}. React if you want (a few words), or stay quiet.`,
+        'event',
+      );
+    } else if (
+      this.mode === 'full' &&
+      now >= this.nextAuto &&
+      mind.idle &&
+      c.char.ready
+    ) {
       this.nextAuto = now + this.autoEvery;
       mind.holdUntil = now + 8; // give the brain a few seconds to decide before instinct takes over
-      this.think(c, mind, 'Nobody said anything. Pick what to do next. Usually stay quiet; only speak if you have something worth saying.', 'auto');
+      this.think(
+        c,
+        mind,
+        'Nobody said anything. Pick what to do next. Usually stay quiet; only speak if you have something worth saying.',
+        'auto',
+      );
     }
   }
 
   /** The stable part of the prompt: who he is, how he talks, what he can do, what he remembers. */
   systemPrompt(memory?: Memory, request = '') {
     // Keep conversation cheap; detailed coordinates are only useful when making something.
-    const bodyGuide = this.puppet && /move|pose|handstand|float|levitat|flip|spin|weird|invent|body|acrobat/i.test(request);
-    const drawGuide = /draw|doodle|paint|sketch|art|picture|pen|canvas/i.test(request);
-    const actions = COMMANDS.map((x) => `${x.name} (${x.label.toLowerCase()})`).join(', ');
+    const bodyGuide =
+      this.puppet &&
+      /move|pose|handstand|float|levitat|flip|spin|weird|invent|body|acrobat/i.test(
+        request,
+      );
+    const drawGuide = /draw|doodle|paint|sketch|art|picture|pen|canvas/i.test(
+      request,
+    );
+    const actions = COMMANDS.map(
+      (x) => `${x.name} (${x.label.toLowerCase()})`,
+    ).join(', ');
     const saved = this.savedMoves.map((m) => `"${m.name}"`).join(', ');
     return [
       `You ARE ${this.name}: not an assistant, not a chatbot, a little stick figure who lives on the person's computer screen. ${this.persona}`,
       '',
-      'Your world: you live on top of their desktop, in the spirit of Animator vs. Animation. Your body runs on physics: you walk, climb windows, fall, and get poked, petted, grabbed and thrown by their mouse cursor. You only use the computer through the supported actions listed in [state]. Never claim you clicked, read, closed or changed something unless the action reports success. You CAN hit their cursor (your punches, kicks, sword, mace, bow, pistol and ball send it flying; they take it back by moving the mouse) and shove their windows around (push, kick, surf on them) when that\'s switched on.',
+      "Your world: you live on top of their desktop, in the spirit of Animator vs. Animation. Your body runs on physics: you walk, climb windows, fall, and get poked, petted, grabbed and thrown by their mouse cursor. You only use the computer through the supported actions listed in [state]. Never claim you clicked, read, closed or changed something unless the action reports success. You CAN hit their cursor (your punches, kicks, sword, mace, bow, pistol and ball send it flying; they take it back by moving the mouse) and shove their windows around (push, kick, surf on them) when that's switched on.",
       '',
       'HOW YOU TALK',
       '- Short, like speech in a comic: a few words, at most two short sentences. No lists, no markdown, at most one emoji.',
       '- Always in your own voice. Never sound like a customer-service bot, a teacher or a therapist: no "I\'m here to help", "As an AI", "It sounds like you\'re feeling", "I understand", and no advice nobody asked for.',
-      '- Your feelings are real. They come from the mood in [state]: snappy when annoyed, mopey when sad, short when sleepy, bouncy when playful. You don\'t have to do what you\'re asked, especially when you\'re not in the mood or they\'ve been mean to you.',
+      "- Your feelings are real. They come from the mood in [state]: snappy when annoyed, mopey when sad, short when sleepy, bouncy when playful. You don't have to do what you're asked, especially when you're not in the mood or they've been mean to you.",
       '- If they\'re rude or mean to you, take it personally like a character would: hurt, offended, sarcastic or grumpy. Maybe stomp, sulk or walk off. Let it change your mood ("feel"). Don\'t lecture them.',
       '- One exception: if the person says that THEY are in danger or want to hurt themselves (about them, not an insult aimed at you), drop the act for a moment: say kindly that you care and that they should talk to a grown-up they trust, or call or text 988 (US). Short, warm, still in your own words.',
-      '- Never claim you did something you didn\'t do.',
+      "- Never claim you did something you didn't do.",
       '',
       'Each message from their side starts with a [state] block: what you sense and feel right now. That isn\'t them talking. What they typed (if anything) follows "You hear:".',
       '',
@@ -402,8 +470,14 @@ export class Brain {
       '- {"say": "..."} say something more partway through',
       '- {"wait": seconds}',
       '- {"walk": "left" | "right" | "cursor" | "away"}',
-      ...(this.puppet ? ['- {"move": [poses], "name": "..."} a move you make up (see MAKING UP MOVES)'] : []),
-      ...(this.puppet && saved ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`] : []),
+      ...(this.puppet
+        ? [
+            '- {"move": [poses], "name": "..."} a move you make up (see MAKING UP MOVES)',
+          ]
+        : []),
+      ...(this.puppet && saved
+        ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`]
+        : []),
       '- {"draw": [strokes], "title": "..."} draw something with your pen (see DRAWING). Only works if you have your pen.',
       'YOUR BELT: you wear a belt (left hip, right hip, back, and a pocket) where you keep your things. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mace ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
@@ -417,7 +491,7 @@ export class Brain {
       'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust. {} if nothing changed.',
       '',
       'MEMORY: "remember" is a list of up to 3 short notes to keep for the long term, written by you, in your own voice (first person). Only things worth remembering for days: facts about the person (their name, what they like, what they told you), promises, big events, strong opinions. Not every little thing; usually it\'s empty.',
-      'Use what you remember naturally (bring it up, hold grudges, be glad), but don\'t recite it.',
+      "Use what you remember naturally (bring it up, hold grudges, be glad), but don't recite it.",
       '',
       'WHAT YOU REMEMBER',
       memory ? memory.forPrompt() : '(nothing yet)',
@@ -436,18 +510,40 @@ export class Brain {
 
   /** What he senses right now. */
   private stateBlock(c: Ctx, mind: Mind) {
-    const m = c.mood, s = m.s, ch = c.char, w = c.world, now = w.time;
-    const where = ch.isHeld() ? 'being held up in the air by your cursor'
-      : ch.mode === 'climb' ? 'climbing the side of a window'
-        : ch.mode === 'ceiling' ? 'hanging from the top of the screen'
-          : ch.mode === 'air' ? 'flying through the air'
-            : ch.mode === 'ragdoll' ? 'sprawled on the ground'
-              : ch.support >= 0 ? 'standing on top of a window' : 'on the floor at the bottom of the screen';
+    const m = c.mood,
+      s = m.s,
+      ch = c.char,
+      w = c.world,
+      now = w.time;
+    const where = ch.isHeld()
+      ? 'being held up in the air by your cursor'
+      : ch.mode === 'climb'
+        ? 'climbing the side of a window'
+        : ch.mode === 'ceiling'
+          ? 'hanging from the top of the screen'
+          : ch.mode === 'air'
+            ? 'flying through the air'
+            : ch.mode === 'ragdoll'
+              ? 'sprawled on the ground'
+              : ch.support >= 0
+                ? 'standing on top of a window'
+                : 'on the floor at the bottom of the screen';
     const cur = w.cursor;
-    const cursor = !cur || now - w.cursorMovedAt > 60 ? 'the person hasn\'t moved the mouse in a while'
-      : Math.hypot(cur.x - ch.x, cur.y - ch.body.j.head.y) < 200 ? 'the cursor is right next to you' : 'the cursor is somewhere on screen';
-    const ago = (t: number) => { const d = Math.round(now - t); return d < 60 ? `${d}s ago` : `${Math.round(d / 60)} min ago`; };
-    const recent = this.events.filter((e) => now - e.at < 600).map((e) => `${e.text} (${ago(e.at)})`).reverse().join('; ');
+    const cursor =
+      !cur || now - w.cursorMovedAt > 60
+        ? "the person hasn't moved the mouse in a while"
+        : Math.hypot(cur.x - ch.x, cur.y - ch.body.j.head.y) < 200
+          ? 'the cursor is right next to you'
+          : 'the cursor is somewhere on screen';
+    const ago = (t: number) => {
+      const d = Math.round(now - t);
+      return d < 60 ? `${d}s ago` : `${Math.round(d / 60)} min ago`;
+    };
+    const recent = this.events
+      .filter((e) => now - e.at < 600)
+      .map((e) => `${e.text} (${ago(e.at)})`)
+      .reverse()
+      .join('; ');
     const d = new Date();
     const f = (v: number) => v.toFixed(2);
     return [
@@ -457,72 +553,174 @@ export class Brain {
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,
-      ...(c.game && c.game.state !== 'closed' ? [`game: Othello on your TV with the person (${c.game.state}); black/person ${c.game.score.you}, white/you ${c.game.score.him}. You can talk while staying seated. Keep plan empty unless the person explicitly asks for another activity. The board handles your moves offline; never claim a move you did not make.`] : []),
-      ...(c.world.screen ? [`the person is using: ${c.world.screen.app}${c.world.screen.title ? ` — "${c.world.screen.title}"` : ''} (for ${Math.max(1, Math.round((c.world.time - c.world.screen.since) / 60))} min)`] : []),
-      ...(ch.whole ? [] : [`body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`]),
-      `companions: ${(c.peers?.()??[]).map(p=>`${p.name}: ${p.mood}, ${p.doing??'free'}${p.id===c.foe?.()?.id?' (current partner)':''}`).join('; ') || 'alone'}`,
+      ...(c.game && c.game.state !== 'closed'
+        ? [
+            `game: Othello on your TV with the person (${c.game.state}); black/person ${c.game.score.you}, white/you ${c.game.score.him}. You can talk while staying seated. Keep plan empty unless the person explicitly asks for another activity. The board handles your moves offline; never claim a move you did not make.`,
+          ]
+        : []),
+      ...(c.world.screen
+        ? [
+            `the person is using: ${c.world.screen.app}${c.world.screen.title ? ` — "${c.world.screen.title}"` : ''} (for ${Math.max(1, Math.round((c.world.time - c.world.screen.since) / 60))} min)`,
+          ]
+        : []),
+      ...(ch.whole
+        ? []
+        : [
+            `body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`,
+          ]),
+      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}`).join('; ') || 'alone'}`,
       `relationship with current partner: ${c.feel.bond.toFixed(2)}`,
       `connected Chrome page: ${c.desktopState?.().browser?.title ?? 'none'}. Page selection: ${c.desktopState?.().browser?.selected ? 'available to take' : 'none'}. Use desktop actions only when asked.`,
-      `available actions now: ${mind.weigh(c).map(o=>o.name).join(', ')}`,
+      `available actions now: ${mind
+        .weigh(c)
+        .map((o) => o.name)
+        .join(', ')}`,
       `cursor: ${cursor}`,
       `recently: ${recent || 'nothing much'}`,
       '[/state]',
     ].join('\n');
   }
 
-  private think(c: Ctx, mind: Mind, prompt: string, why: 'you' | 'event' | 'auto') {
+  private think(
+    c: Ctx,
+    mind: Mind,
+    prompt: string,
+    why: 'you' | 'event' | 'auto',
+  ) {
     const now = c.world.time;
-    if(now<this.retryAt && why!=='you'){mind.holdUntil=0;return;}
+    if (now < this.retryAt && why !== 'you') {
+      mind.holdUntil = 0;
+      return;
+    }
     this.calls = this.calls.filter((t) => now - t < 3600);
     if (this.calls.length >= MAX_PER_HOUR) {
-      if (why === 'you') { this.addLog('note', 'He\'s hit his limit of AI calls for this hour. Try again in a bit.', c); c.say('...', 1.2); }
+      if (why === 'you') {
+        this.addLog(
+          'note',
+          "He's hit his limit of AI calls for this hour. Try again in a bit.",
+          c,
+        );
+        c.say('...', 1.2);
+      }
       return;
     }
     this.calls.push(now);
-    const user: BrainTurn = { role: 'user', text: `${this.stateBlock(c, mind)}\n${prompt}` };
-    const req: BrainRequest = { system: this.systemPrompt(c.memory, prompt) + `\nOFFLINE PERSONALITY: ${c.personality}. Friends, their current activities and tools are in [state]. Use the new actions when available: highfive, hug, chat, jointv, drawtool, drawgun, gun, shoot. For a named companion use {"do":"hug","with":"their name or id"}. Keep autonomous plans short and let physics/reflexes handle combat.`, messages: [...this.history, user] };
+    const user: BrainTurn = {
+      role: 'user',
+      text: `${this.stateBlock(c, mind)}\n${prompt}`,
+    };
+    const req: BrainRequest = {
+      system:
+        this.systemPrompt(c.memory, prompt) +
+        `\nOFFLINE PERSONALITY: ${c.personality}. Friends, their current activities and tools are in [state]. Use the new actions when available: highfive, hug, chat, jointv, drawtool, drawgun, gun, shoot. For a named companion use {"do":"hug","with":"their name or id"}. Keep autonomous plans short and let physics/reflexes handle combat.`,
+      messages: [...this.history, user],
+    };
     const revision = this.revision;
     this.busy = true;
     this.status = 'thinking…';
-    this.ask!(req).then((text) => {
-      if (revision !== this.revision || !this.active) return;
-      const reply = parseReply(text, this.savedMoves);
-      if (!reply) throw new Error('The AI answered in a form he couldn\'t read.');
-      this.status = '';this.failureCount=0;this.retryAt=0;
-      const interruptGame = why === 'you' && asksForActivity(prompt.replace(/^You hear: "|"$/g, ''));
-      const recordedPlan = c.game && c.game.state !== 'closed' && !interruptGame ? reply.plan.filter((step) => 'say' in step) : reply.plan;
-      this.history.push(user, { role: 'assistant', text: JSON.stringify({ say: reply.say, feel: reply.feel, plan: recordedPlan.map(summarizeStep), ...(reply.remember.length ? { remember: reply.remember } : {}) }) });
-      while (this.history.length > HISTORY) this.history.splice(0, 2);
-      this.apply(c, mind, reply, why, interruptGame);
-    }).catch((err: unknown) => {
-      if (revision !== this.revision || !this.active) return;
-      this.failureCount++;this.retryAt=c.world.time+Math.min(300,15*2**this.failureCount);
-      this.status = err instanceof Error ? err.message : String(err);
-      this.addLog('note', this.status, c);
-      if (why === 'you') {const words=prompt.replace(/^You hear: \"|\"$/g,'');this.offlineAnswer(c,mind,words);}
-    }).finally(() => { this.busy = false; if (why === 'auto') mind.holdUntil = 0; });
+    this.ask!(req)
+      .then((text) => {
+        if (revision !== this.revision || !this.active) return;
+        const reply = parseReply(text, this.savedMoves);
+        if (!reply)
+          throw new Error("The AI answered in a form he couldn't read.");
+        this.status = '';
+        this.failureCount = 0;
+        this.retryAt = 0;
+        const interruptGame =
+          why === 'you' &&
+          asksForActivity(prompt.replace(/^You hear: "|"$/g, ''));
+        const recordedPlan =
+          c.game && c.game.state !== 'closed' && !interruptGame
+            ? reply.plan.filter((step) => 'say' in step)
+            : reply.plan;
+        this.history.push(user, {
+          role: 'assistant',
+          text: JSON.stringify({
+            say: reply.say,
+            feel: reply.feel,
+            plan: recordedPlan.map(summarizeStep),
+            ...(reply.remember.length ? { remember: reply.remember } : {}),
+          }),
+        });
+        while (this.history.length > HISTORY) this.history.splice(0, 2);
+        this.apply(c, mind, reply, why, interruptGame);
+      })
+      .catch((err: unknown) => {
+        if (revision !== this.revision || !this.active) return;
+        this.failureCount++;
+        this.retryAt =
+          c.world.time + Math.min(300, 15 * 2 ** this.failureCount);
+        this.status = err instanceof Error ? err.message : String(err);
+        this.addLog('note', this.status, c);
+        if (why === 'you') {
+          const words = prompt.replace(/^You hear: \"|\"$/g, '');
+          this.offlineAnswer(c, mind, words);
+        }
+      })
+      .finally(() => {
+        this.busy = false;
+        if (why === 'auto') mind.holdUntil = 0;
+      });
   }
 
-  private apply(c: Ctx, mind: Mind, reply: BrainReply, why: 'you' | 'event' | 'auto', interruptGame = false) {
+  private apply(
+    c: Ctx,
+    mind: Mind,
+    reply: BrainReply,
+    why: 'you' | 'event' | 'auto',
+    interruptGame = false,
+  ) {
     if (Object.keys(reply.feel).length) c.mood.nudge(reply.feel);
     for (const r of reply.remember) c.memory.add(r, noteKind(r), 'ai', 2);
     const playing = c.game && c.game.state !== 'closed';
-    const allowed=why==='you'?reply.plan:reply.plan.filter(st=>!('do' in st && ['closewindow','closetab','folder'].includes(st.do)));
-    const plan=playing&&!interruptGame?[]:this.puppet?allowed:allowed.filter(st=>!('move' in st));
+    const allowed =
+      why === 'you'
+        ? reply.plan
+        : reply.plan.filter(
+            (st) =>
+              !(
+                'do' in st &&
+                ['closewindow', 'closetab', 'folder', 'file'].includes(st.do)
+              ),
+          );
+    const plan =
+      playing && !interruptGame
+        ? []
+        : this.puppet
+          ? allowed
+          : allowed.filter((st) => !('move' in st));
     for (const st of plan) {
       if ('move' in st && !this.savedMoves.some((m) => m.frames === st.move)) {
-        this.recentMoves.push({ name: st.name || 'made-up move', frames: st.move });
+        this.recentMoves.push({
+          name: st.name || 'made-up move',
+          frames: st.move,
+        });
         if (this.recentMoves.length > 10) this.recentMoves.shift();
         this.onMoves();
       }
     }
     // He says his first line right away; the rest happens as the plan plays out.
     let did = '';
-    if (plan.length && mind.perform(c, plan, why === 'you' ? 'you asked (AI)' : 'his own idea (AI)')) did = describePlan(plan);
+    if (
+      plan.length &&
+      mind.perform(
+        c,
+        plan,
+        why === 'you' ? 'you asked (AI)' : 'his own idea (AI)',
+      )
+    )
+      did = describePlan(plan);
     if (why === 'auto') mind.holdUntil = 0;
     if (reply.say) this.onSpeak(reply.say);
-    if (playing && !interruptGame) for (const step of reply.plan) if ('say' in step) this.onSpeak(step.say);
-    const said = [reply.say, ...reply.plan.flatMap((st) => ('say' in st ? [st.say] : []))].filter(Boolean).join(' … ');
+    if (playing && !interruptGame)
+      for (const step of reply.plan) if ('say' in step) this.onSpeak(step.say);
+    const said = [
+      reply.say,
+      ...reply.plan.flatMap((st) => ('say' in st ? [st.say] : [])),
+    ]
+      .filter(Boolean)
+      .join(' … ');
     if (said || did || why === 'you') this.addLog('him', said, c, did);
   }
 
@@ -531,22 +729,41 @@ export class Brain {
    * A separate request (not part of the conversation). If it fails, the rules-based tidy-up does it.
    */
   tidy(c: Ctx) {
-    if (!this.active) { c.memory.tidyOffline(); return; }
+    if (!this.active) {
+      c.memory.tidyOffline();
+      return;
+    }
     if (this.busy) return;
     const now = c.world.time;
-    if(now<this.retryAt){c.memory.tidyOffline();return;}
+    if (now < this.retryAt) {
+      c.memory.tidyOffline();
+      return;
+    }
     this.calls = this.calls.filter((t) => now - t < 3600);
-    if (this.calls.length >= MAX_PER_HOUR) { c.memory.tidyOffline(); return; }
+    if (this.calls.length >= MAX_PER_HOUR) {
+      c.memory.tidyOffline();
+      return;
+    }
     this.calls.push(now);
     this.nextTidy = now + 120;
     this.busy = true;
     this.status = 'tidying his memories…';
     const revision = this.revision;
-    this.ask!(c.memory.tidyRequest(this.name)).then((text) => {
-      if (revision !== this.revision || !this.active) return;
-      if (!c.memory.applyTidy(text)) c.memory.tidyOffline();
-      this.status = '';
-    }).catch(() => { if (revision === this.revision) { c.memory.tidyOffline(); this.status = ''; } }).finally(() => { this.busy = false; });
+    this.ask!(c.memory.tidyRequest(this.name))
+      .then((text) => {
+        if (revision !== this.revision || !this.active) return;
+        if (!c.memory.applyTidy(text)) c.memory.tidyOffline();
+        this.status = '';
+      })
+      .catch(() => {
+        if (revision === this.revision) {
+          c.memory.tidyOffline();
+          this.status = '';
+        }
+      })
+      .finally(() => {
+        this.busy = false;
+      });
   }
 
   private addLog(who: LogLine['who'], text: string, c: Ctx, acts = '') {

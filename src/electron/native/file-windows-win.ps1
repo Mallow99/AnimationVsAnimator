@@ -1,5 +1,6 @@
 # Real Explorer folder identities. Read-only COM query; no files or windows are modified.
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;

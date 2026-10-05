@@ -140,8 +140,22 @@ try {
   const small = await evaluate(`(() => { const r = document.querySelector('#gamePanel').getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom}; })()`);
   assert(small.left >= 0 && small.top >= 0 && small.right <= 480 && small.bottom <= 640);
   await evaluate('document.querySelector(".game-close").click(); document.querySelector("#talkClose").click()');
+  // New desktop controls and data-image fragments render in the real overlay page.
+  await send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+  await evaluate("window.equipCursor('sword')");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#weaponBar')).display"),'flex');
+  await evaluate("document.querySelector('#weaponBar button').click()");assert.equal(await evaluate('window.cursorWeapon.kind'),'none');
+  const fragment=await send('Page.captureScreenshot',{format:'png'});
+  await evaluate(`window.cutouts.add({id:'render-check',image:${JSON.stringify('data:image/png;base64,'+fragment.data)},x:400,y:300,width:160,height:100,title:'Real screenshot',owner:0})`);
+  await until(()=>evaluate('window.cutouts.cards[0].bitmap.naturalWidth>0'));
+  assert(await evaluate('window.cutouts.hit(window.cutouts.cards[0].x+5,window.cutouts.cards[0].y+5)!==null'));await evaluate('window.cutouts.clear()');
+  // A resident uses its existing identity and is returned by the actual controller.
+  await evaluate("window.habitats.enter(0,window.pet,'/test/real-folder');window.habitats.refresh([{id:1,path:'/test/real-folder',kind:'folder',x:100,y:100,width:500,height:400}])");
+  assert.equal(await evaluate('window.habitats.activePets[0].ctx.who===window.pet.ctx.who'),true);
+  await evaluate('window.habitats.refresh([])');assert.equal(await evaluate('window.habitats.activePets.length'),0);
+  await evaluate('window.habitats.returnHome(0)');assert.equal(await evaluate('window.pet.paused'),false);
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
-  console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close and rendering');
+  console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close, cursor weapons, page-fragment images, native-window visit controller and rendering');
   console.log('Screenshot: .build/browser-smoke.png');
 } finally {
   socket?.close(); browser.kill();

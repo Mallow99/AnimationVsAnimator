@@ -2,7 +2,7 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest work: combat, cursor weapons, a larger group, and native integration (in progress)
+## Latest work: combat, cursor weapons, a larger group, and native integration
 
 The owner uses Chrome on Mac. They asked for cleaner physics/code, guns and cursor weapons, broader
 combat animation with purposeful hidden guard pressure, more pen-created tools, richer offline/AI life,
@@ -36,15 +36,28 @@ Break pressure stays hidden; General has a developer toggle. Existing appearance
   Finder enumeration is a fixed read-only JXA script, Explorer uses Shell.Application. Accessibility's
   document URL supports Mac document apps that expose it; universal file-app detection is not established.
 
-Verified so far: typecheck/build, 50 focused checks, full simulation seed 1, baseline two-figure
-300-second soak seed 1, Chromium functional smoke. Magazine persistence checks and a five-figure 300-second soak seed 1 pass; both soaks report no trouble seen.
-Actual Mac Accessibility/Automation, real Chrome extension permissions, and native window close need
-hardware checks. No real AI calls or provider keys were used. Do not claim those hardware paths verified.
+Verified: typecheck/build; 50 focused checks; full simulation seed 1; two-figure and five-figure
+300-second soaks seed 1 (both report no trouble seen); expanded Chromium overlay smoke; Chrome picker,
+real screenshot crop, extraction and restoration against actual DOM/canvas with simulated extension APIs.
+Electron was downloaded using the inherited proxy and a workspace cache; Xvfb was extracted under /tmp.
+Real Electron on Linux/Xvfb passed preload IPC, config broadcasts, five-figure add/remove, stable IDs,
+hidden pressure by default, cursor equipment, disabled-window-close gate, actual local bridge delivery,
+cutout image rendering, and the fifth figure's settings window. All test app data was isolated under /tmp.
+No provider keys or real model calls were used. Separate the Linux shell smoke from native Mac/Windows checks.
 
-Next: finish new checks, five-figure soak and browser integration checks; review native path handling and
-clipping; finish docs and a runnable commit. Ask for Mac feedback on real-folder visits before treating
-that request as fully satisfied. Primary references: Apple Finder Sync supports badges/menus/toolbars,
-not an arbitrary animation pane; kAXDocumentAttribute is the represented document's URL.
+Remaining: installed Chrome activeTab/capture permissions, real tab close, native normal-window close,
+Finder Automation/Accessibility, actual document URLs, window placement/clipping/Spaces, and Windows helper
+execution need hardware checks. Entry is currently a state transfer; **crawl-through-icon animation is not
+implemented**. The native-file prototype does not complete every part of that request. Check the owner's
+acceptance of drawing through an overlay before treating it as satisfied. Universal arbitrary document
+embedding has not been established. Studio/export remains postponed.
+
+Next concrete step: the owner runs General → Enter a folder… on Mac and opens the exact folder in Finder.
+Verify native path/frame reports, hiding on close/tab changes, z-order clipping, moving the window, returning
+with the same memories, and no Space switching. Then implement entry/crawl using real detected icon geometry;
+do not substitute browser rooms. Setup and verification boundaries: [DESKTOP-INTERACTIONS.md](DESKTOP-INTERACTIONS.md).
+Primary references: Apple Finder Sync supports badges/menus/toolbars, not an arbitrary animation pane;
+kAXDocumentAttribute is the represented document's URL.
 
 ## Latest: two figures that live together, rigid furniture, bows, a soak test, and the desktop-switch bug
 

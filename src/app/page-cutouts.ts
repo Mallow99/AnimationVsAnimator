@@ -1,6 +1,6 @@
-import type { PageCutout } from "../shared/desktop";
-import type { Pet } from "../core/pet";
-import type { Bounds } from "../core/physics";
+import type { PageCutout } from '../shared/desktop';
+import type { Pet } from '../core/pet';
+import type { Bounds } from '../core/physics';
 interface Card extends PageCutout {
   bitmap: HTMLImageElement;
   vx: number;
@@ -60,7 +60,7 @@ export class PageCutouts {
       const pet = pets[c.owner],
         hand = pet?.char.useHand;
       if (c.age < 4 && pet && hand) {
-        const at = pet.char.body.j[hand === "R" ? "handR" : "handL"];
+        const at = pet.char.body.j[hand === 'R' ? 'handR' : 'handL'];
         c.x = at.x;
         c.y = at.y - c.height / 2;
         c.vx = 0;
@@ -88,9 +88,9 @@ export class PageCutouts {
   draw(g: CanvasRenderingContext2D) {
     for (const c of this.cards) {
       g.save();
-      g.shadowColor = "#0005";
+      g.shadowColor = '#0005';
       g.shadowBlur = 8;
-      g.fillStyle = "#fff";
+      g.fillStyle = '#fff';
       g.fillRect(c.x - 3, c.y - 3, c.width + 6, c.height + 6);
       g.shadowBlur = 0;
       if (c.bitmap.complete && c.bitmap.naturalWidth)

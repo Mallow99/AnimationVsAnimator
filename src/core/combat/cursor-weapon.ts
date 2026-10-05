@@ -1,14 +1,14 @@
-import { BUILTIN_ITEMS, drawItem, Item, type ItemDef } from "../items";
-import type { Pet } from "../pet";
-import type { FighterView, Peer } from "../peer";
-import type { Vec } from "../math";
-import type { JointName } from "../body";
-import { viewHitTest } from "../fighting";
-import { Projectiles } from "./projectiles";
+import { BUILTIN_ITEMS, drawItem, Item, type ItemDef } from '../items';
+import type { Pet } from '../pet';
+import type { FighterView, Peer } from '../peer';
+import type { Vec } from '../math';
+import type { JointName } from '../body';
+import { viewHitTest } from '../fighting';
+import { Projectiles } from './projectiles';
 
-export type CursorWeaponKind = "none" | "sword" | "mace" | "gun";
+export type CursorWeaponKind = 'none' | 'sword' | 'mace' | 'gun';
 export class CursorWeapon {
-  kind: CursorWeaponKind = "none";
+  kind: CursorWeaponKind = 'none';
   private at: Vec = { x: 0, y: 0 };
   private previous: Vec | null = null;
   private angle = -0.7;
@@ -48,8 +48,8 @@ export class CursorWeapon {
     const source: Peer = {
       view: () => ({
         ...pets[0].view(),
-        id: "cursor",
-        name: "your cursor",
+        id: 'cursor',
+        name: 'your cursor',
         x: this.at.x,
         partner: null,
         joints: {},
@@ -57,7 +57,7 @@ export class CursorWeapon {
       }),
       receive: () => {},
     };
-    if (def && this.held && this.kind === "gun" && this.time >= this.fireAt) {
+    if (def && this.held && this.kind === 'gun' && this.time >= this.fireAt) {
       const nearest = [...pets].sort(
         (a, b) =>
           Math.hypot(a.char.x - this.at.x, a.char.body.j.neck.y - this.at.y) -
@@ -74,12 +74,12 @@ export class CursorWeapon {
         this.at.y + y * 25,
         x * 2200,
         y * 2200,
-        pets[0].config.fightMode === "play",
+        pets[0].config.fightMode === 'play',
       );
       this.fireAt = this.time + 0.3;
-      pets[0].ctx.sound?.("shot", 0.5);
+      pets[0].ctx.sound?.('shot', 0.5);
     }
-    if (def && this.held && this.kind !== "gun" && speed > 350) {
+    if (def && this.held && this.kind !== 'gun' && speed > 350) {
       const length = def.length * 1.35;
       // Sweep the grip and tip between frames; fast swipes cannot skip a thin limb.
       const count = Math.min(512, Math.ceil(Math.hypot(dx, dy) / 5) + 1);
@@ -104,7 +104,7 @@ export class CursorWeapon {
           if (!joint) continue;
           p.receive(
             {
-              type: "hit",
+              type: 'hit',
               joint: joint as JointName,
               vx: Math.max(
                 -1400,
@@ -117,7 +117,7 @@ export class CursorWeapon {
               power: Math.min(1.4, speed / 1400),
               weapon: { id: def.id, hit: def.hit, cuts: false },
               at,
-              kind: this.kind === "mace" ? "heavy" : "cut",
+              kind: this.kind === 'mace' ? 'heavy' : 'cut',
             },
             source,
           );

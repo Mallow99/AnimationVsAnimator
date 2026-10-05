@@ -91,29 +91,52 @@ export class Pet implements Peer {
   readonly projectiles = new Projectiles();
   /** A stable partner for an exchange, selected again only while free. */
   partner(): Peer | null {
-    const existing = this.others.find(o => o.view().id === this.partnerId);
+    const existing = this.others.find((o) => o.view().id === this.partnerId);
     if (existing) return existing;
-    const available = this.others.filter(o => {
-      const v=o.view();return !v.partner || v.partner===this.ctx.who || !['duel','together','ask'].includes(v.doing??'');
+    const available = this.others.filter((o) => {
+      const v = o.view();
+      return (
+        !v.partner ||
+        v.partner === this.ctx.who ||
+        !['duel', 'together', 'ask'].includes(v.doing ?? '')
+      );
     });
-    return available.sort((a,b)=>Math.abs(a.view().x-this.char.x)-Math.abs(b.view().x-this.char.x))[0] ?? null;
+    return (
+      available.sort(
+        (a, b) =>
+          Math.abs(a.view().x - this.char.x) -
+          Math.abs(b.view().x - this.char.x),
+      )[0] ?? null
+    );
   }
   selectPeer(id: string): boolean {
-    if (!this.others.some(o=>o.view().id===id)) return false;
-    this.partnerId=id;return true;
+    if (!this.others.some((o) => o.view().id === id)) return false;
+    this.partnerId = id;
+    return true;
   }
   private feeling() {
-    const id=this.partner()?.view().id;
+    const id = this.partner()?.view().id;
     if (!id) return this.soloFeeling;
-    let value=this.relationships.get(id);
-    if (!value) {value={bond:this.soloFeeling.bond};this.relationships.set(id,value);}
+    let value = this.relationships.get(id);
+    if (!value) {
+      value = { bond: this.soloFeeling.bond };
+      this.relationships.set(id, value);
+    }
     return value;
   }
   /** Release seat/TV claims and queued social work when a figure leaves the desktop. */
   leaveWorld() {
     this.mind.reset(this.ctx);
-    for (const th of this.props.things) {th.leaveSeat(this.ctx.who);th.watchers.delete(this.ctx.who);th.players=th.players.filter(who=>who!==this.ctx.who);}
-    this.partnerId=null;this.others=[];this.pointerUp(0,0);this.releasePlatforms?.();this.releasePlatforms=null;
+    for (const th of this.props.things) {
+      th.leaveSeat(this.ctx.who);
+      th.watchers.delete(this.ctx.who);
+      th.players = th.players.filter((who) => who !== this.ctx.who);
+    }
+    this.partnerId = null;
+    this.others = [];
+    this.pointerUp(0, 0);
+    this.releasePlatforms?.();
+    this.releasePlatforms = null;
   }
   /** An answer he's about to give his friend (a beat after he spoke). */
   private pendingTalk: { text: string; at: number; wave: boolean } | null = null;
@@ -178,8 +201,8 @@ export class Pet implements Peer {
   private strikeFrom: Vec | null = null;
   private bladeCooldown = new Map<object, number>();
   /** Set by the app: moves another app's window to (x, y) (overlay coordinates of its top-left). */
-  onDesktopAction: ((action:import('../shared/desktop').DesktopAction)=>Promise<import('../shared/desktop').DesktopResult>)|null=null;
-  desktopState: import('../shared/desktop').DesktopState={browser:null};
+  onDesktopAction: ((action: import('../shared/desktop').DesktopAction) => Promise<import('../shared/desktop').DesktopResult>) | null = null;
+  desktopState: import('../shared/desktop').DesktopState = { browser: null };
   onMoveWindow: ((id: number, x: number, y: number, w: number, h: number) => void) | null = null;
   private winMotion = new Map<number, WinMotion>();
   /** Windows that just stopped moving: ignore the (late) reports of where they were, for a moment. */
@@ -483,11 +506,27 @@ export class Pet implements Peer {
   }
 
   private drawCombatDebug(g: CanvasRenderingContext2D) {
-    const x=this.char.x,y=this.char.body.j.head.y-30;
-    g.save();g.fillStyle='#172033';g.fillRect(x-35,y,70,6);
-    g.fillStyle=this.char.stagger>0?'#fff':'#efb154';g.fillRect(x-35,y,70*(1-this.char.poise),6);
-    g.font='10px monospace';g.textAlign='center';g.fillStyle='#fff';
-    g.fillText(`break ${Math.round((1-this.char.poise)*100)}% · ${this.char.breakCount}`,x,y-4);g.restore();
+    const x = this.char.x,
+      y = this.char.body.j.head.y - 30;
+    g.save();
+    g.fillStyle = '#172033';
+    g.fillRect(x - 35, y, 70, 6);
+    g.fillStyle = this.char.stagger > 0 ? '#fff' : '#efb154';
+    g.fillRect(
+      x - 35,
+      y,
+      70 * Math.max(0, Math.min(1, 1 - this.char.poise)),
+      6,
+    );
+    g.font = '10px monospace';
+    g.textAlign = 'center';
+    g.fillStyle = '#fff';
+    g.fillText(
+      `break ${Math.round((1 - this.char.poise) * 100)}% · ${this.char.breakCount}`,
+      x,
+      y - 4,
+    );
+    g.restore();
   }
 
   /** Apply a (possibly changed) config live. A new size rebuilds his body where he stands. */
@@ -1381,7 +1420,7 @@ export class Pet implements Peer {
     let cut = false, stabbed = false;
     ch.hp -= k.dmg * (sharp ? 1.6 : foam ? 2 : weapon ? 1.5 : 1) * (0.7 + 0.3 * Math.min(1.3, power));
     ch.poiseDelay=1.6;
-    ch.poise -= k.poise;
+    ch.poise = Math.max(0,ch.poise-k.poise);
     // (Only once he's been worn down a bit: a real fight builds up to the cut that decides it.)
     if (sharp && ch.destructible && ch.hp < 0.8) {
       const limb = limbOf(joint);

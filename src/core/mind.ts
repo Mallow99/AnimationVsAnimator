@@ -204,7 +204,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'pattycake', label: 'Patty cake with his friend' }, { name: 'hug', label: 'Hug his friend' }, { name: 'bump', label: 'Bump into his friend (rude)' },
   { name: 'chat', label: 'Go talk to his friend' }, { name: 'waveat', label: 'Wave at his friend' }, { name: 'sitwith', label: 'Sit with his friend' }, { name: 'naptogether', label: 'Nap next to his friend' }, { name: 'jointv', label: 'Join his friend at the TV' },
   {name:'closetab',label:'Close connected Chrome tab'}, {name:'closewindow',label:'Close front window'},
-  {name:'pluck',label:'Take selected page element'}, {name:'restorepage',label:'Restore the Chrome page'}, {name:'folder',label:'Enter a real file / folder'},
+  {name:'pluck',label:'Take selected page element'}, {name:'restorepage',label:'Restore the Chrome page'}, {name:'folder',label:'Enter a real folder'}, {name:'file',label:'Enter a real file'},
   { name: 'drawtool', label: 'Draw a working tool' }, { name: 'drawgun', label: 'Draw a pistol' },
   { name: 'gun', label: 'Fire pistol at the cursor' },
   { name: 'shoot', label: 'Shoot arrows at the cursor' },
@@ -421,7 +421,7 @@ export class Mind {
 
   /** Build the skill for a command name (null if he can't do it right now). */
   makeSkill(c: Ctx, name: string): Skill | null {
-    if(['closetab','closewindow','pluck','restorepage','folder'].includes(name))return new DesktopInteraction(name as import('../shared/desktop').DesktopAction);
+    if(['closetab','closewindow','pluck','restorepage','folder','file'].includes(name))return new DesktopInteraction(name as import('../shared/desktop').DesktopAction);
     if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun',true) : null;
     if(name==='drawtool')return c.items.find('draw') && c.char.useHand ? new DrawTool('foam-sword',true) : null;
     if (name === 'wake') { c.mood.asleep = false; return new Sequence('wake', [{ wait: 0.1 }]); }

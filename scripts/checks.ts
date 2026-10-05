@@ -590,99 +590,314 @@ await test('bad saved moves, pictures, positions and frame times cannot poison t
   p.update(1/60); assert(Number.isFinite(p.char.x));
 });
 await test('five figures reserve distinct partners and save separate relationships', () => {
-  const cfg=structuredClone(DEFAULT_CONFIG),group=Array.from({length:5},(_,id)=>new Pet(bounds,companionConfig(cfg,id),{identity:`group-${id}`}));
-  for(const p of group){p.paused=true;for(let i=0;i<360;i++)p.update(1/120);p.mind.reset(p.ctx);p.paused=false;}
-  for(const p of group)p.others=group.filter(other=>other!==p);
-  const [a,b,c,d,e]=group;
-  a.selectPeer(b.ctx.who);b.selectPeer(a.ctx.who);c.selectPeer(d.ctx.who);d.selectPeer(c.ctx.who);
-  a.ctx.feel.bond=0.8;a.selectPeer(c.ctx.who);a.ctx.feel.bond=-0.4;a.selectPeer(b.ctx.who);
-  assert.equal(a.ctx.feel.bond,0.8);
-  const loaded=new Pet(bounds,cfg,{identity:a.ctx.who});loaded.others=a.others;loaded.load(a.save());loaded.selectPeer(c.ctx.who);assert.equal(loaded.ctx.feel.bond,-0.4);
-  a.selectPeer(b.ctx.who);a.command('do:duel');b.command('do:duel');c.command('do:duel');d.command('do:duel');
-  for(const p of group.slice(0,4))p.update(1/120);
-  assert.equal(c.mind.skill?.name,'duel');
-  assert(!e.partner() || !['duel'].includes(e.partner()!.view().doing??''),'the fifth figure stole a reserved fighter');
-  c.receive({type:'challenge',armed:true},a);assert.equal(c.partnerId,d.ctx.who);
-  for(const p of group)p.leaveWorld();
+  const cfg = structuredClone(DEFAULT_CONFIG),
+    group = Array.from(
+      { length: 5 },
+      (_, id) =>
+        new Pet(bounds, companionConfig(cfg, id), { identity: `group-${id}` }),
+    );
+  for (const p of group) {
+    p.paused = true;
+    for (let i = 0; i < 360; i++) p.update(1 / 120);
+    p.mind.reset(p.ctx);
+    p.paused = false;
+  }
+  for (const p of group) p.others = group.filter((other) => other !== p);
+  const [a, b, c, d, e] = group;
+  a.selectPeer(b.ctx.who);
+  b.selectPeer(a.ctx.who);
+  c.selectPeer(d.ctx.who);
+  d.selectPeer(c.ctx.who);
+  a.ctx.feel.bond = 0.8;
+  a.selectPeer(c.ctx.who);
+  a.ctx.feel.bond = -0.4;
+  a.selectPeer(b.ctx.who);
+  assert.equal(a.ctx.feel.bond, 0.8);
+  const loaded = new Pet(bounds, cfg, { identity: a.ctx.who });
+  loaded.others = a.others;
+  loaded.load(a.save());
+  loaded.selectPeer(c.ctx.who);
+  assert.equal(loaded.ctx.feel.bond, -0.4);
+  a.selectPeer(b.ctx.who);
+  a.command('do:duel');
+  b.command('do:duel');
+  c.command('do:duel');
+  d.command('do:duel');
+  for (const p of group.slice(0, 4)) p.update(1 / 120);
+  assert.equal(c.mind.skill?.name, 'duel');
+  assert(
+    !e.partner() || !['duel'].includes(e.partner()!.view().doing ?? ''),
+    'the fifth figure stole a reserved fighter',
+  );
+  c.receive({ type: 'challenge', armed: true }, a);
+  assert.equal(c.partnerId, d.ctx.who);
+  for (const p of group) p.leaveWorld();
 });
 await test('pen-made pistol retains gun behavior through save/load and does not multiply replacements', () => {
-  const p=new Pet(bounds,structuredClone(DEFAULT_CONFIG));p.paused=true;
-  for(let i=0;i<360;i++)p.update(1/120);
-  for(let n=0;n<2;n++){
-    p.paused=false;p.command('do:drawgun');
-    const old=p.items.list.find(it=>it.def.id==='ink-gun')?.uid;
-    for(let i=0;i<3600&&!p.items.list.some(it=>it.def.id==='ink-gun'&&it.uid!==old);i++)p.update(1/120);
-    assert(p.items.list.some(it=>it.def.id==='ink-gun'),'drawing never became a pistol');
-    p.mind.reset(p.ctx);p.paused=true;
+  const p = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  for (let n = 0; n < 2; n++) {
+    p.paused = false;
+    p.command('do:drawgun');
+    const old = p.items.list.find((it) => it.def.id === 'ink-gun')?.uid;
+    for (
+      let i = 0;
+      i < 3600 &&
+      !p.items.list.some((it) => it.def.id === 'ink-gun' && it.uid !== old);
+      i++
+    )
+      p.update(1 / 120);
+    assert(
+      p.items.list.some((it) => it.def.id === 'ink-gun'),
+      'drawing never became a pistol',
+    );
+    p.mind.reset(p.ctx);
+    p.paused = true;
   }
-  assert.equal(p.items.list.filter(it=>it.def.id==='ink-gun').length,1);
-  const copy=new Pet(bounds,structuredClone(DEFAULT_CONFIG));copy.load(p.save());
-  const gun=copy.items.find('gun');assert(gun?.def.drawn);assert.equal(gun.def.id,'ink-gun');
+  assert.equal(p.items.list.filter((it) => it.def.id === 'ink-gun').length, 1);
+  const copy = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  copy.load(p.save());
+  const gun = copy.items.find('gun');
+  assert(gun?.def.drawn);
+  assert.equal(gun.def.id, 'ink-gun');
 });
-await test('pistol magazines survive bursts and reload before another round can fire',()=>{
-  const p=new Pet(bounds,structuredClone(DEFAULT_CONFIG));p.paused=true;for(let i=0;i<360;i++)p.update(1/120);
-  const gun=p.items.give('gun',p.char)!;gun.ammo=1;const fired:number[]=[];
-  p.ctx.fire=()=>fired.push(skill.t);
-  const skill=new ShootGun(()=>({x:p.char.x+300,y:p.char.body.j.neck.y}),'cursor',3);skill.start(p.ctx);
-  for(let i=0;i<1200;i++){skill.t+=1/120;if(skill.update(p.ctx,1/120))break;}
-  skill.stop(p.ctx);assert.equal(fired.length,3);assert(fired[1]-fired[0]>=1.15);assert.equal(gun.ammo,4);
-  const copy=new Pet(bounds,structuredClone(DEFAULT_CONFIG));copy.load(p.save());assert.equal(copy.items.find('gun')?.ammo,4);
+await test('pistol magazines survive bursts and reload before another round can fire', () => {
+  const p = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  const gun = p.items.give('gun', p.char)!;
+  gun.ammo = 1;
+  const fired: number[] = [];
+  p.ctx.fire = () => fired.push(skill.t);
+  const skill = new ShootGun(
+    () => ({ x: p.char.x + 300, y: p.char.body.j.neck.y }),
+    'cursor',
+    3,
+  );
+  skill.start(p.ctx);
+  for (let i = 0; i < 1200; i++) {
+    skill.t += 1 / 120;
+    if (skill.update(p.ctx, 1 / 120)) break;
+  }
+  skill.stop(p.ctx);
+  assert.equal(fired.length, 3);
+  assert(fired[1] - fired[0] >= 1.15);
+  assert.equal(gun.ammo, 4);
+  const copy = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  copy.load(p.save());
+  assert.equal(copy.items.find('gun')?.ammo, 4);
 });
 await test('swept bullets hit thin targets, stop at a platform, and guard hits build break pressure', () => {
-  const {a,b}=duo();const n=b.char.body.j.neck;
-  const rounds=new Projectiles();const hp=b.char.hp;
-  rounds.fire(n.x-150,n.y+12,4000,0,true);rounds.update(0.1,bounds,[],a,[b],()=>{});
-  assert(b.char.hp<hp,'fast round skipped the body');assert.equal(rounds.rounds.length,0);
-  const blockedHp=b.char.hp;rounds.fire(n.x,n.y-100,0,2000,true);rounds.update(0.1,bounds,[{id:91,x1:n.x-50,x2:n.x+50,y:n.y-50}],a,[b],()=>{});assert.equal(b.char.hp,blockedHp);
-  b.char.body.translate(a.char.x+50-b.char.x,0);b.char.facing=-1;b.char.guard=true;b.char.poise=1;b.char.hp=1;
-  for(let i=0;i<6&&b.char.breakCount===0;i++)b.receive({type:'hit',joint:'neck',vx:0,vy:0,power:1,weapon:{id:'mace',hit:1,cuts:false},at:b.char.body.j.neck,kind:'heavy'},a);
-  assert(b.char.breakCount>0,'repeated guarding never broke');assert.equal(b.char.hp,1);assert.equal(b.char.poise,0);assert(b.char.stagger>0);
-  Math.random=realRandom;
+  const { a, b } = duo();
+  const n = b.char.body.j.neck;
+  const rounds = new Projectiles();
+  const hp = b.char.hp;
+  rounds.fire(n.x - 150, n.y + 12, 4000, 0, true);
+  rounds.update(0.1, bounds, [], a, [b], () => {});
+  assert(b.char.hp < hp, 'fast round skipped the body');
+  assert.equal(rounds.rounds.length, 0);
+  const blockedHp = b.char.hp;
+  rounds.fire(n.x, n.y - 100, 0, 2000, true);
+  rounds.update(
+    0.1,
+    bounds,
+    [{ id: 91, x1: n.x - 50, x2: n.x + 50, y: n.y - 50 }],
+    a,
+    [b],
+    () => {},
+  );
+  assert.equal(b.char.hp, blockedHp);
+  b.char.body.translate(a.char.x + 50 - b.char.x, 0);
+  b.char.facing = -1;
+  b.char.guard = true;
+  b.char.poise = 1;
+  b.char.hp = 1;
+  for (let i = 0; i < 6 && b.char.breakCount === 0; i++)
+    b.receive(
+      {
+        type: 'hit',
+        joint: 'neck',
+        vx: 0,
+        vy: 0,
+        power: 1,
+        weapon: { id: 'mace', hit: 1, cuts: false },
+        at: b.char.body.j.neck,
+        kind: 'heavy',
+      },
+      a,
+    );
+  assert(b.char.breakCount > 0, 'repeated guarding never broke');
+  assert.equal(b.char.hp, 1);
+  assert.equal(b.char.poise, 0);
+  assert(b.char.stagger > 0);
+  Math.random = realRandom;
 });
 await test('cursor weapons require a held button and fast swipes register between frames', () => {
-  const p=new Pet(bounds,structuredClone(DEFAULT_CONFIG));p.paused=true;for(let i=0;i<360;i++)p.update(1/120);
-  const weapon=new CursorWeapon(),n=p.char.body.j.neck;weapon.equip('mace');
-  weapon.pointer(n.x-100,n.y+8);weapon.update(1/60,[p]);weapon.pointer(n.x+100,n.y+8);weapon.update(1/60,[p]);assert.equal(p.char.hp,1);
-  weapon.pointer(n.x-100,n.y+8);weapon.update(1/60,[p]);weapon.press(true);weapon.pointer(n.x+100,n.y+8);weapon.update(1/60,[p]);assert(p.char.hp<1);
-  const hp=p.char.hp;weapon.equip('none');weapon.update(1/60,[p]);assert.equal(p.char.hp,hp);
+  const p = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
+  p.paused = true;
+  for (let i = 0; i < 360; i++) p.update(1 / 120);
+  const weapon = new CursorWeapon(),
+    n = p.char.body.j.neck;
+  weapon.equip('mace');
+  weapon.pointer(n.x - 100, n.y + 8);
+  weapon.update(1 / 60, [p]);
+  weapon.pointer(n.x + 100, n.y + 8);
+  weapon.update(1 / 60, [p]);
+  assert.equal(p.char.hp, 1);
+  weapon.pointer(n.x - 100, n.y + 8);
+  weapon.update(1 / 60, [p]);
+  weapon.press(true);
+  weapon.pointer(n.x + 100, n.y + 8);
+  weapon.update(1 / 60, [p]);
+  assert(p.char.hp < 1);
+  const hp = p.char.hp;
+  weapon.equip('none');
+  weapon.update(1 / 60, [p]);
+  assert.equal(p.char.hp, hp);
 });
 await test('offline conversation follows ordered requests, remembers the person, and selects a named companion', () => {
-  const {a,b}=duo();
-  const named=offlineReply(a.ctx,`high five ${b.config.name} and then draw a pistol`);
-  assert.deepEqual(named.plan,[{do:'highfive',with:b.ctx.who},{do:'drawgun'}]);assert.equal(a.partnerId,b.ctx.who);
-  offlineReply(a.ctx,'my name is Sam');assert.match(offlineReply(a.ctx,'what is my name').say,/Sam/);
-  assert.equal(offlineReply(a.ctx,'stop that').stop,true);
-  assert.deepEqual(offlineReply(a.ctx,'close this tab').plan[0],{do:'closetab'});
-  const recovered=offlineReply(a.ctx,'how are you');assert(recovered.say.length>2 && !recovered.plan.length);
-  Math.random=realRandom;
+  const { a, b } = duo();
+  const named = offlineReply(
+    a.ctx,
+    `high five ${b.config.name} and then draw a pistol`,
+  );
+  assert.deepEqual(named.plan, [
+    { do: 'highfive', with: b.ctx.who },
+    { do: 'drawgun' },
+  ]);
+  assert.equal(a.partnerId, b.ctx.who);
+  offlineReply(a.ctx, 'my name is Sam');
+  assert.match(offlineReply(a.ctx, 'what is my name').say, /Sam/);
+  assert.equal(offlineReply(a.ctx, 'stop that').stop, true);
+  assert.deepEqual(offlineReply(a.ctx, 'close this tab').plan[0], {
+    do: 'closetab',
+  });
+  const recovered = offlineReply(a.ctx, 'how are you');
+  assert(recovered.say.length > 2 && !recovered.plan.length);
+  Math.random = realRandom;
 });
 await test('a file visit follows its exact real path, hides when closed, and restores one desktop identity', () => {
-  const a=new Pet(bounds,structuredClone(DEFAULT_CONFIG),{identity:'file-test'}),changes:unknown[]=[];
-  const habitats=new FileHabitats(h=>changes.push(h));a.props.spawn('chair',300,600,1);
-  habitats.enter(0,a,'/real/a/folder');assert(habitats.isAway(0));assert(a.paused);assert.equal(habitats.activePets.length,0);
-  habitats.refresh([{id:1,path:'/real/b/folder',kind:'folder',x:100,y:100,width:500,height:400}]);assert.equal(habitats.activePets.length,0,'matched a different folder with the same basename');
-  habitats.refresh([{id:2,path:'/real/a/folder',kind:'folder',x:100,y:100,width:500,height:400}]);assert.equal(habitats.activePets.length,1);assert.equal(habitats.activePets[0].ctx.who,a.ctx.who);
-  habitats.petFor(0)!.memory.add('a real folder visit','event','him');habitats.update(1/60);
-  habitats.refresh([]);assert.equal(habitats.activePets.length,0);assert(habitats.isAway(0));
-  habitats.returnHome(0);assert(!a.paused);assert.equal(habitats.petFor(0),null);assert.equal(a.props.placed.length,1);assert(a.memory.notes.some(n=>n.text==='a real folder visit'));
+  const a = new Pet(bounds, structuredClone(DEFAULT_CONFIG), {
+      identity: 'file-test',
+    }),
+    changes: unknown[] = [];
+  const habitats = new FileHabitats((h) => changes.push(h));
+  a.props.spawn('chair', 300, 600, 1);
+  habitats.enter(0, a, '/real/a/folder');
+  assert(habitats.isAway(0));
+  assert(a.paused);
+  assert.equal(habitats.activePets.length, 0);
+  habitats.refresh([
+    {
+      id: 1,
+      path: '/real/b/folder',
+      kind: 'folder',
+      x: 100,
+      y: 100,
+      width: 500,
+      height: 400,
+    },
+  ]);
+  assert.equal(
+    habitats.activePets.length,
+    0,
+    'matched a different folder with the same basename',
+  );
+  habitats.refresh([
+    {
+      id: 2,
+      path: '/real/a/folder',
+      kind: 'folder',
+      x: 100,
+      y: 100,
+      width: 500,
+      height: 400,
+    },
+  ]);
+  assert.equal(habitats.activePets.length, 1);
+  assert.equal(habitats.activePets[0].ctx.who, a.ctx.who);
+  habitats.petFor(0)!.memory.add('a real folder visit', 'event', 'him');
+  habitats.update(1 / 60);
+  habitats.refresh([]);
+  assert.equal(habitats.activePets.length, 0);
+  assert(habitats.isAway(0));
+  habitats.returnHome(0);
+  assert(!a.paused);
+  assert.equal(habitats.petFor(0), null);
+  assert.equal(a.props.placed.length, 1);
+  assert(a.memory.notes.some((n) => n.text === 'a real folder visit'));
 });
 await test('Chrome bridge requires pairing, refuses web origins, delivers only the connected tab, and validates cutouts', async () => {
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ava-bridge-'));const cutouts:unknown[]=[];
-  const bridge=new DesktopBridge({dataDir:dir,enabled:()=>true,changed:()=>{},cutout:c=>cutouts.push(c)});
-  try{
-    await bridge.start(0);const base=`http://127.0.0.1:${bridge.port}`,token=new URL(bridge.pairing).searchParams.get('token')!;
-    assert.equal((await fetch(`${base}/browser/commands`)).status,401);
-    assert.equal((await fetch(`${base}/browser/commands`,{headers:{Authorization:`Bearer ${token}`,Origin:'https://example.com'}})).status,403);
-    const request=async(route:string,body?:unknown)=>(await fetch(base+route,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})).json();
-    await request('/browser/state',{tab:7,title:'Actual page',selected:true,x:200,y:200,width:100,height:60});
-    const response=bridge.browserAction('pluck',1);
-    assert.deepEqual(await request('/browser/commands?tab=8'),[]);
-    const [command]=await request('/browser/commands?tab=7');assert.equal(command.owner,1);
-    await request('/browser/result',{id:command.id,ok:true,cutout:{image:'https://example.com/unsafe',x:1,y:2,width:3,height:4}});
-    assert.equal((await response).ok,false);assert.equal(cutouts.length,0);
-    const closing=bridge.browserAction('closetab',0);const [close]=await request('/browser/commands?tab=7');
-    await request('/browser/result',{id:close.id,ok:true});assert.equal((await closing).message,'Tab closed.');
-  }finally{await bridge.stop();fs.rmSync(dir,{recursive:true,force:true});}
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ava-bridge-'));
+  const cutouts: unknown[] = [];
+  const bridge = new DesktopBridge({
+    dataDir: dir,
+    enabled: () => true,
+    changed: () => {},
+    cutout: (c) => cutouts.push(c),
+  });
+  try {
+    await bridge.start(0);
+    const base = `http://127.0.0.1:${bridge.port}`,
+      token = new URL(bridge.pairing).searchParams.get('token')!;
+    assert.equal((await fetch(`${base}/browser/commands`)).status, 401);
+    assert.equal(
+      (
+        await fetch(`${base}/browser/commands`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Origin: 'https://example.com',
+          },
+        })
+      ).status,
+      403,
+    );
+    const request = async (route: string, body?: unknown) =>
+      (
+        await fetch(base + route, {
+          method: body ? 'POST' : 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        })
+      ).json();
+    await request('/browser/state', {
+      tab: 7,
+      title: 'Actual page',
+      selected: true,
+      x: 200,
+      y: 200,
+      width: 100,
+      height: 60,
+    });
+    const response = bridge.browserAction('pluck', 1);
+    assert.deepEqual(await request('/browser/commands?tab=8'), []);
+    const [command] = await request('/browser/commands?tab=7');
+    assert.equal(command.owner, 1);
+    await request('/browser/result', {
+      id: command.id,
+      ok: true,
+      cutout: {
+        image: 'https://example.com/unsafe',
+        x: 1,
+        y: 2,
+        width: 3,
+        height: 4,
+      },
+    });
+    assert.equal((await response).ok, false);
+    assert.equal(cutouts.length, 0);
+    const closing = bridge.browserAction('closetab', 0);
+    const [close] = await request('/browser/commands?tab=7');
+    await request('/browser/result', { id: close.id, ok: true });
+    assert.equal((await closing).message, 'Tab closed.');
+  } finally {
+    await bridge.stop();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 console.log(`${passed} regression checks passed`);

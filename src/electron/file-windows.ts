@@ -1,7 +1,7 @@
 // Discover real Finder / Explorer folder windows. Never create a surrogate file or room.
-import { execFile, type ChildProcess } from "node:child_process";
-import path from "node:path";
-import type { FileWindow } from "../shared/desktop";
+import { execFile, type ChildProcess } from 'node:child_process';
+import path from 'node:path';
+import type { FileWindow } from '../shared/desktop';
 
 // Fixed code, with no path interpolation. Finder may ask for Automation permission on macOS.
 const finderScript = `ObjC.import('Foundation');
@@ -23,27 +23,27 @@ export function watchFileWindows(
   let stopped = false,
     busy = false,
     child: ChildProcess | null = null,
-    lastError = "";
+    lastError = '';
   const read = () => {
     if (stopped || busy) return;
     const args =
-      process.platform === "darwin"
-        ? ["-l", "JavaScript", "-e", finderScript]
+      process.platform === 'darwin'
+        ? ['-l', 'JavaScript', '-e', finderScript]
         : [
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            path.join(__dirname, "native/file-windows-win.ps1"),
+            '-NoProfile',
+            '-NonInteractive',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            path.join(__dirname, 'native/file-windows-win.ps1'),
           ];
-    if (!["darwin", "win32"].includes(process.platform)) {
-      note("Finder / Explorer visits need macOS or Windows.");
+    if (!['darwin', 'win32'].includes(process.platform)) {
+      note('Finder / Explorer visits need macOS or Windows.');
       return;
     }
     busy = true;
     child = execFile(
-      process.platform === "darwin" ? "osascript" : "powershell.exe",
+      process.platform === 'darwin' ? 'osascript' : 'powershell.exe',
       args,
       { timeout: 3000, maxBuffer: 300_000, windowsHide: true },
       (err, output) => {
@@ -51,9 +51,9 @@ export function watchFileWindows(
         child = null;
         if (stopped) return;
         if (err) {
-          const message = err.message.includes("-1743")
-            ? "Allow Finder under System Settings → Privacy & Security → Automation for folder visits."
-            : "Folder windows could not be read. Check Finder / Explorer permissions.";
+          const message = err.message.includes('-1743')
+            ? 'Allow Finder under System Settings → Privacy & Security → Automation for folder visits.'
+            : 'Folder windows could not be read. Check Finder / Explorer permissions.';
           if (message !== lastError) {
             note(message);
             lastError = message;
@@ -67,7 +67,7 @@ export function watchFileWindows(
             .filter(
               (w: FileWindow) =>
                 w &&
-                typeof w.path === "string" &&
+                typeof w.path === 'string' &&
                 w.path.length < 4096 &&
                 [w.id, w.x, w.y, w.width, w.height].every(Number.isFinite) &&
                 w.width > 100 &&
@@ -75,7 +75,7 @@ export function watchFileWindows(
             )
             .slice(0, 40);
           update(windows);
-          lastError = "";
+          lastError = '';
         } catch {
           update([]);
         }

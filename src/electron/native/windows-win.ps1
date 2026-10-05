@@ -6,6 +6,7 @@
 # (so he can comment on it). Nothing from inside the window.
 param([int]$SelfPid = -1)
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;

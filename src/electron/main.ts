@@ -196,26 +196,67 @@ function sendUi(ui: UiReport) {
 }
 
 function sendFileWindows() {
-  const files:FileWindow[]=[];
-  for(const f of folderWindows){
-    let source=lastWins.find(w=>w.id===f.id);
-    if(!source && process.platform==='darwin') {
-      const converted=toOverlay([{id:0,x:f.x,y:f.y,w:f.width,h:f.height}])[0];
-      source=lastWins.find(w=>Math.abs(w.x-converted.x)<5 && Math.abs(w.y-converted.y)<5 && Math.abs(w.w-converted.w)<10 && Math.abs(w.h-converted.h)<10);
+  const files: FileWindow[] = [];
+  for (const f of folderWindows) {
+    let source = lastWins.find((w) => w.id === f.id);
+    if (!source && process.platform === 'darwin') {
+      const converted = toOverlay([
+        { id: 0, x: f.x, y: f.y, w: f.width, h: f.height },
+      ])[0];
+      source = lastWins.find(
+        (w) =>
+          Math.abs(w.x - converted.x) < 5 &&
+          Math.abs(w.y - converted.y) < 5 &&
+          Math.abs(w.w - converted.w) < 10 &&
+          Math.abs(w.h - converted.h) < 10,
+      );
     }
-    if(source)files.push({...f,path:normalizedPath(f.path),id:source.id,x:source.x,y:source.y,width:source.w,height:source.h});
+    if (source)
+      files.push({
+        ...f,
+        path: normalizedPath(f.path),
+        id: source.id,
+        x: source.x,
+        y: source.y,
+        width: source.w,
+        height: source.h,
+      });
   }
-  if(documentWindow && lastWins.some(w=>w.id===documentWindow!.id) && !files.some(f=>f.id===documentWindow!.id))files.push({...documentWindow,path:normalizedPath(documentWindow.path)});
-  win?.webContents.send('world:files',files);
+  if (
+    documentWindow &&
+    lastWins.some((w) => w.id === documentWindow!.id) &&
+    !files.some((f) => f.id === documentWindow!.id)
+  )
+    files.push({
+      ...documentWindow,
+      path: normalizedPath(documentWindow.path),
+    });
+  win?.webContents.send('world:files', files);
 }
-function normalizedPath(file:string){let full=path.resolve(file);try{full=fs.realpathSync(full);}catch{}return process.platform==='win32'?full.toLowerCase():full;}
-async function chooseHabitat(id:number){
-  const result=await dialog.showOpenDialog({title:'Choose the real file or folder for this figure to enter',properties:['openDirectory','openFile']});
-  if(result.canceled || !result.filePaths[0])return {ok:false,message:'No place selected.'};
-  const target=normalizedPath(fs.realpathSync(result.filePaths[0]));
-  setConfig(id,{fileHomes:true});
-  win?.webContents.send('desktop:habitat',{id,path:target});
-  return {ok:true,message:'Entered. Open that folder in Finder / Explorer, or that file in an app that reports its document path.'};
+function normalizedPath(file: string) {
+  let full = path.resolve(file);
+  try {
+    full = fs.realpathSync(full);
+  } catch {}
+  return process.platform === 'win32' ? full.toLowerCase() : full;
+}
+async function chooseHabitat(id: number, kind: 'folder' | 'file' = 'folder') {
+  const result = await dialog.showOpenDialog({
+    title: 'Choose the real file or folder for this figure to enter',
+    properties: [kind === 'file' ? 'openFile' : 'openDirectory'],
+  });
+  if (result.canceled || !result.filePaths[0])
+    return { ok: false, message: 'No place selected.' };
+  const target = normalizedPath(fs.realpathSync(result.filePaths[0]));
+  setConfig(id, { fileHomes: true });
+  win?.webContents.send('desktop:habitat', { id, path: target });
+  return {
+    ok: true,
+    message:
+      kind === 'folder'
+        ? 'Entered. Open that folder in Finder / Explorer to see him.'
+        : 'Entered. On Mac, open the file in an app that reports its document path. This file detection still needs a Mac test.',
+  };
 }
 
 // ───────────── windows ─────────────
@@ -387,21 +428,62 @@ ipcMain.on('pet:moveWindow', (_e, id: number, x: number, y: number, w: number, h
   watcher.moveWindow(id, r.x, r.y);
 });
 
-ipcMain.handle('desktop:info',()=>({pairing:desktop?.pairing??'',error:desktopError,homes,connected:!!desktop?.state.browser}));
-ipcMain.on('desktop:extensionFolder',()=>shell.openPath(path.join(__dirname,'../extension/chrome')));
-ipcMain.handle('desktop:chooseHabitat',(_e,id)=>chooseHabitat(petIndex(id)));
-ipcMain.on('desktop:fileHomes',(_e,value:unknown)=>{if(Array.isArray(value))homes=value.slice(0,5).filter(h=>h&&Number.isInteger(h.id)&&h.id>=0&&h.id<5&&typeof h.path==='string'&&h.path.length<4096);});
-ipcMain.handle('desktop:action',async (_e,id:unknown,action:DesktopAction)=>{
-  const i=petIndex(id);
-  if(action==='folder')return chooseHabitat(i);
-  if(action==='closewindow'){
-    if(!config.closeWindows)return {ok:false,message:'Enable window closing in General first.'};
-    const target=lastWins[0];if(!target || !watcher)return {ok:false,message:'No accessible window is available.'};
-    return watcher.closeWindow(target.id);
-  }
-  if(['closetab','pluck','restorepage'].includes(action))return desktop?.browserAction(action as 'closetab'|'pluck'|'restorepage',i)??{ok:false,message:desktopError || 'The Chrome bridge is unavailable.'};
-  return {ok:false,message:'Unknown desktop action.'};
+ipcMain.handle('desktop:info', () => ({
+  pairing: desktop?.pairing ?? '',
+  error: desktopError,
+  homes,
+  connected: !!desktop?.state.browser,
+}));
+ipcMain.on('desktop:extensionFolder', () =>
+  shell.openPath(path.join(__dirname, '../extension/chrome')),
+);
+ipcMain.handle('desktop:chooseHabitat', (_e, id, kind) =>
+  chooseHabitat(petIndex(id), kind === 'file' ? 'file' : 'folder'),
+);
+ipcMain.on('desktop:fileHomes', (_e, value: unknown) => {
+  if (Array.isArray(value))
+    homes = value
+      .slice(0, 5)
+      .filter(
+        (h) =>
+          h &&
+          Number.isInteger(h.id) &&
+          h.id >= 0 &&
+          h.id < 5 &&
+          typeof h.path === 'string' &&
+          h.path.length < 4096,
+      );
 });
+ipcMain.handle(
+  'desktop:action',
+  async (_e, id: unknown, action: DesktopAction) => {
+    const i = petIndex(id);
+    if (action === 'folder' || action === 'file')
+      return chooseHabitat(i, action);
+    if (action === 'closewindow') {
+      if (!config.closeWindows)
+        return {
+          ok: false,
+          message: 'Enable window closing in General first.',
+        };
+      const target = lastWins[0];
+      if (!target || !watcher)
+        return { ok: false, message: 'No accessible window is available.' };
+      return watcher.closeWindow(target.id);
+    }
+    if (['closetab', 'pluck', 'restorepage'].includes(action))
+      return (
+        desktop?.browserAction(
+          action as 'closetab' | 'pluck' | 'restorepage',
+          i,
+        ) ?? {
+          ok: false,
+          message: desktopError || 'The Chrome bridge is unavailable.',
+        }
+      );
+    return { ok: false, message: 'Unknown desktop action.' };
+  },
+);
 
 // His talking blips should play without you having to click first.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -411,14 +493,40 @@ app.whenReady().then(() => {
   // He lives in the menu bar, not the Dock. Keep an Edit menu so copy/paste
   // shortcuts work in the settings window's text boxes.
   if (process.platform === 'darwin') app.dock?.hide();
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]));
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      { role: 'appMenu' },
+      { role: 'editMenu' },
+      { role: 'windowMenu' },
+    ]),
+  );
   createOverlay();
   createTray();
   updateWatcher();
-  desktop=new DesktopBridge({dataDir:app.getPath('userData'),enabled:()=>config.browserPlay,
-    changed:(state:DesktopState)=>{const b=state.browser,wa=screen.getPrimaryDisplay().workArea;win?.webContents.send('desktop:state',{browser:b?{...b,x:b.x-wa.x,y:b.y-wa.y}:null});},
-    cutout:cutout=>{const wa=screen.getPrimaryDisplay().workArea;win?.webContents.send('desktop:cutout',{...cutout,x:cutout.x-wa.x,y:cutout.y-wa.y});}});
-  desktop.start().catch(err=>{desktopError=`Chrome bridge could not start: ${(err as Error).message}`;console.error(desktopError);desktop=null;});
+  desktop = new DesktopBridge({
+    dataDir: app.getPath('userData'),
+    enabled: () => config.browserPlay,
+    changed: (state: DesktopState) => {
+      const b = state.browser,
+        wa = screen.getPrimaryDisplay().workArea;
+      win?.webContents.send('desktop:state', {
+        browser: b ? { ...b, x: b.x - wa.x, y: b.y - wa.y } : null,
+      });
+    },
+    cutout: (cutout) => {
+      const wa = screen.getPrimaryDisplay().workArea;
+      win?.webContents.send('desktop:cutout', {
+        ...cutout,
+        x: cutout.x - wa.x,
+        y: cutout.y - wa.y,
+      });
+    },
+  });
+  desktop.start().catch((err) => {
+    desktopError = `Chrome bridge could not start: ${(err as Error).message}`;
+    console.error(desktopError);
+    desktop = null;
+  });
 });
 app.on('will-quit', () => { clearTimeout(saveTimer); saveConfig(); watcher?.stop();fileWatcher?.stop();void desktop?.stop(); });
 app.on('window-all-closed', () => app.quit());

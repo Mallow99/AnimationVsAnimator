@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('petShell', {
   desktopAction:(id:number,action:string)=>ipcRenderer.invoke('desktop:action',id,action),
   desktopInfo:()=>ipcRenderer.invoke('desktop:info'),
   openExtensionFolder:()=>ipcRenderer.send('desktop:extensionFolder'),
-  chooseHabitat:()=>ipcRenderer.invoke('desktop:chooseHabitat',petId),
+  chooseHabitat:(kind='folder')=>ipcRenderer.invoke('desktop:chooseHabitat',petId,kind),
   fileHomes:(homes:unknown)=>ipcRenderer.send('desktop:fileHomes',homes),
   onWindowsLog: on('world:log'),
   onUi: on('world:ui'),

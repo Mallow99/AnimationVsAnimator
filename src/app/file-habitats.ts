@@ -1,8 +1,8 @@
 // A figure visits an existing file/folder's actual native window, clipped to its contents.
 // The desktop body is parked while its visiting body uses the same identity and saved state.
-import { Pet } from "../core/pet";
-import type { FileWindow } from "../shared/desktop";
-import type { Bounds } from "../core/physics";
+import { Pet } from '../core/pet';
+import type { FileWindow } from '../shared/desktop';
+import type { Bounds } from '../core/physics';
 
 interface Visit {
   path: string;
@@ -67,7 +67,16 @@ export class FileHabitats {
       const frame = this.frame(visit.path),
         before = visit.frame;
       visit.frame = frame;
-      if (!frame) continue;
+      if (!frame) {
+        if (before) {
+          const cursor = visit.pet.ctx.world.cursor;
+          visit.pet.pointerUp(
+            cursor?.x ?? visit.pet.char.x,
+            cursor?.y ?? visit.pet.char.body.j.neck.y,
+          );
+        }
+        continue;
+      }
       const b = {
         left: frame.x + 12,
         right: frame.x + frame.width - 12,
@@ -118,7 +127,7 @@ export class FileHabitats {
         g.beginPath();
         g.rect(f.x + 8, f.y + 64, f.width - 16, f.height - 76);
         g.rect(w.x, w.y, w.w, w.h);
-        g.clip("evenodd");
+        g.clip('evenodd');
       }
       visit.pet.drawProps(g);
       visit.pet.draw(g);
@@ -179,13 +188,13 @@ export class FileHabitats {
         v &&
         Number.isInteger(v.id) &&
         pets[v.id] &&
-        typeof v.path === "string" &&
+        typeof v.path === 'string' &&
         v.path.length < 4096
       ) {
         this.enter(v.id, pets[v.id], v.path);
         const visit = this.visits.get(v.id)!;
-        if (typeof v.save === "string") visit.pet.load(v.save);
-        if (typeof v.memory === "string") visit.pet.memory.load(v.memory);
+        if (typeof v.save === 'string') visit.pet.load(v.save);
+        if (typeof v.memory === 'string') visit.pet.memory.load(v.memory);
       }
   }
   sync(pets: Pet[]) {
