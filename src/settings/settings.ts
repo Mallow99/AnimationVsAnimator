@@ -425,9 +425,9 @@ const SLOTS = Array.from({length:16},(_,i)=>`slot ${i+1}`);
 function renderItems(v: ItemsView) {
   const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `in his satchel (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'worn' ? 'wearing it' : it.where === 'world' ? 'lying around' : 'you have it';
   $('itemList').replaceChildren(...(v.list.length ? v.list.map((it) => moveRow(it.name + (it.drawn ? ' (drawn)' : ''), 0, [
-    ...(it.where === 'belt' || it.where === 'hand' || it.where === 'worn' ? [['Take', () => shell.command(`item:take:${it.uid}`)] as [string, () => void]] : []),
+    ...(it.where === 'belt' || it.where === 'hand' || it.where === 'worn' ? [['Take out', () => shell.command(`item:take:${it.uid}`)] as [string, () => void]] : []),
     ...(it.where === 'cursor' || it.where === 'world' ? [['Give back', () => shell.command(`item:return:${it.uid}`)] as [string, () => void]] : []),
-    ['Put away', () => shell.command(`item:remove:${it.uid}`)],
+    ['Trash', () => shell.command(`item:remove:${it.uid}`)],
   ], where(it))) : [emptyNote('He has nothing. Give him something below.')]));
   // His inventory: every kind of thing there is. Drop one in (it falls from the top of the screen and he
   // goes to get it), or put it straight in his satchel.
@@ -447,9 +447,9 @@ function renderProps(v: PropsView) {
           ['Change channel', () => shell.command(`prop:channel:${p.i}`)],
         ] as [string, () => void][] : []),
         ...(p.id === 'canvas' ? [['Paint', () => shell.command('do:paint')] as [string, () => void]] : []),
-        ['Put away', () => shell.command(`prop:remove:${p.i}`)]
+        ['Trash', () => shell.command(`prop:remove:${p.i}`)]
       ], 'on the desktop')),
-      moveRow('All of them', 0, [['Put everything away', () => shell.command('prop:clear')]], '')]
+      moveRow('All of them', 0, [['Trash all furniture', () => shell.command('prop:clear')]], 'Undo restores the last object only.')]
     : [emptyNote('Nothing out on the desktop yet.')]));
 }
 $('openItems').addEventListener('click', () => shell.openItemsFolder());

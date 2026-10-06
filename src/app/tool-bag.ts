@@ -2,6 +2,10 @@ import type { Pet } from "../core/pet";
 import { OverlayTools } from "../core/overlay-tools";
 import { satchelAt } from "../core/satchel";
 import { thingCard } from "../settings/item-card";
+import { isWeapon } from "../core/combat/armament";
+import type { Item } from "../core/items";
+import type { Thing } from "../core/props";
+import { activitiesFor } from "./activities";
 
 type Position = { x: number; y: number };
 function icon(bin: boolean) {
@@ -41,9 +45,24 @@ export class ToolBag {
   private status = document.createElement("p");
   private choices = document.createElement("div");
   private owners = document.createElement("div");
+  private tabs = document.createElement("nav");
+  private details = document.createElement("div");
+  private footer = document.createElement("footer");
+  private panelUndo = document.createElement("button");
+  private transport = document.createElement("div");
+  private transportHint = document.createElement("span");
+  private transportUse = document.createElement("button");
+  private help = document.createElement("details");
+  private hint = document.createElement("div");
+  private hoverOwner: Pet | null = null;
+  private hoverAt = 0;
+  private view: "inventory" | "supplies" | "activities" = "inventory";
+  private selection: { kind: "item" | "prop" | "owned"; id: string } | null = null;
+  private pendingPull: { kind: "item" | "prop" | "owned"; id: string; x: number; y: number } | null = null;
+  private anchor: Position = { x: 0, y: 0 };
   private signature = "";
   private selected = "";
-  private owned = false;
+  private get owned() { return this.view === "inventory"; }
   private opened = false;
   private keyboard = false;
   private pointerPull = false;
@@ -115,7 +134,7 @@ export class ToolBag {
         this.suppressClick = false;
         return;
       }
-      this.owned = false;
+      this.setView("supplies");
       this.toggle();
     };
     for (const kind of ["bag", "bin"] as const)
@@ -134,7 +153,7 @@ export class ToolBag {
       };
     this.panel.id = "bagPanel";
     this.panel.hidden = true;
-    this.panel.setAttribute("aria-label", "Satchel and supplies");
+    this.panel.setAttribute("aria-label", "Figure bag, supplies and activities");
     const header = document.createElement("header");
     const keys = document.createElement("button");
     keys.id = "bagKeyboard";
@@ -144,30 +163,66 @@ export class ToolBag {
     keys.onclick = () => {
       this.keyboard = true;
       this.typing(true);
-      this.choices.querySelector<HTMLButtonElement>("button")?.focus();
+      this.choices.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
     };
     const close = document.createElement("button");
     close.type = "button";
     close.textContent = "✕";
-    close.setAttribute("aria-label", "Close grab bag");
+    close.setAttribute("aria-label", "Close bag");
     close.onclick = () => this.toggle(false);
     header.append(this.title, keys, close);
+    this.tabs.className = "bag-tabs";
+    this.tabs.setAttribute("aria-label", "Bag sections");
+    for (const [view, label, id] of [["inventory", "Bag", "bagInventory"], ["supplies", "Supplies", "bagSupplies"], ["activities", "Activities", "bagActivities"]] as const) {
+      const tab = document.createElement("button");
+      tab.type = "button"; tab.id = id; tab.textContent = label; tab.dataset.view = view;
+      tab.onclick = () => this.setView(view);
+      this.tabs.append(tab);
+    }
     this.owners.className = "bag-owners";
     this.status.id = "bagHint";
     this.status.setAttribute("role", "status");
-    this.status.textContent =
-      "Pull a tool out. Drop it on a figure to store it, or on the desktop to place it.";
     this.choices.className = "bag-choices";
-    this.panel.append(header, this.owners, this.status, this.choices);
-    this.root.append(this.bag, this.bin, this.undo, this.panel);
+    this.details.id = "bagDetails";
+    this.panelUndo.id = "bagUndo"; this.panelUndo.type = "button";
+    this.panelUndo.onclick = () => this.restoreTrash();
+    const summary = document.createElement("summary"); summary.textContent = "How to use this";
+    const instructions = document.createElement("p");
+    instructions.textContent = "Right-click a figure → Open bag. Bag contains its own items; Supplies adds new tools or furniture. Click a card to see its actions, or drag it onto the desktop or another figure. Activities lists things the figure can do and what each needs. Escape or Cancel puts a dragged item back. Trash has one Undo, also available here when the desktop shortcuts are hidden.";
+    this.help.append(summary, instructions);
+    this.footer.append(this.panelUndo, this.help);
+    this.panel.append(header, this.owners, this.tabs, this.status, this.details, this.choices, this.footer);
+    this.transport.id = "bagTransport"; this.transport.hidden = true;
+    const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = "Cancel";
+    cancel.onclick = () => this.cancel();
+    this.transportUse.type = "button"; this.transportUse.textContent = "Use with cursor";
+    this.transportUse.onclick = () => {
+      const held = this.tools.held;
+      if (held?.kind !== "item" || !isWeapon(held.object.def)) return;
+      const at = { ...held.object.at };
+      this.tools.release(at, { x: 0, y: 0 }, held.owner);
+      held.owner.takeItem(held.object);
+      this.keyboard = false; this.typing(false); this.changed(); this.refresh();
+    };
+    this.transport.append(this.transportHint, this.transportUse, cancel);
+    this.root.append(this.bag, this.bin, this.undo, this.panel, this.transport);
     document.body.append(this.root);
+    this.hint.id = "figureHint"; this.hint.hidden = true;
+    this.hint.textContent = "Right-click → Open bag / Activities";
+    document.body.append(this.hint);
     this.root.addEventListener("mousedown", (e) => {
-      e.preventDefault();
+      if (!this.keyboard) e.preventDefault();
       e.stopPropagation();
     });
     this.root.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
+    });
+    this.root.addEventListener("keydown", e => {
+      if (!e.defaultPrevented && (e.key === "Enter" || e.key === " ") && e.target instanceof HTMLButtonElement) {
+        e.preventDefault();
+        if (!e.repeat) e.target.click();
+      }
     });
     this.root.addEventListener("focusout", () =>
       queueMicrotask(() => {
@@ -182,6 +237,11 @@ export class ToolBag {
       }),
     );
     window.addEventListener("mousemove", (e) => {
+      const pull = this.pendingPull;
+      if (pull && Math.hypot(e.clientX - pull.x, e.clientY - pull.y) > 6) {
+        this.pendingPull = null;
+        this.startPull(pull.kind, pull.id, pull.x, pull.y, true);
+      }
       const m = this.moving;
       if (!m) return;
       if (Math.hypot(e.clientX - m.start.x, e.clientY - m.start.y) > 5)
@@ -195,6 +255,7 @@ export class ToolBag {
       }
     });
     window.addEventListener("mouseup", () => {
+      this.pendingPull = null;
       if (this.moving?.moved) {
         this.suppressClick = true;
         localStorage.setItem(
@@ -219,12 +280,33 @@ export class ToolBag {
       this.pets().find((p) => p.ctx.who === this.selected) ?? this.pets()[0]
     );
   }
-  showFor(p: Pet) {
+  showFor(p: Pet, view: "inventory" | "supplies" | "activities" = "inventory") {
+    if (this.dragging) return;
+    for (const pet of this.pets()) pet.closeMenu();
     this.selected = p.ctx.who;
-    this.owned = true;
+    this.view = view; this.selection = null;
+    this.anchor = satchelAt(p.char);
     this.toggle(true);
   }
+  private setView(view: typeof this.view) {
+    this.pendingPull = null;
+    this.view = view; this.selection = null; this.signature = "";
+    this.status.textContent = "";
+    if (!this.opened) this.anchor = { ...this.positions.bag };
+    this.refresh();
+    this.choices.scrollTop = 0;
+  }
+  close() { this.toggle(false); }
+  hover(p: Pet | null, now: number) {
+    if (p !== this.hoverOwner) { this.hoverOwner = p; this.hoverAt = now; }
+    this.hint.hidden = !p || now - this.hoverAt < 700 || this.opened || this.dragging || p.menuOpen || p.carrying || p.dragging;
+    if (this.hint.hidden || !p) return;
+    const at = p.talkAnchor();
+    this.hint.style.left = `${Math.max(8, Math.min(innerWidth - this.hint.offsetWidth - 8, at.x - this.hint.offsetWidth / 2))}px`;
+    this.hint.style.top = `${Math.max(8, at.y - 38)}px`;
+  }
   private toggle(on = !this.opened, keepKeyboard = false) {
+    this.pendingPull = null;
     this.opened = on;
     this.panel.hidden = !on;
     this.bag.setAttribute("aria-expanded", String(on));
@@ -263,17 +345,15 @@ export class ToolBag {
     }
     this.undo.style.left = `${Math.max(4, this.positions.bin.x - 60)}px`;
     this.undo.style.top = `${this.positions.bin.y + 6}px`;
-    const at =
-      this.owned && this.current()
-        ? satchelAt(this.current()!.char)
-        : this.positions.bag;
+    const at = this.anchor;
     this.panel.style.left = `${Math.max(8, Math.min(innerWidth - this.panel.offsetWidth - 8, at.x - this.panel.offsetWidth))}px`;
     this.panel.style.top = `${Math.max(8, Math.min(innerHeight - this.panel.offsetHeight - 8, at.y))}px`;
   }
   over(x: number, y: number) {
     return (
       !!this.moving ||
-      [this.bag, this.bin, this.undo, this.panel].some((el) => {
+      !!this.pendingPull ||
+      [this.bag, this.bin, this.undo, this.panel, this.transport].some((el) => {
         if (el.hidden) return false;
         const r = el.getBoundingClientRect();
         return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
@@ -294,6 +374,8 @@ export class ToolBag {
   refresh() {
     const pets = this.pets(),
       owner = this.current();
+    if (!owner) { this.toggle(false); return; }
+    if (this.dragging && !pets.includes(this.tools.held!.owner)) this.cancel();
     this.bag.hidden = !pets[0]?.config.showBag;
     this.bin.hidden = !pets[0]?.config.showTrash;
     this.undo.hidden = this.bin.hidden || !this.tools.trashedName;
@@ -302,22 +384,31 @@ export class ToolBag {
       `Retrieve ${this.tools.trashedName ?? "last object"} from trash`,
     );
     this.bin.classList.toggle("receiving", this.dragging);
+    this.transport.hidden = !this.dragging;
+    const held = this.tools.held;
+    this.transportUse.hidden = held?.kind !== "item" || !isWeapon(held.object.def);
+    this.transportHint.textContent = held ? `${held.kind === "item" ? held.object.def.name : held.kind === "thing" ? held.object.def?.name ?? "Object" : "Ball"} · Drop on the desktop${held.kind === "item" ? " or a figure" : ""}.` : "";
+    this.panelUndo.hidden = !this.tools.trashedName;
+    this.panelUndo.textContent = `Undo trash: ${this.tools.trashedName ?? ""}`;
+    for (const tab of this.tabs.querySelectorAll("button")) tab.setAttribute("aria-pressed", String(tab.dataset.view === this.view));
+    const actions = this.view === "activities" ? activitiesFor(owner) : [];
     const signature = JSON.stringify([
-      this.owned,
+      this.view,
       owner?.ctx.who,
       pets.map((p) => [p.ctx.who, p.config.name]),
       this.owned
-        ? owner?.items.onHim.map((i) => [i.uid, i.where])
+        ? owner?.items.onHim.map((i) => [i.uid, i.where, i.ammo, i.ink?.progress])
         : [
             owner && [...owner.items.defs.values()],
             owner && [...owner.props.defs.values()],
           ],
+      actions,
     ]);
     if (signature !== this.signature) {
+      const focused = document.activeElement instanceof HTMLButtonElement && this.root.contains(document.activeElement) ? document.activeElement : null;
       this.signature = signature;
-      this.title.textContent = this.owned
-        ? `${owner?.config.name ?? "Figure"}’s satchel`
-        : "Supplies";
+      this.title.textContent = `${owner.config.name}’s bag`;
+      this.status.textContent = this.owned ? `${owner.items.onHim.filter(i => i.where === "belt").length}/16 bag slots · Click an item for actions, or drag it out.` : this.view === "supplies" ? `New supplies for ${owner.config.name}. Click a card to give or place it.` : "Choose an activity. Missing tools, furniture or companions are shown below.";
       this.owners.replaceChildren(
         ...pets.map((p) => {
           const b = document.createElement("button");
@@ -325,13 +416,21 @@ export class ToolBag {
           b.textContent = p.config.name;
           b.setAttribute("aria-pressed", String(p === owner));
           b.onclick = () => {
+            this.pendingPull = null;
             this.selected = p.ctx.who;
+            this.selection = null;
             this.refresh();
           };
           return b;
         }),
       );
       this.renderChoices();
+      if (this.keyboard && this.opened && focused && !focused.isConnected) {
+        const match = [...this.root.querySelectorAll("button")].find(b =>
+          focused.id ? b.id === focused.id : focused.dataset.id ? b.dataset.id === focused.dataset.id && b.dataset.kind === focused.dataset.kind : focused.dataset.action ? b.dataset.action === focused.dataset.action : b.textContent === focused.textContent,
+        );
+        (match ?? this.root.querySelector<HTMLButtonElement>("#bagKeyboard"))?.focus();
+      }
     }
     this.layout();
   }
@@ -349,19 +448,27 @@ export class ToolBag {
       button.className = "bag-choice";
       button.dataset.kind = kind;
       button.dataset.id = id;
-      button.setAttribute("aria-label", `Pull out ${def.name}`);
+      button.setAttribute("aria-label", `Select ${def.name}`);
+      button.setAttribute("aria-pressed", String(this.selection?.kind === kind && this.selection.id === id));
       button.append(thingCard(def, [], 18));
+      if (kind === "owned") {
+        const item = owner.items.onHim.find(i => String(i.uid) === id)!;
+        const state = document.createElement("small");
+        state.textContent = item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : "In bag";
+        if (item.def.use === "gun") state.textContent += ` · ${item.ammo}/6 rounds`;
+        button.append(state);
+      }
       button.onmousedown = (e) => {
         if (e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
-        this.startPull(kind, id, e.clientX, e.clientY, true);
+        this.pendingPull = { kind, id, x: e.clientX, y: e.clientY };
       };
       button.onclick = (e) => {
-        if (e.detail === 0) {
-          const at = satchelAt(owner.char);
-          this.startPull(kind, id, at.x, at.y, false);
-        }
+        if (this.dragging) return;
+        this.selection = { kind, id };
+        for (const card of this.choices.querySelectorAll(".bag-choice")) card.setAttribute("aria-pressed", String(card === button));
+        this.renderDetails(); this.layout();
       };
       button.onkeydown = (e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -371,18 +478,24 @@ export class ToolBag {
       };
       this.choices.append(button);
     };
-    if (this.owned) {
+    if (this.view === "activities") {
+      let group = "";
+      for (const activity of activitiesFor(owner)) {
+        if (group !== activity.group) { group = activity.group; const h = document.createElement("h3"); h.textContent = group; this.choices.append(h); }
+        const button = document.createElement("button"); button.type = "button"; button.className = "bag-activity"; button.dataset.action = activity.command;
+        const title = document.createElement("strong"); title.textContent = activity.label;
+        const hint = document.createElement("small"); hint.textContent = activity.needs ?? activity.hint;
+        button.disabled = !!activity.needs; button.append(title, hint);
+        button.onclick = () => { owner.command(`do:${activity.command}`); this.changed(); this.toggle(false); };
+        this.choices.append(button);
+      }
+      const stop = document.createElement("button"); stop.type = "button"; stop.textContent = owner.mood.asleep ? "Wake up" : "Stop current activity";
+      stop.onclick = () => { owner.command("do:wake"); this.changed(); this.signature = ""; this.refresh(); };
+      this.choices.prepend(stop);
+    } else if (this.owned) {
       for (const item of owner.items.onHim)
         choice("owned", String(item.uid), item.def);
-      const supplies = document.createElement("button");
-      supplies.type = "button";
-      supplies.className = "bag-choice";
-      supplies.textContent = "Tools & furniture supplies";
-      supplies.onclick = () => {
-        this.owned = false;
-        this.refresh();
-      };
-      this.choices.append(supplies);
+      if (!owner.items.onHim.length) { const empty = document.createElement("p"); empty.className = "bag-empty"; empty.textContent = "This bag is empty. Open Supplies to give this figure a tool."; this.choices.append(empty); }
     } else
       for (const [kind, defs] of [
         ["item", owner.items.defs],
@@ -393,6 +506,42 @@ export class ToolBag {
         this.choices.append(heading);
         for (const def of defs.values()) choice(kind, def.id, def);
       }
+    this.renderDetails();
+  }
+  private renderDetails() {
+    this.details.replaceChildren();
+    const owner = this.current(), selected = this.selection;
+    if (!owner || !selected) { this.details.hidden = true; return; }
+    const item = selected.kind === "owned" ? owner.items.onHim.find(i => String(i.uid) === selected.id) : null;
+    const def = selected.kind === "owned" ? item?.def : selected.kind === "item" ? owner.items.defs.get(selected.id) : owner.props.defs.get(selected.id);
+    if (!def) { this.selection = null; this.details.hidden = true; return; }
+    this.details.hidden = false;
+    const name = document.createElement("strong"); name.textContent = def.name;
+    const about = document.createElement("p"); about.textContent = def.about;
+    const actions = document.createElement("div"); actions.className = "bag-item-actions";
+    const action = (label: string, id: string, run: () => void) => { const button = document.createElement("button"); button.type = "button"; button.textContent = label; button.dataset.action = id; button.onclick = run; actions.append(button); };
+    action(selected.kind === "owned" ? "Take out" : "Place on desktop", "place", () => { const at = satchelAt(owner.char); this.startPull(selected.kind, selected.id, at.x, at.y, false); });
+    if (item) {
+      if (isWeapon(item.def)) action("Use with cursor", "use", () => { if (!this.canPull()) { this.status.textContent = "Return the tool you are using first."; return; } owner.takeItem(item); this.toggle(false); this.changed(); });
+      if (item.where === "hand" && !item.def.wear) action("Store in bag", "store", () => { owner.mind.reset(owner.ctx); owner.giveBack(item); this.changed(); this.refresh(); });
+      action("Drop beside figure", "drop", () => { owner.mind.reset(owner.ctx); item.at = { x: owner.char.x + 45 * owner.char.scale, y: owner.char.body.j.hip.y, z: 0 }; owner.items.drop(item, 0, 0); this.changed(); this.refresh(); });
+      action("Trash", "trash", () => this.trashObject(owner, item));
+    } else if (selected.kind === "item") action(`Give to ${owner.config.name}`, "give", () => {
+      if (owner.items.belt.every(Boolean) && !("wear" in def && def.wear)) {
+        this.status.textContent = "The bag is full. Place this tool on the desktop or free a slot first.";
+        return;
+      }
+      owner.items.give(def.id, owner.char); this.changed(); this.setView("inventory");
+    });
+    this.details.append(name, about, actions);
+    if (item && ["wipe", "erase", "color"].includes(item.def.use)) { const hint = document.createElement("small"); hint.textContent = "Take out, then move over the drawing to use it. Cancel returns it to the bag."; this.details.append(hint); }
+  }
+  trashObject(owner: Pet, object: Item | Thing) {
+    if (this.tools.trashObject(owner, object)) { this.trashed(); this.showFor(owner); }
+  }
+  private restoreTrash() {
+    const owner = this.current(); if (!owner) return;
+    if (this.tools.undo({ x: owner.char.x + 70 * owner.char.scale, y: owner.char.body.j.hip.y })) { this.changed(); this.signature = ""; this.refresh(); }
   }
   private startPull(
     kind: "item" | "prop" | "owned",
@@ -404,7 +553,7 @@ export class ToolBag {
     const owner = this.current();
     const item =
       kind === "owned"
-        ? owner?.items.onHim.find((i) => String(i.uid) === id)
+        ? owner?.items.list.find((i) => String(i.uid) === id)
         : null;
     if (
       !owner ||
@@ -419,14 +568,28 @@ export class ToolBag {
     }
     this.pointerPull = pointer;
     this.pullOrigin = { x, y };
-    this.toggle(false, !pointer && this.keyboard);
+    this.toggle(false, this.keyboard);
     this.refresh();
   }
   move(x: number, y: number, vx: number, vy: number) {
     this.tools.move({ x, y }, { x: vx, y: vy });
   }
+  takeItem(owner: Pet, item: Item) {
+    this.selected = owner.ctx.who;
+    this.startPull("owned", String(item.uid), item.at.x, item.at.y, false);
+  }
+  storeItem(owner: Pet, item: Item) {
+    if (this.tools.held?.object === item) {
+      this.tools.release(item.at, { x: 0, y: 0 }, owner);
+      this.keyboard = false; this.typing(false);
+    } else owner.giveBack(item);
+    this.changed(); this.refresh();
+  }
   release(x: number, y: number, vx: number, vy: number) {
     if (!this.dragging) return false;
+    const controls = this.transport.getBoundingClientRect();
+    // A toolbar click belongs to Cancel/Use, not to the desktop drop handler.
+    if (!this.transport.hidden && x >= controls.left && x <= controls.right && y >= controls.top && y <= controls.bottom) return true;
     if (
       this.pointerPull &&
       Math.hypot(x - this.pullOrigin.x, y - this.pullOrigin.y) < 6
@@ -448,22 +611,15 @@ export class ToolBag {
     return true;
   }
   cancel() {
-    const entry = this.tools.held;
-    if (!entry) return;
-    const b = entry.owner.ctx.world.bounds;
-    this.tools.release(
-      {
-        x: Math.min(b.right - 40, Math.max(40, entry.owner.char.x + 70)),
-        y: b.floor - 120,
-      },
-      { x: 0, y: 0 },
-    );
+    this.pendingPull = null;
+    if (!this.tools.cancel()) return;
     this.keyboard = false;
     this.typing(false);
     this.changed();
     this.refresh();
   }
   trashed() {
+    if (!this.opened && !this.dragging) { this.keyboard = false; this.typing(false); }
     this.changed();
     this.refresh();
   }

@@ -116,7 +116,12 @@ function makePet(id: number, config: PetConfig): Pet {
   p.onBlip = (pitch) => playBlip(pitch * (id ? 0.85 : 1), p.config.volume);
   p.onSound = (name, strength) => playSfx(name, strength, p.config.volume, (id ? 0.75 : 0.8) + p.mood.s.happiness * 0.4);
   p.onTalk = () => openTalk(p);
-  p.onSatchel = () => toolBag.showFor(p);
+  p.onSatchel = () => { closeTalk(); toolBag.showFor(p); };
+  p.onSupplies = () => toolBag.showFor(p, 'supplies');
+  p.onActivities = () => toolBag.showFor(p, 'activities');
+  p.onTrash = object => toolBag.trashObject(p, object);
+  p.onTake = item => toolBag.takeItem(p, item);
+  p.onStore = item => toolBag.storeItem(p, item);
   if (shell) {
     p.onDesktopAction=async action=>{const result=await shell.desktopAction(id,action);if(result.ok && action==='restorepage')cutouts.clear();return result;};
     p.desktopState=desktopState;
@@ -370,6 +375,7 @@ window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (toolBag.dragging) { toolBag.cancel(); updateClickThrough(e.clientX, e.clientY); return; }
   if (gamePanel.over(e.clientX, e.clientY)) return;
+  toolBag.close();
   if (cursorWeapon.owner && cursorWeapon.item) {
     const owner = cursorWeapon.owner, item = cursorWeapon.item;
     cursorWeapon.detach();
@@ -392,6 +398,10 @@ window.addEventListener('mousedown', (e) => {
   if (pongPanel.over(e.clientX,e.clientY) || overTalk(e.clientX, e.clientY) || gamePanel.over(e.clientX, e.clientY)) return;
   if(cutouts.grab(e.clientX,e.clientY)){shell?.pressed();return;}
   if (talkOpen && !talkPet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
+  // Open menus get first refusal, even where a row overlaps a satchel or held tool.
+  const menu = [...desktopPets()].reverse().find(p => p.menuOpen);
+  if (menu) { menu.pointerDown(e.clientX, e.clientY, performance.now()); updateClickThrough(e.clientX, e.clientY); return; }
+  if (toolBag.isOpen) toolBag.close();
   const satchel = [...desktopPets()].reverse().find(p => p.satchelHit(e.clientX, e.clientY));
   if (satchel) { toolBag.showFor(satchel); updateClickThrough(e.clientX, e.clientY); return; }
   for (const p of [...desktopPets()].reverse()) {
@@ -508,6 +518,7 @@ function frame(now: number) {
     pets.map((p, id) => (habitats.isAway(id) ? undefined : p)) as Pet[],
   );
   gamePanel.update(); pongPanel.update();
+  toolBag.hover(!cursorWeapon.active && !talkOpen && !toolBag.over(last.x, last.y) ? [...desktopPets()].reverse().find(p => p.char.hitTest(last.x, last.y, 8) || p.satchelHit(last.x, last.y)) ?? null : null, now);
   updateClickThrough(last.x, last.y);
   if (talkOpen) {
     placeTalk();

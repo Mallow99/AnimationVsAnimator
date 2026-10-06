@@ -8,7 +8,10 @@ import type { JointName } from './body';
 import type { Bounds } from './physics';
 import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
-import { DEFAULT_LESSONS, type Ctx } from './skills';
+import { DEFAULT_LESSONS, PaintCanvas, type Ctx } from './skills';
+import { SitOnProp, WatchTV, RideScooter } from './skills/props';
+import { DeskWork, RefineProject, SortTools } from './skills/workshop';
+import { groupPlan } from './skills/group';
 import { windowPlatforms, windowSides, windowWalls, type WinRect } from './world';
 import { drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
 import { propActions } from './capabilities';
@@ -196,6 +199,11 @@ export class Pet implements Peer {
   /** "Settings" in his menu. */
   onOpenSettings: (() => void) | null = null;
   onSatchel: (() => void) | null = null;
+  onSupplies: (() => void) | null = null;
+  onActivities: (() => void) | null = null;
+  onTrash: ((object: Item | Thing) => void) | null = null;
+  onTake: ((item: Item) => void) | null = null;
+  onStore: ((item: Item) => void) | null = null;
   satchelHit(x: number, y: number) { const at = satchelAt(this.char); return Math.abs(x - at.x) < 8 * this.char.scale && y > at.y - 5 * this.char.scale && y < at.y + 10 * this.char.scale; }
   /** Sound effects (the app plays them): footsteps, thuds, snaps, whooshes... */
   onSound: ((name: string, strength: number) => void) | null = null;
@@ -1027,21 +1035,51 @@ export class Pet implements Peer {
 
   /** Right-click on him: his menu. Returns true if it opened. */
   contextMenu(x: number, y: number) {
+    const item = this.items.hitWorld(x, y);
+    if (item && !this.char.hitTest(x, y, 10)) {
+      this.menu = { at: { x, y }, hover: -1, rows: [
+        { label: `Take out ${item.def.name.toLowerCase()}`, act: () => this.onTake ? this.onTake(item) : this.takeItem(item) },
+        { label: 'Store in bag', act: () => this.onStore ? this.onStore(item) : this.giveBack(item) },
+        ...(this.onTrash ? [{ label: 'Trash', act: () => this.onTrash?.(item) }] : []),
+      ] };
+      return true;
+    }
     const prop = this.props.placed.find(t => t.contains(x,y));
     if (prop && !this.char.hitTest(x,y,10)) {
       const capabilities = propActions(prop.def!);
-      const actions: Record<string,string> = {sit:'sitdown',watch:'watchtv',ride:'ride',paint:'paint',drawhere:'deskwork',refine:'refine',store:'sorttools'};
-      this.menu = {at:{x,y}, hover:-1, rows:[...capabilities.filter(a=>actions[a]).map(a=>({label:`${a === 'drawhere' ? 'Make blueprint on' : a === 'refine' ? 'Refine at' : a === 'store' ? 'Sort tools on' : 'Use'} ${prop.def!.name.toLowerCase()}`,act:()=>this.command(`do:${actions[a]}`)})), ...(capabilities.includes('watch') ? [{label:'Play Pong',act:()=>this.command('do:pong')},{label:'Move beside couch',act:()=>this.command('do:arrange')}] : []), {label:'Supplies',act:()=>this.onSatchel?.()}]};
+      const actions = {
+        sit: { label: 'Sit here', make: () => new SitOnProp(prop) },
+        watch: { label: 'Watch this TV', make: () => new WatchTV(prop) },
+        ride: { label: 'Ride this scooter', make: () => new RideScooter(prop) },
+        paint: { label: 'Paint here', make: () => new PaintCanvas(prop) },
+        drawhere: { label: 'Make a blueprint here', make: () => new DeskWork(prop) },
+        refine: { label: 'Finish an ink project here', make: () => new RefineProject(prop) },
+        store: { label: 'Sort tools here', make: () => new SortTools(prop) },
+      };
+      const rows = capabilities.flatMap(a => {
+        const action = actions[a as keyof typeof actions];
+        return action ? [{ label: action.label, act: () => {
+          this.mind.startActivity(this.ctx, action.make(), 'you chose this furniture');
+        } }] : [];
+      });
+      if (capabilities.includes('watch')) rows.push({ label: 'Play Pong here', act: () => {
+        const plan = groupPlan(this.ctx, 'pong', prop);
+        if (plan) this.mind.startActivity(this.ctx, new GroupActivity(plan));
+      } });
+      if (this.onActivities) rows.push({ label: 'Activities…', act: () => this.onActivities?.() });
+      if (this.onSupplies) rows.push({ label: 'Supplies…', act: () => this.onSupplies?.() });
+      if (this.onTrash) rows.push({ label: `Trash ${prop.def!.name.toLowerCase()}`, act: () => this.onTrash?.(prop) });
+      this.menu = { at: { x, y }, hover: -1, rows };
       return true;
     }
-    if (!this.char.hitTest(x, y, 10)) { this.menu = null; return false; }
+    if (!this.char.hitTest(x, y, 10) && !this.satchelHit(x, y)) { this.menu = null; return false; }
     this.pendingPoke = null;
     const rows: { label: string; act: () => void }[] = [];
     rows.push({ label: `Talk to ${this.config.name}`, act: () => this.onTalk?.() });
-    if (this.onSatchel) rows.push({ label: 'Open satchel', act: () => this.onSatchel?.() });
+    if (this.onSatchel) rows.push({ label: 'Open bag', act: () => this.onSatchel?.() });
+    if (this.onActivities) rows.push({ label: 'Activities…', act: () => this.onActivities?.() });
     const carried = this.items.carried;
     if (carried) rows.push({ label: `Give back ${carried.def.name.toLowerCase()}`, act: () => this.giveBack(carried) });
-    for (const it of this.items.onHim) rows.push({ label: `Take ${it.def.name.toLowerCase()}`, act: () => this.takeItem(it) });
     if (!this.char.whole) rows.push({ label: 'Fix him up', act: () => { for (const l of [...this.char.missing.keys()]) this.char.regrow(l); } });
     if (this.onOpenSettings) rows.push({ label: 'Settings', act: () => this.onOpenSettings?.() });
     this.menu = { at: { x, y }, rows, hover: -1 };
@@ -1949,7 +1987,10 @@ export class Pet implements Peer {
     const arg = rest.join(':');
     if (verb === 'do') { this.mind.command(this.ctx, arg); return; }
     if (verb === 'say') { if (arg.trim()) this.say(arg.trim().slice(0, 80)); return; }
-    if (verb === 'hear') { if (arg.trim()) this.memory.count('talks'); this.brain.hear(this.ctx, arg); return; }
+    if (verb === 'hear') {
+      if (/^\s*(?:open|show)(?: me)?(?: your| the| my)? (?:bag|satchel|inventory)\s*[.!?]?\s*$/i.test(arg) && this.onSatchel) { this.onSatchel(); return; }
+      if (arg.trim()) this.memory.count('talks'); this.brain.hear(this.ctx, arg); return;
+    }
     if (this.memoryCommand(verb, arg)) return;
     if (verb === 'item') { this.itemCommand(arg); this.onCollections?.(); return; }
     if (verb === 'prop') { this.propCommand(arg); this.onCollections?.(); return; }
@@ -2023,10 +2064,10 @@ export class Pet implements Peer {
         if (made) { this.sound('poof', 0.6); this.emit({ type: 'itemSpawned', name: made.def.name.toLowerCase(), uid: made.uid }); }
         break;
       }
-      case 'take': if (it && (it.where === 'belt' || it.where === 'hand' || it.where === 'worn')) this.takeItem(it); break;
-      case 'return': if (it) this.giveBack(it); break;
+      case 'take': if (it && (it.where === 'belt' || it.where === 'hand' || it.where === 'worn')) { if (this.onTake) this.onTake(it); else this.takeItem(it); } break;
+      case 'return': if (it) { if (this.onStore) this.onStore(it); else this.giveBack(it); } break;
       case 'drop': if (it) this.items.drop(it, 0, 0); break;
-      case 'remove': if (it) this.items.remove(it); break;
+      case 'remove': if (it) { if (this.onTrash) this.onTrash(it); else this.items.remove(it); } break;
     }
   }
 
@@ -2043,8 +2084,8 @@ export class Pet implements Peer {
       const t = this.props.spawn(id, x, b.top + 10, this.char.scale);
       if (t) { this.sound('poof', 0.7); this.emit({ type: 'propSpawned', id: t.def!.id, name: t.def!.name }); }
     } else if (verb === 'channel') { const t = this.props.placed[Number(id)]; if (t?.def && propActions(t.def).includes('watch')) { t.channel = (t.channel + 1) % 4; this.sound('click', 0.5); } }
-    else if (verb === 'remove') { const t = this.props.placed[Number(id)]; if (t) { this.props.remove(t); this.sound('poof', 0.4); } }
-    else if (verb === 'clear') for (const t of this.props.placed) this.props.remove(t);
+    else if (verb === 'remove') { const t = this.props.placed[Number(id)]; if (t) { if (this.onTrash) this.onTrash(t); else this.props.remove(t); this.sound('poof', 0.4); } }
+    else if (verb === 'clear') for (const t of this.props.placed) { if (this.onTrash) this.onTrash(t); else this.props.remove(t); }
   }
 
   /** Definition files from your items folder: items and props (a prop file says "type": "prop"). */

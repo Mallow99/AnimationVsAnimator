@@ -2,6 +2,42 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest owner feedback: interaction and rendering cleanup
+
+The owner reported clunky/discoverability problems, thin limbs while drawing/sitting, and returning
+behavior that may involve native focus. This pass finishes those bugs and interaction coherence;
+the owner hit their usage limit and explicitly asked to stop before further roadmap work.
+
+- Figure right-click → Open bag / Activities, plus an offline “open bag” request and a brief hover
+  hint. The menu no longer grows a Take row for every item. Clicking an item inspects it; dragging
+  remains available. Bag / Supplies / Activities tabs separate existing possessions, new objects
+  and actual offline actions. Item state/ammo, descriptions, explicit actions, requirements, in-panel
+  instructions and a stable panel position make the controls visible. Scrolling retains navigation.
+- Take out/Place, Give to a figure, Store, Drop, Use with cursor, Trash and Cancel are consistent across
+  bag, object menus and Settings. Settings' misleading Put away deletion labels are now Trash.
+  Undo remains accessible in the bag with both shortcuts hidden. Transport controls sit top-right
+  so they don't cover the floor figures; clicking Cancel/Use does not first drop the held object.
+- Cancel restores an existing item's previous hand/worn/bag state; unplaced supplies are removed.
+  Removing the original owner returns an existing held item through a current figure. User-controlled
+  transport/weapons cannot be reclaimed by AskBack. Settings returns also release transport ownership.
+- Each depth accessory draws inside save/restore. The satchel's narrow brush width no longer leaks
+  into limbs drawn afterward. Furniture menus target the exact clicked seat/TV/desk/bench/shelf.
+  Explicit group leaders can start from sitting, and Stop clears a queued activity too.
+- Pong controls stay above its intermittent preview, and visibility is applied before measuring.
+  The stage's canvas CSS is scoped to the stage, so it cannot override hidden preview canvases.
+- Mac refocus only activates the previous app when our own app actually became foreground. This
+  prevents unnecessary reactivation; the Swift helper and Spaces behavior remain unverified here.
+  The owner's earlier “return to the original thing” report still needs precise hardware confirmation.
+
+Validated: typecheck/build, 72 existing regressions plus 30 roadmap/cleanup checks, and the complete
+simulation with seed 1. Actual Chromium pointer/keyboard checks cover right-click Open bag with both
+shortcuts hidden, inspect without taking/closing, Give/Place, safe Cancel, stable panels, visible
+requirements/instructions, hidden-shortcut Trash/Undo, Settings take/return, full bag refusal, existing
+weapon/Othello/book flows, five-seat/workshop rendering and Pong Join/Keyboard/Escape/Rematch.
+Linux Electron/Xvfb passes real preload focus/input paths and the existing settings/chat/group checks.
+Inspected inventory, activities, small-screen supplies, couch and workshop screenshots. Mac Swift
+compilation/Spaces and real Windows behavior were not tested. No next roadmap update is started.
+
 ## Latest milestone: Workshop and Household
 
 The owner authorized completing missing Update 2 work plus the next two old updates, then supplied
@@ -16,7 +52,7 @@ Implemented:
 - Pixel supplies/trash shortcuts, hidden by default, independently enabled in General and draggable
   with saved placements. Satchel click/menu works with both hidden. Pointer catalog use never toggles
   native focus; Keyboard explicitly enables it, including a held selection that Escape can cancel.
-  Duplicate typing IPC is ignored. This addresses the focus transition responsible for overlay flicker;
+  Duplicate typing IPC is ignored. This was intended to address overlay flicker;
   Mac Spaces behavior still needs real hardware verification.
 - Wearable satchels replace belt rendering, with a reach/flap motion and 16 slots. Legacy slot indices
   still load, and worn helmets/boots remain attached. Owned satchel entries move the original item.

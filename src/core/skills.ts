@@ -976,7 +976,7 @@ export class AskBack extends Skill {
   start(c: Ctx) { c.look = 'cursor'; c.say(pick([`can I have my ${this.item.def.name.toLowerCase()} back?`, `hey. my ${this.item.def.name.toLowerCase()}.`, 'give it.']), 2); }
   update(c: Ctx) {
     const ch = c.char, cur = c.world.cursor, it = this.item;
-    if (it.where !== 'cursor' || !cur) return true;
+    if (it.where !== 'cursor' || it.cursorControlled || !cur) return true;
     if (this.t > 10) { c.say(pick(['fine. keep it.', 'hmph.', 'whatever']), 1.4); return true; }
     if (ch.ready && this.t > this.next) {
       this.next = this.t + 0.4;

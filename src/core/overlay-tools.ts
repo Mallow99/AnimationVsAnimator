@@ -11,6 +11,7 @@ type HeldObject = { kind: 'item'; owner: Pet; object: Item }
 /** Direct overlay transfers and one reversible trash slot. Only in-app objects enter this API. */
 export class OverlayTools {
   held: HeldObject | null = null;
+  private origin: { created: boolean; state?: Pick<Item, 'where' | 'slot' | 'hand' | 'at' | 'dir'> } | null = null;
   private wipeFrom: Vec | null = null;
   private lastTrash: { entry: HeldObject; born: number; at: number } | null = null;
   constructor(private readonly pets: () => Pet[]) {}
@@ -24,6 +25,7 @@ export class OverlayTools {
   beginItem(owner: Pet, object: Item, at: Vec) {
     if (this.held || !owner.items.list.includes(object)) return false;
     if (this.pets().some(p => p.items.carried && p.items.carried !== object)) return false;
+    this.origin = { created: false, state: { where: object.where, slot: object.slot, hand: object.hand, at: { ...object.at }, dir: { ...object.dir } } };
     owner.takeItem(object);
     object.cursorControlled = true;
     owner.userWeaponControlled = true; // Transport never swings/fires the weapon.
@@ -38,12 +40,16 @@ export class OverlayTools {
     if (this.held || this.pets().some(p => p.items.carried)) return false;
     if (kind === 'item') {
       const object = owner.items.spawn(id, at, owner.char.scale);
-      return object ? this.beginItem(owner, object, at) : false;
+      if (!object) return false;
+      if (!this.beginItem(owner, object, at)) { owner.items.remove(object); return false; }
+      this.origin!.created = true;
+      return true;
     }
     const object = owner.props.spawn(id, at.x, at.y, owner.char.scale);
     if (!object) return false;
     object.grab(at.x, at.y);
     this.held = { kind: 'thing', owner, object };
+    this.origin = { created: true };
     return true;
   }
 
@@ -93,6 +99,7 @@ export class OverlayTools {
     const e = this.held;
     this.move(at, velocity);
     this.held = null;
+    this.origin = null;
     if (!e) return false;
     if (e.kind === 'item') {
       e.owner.userWeaponControlled = false;
@@ -134,6 +141,16 @@ export class OverlayTools {
       }
     }
     if (!e) return false;
+    return this.trash(e);
+  }
+
+  trashObject(owner: Pet, object: Item | Thing) {
+    if (this.held?.object === object) return this.trashHeld();
+    if (this.dragging) return false;
+    return this.trash('where' in object ? { kind: 'item', owner, object } : { kind: 'thing', owner, object });
+  }
+
+  private trash(e: HeldObject) {
     const { owner } = e;
     const born = e.kind === 'item' ? 0 : e.object.doodle.born;
     if (e.kind === 'item') {
@@ -160,7 +177,43 @@ export class OverlayTools {
       e.object.release();
     }
     this.held = null;
+    this.origin = null;
     this.lastTrash = { entry: e, born, at: owner.ctx.world.time };
+    return true;
+  }
+
+  /** Cancel puts an existing item back; an unused supply is never left on the desktop. */
+  cancel() {
+    const e = this.held, origin = this.origin;
+    if (!e) return false;
+    this.held = null; this.origin = null; this.wipeFrom = null;
+    if (e.kind === 'item') {
+      e.owner.userWeaponControlled = false; e.object.cursorControlled = false;
+      if (!e.owner.items.list.includes(e.object)) return true;
+      if (origin?.created) e.owner.items.remove(e.object);
+      else if (!this.pets().includes(e.owner) && this.pets()[0]) {
+        const owner = this.pets()[0];
+        e.owner.items.remove(e.object); owner.items.list.push(e.object); owner.giveBack(e.object);
+      }
+      else if (origin?.state) {
+        const s = origin.state;
+        if (s.where === 'hand') e.owner.items.toHand(e.object, s.hand);
+        else if (s.where === 'belt' || s.where === 'worn') {
+          if (!e.owner.items.stow(e.object)) e.owner.items.drop(e.object, 0, 0);
+          // Keep the original slot when it is still free.
+          if (s.where === 'belt' && s.slot >= 0 && !e.owner.items.belt[s.slot]) {
+            e.owner.items.belt[e.object.slot] = null;
+            e.object.slot = s.slot; e.owner.items.belt[s.slot] = e.object;
+          }
+        } else {
+          e.object.at = { ...s.at }; e.object.dir = { ...s.dir };
+          e.owner.items.drop(e.object, 0, 0); e.object.resetMotion();
+        }
+      }
+    } else {
+      e.object.release();
+      if (origin?.created && e.kind === 'thing') e.owner.props.remove(e.object);
+    }
     return true;
   }
 

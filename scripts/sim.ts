@@ -719,16 +719,19 @@ function calmPet() {
   const d = pet.ctx.doodles[0];
   check('doodling: pen out of the belt, its tip does the drawing, back on the belt after', inHand && tipOnPaper < 6 && !!d?.done && pen.where === 'belt', `inHand=${inHand} tipGap=${tipOnPaper.toFixed(1)} done=${d?.done} pen=${pen.where}`);
 }
-{ // Right-click him: a menu with "Take pen". Take it, and he can't draw; he asks for it back and snatches it.
+{ // Right-click opens the inventory; the legacy uncontrolled take/ask-back behavior remains available.
   const pet = calmPet();
+  let bagOpened = false;
+  pet.onSatchel = () => { bagOpened = true; };
   const n = pet.char.body.j.neck;
   pet.cursor(n.x, n.y + 5, 0, 0);
   const opened = pet.contextMenu(n.x, n.y + 5);
   const rows = (pet as any).menu?.rows.map((r: { label: string }) => r.label) as string[];
   const pen = pet.items.find('draw')!;
-  (pet as any).menu.rows.find((r: { label: string }) => r.label === 'Take pen').act();
+  (pet as any).menu.rows.find((r: { label: string }) => r.label === 'Open bag').act();
   (pet as any).menu = null;
-  check('right-click menu: talk, take his things', opened && rows[0].startsWith('Talk') && rows.includes('Take pen') && rows.includes('Take wooden sword') && pen.where === 'cursor', rows?.join(' | '));
+  check('right-click menu: talk and one discoverable inventory entry', opened && bagOpened && rows[0].startsWith('Talk') && rows.includes('Open bag') && !rows.some(r => r.startsWith('Take ')), rows?.join(' | '));
+  pet.takeItem(pen);
   const said: string[] = [];
   const origSay = pet.ctx.say; pet.ctx.say = (t, x) => { said.push(t); origSay(t, x); };
   // Calm and a bit tired, so he isn't off on a 40-second monkey-bars run when it's time to ask for it back.

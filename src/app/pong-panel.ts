@@ -23,7 +23,8 @@ export function createPongPanel(
   for (const b of [join, rematch, leave, keys]) b.type = "button";
   const controls = document.createElement("div");
   controls.append(join, rematch, keys, leave);
-  root.append(title, court, controls);
+  // Controls stay in the same place when the intermittent court preview appears.
+  root.append(title, controls, court);
   document.body.append(root);
   let keyboard = false;
   const tv = () => pets()[0]?.props.things.find((t) => t.pong);
@@ -99,11 +100,12 @@ export function createPongPanel(
       leave.hidden = p.user === null;
       rematch.hidden = p.winner === null;
       paintPong(court.getContext("2d")!, p, 0, 0, court.width, court.height);
+      // Apply visibility before measuring, including on Escape and Join.
+      court.hidden = p.user === null && p.time % 25 > 4 && p.winner === null;
       const b = t!.center;
       root.style.left = `${Math.max(8, Math.min(innerWidth - root.offsetWidth - 8, b.x - 80))}px`;
       root.style.top = `${Math.max(8, Math.min(innerHeight - root.offsetHeight - 8, b.y - 230))}px`;
       // The full court is available on demand; otherwise it is an intermittent preview.
-      court.hidden = p.user === null && p.time % 25 > 4 && p.winner === null;
     },
   };
 }

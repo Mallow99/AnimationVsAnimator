@@ -1,5 +1,8 @@
 # Project roadmap
 
+Owner pause: finish the current bug/coherence cleanup, then stop before the next update. Resume only
+when the owner asks to continue; the unlimited batch-scope preference remains in effect.
+
 Owner-approved five-update plan. Batch scope is unlimited; the owner removed the one-or-two-system limit on 2026-10-06. Keep runnable builds, regression checks, visual checks and separate Mac/Windows acceptance evidence. New actions must ship with offline commands.
 
 Current authorized work completes Workshop and Household, including the owner’s additional requests: optional movable pixel-art bag/trash shortcuts, no interaction flicker, wearable satchels, group activities for 2–5 with count-specific activities, and couch seating for five.

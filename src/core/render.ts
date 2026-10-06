@@ -68,7 +68,12 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look, extras: Dept
     ctx.arc(j.head.x, j.head.y, c.d.headR, 0, Math.PI * 2);
     ctx.fill();
   } });
-  for (const e of extras) parts.push({ z: e.z, draw: () => e.draw(ctx) });
+  // Accessories can change stroke width, alpha or transforms. Isolate each one so
+  // limbs drawn after it retain the figure's look in every pose/depth order.
+  for (const e of extras) parts.push({ z: e.z, draw: () => {
+    ctx.save();
+    try { e.draw(ctx); } finally { ctx.restore(); }
+  } });
   parts.sort((a, b) => a.z - b.z);
   for (const p of parts) p.draw();
 

@@ -6,18 +6,35 @@ for the current five-update roadmap; batch scope is unlimited.
 
 ## Satchels, supplies and trash
 
-Click a figure's pixel satchel, or choose **Open satchel** from its menu. The inventory contains
-its actual owned items. **Tools & furniture supplies** opens the catalog; owner buttons choose who
-receives a new tool. Pull an item onto the desktop or another figure. You can also grab an equipped
-hand item directly. Actual weapons taken from a hand use the existing combat controls below.
+Right-click a figure → **Open bag**, click its wearable satchel, or tell it “open bag.”
+A brief hover hint points to this menu. The figure menu has one inventory entry instead of a separate
+Take row for every owned item. **Activities…** opens the activity list directly.
 
-General → **Show supplies bag shortcut** and **Show trash can** enable the optional pixel icons.
-Both start hidden. Drag either shortcut to reposition it; its placement survives restart.
-Mouse use leaves the overlay non-focusable. **Keyboard** explicitly enables Tab/Enter/Space.
-Click a choice then click to place, or drag it; Escape/right-click drops transport safely.
+- **Bag** contains that figure's actual items, with **In bag / In hand / Wearing** states and pistol ammo.
+  Click a card to inspect it; this keeps the panel open. **Take out** puts the original item on your
+  cursor. **Use with cursor** enables weapon controls. **Store in bag**, **Drop beside figure** and
+  **Trash** say what they do. Dragging a card remains available.
+- **Supplies** creates new tools and furniture. Select a card, then **Give to [figure]** or **Place on
+  desktop**. Owner buttons choose the recipient. A full bag asks you to free a slot or place the tool.
+- **Activities** lists everyday, workshop, drawing, group, game, arranging and friend activities.
+  Unavailable entries explain the missing tools, furniture or free companions. **Stop current activity**
+  releases the current activity; **Wake up** is shown for a sleeping figure.
+- **How to use this** explains these controls inside the panel. The tabs, title and close control
+  remain visible while the choices scroll, and an open panel stays where you opened it.
 
-Drop an in-app object into the optional trash can; **Undo** retrieves the last object with the same
-identity, art and ammo. Undo lasts for this session. Trashed objects stay absent after restart.
+After taking an object out, drag or click to place it, or drop it onto a figure to store/pass it.
+The temporary controls in the top-right offer **Cancel** and, for weapons, **Use with cursor**.
+Escape/right-click/Cancel restores an existing item to its previous hand, worn state or bag slot;
+unplaced new supplies are discarded. Figures cannot snatch a tool during user-controlled use.
+
+**Trash** is also available from an object's right-click menu and Settings → Items. **Undo trash**
+in the bag restores the last original object even when the trash shortcut is hidden. Undo lasts for
+this session and preserves identity, art and ammo. Bulk furniture trash only allows the last object
+back. Furniture actions such as **Sit here** and **Make a blueprint here** use the object clicked.
+
+General → **Show supplies bag shortcut** and **Show trash can** enable optional pixel icons. Both
+start hidden. Drag either to reposition it; placement survives restart. Mouse use leaves the overlay
+non-focusable. **Keyboard** explicitly enables Tab/Enter/Space; Escape closes it and releases focus.
 
 ## Workshop
 
@@ -54,7 +71,7 @@ retain shared activities, disagreements and effective fighting moves.
 
 1. Start this branch with `npm ci` then `npm start`. Open a satchel and use supplies with the mouse;
    verify no one disappears or switches Spaces. Toggle and relocate the two shortcuts.
-2. Pull, pass, store, trash and undo tools. Use Keyboard, Escape and a smaller display. Confirm
+2. Inspect, pull, pass, store, cancel, trash and undo tools with both shortcuts hidden. Use Keyboard, Escape and a smaller display. Confirm
    normal Chrome focus/click-through returns after explicit keyboard navigation.
 3. Wipe two nearby drawings locally. Draw/refine a katana, interrupt and restart mid-project;
    complete it and restart again. Verify one durable katana, saved ammo, shelf positions and desk art.
@@ -68,7 +85,7 @@ Cloud Linux/Chromium tests do not establish Mac Spaces/focus, real native helper
 
 ## Use a figure's actual weapon
 
-Take a weapon from its menu or Settings → Items → Take. Its original item follows your cursor;
+Choose **Use with cursor** in its bag, or take it out and choose **Use with cursor** in the temporary controls. Its original item follows your cursor;
 the small weapon bar shows the current tool and relevant controls.
 
 - Sword or mace: hold the left button and swipe quickly to swing.

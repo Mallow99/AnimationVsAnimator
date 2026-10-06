@@ -70,7 +70,7 @@ export function groupPlan(
   if (
     peers.length < n - 1 ||
     n < 2 ||
-    c.char.mode !== "ground" ||
+    !["ground", "sit"].includes(c.char.mode) ||
     !c.char.whole
   ) {
     c.say("Not enough friends free right now.", 1.5);

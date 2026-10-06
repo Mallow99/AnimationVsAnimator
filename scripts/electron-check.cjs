@@ -66,6 +66,7 @@ app.whenReady().then(async () => {
   const card = await overlay.webContents.executeJavaScript('(() => {const el=document.querySelector(".bag-choice[data-id=book]");el.scrollIntoView({block:"nearest"});const r=el.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()');
   overlay.webContents.sendInputEvent({type:'mouseMove',...card});
   overlay.webContents.sendInputEvent({type:'mouseDown',...card,button:'left',clickCount:1});
+  overlay.webContents.sendInputEvent({type:'mouseMove',x:card.x+10,y:card.y});
   await until(() => overlay.webContents.executeJavaScript('window.toolBag.dragging'));
   await overlay.webContents.executeJavaScript('window.electronBagBook=window.toolBag.tools.held.object');
   assert(!overlay.isFocusable(), 'pointer pulling an item changed native focus');
@@ -86,6 +87,12 @@ app.whenReady().then(async () => {
   await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").click();document.querySelector("#bagKeyboard").click()');
   await until(() => overlay.isFocusable());
   await overlay.webContents.executeJavaScript('document.querySelector(".bag-choice[data-id=book]").focus()');
+  overlay.webContents.sendInputEvent({type:'keyDown',keyCode:'Return'});
+  overlay.webContents.sendInputEvent({type:'keyUp',keyCode:'Return'});
+  await until(() => overlay.webContents.executeJavaScript('!document.querySelector("#bagDetails").hidden'));
+  assert(overlay.isFocusable(), 'selecting an item lost keyboard focus');
+  assert(await overlay.webContents.executeJavaScript('window.toolBag.isOpen && !window.toolBag.dragging'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#bagDetails [data-action=place]").focus()');
   overlay.webContents.sendInputEvent({type:'keyDown',keyCode:'Return'});
   overlay.webContents.sendInputEvent({type:'keyUp',keyCode:'Return'});
   await until(() => overlay.webContents.executeJavaScript('window.toolBag.dragging'));

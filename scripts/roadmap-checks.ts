@@ -19,6 +19,9 @@ import { propActions } from "../src/core/capabilities";
 import { PlayHandheld } from "../src/core/skills/handheld";
 import { FriendlyMoment } from "../src/core/skills/friendly-moment";
 import { LifeRhythm } from "../src/core/life-rhythm";
+import { activitiesFor } from "../src/app/activities";
+import { drawCharacter, type Ctx2D } from "../src/core/render";
+import { satchelParts } from "../src/core/satchel";
 const bounds = { left: 0, right: 1400, top: 0, floor: 800 },
   dt = 1 / 120;
 let seed = 21;
@@ -631,5 +634,99 @@ test("specialty roles favor a free game expert over a nearer non-expert", () => 
   const tv = pets[0].props.spawn("tv", 260, 720, 1)!;
   const plan = groupPlan(pets[0].ctx, "pong", tv)!;
   assert.equal(plan.members[1], pets[3].ctx.who);
+});
+test("satchel and custom accessory styles cannot thin later body strokes", () => {
+  const [p] = fixture();
+  const strokes: { width: number; color: string }[] = [];
+  const stack: { lineWidth: number; strokeStyle: string }[] = [];
+  const g = {
+    lineWidth: 1, strokeStyle: "", fillStyle: "", lineCap: "round", lineJoin: "round",
+    save() { stack.push({ lineWidth: this.lineWidth, strokeStyle: this.strokeStyle }); },
+    restore() { Object.assign(this, stack.pop()); },
+    beginPath() {}, moveTo() {}, lineTo() {}, arc() {}, fill() {}, fillRect() {}, roundRect() {},
+    stroke() { strokes.push({ width: this.lineWidth, color: this.strokeStyle }); },
+  };
+  // Put the satchel behind the front limbs: the draw/sit depth order that exposed the regression.
+  for (const j of p.char.body.points) j.z = 20;
+  p.char.body.j.hip.z = 0; p.char.body.j.neck.z = 0;
+  for (const yaw of [-Math.PI / 2, 0, Math.PI / 2, Math.PI]) {
+    p.char.yaw = yaw; strokes.length = 0;
+    drawCharacter(g as unknown as Ctx2D, p.char, { ...p.config.look, outline: false, lineWidth: 7 }, [
+      ...satchelParts(p.char), { z: 4, draw(ctx) { ctx.lineWidth = 0.5; ctx.strokeStyle = "#abcdef"; } },
+    ]);
+    const body = strokes.filter(s => s.color !== "#77624a");
+    assert.equal(body.length, 5);
+    assert(body.every(s => s.width === 7 * p.char.scale));
+    assert.equal(g.lineWidth, 1);
+    assert.equal(stack.length, 0);
+  }
+});
+test("Cancel restores an owned item and discards unplaced supplies", () => {
+  const pets = fixture(2), p = pets[0], tools = new OverlayTools(() => pets);
+  const gun = p.items.give("gun", p.char)!; gun.ammo = 2;
+  const slot = gun.slot, count = p.items.list.length;
+  assert(tools.beginItem(p, gun, { x: 600, y: 200 }));
+  tools.move({ x: 700, y: 250 }, { x: 0, y: 0 });
+  assert(tools.cancel());
+  assert.equal(gun.where, "belt"); assert.equal(gun.slot, slot); assert.equal(gun.ammo, 2);
+  assert.equal(p.items.list.length, count); assert(!p.userWeaponControlled); assert(!gun.cursorControlled);
+  assert(tools.pull(p, "item", "book", { x: 500, y: 200 }));
+  assert(tools.cancel()); assert.equal(p.items.list.length, count);
+  const furniture = p.props.placed.length;
+  assert(tools.pull(p, "prop", "chair", { x: 500, y: 200 }));
+  assert(tools.cancel()); assert.equal(p.props.placed.length, furniture);
+  p.items.toHand(gun, "L");
+  assert(tools.beginItem(p, gun, { x: 600, y: 200 })); assert(tools.cancel());
+  assert.equal(gun.where, "hand"); assert.equal(gun.hand, "L");
+  assert(tools.beginItem(p, gun, { x: 600, y: 200 }));
+  pets.shift();
+  assert(tools.cancel());
+  assert(!p.items.list.includes(gun)); assert(pets[0].items.onHim.includes(gun));
+  assert.equal(gun.ammo, 2);
+});
+test("a user-controlled tool cannot be snatched during prolonged use", () => {
+  const [p] = fixture(), tools = new OverlayTools(() => [p]), pen = p.items.onHim[0];
+  assert(tools.beginItem(p, pen, p.char.body.j.handR));
+  p.paused = false;
+  for (let i = 0; i < 35 / dt; i++) p.update(dt);
+  assert.equal(pen.where, "cursor");
+  assert(!p.mind.weigh(p.ctx).some(a => a.name === "askback"));
+  assert(tools.cancel());
+});
+test("activity choices explain missing requirements and seated leaders can invite", () => {
+  const [p] = fixture();
+  let actions = activitiesFor(p);
+  assert(actions.find(a => a.command === "deskwork")!.needs?.includes("desk"));
+  assert(actions.find(a => a.command === "group:relay")!.needs?.includes("5"));
+  assert(!actions.find(a => a.command === "drawitem:katana")!.needs);
+  p.props.spawn("desk", 700, 720, 1);
+  assert(!activitiesFor(p).find(a => a.command === "deskwork")!.needs);
+  const pets = groupFixture(2), a = pets[0];
+  a.char.sit();
+  assert(groupPlan(a.ctx, "wave"));
+  a.command("do:group:wave");
+  assert.equal(a.char.mode, "ground");
+  a.update(dt);
+  assert.equal(a.mind.activeSkill?.name, "group");
+});
+test("the figure menu stays short and furniture actions target the clicked object", () => {
+  const [p] = fixture();
+  let opened = 0;
+  p.onSatchel = () => { opened++; }; p.onActivities = () => {}; p.onSupplies = () => {};
+  p.command("hear:open bag"); assert.equal(opened, 1);
+  p.command("hear:show your inventory!"); assert.equal(opened, 2);
+  for (const def of p.items.defs.values()) p.items.give(def.id, p.char);
+  assert(p.contextMenu(p.char.body.j.head.x, p.char.body.j.head.y));
+  const menu = () => (p as unknown as { menu: { rows: { label: string; act: () => void }[] } }).menu;
+  assert(menu().rows.some(r => r.label === "Open bag"));
+  assert(!menu().rows.some(r => r.label.startsWith("Take ")));
+  assert(menu().rows.length <= 5);
+  const first = p.props.spawn("desk", 700, 720, 1)!, second = p.props.spawn("desk", 950, 720, 1)!;
+  assert(p.contextMenu(second.center.x, second.center.y));
+  menu().rows.find(r => r.label === "Make a blueprint here")!.act();
+  p.paused = false; p.update(dt);
+  assert.equal(p.mind.activeSkill?.name, "deskwork");
+  assert.equal((p.mind.activeSkill as unknown as { desk: unknown }).desk, second);
+  assert.notEqual((p.mind.activeSkill as unknown as { desk: unknown }).desk, first);
 });
 console.log(`${passed} roadmap checks passed`);

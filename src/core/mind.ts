@@ -338,7 +338,7 @@ export class Mind {
     // You've had one of his things for a while: he stops lazing around and asks for it back.
     const taken = c.items.carried;
     const lazing = !this.skill || ['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch'].includes(this.skill.name);
-    if (taken && w.time - this.takenAt > 20 && lazing && !this.queued && ch.ready && ch.useHand && m.label !== 'sad' && m.label !== 'scared' && !m.asleep) {
+    if (taken && !taken.cursorControlled && w.time - this.takenAt > 20 && lazing && !this.queued && ch.ready && ch.useHand && m.label !== 'sad' && m.label !== 'scared' && !m.asleep) {
       this.takenAt = w.time;
       this.interrupt(c, new AskBack(taken));
       this.why = `wants his ${taken.def.name.toLowerCase()} back`;
@@ -410,7 +410,7 @@ export class Mind {
    */
   command(c: Ctx, name: string, why = 'you told him to', quiet = false): boolean {
     const ch = c.char, m = c.mood;
-    if (name === 'wake') { m.asleep = false; this.end(c); ch.standUp(); return true; }
+    if (name === 'wake') { m.asleep = false; this.reset(c); ch.standUp(); return true; }
     // Asked directly, he skips his own "not in the mood" and "you're busy in that window" filters.
     this.forced = true; this.cant = {};
     const s = this.makeSkill(c, name);
@@ -420,11 +420,16 @@ export class Mind {
       if (!quiet) c.say(reason, reason.length > 2 ? 2.2 : 1);
       return false;
     }
-    this.interrupt(c, s);
-    m.asleep = false;
-    this.why = why;
-    if (ch.mode === 'lie' || ch.mode === 'sit') ch.standUp();
+    this.startActivity(c, s, why);
     return true;
+  }
+
+  /** A user chose an exact object, rather than asking us to find one by kind. */
+  startActivity(c: Ctx, skill: Skill, why = 'you chose this activity') {
+    this.interrupt(c, skill);
+    c.mood.asleep = false;
+    this.why = why;
+    if (c.char.mode === 'lie' || c.char.mode === 'sit') c.char.standUp();
   }
 
   acceptGroup(c: Ctx, plan: GroupPlan, sender: string) {
@@ -671,7 +676,7 @@ export class Mind {
     if (lying && ch.useHand) opts.push({ name: 'pickup', why: `his ${lying.def.name.toLowerCase()} is on the floor`, score: L === 'sleepy' ? 0.3 : 1.6, make: () => new FetchItem(lying) });
     // You've had one of his things for a while.
     const taken = c.items.carried;
-    if (taken && w.time - this.takenAt > 15 && ch.useHand) {
+    if (taken && !taken.cursorControlled && w.time - this.takenAt > 15 && ch.useHand) {
       opts.push({ name: 'askback', why: `wants his ${taken.def.name.toLowerCase()} back`, score: L === 'sad' || L === 'scared' ? 0.3 : 2.2 + s.boredom * 0.5, make: () => { this.takenAt = w.time; return new AskBack(taken); } });
     }
     return opts;

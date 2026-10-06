@@ -214,9 +214,10 @@ export class RefineProject extends Skill {
   private working = false;
   private announced = -1;
   private source: Item["def"] | PropDef | null = null;
+  constructor(private selectedBench?: Thing) { super(); }
   start(c: Ctx) {
     this.bench =
-      propsOf(c, "work").find((t) => propActions(t.def!).includes("refine")) ??
+      this.selectedBench ?? propsOf(c, "work").find((t) => propActions(t.def!).includes("refine")) ??
       null;
     this.object =
       c.items.list.find((i) => i.ink && i.where !== "cursor") ??
@@ -345,8 +346,9 @@ export class SortTools extends Skill {
   private item: Item | null = null;
   private index = 0;
   private phase: "fetch" | "place" = "fetch";
+  constructor(private selectedShelf?: Thing) { super(); }
   start(c: Ctx) {
-    this.shelf = propsOf(c, "storage")[0] ?? null;
+    this.shelf = this.selectedShelf ?? propsOf(c, "storage")[0] ?? null;
     if (!this.shelf) c.say("I need a tool shelf.", 1.5);
   }
   update(c: Ctx) {

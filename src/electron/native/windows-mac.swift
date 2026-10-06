@@ -201,7 +201,10 @@ while true {
       lock.lock(); frontPid = front.processIdentifier; frontName = front.localizedName ?? ""; lock.unlock()
     }
     lock.lock(); let want = refocusWanted; refocusWanted = false; let moves = pendingMoves; pendingMoves = [:]; let closes = pendingCloses; pendingCloses = []; lock.unlock()
-    if want, let app = userApp { app.activate(options: []) }
+    // A pointer press is not a request to change the user's app/Space. Only undo
+    // an actual activation of our own app, and never reactivate an already-front app.
+    if want, Int(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1) == selfPid,
+       let app = userApp, !app.isTerminated { app.activate(options: []) }
     for (id, p) in moves { moveWindow(id, p) }
     for (request, id) in closes { closeWindow(request, id) }
     var out: [String] = []
