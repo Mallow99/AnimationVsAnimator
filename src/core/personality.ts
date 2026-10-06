@@ -5,6 +5,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
   switch (p) {
     case 'competitive':
       return {
+        exercise: 1.8, read: 0.65,
         duel: 1.5,
         spar: 1.35,
         videogame: 1.35,
@@ -15,6 +16,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
       };
     case 'gentle':
       return {
+        sip: 1.8, read: 1.45,
         duel: 0.45,
         refine: 1.8, arrange: 1.6, sorttools: 1.4, checkfriend: 1.6,
         bump: 0.2,
@@ -26,6 +28,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
       };
     case 'mischievous':
       return {
+        yoyo: 1.8, read: 0.8,
         grabcursor: 1.5,
         drawtool: 1.4,
         fistbump: 1.4,
@@ -34,6 +37,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
       };
     case 'adventurous':
       return {
+        exercise: 1.3, yoyo: 1.35, read: 0.65,
         explore: 1.5,
         pong: 1.5, handheld: 1.5,
         climb: 1.4,
@@ -43,6 +47,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
       };
     default:
       return {
+        read: 1.3, sip: 1.2,
         doodle: 1.5,
         deskwork: 1.6, comparedrawings: 1.4,
         drawtool: 1.7,

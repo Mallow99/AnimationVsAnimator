@@ -396,6 +396,7 @@ ipcMain.on('items:openFolder', () => { readItemDefs(); shell.openPath(itemsDir()
 ipcMain.on('pet:typing', (_e, on: boolean) => {
   if (!win) return;
   if (win.isFocusable() === !!on) return; // Avoid recreating/toggling a native panel for duplicate focus messages.
+  watcher?.setKeyboard(!!on);
   if (on) {
     win.setFocusable(true);
     win.focus();

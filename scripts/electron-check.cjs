@@ -17,6 +17,13 @@ app.on('web-contents-created', (_e, web) => {
     catch (error) { console.error('Failed smoke script:', source); throw error; }
   };
 });
+// Upgrade an existing install, while keeping an edited example and a deleted example.
+const examplesDir=path.join(dir,'items');fs.mkdirSync(examplesDir);
+const history=require('../assets/builtin-history.json');
+for(const name of ['book','couch'])fs.writeFileSync(path.join(examplesDir,name+'.json'),JSON.stringify(history[name+'.json'].at(-1)));
+const editedSponge={...require('../src/core/items/sponge.json'),name:'My sponge'};
+fs.writeFileSync(path.join(examplesDir,'sponge.json'),JSON.stringify(editedSponge));
+fs.writeFileSync(path.join(examplesDir,'.copied.json'),JSON.stringify(['book.json','couch.json','sponge.json','cup.json']));
 require('../dist/electron/main.js');
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 async function until(fn) { for (let i = 0; i < 160; i++) { if (await fn()) return; await pause(50); } throw new Error('Electron readiness timed out'); }
@@ -24,6 +31,12 @@ app.whenReady().then(async () => {
   let overlay, settings;
   await until(() => { overlay = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/app/index.html')); return !!overlay && !overlay.webContents.isLoading(); });
   await until(() => overlay.webContents.executeJavaScript('!!window.pet'));
+  await until(()=>fs.existsSync(path.join(examplesDir,'bookshelf.json')));
+  for(const [name,kind]of [['book','items'],['couch','props']])assert.deepEqual(JSON.parse(fs.readFileSync(path.join(examplesDir,name+'.json'),'utf8')),require('../src/core/'+kind+'/'+name+'.json'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(examplesDir,'sponge.json'),'utf8')),editedSponge);
+  assert(!fs.existsSync(path.join(examplesDir,'cup.json')),'an owner-deleted example returned');
+  console.log('PASS Electron upgrade: stock book/couch updated, custom sponge kept, deleted example kept deleted, new bookshelf supplied');
+
   await until(() => overlay.webContents.executeJavaScript('window.pet.ctx.world.windows.length === 1'));
   await overlay.webContents.executeJavaScript('window.petShell.openSettings()');
   await until(() => { settings = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/settings/index.html?pet=0')); return !!settings && !settings.webContents.isLoading(); });
@@ -31,7 +44,7 @@ app.whenReady().then(async () => {
   await settings.webContents.executeJavaScript('window.petShell.setConfig({aiInterval:120})');
   await until(() => overlay.webContents.executeJavaScript('window.pet.config.aiInterval === 120'));
   await settings.webContents.executeJavaScript('document.querySelector("[data-tab=items]").click(); window.petShell.command("sync")');
-  await until(() => settings.webContents.executeJavaScript('document.querySelectorAll("#propKinds .thing-card canvas").length === 8'));
+  await until(() => settings.webContents.executeJavaScript('document.querySelectorAll("#propKinds .thing-card canvas").length === 9'));
   await settings.webContents.executeJavaScript('document.querySelector("button[aria-label=\\"Wear: Helmet\\"]").click()');
   await until(() => overlay.webContents.executeJavaScript('window.pet.items.onHim.some(i => i.def.id === "helmet" && i.where === "worn")'));
   await settings.webContents.executeJavaScript('document.querySelector("#itemKinds").scrollIntoView({block:"start"})');

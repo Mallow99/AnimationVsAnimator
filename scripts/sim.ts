@@ -263,12 +263,18 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   ]);
   const seen = new Set<string>();
   let out = 0, onWin = 0;
-  petFor(900, pet, () => {
+  // This fixture verifies window travel, independently of a valid multi-minute reading choice.
+  // First exercise climb/getdown explicitly, then keep the autonomous 15-minute life check.
+  pet.paused = true; petFor(3, pet); pet.paused = false;
+  pet.command('do:climb');
+  const observe = () => {
     if (pet.mind.skill) seen.add(pet.mind.skill.name);
     const j = pet.char.body.j;
     if (j.hip.x < 0 || j.hip.x > 1400 || j.hip.y > 800) out++;
     if (pet.char.support >= 0) onWin++;
-  });
+  };
+  petFor(30, pet, observe); pet.command('do:getdown'); petFor(20, pet, observe);
+  petFor(900, pet, observe);
   check('with windows: climbs up and gets down', seen.has('climb') && seen.has('getdown') && out === 0, `${[...seen].join(',')} onWindowFrames=${onWin} mode=${pet.char.mode} support=${pet.char.support} safeDrop=${pet.ctx.lessons.safeDrop} options=${pet.mind.weigh(pet.ctx).map(o=>o.name).join(',')}`);
 }
 { // Cheap learning: a jump down that hurts makes him warier of that height.

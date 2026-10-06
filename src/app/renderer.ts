@@ -316,7 +316,7 @@ const cursorWeapon = new CursorWeapon();
 const weaponBar = document.createElement('div');
 weaponBar.id = 'weaponBar';
 weaponBar.style.cssText =
-  'position:fixed;right:12px;top:12px;display:none;gap:5px;padding:8px;background:#fff;color:#172033;font:13px system-ui;border-radius:6px;z-index:20';
+  'position:fixed;right:12px;top:12px;display:none;gap:5px;padding:8px;background:#f4efe5;color:#343c3b;font:12px monospace;border:2px solid #8e806d;max-width:calc(100vw - 24px);box-sizing:border-box;flex-wrap:wrap;z-index:26';
 for (const kind of ['none', 'sword', 'mace', 'gun', 'bow'] as CursorWeaponKind[]) {
   const button = document.createElement('button');
   button.type = 'button';
@@ -327,6 +327,26 @@ for (const kind of ['none', 'sword', 'mace', 'gun', 'bow'] as CursorWeaponKind[]
   };
   weaponBar.append(button);
 }
+const carryWeapon = document.createElement('button');
+carryWeapon.textContent = 'Carry';
+carryWeapon.onclick = () => {
+  const item = cursorWeapon.item, owner = cursorWeapon.owner;
+  if (!item || !owner) return;
+  cursorWeapon.detach(); weaponBar.style.display = 'none';
+  toolBag.takeItem(owner, item); updateClickThrough(last.x, last.y);
+};
+const dropWeapon = document.createElement('button');
+dropWeapon.textContent = 'Drop';
+dropWeapon.onclick = () => {
+  const item = cursorWeapon.item, owner = cursorWeapon.owner;
+  if (!item || !owner) return;
+  cursorWeapon.detach(); owner.items.drop(item, 0, 0);
+  weaponBar.style.display = 'none'; save(); updateClickThrough(last.x, last.y);
+};
+const reloadWeapon = document.createElement('button');
+reloadWeapon.textContent = 'Reload';
+reloadWeapon.onclick = () => cursorWeapon.reload();
+weaponBar.append(carryWeapon, dropWeapon, reloadWeapon);
 const weaponHint = document.createElement('span');
 weaponHint.style.cssText = 'max-width:260px;align-self:center;font-size:12px';
 weaponBar.append(weaponHint);
@@ -502,13 +522,17 @@ function frame(now: number) {
   if (cursorWeapon.owner && cursorWeapon.item && (!cursorWeapon.owner.items.list.includes(cursorWeapon.item) || cursorWeapon.item.where !== 'cursor')) {
     cursorWeapon.detach(); weaponBar.style.display = 'none';
   }
-  const owner = desktopPets().find(p => p.items.carried && isWeapon(p.items.carried.def));
+  const owner = desktopPets().find(p => p.userWeaponControlled && p.items.carried?.cursorControlled && isWeapon(p.items.carried.def));
   if (!toolBag.dragging && owner && owner.items.carried && cursorWeapon.item !== owner.items.carried) {
     cursorWeapon.attach(owner.items.carried, owner);
     weaponBar.style.display = 'flex'; updateClickThrough(last.x, last.y);
   }
   cursorWeapon.update(dt, desktopPets());
-  const hint = cursorWeapon.item?.def.use === 'gun' ? 'Hold and drag to aim/fire · R reload' : cursorWeapon.item?.def.use === 'shoot' ? 'Hold and drag to aim · release to shoot' : 'Hold and swipe to swing';
+  for (const button of Array.from(weaponBar.querySelectorAll('button')).slice(1,5)) button.hidden = !!cursorWeapon.owner;
+  carryWeapon.hidden = dropWeapon.hidden = !cursorWeapon.owner;
+  reloadWeapon.hidden = cursorWeapon.kind !== 'gun';
+  reloadWeapon.disabled = !!cursorWeapon.item?.reloadRemaining || cursorWeapon.item?.ammo === 6;
+  const hint = cursorWeapon.item?.def.use === 'gun' ? 'Hold and drag to aim/fire · Reload button' : cursorWeapon.item?.def.use === 'shoot' ? 'Hold and drag to aim · release to shoot' : 'Hold and swipe to swing';
   weaponHint.textContent = `${cursorWeapon.status} · ${hint}`;
   weaponBar.title = `${cursorWeapon.status} · ${hint} · right-click to drop or hand back · Esc to return`;
   weaponBar.setAttribute('aria-label', weaponBar.title);

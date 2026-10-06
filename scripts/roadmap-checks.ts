@@ -255,9 +255,13 @@ test("animator bucket colors once and eraser removes only ink objects", () => {
   p.items.drop(item, 0, 0);
   const tools = new OverlayTools(() => [p]);
   tools.pull(p, "item", "paint-bucket", { x: 600, y: 690 });
+  assert.equal(item.ink!.progress, 0, "picking up paint must be passive");
+  tools.using = true; tools.move({x:600,y:690},{x:0,y:0});
   assert.equal(item.ink!.progress, 0.6);
   tools.release({ x: 850, y: 690 }, { x: 0, y: 0 });
   tools.pull(p, "item", "eraser", { x: 600, y: 690 });
+  assert(p.items.list.includes(item), "picking up an eraser must be passive");
+  tools.using = true; tools.move({x:600,y:690},{x:0,y:0});
   assert(!p.items.list.includes(item));
   assert(p.items.list.some((i) => i.def.id === "pen"));
 });

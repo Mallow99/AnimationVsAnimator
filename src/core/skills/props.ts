@@ -45,6 +45,7 @@ export class SitOnProp extends Skill {
     c.look = 'default';
     this.dur ??= activitySeconds(c, 'sitdown');
     this.style = seatStyle(c, this.seat);
+    if (this.seat.sitters.size > 1) this.style = 'front';
     // Lying along the couch needs it to himself.
     if (this.style === 'lie' && this.seat.sitters.size) this.style = 'lounge';
   }
@@ -72,6 +73,7 @@ export class SitOnProp extends Skill {
       return true;
     }
     const at = seat.seatFor(c.who)!;
+    if (seat.sitters.size > 2) ch.seatStyle = 'front';
     ch.seat = { x: ch.seat.x + (at.x - ch.seat.x) * 0.12, y: at.y };
     // Someone wants to sit too: up he gets from lying along it, and leans back instead.
     if (ch.seatStyle === 'lie' && seat.sitters.get(c.who)?.lying === false) { ch.seatStyle = 'lounge'; c.say(pick(['oh, ok', 'fine, sit', '*scoots*']), 1.2); }

@@ -146,11 +146,11 @@ try {
   await evaluate("window.equipCursor('sword')");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('#weaponBar')).display"),'flex');
   await evaluate("document.querySelector('#weaponBar button').click()");assert.equal(await evaluate('window.cursorWeapon.kind'),'none');
-  // Taking an actual owned weapon automatically connects the pointer controls to that same item.
+  // Explicitly using an owned weapon connects pointer controls to that same item.
   await evaluate(`(() => {
     for(const p of window.pets)p.paused=true;
     const p=window.pet;p.mind.reset(p.ctx);
-    const gun=p.items.give('gun',p.char);gun.ammo=1;p.takeItem(gun);
+    const gun=p.items.give('gun',p.char);gun.ammo=1;p.useItem(gun);
   })()`);
   await until(()=>evaluate('window.cursorWeapon.item?.def.id === "gun"'));
   await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:220,y:260});
@@ -165,7 +165,7 @@ try {
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});
   await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
   assert(await evaluate('!window.pet.userWeaponControlled && !window.pet.items.carried'));
-  await evaluate("(() => {const p=window.pet;p.takeItem(p.items.give('bow',p.char));})()");
+  await evaluate("(() => {const p=window.pet;p.useItem(p.items.give('bow',p.char));})()");
   await until(()=>evaluate('window.cursorWeapon.item?.def.id === "bow"'));
   await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:200,y:260});
   await send('Input.dispatchMouseEvent',{type:'mousePressed',x:200,y:260,button:'left',clickCount:1});
@@ -194,7 +194,7 @@ try {
   await evaluate('window.habitats.refresh([])');assert.equal(await evaluate('window.habitats.activePets.length'),0);
   await evaluate('window.habitats.returnHome(0)');assert.equal(await evaluate('window.pet.paused'),false);
   // The physical bag uses real pointer input, and removed objects restore their original identity.
-  await evaluate('for (const [i,p] of window.pets.entries()) { p.mind.reset(p.ctx); p.paused = true; p.config.windows=false; p.setWindows([]); p.char.standUp(); p.char.body.translate(450+i*400-p.char.x,0); } for(let i=0;i<600;i++)for(const p of window.pets)p.update(1/120);');
+  await evaluate('window.equipCursor("none");for (const [i,p] of window.pets.entries()) { p.mind.reset(p.ctx); p.paused = true; p.config.windows=false; p.setWindows([]); p.char.standUp(); p.char.grab("neck",p.char.body.j.neck.x,p.char.body.j.neck.y);p.char.moveHold(450+i*400,p.ctx.world.bounds.floor-100*p.char.scale,0,0); } for(let i=0;i<180;i++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.char.release();for(let i=0;i<720;i++)for(const p of window.pets)p.update(1/120);');
   const centerOf = async selector => evaluate(`(() => {const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
   const mouse = async (type, at, down = false) => send('Input.dispatchMouseEvent', {type,...at,button:type==='mouseMoved'?'none':'left',buttons:down?1:0,clickCount:1});
   const click = async selector => { const at=await centerOf(selector);await mouse('mouseMoved',at);await mouse('mousePressed',at,true);await mouse('mouseReleased',at); };
@@ -275,7 +275,7 @@ try {
   assert(await evaluate('window.friend.items.list.includes(window.bagGun) && !window.pet.items.list.includes(window.bagGun)'));
   assert.equal(await evaluate('window.bagGun.ammo'),2);assert.equal(await evaluate('window.cursorWeapon.active'),false);
   // Activating the bin without a mouse release must also end an actual weapon controller.
-  await evaluate('window.friend.takeItem(window.bagGun)');
+  await evaluate('window.friend.useItem(window.bagGun)');
   await until(()=>evaluate('window.cursorWeapon.item === window.bagGun'));
   await evaluate('document.querySelector("#trashCan").click()');
   await until(()=>evaluate('!window.cursorWeapon.active && !window.friend.items.list.includes(window.bagGun)'));
@@ -400,6 +400,7 @@ try {
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});
   await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
   assert.equal(await evaluate('window.pongFixture.user'),null);
+  await until(()=>evaluate('!document.querySelector("#pongPanel button:nth-child(1)").hidden'));
   await click('#pongPanel button:nth-child(1)');
   const court=await centerOf('#pongPanel canvas');await mouse('mouseMoved',{x:court.x,y:court.y-35});
   assert.equal(await evaluate('window.pongFixture.user'),0);
@@ -407,6 +408,111 @@ try {
   await click('#pongPanel button:nth-child(2)');assert.deepEqual(await evaluate('window.pongFixture.score'),[0,0]);
   await evaluate('window.pet.mind.reset(window.pet.ctx)');await pause(100);
   assert(await evaluate('document.querySelector("#pongPanel").hidden'));
+  // Pet Quality: actual pointer transport/use/carry/drop and mouse-only reload.
+  await evaluate(`(() => {
+    window.equipCursor('none');
+    for(const p of window.pets){p.paused=true;p.mind.reset(p.ctx);p.mood.asleep=false;p.char.standUp();p.setWindows([]);p.mind.holdUntil=Infinity;}
+    for(const t of [...window.pet.props.things])window.pet.props.remove(t);
+    for(let i=0;i<300;i++)for(const p of window.pets)p.update(1/120);
+    window.qualityGun=window.pet.items.give('gun',window.pet.char);window.qualityGun.ammo=0;
+    window.toolBag.showFor(window.pet);
+  })()`);
+  await click(`.bag-choice[data-kind=owned][data-id="${await evaluate('String(window.qualityGun.uid)')}"]`);
+  await click('#bagDetails [data-action=place]');
+  assert(await evaluate('window.toolBag.dragging && !window.cursorWeapon.active'));
+  await mouse('mouseMoved',{x:600,y:230},true);
+  assert.equal(await evaluate('window.qualityGun.ammo'),0);
+  await click('#bagTransport button:first-of-type');
+  await until(()=>evaluate('window.cursorWeapon.item === window.qualityGun'));
+  const weaponAction = async label => {
+    const at=await evaluate(`(() => {const b=Array.from(document.querySelectorAll('#weaponBar button')).find(b=>b.textContent===${JSON.stringify(label)});const r=b.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+    await mouse('mouseMoved',at);await mouse('mousePressed',at,true);await mouse('mouseReleased',at);
+  };
+  await weaponAction('Reload');
+  await until(()=>evaluate('window.qualityGun.reloadRemaining>0 && document.querySelector("#weaponBar").textContent.includes("Reloading")'));
+  await until(()=>evaluate('window.qualityGun.ammo===6'));
+  await weaponAction('Carry');
+  assert(await evaluate('window.toolBag.tools.held?.object===window.qualityGun && !window.cursorWeapon.active'));
+  await mouse('mouseMoved',{x:950,y:240});await mouse('mousePressed',{x:950,y:240},true);await mouse('mouseReleased',{x:950,y:240});
+  assert(await evaluate('window.qualityGun.where==="world" && !window.toolBag.dragging && window.qualityGun.ammo===6'));
+  await evaluate('window.toolBag.takeItem(window.pet,window.qualityGun)');
+  await click('#bagTransport button:last-child');
+  assert(await evaluate('window.qualityGun.where==="world" && !window.cursorWeapon.active'));
+
+  // Cleaner transport is passive, activation starts here, and Stop using returns to safe carrying.
+  await evaluate(`(() => {
+    window.qualitySponge=window.pet.items.give('sponge',window.pet.char);
+    window.qualityInk={strokes:[[{x:550,y:330},{x:750,y:330}]],color:'#fff',done:true,born:window.pet.ctx.world.time};
+    window.pet.ctx.doodles.push(window.qualityInk);window.toolBag.showFor(window.pet);
+  })()`);
+  await click(`.bag-choice[data-kind=owned][data-id="${await evaluate('String(window.qualitySponge.uid)')}"]`);
+  await click('#bagDetails [data-action=place]');
+  await mouse('mouseMoved',{x:650,y:330},true);
+  assert(await evaluate('window.qualityInk.strokes.length===1 && window.qualityInk.strokes[0][0].x===550 && !window.toolBag.tools.using'));
+  await click('#bagTransport button:first-of-type');
+  assert(await evaluate('window.toolBag.tools.using'));
+  await mouse('mouseMoved',{x:665,y:330},true);
+  assert(await evaluate('window.qualityInk.strokes.length===2'));
+  await click('#bagTransport button:first-of-type');
+  assert(await evaluate('!window.toolBag.tools.using'));
+  const passiveInk=await evaluate('JSON.stringify(window.qualityInk.strokes)');
+  await mouse('mouseMoved',{x:740,y:330},true);assert.equal(await evaluate('JSON.stringify(window.qualityInk.strokes)'),passiveInk);
+  await click('#bagTransport button:last-child');assert(await evaluate('window.qualitySponge.where==="belt"'));
+
+  // Explicitly store a real book, fetch that same one and inspect every opening/page/closing phase.
+  await evaluate(`(() => {
+    const a=window.pet;window.qualityShelf=a.props.spawn('bookshelf',1020,innerHeight-67,1);
+    window.qualityBook=a.items.give('book',a.char);window.toolBag.showFor(a);
+  })()`);
+  await click(`.bag-choice[data-kind=owned][data-id="${await evaluate('String(window.qualityBook.uid)')}"]`);
+  await click('#bagDetails [data-action=shelve]');
+  assert(await evaluate('window.qualityBook.where==="world" && window.qualityBook.shelf?.key===window.qualityShelf.storageKey'));
+  await click('[aria-label="Close bag"]');
+  await evaluate(`(() => {
+    const ids=['book','cup','dumbbell','yo-yo','handheld'], commands=['read','sip','exercise','yoyo','handheld'];
+    const personalities=['inventive','gentle','competitive','mischievous','adventurous'];
+    for(const [i,p]of window.pets.entries()){
+      p.mind.reset(p.ctx);p.paused=true;p.mood.asleep=false;p.char.standUp();p.applyConfig({...p.config,personality:personalities[i],hyperactivity:1,scale:1,windows:false,dailyRhythm:false});
+      for(const item of [...p.items.list])if(item.def.id==='book' || item.where==='world')p.items.remove(item);
+      p.char.grab("neck",p.char.body.j.neck.x,p.char.body.j.neck.y);p.char.moveHold(130+i*200,p.ctx.world.bounds.floor-100,0,0);p.items.give(ids[i],p.char);
+    }
+    for(let i=0;i<180;i++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.char.release();
+    for(let i=0;i<720;i++)for(const p of window.pets)p.update(1/120);
+    for(const [i,p]of window.pets.entries()){p.paused=false;p.command('do:'+commands[i]);}
+    for(let i=0;i<160;i++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets)p.paused=true;
+  })()`);
+  const scene = async name => {
+    await pause(80);const shot=await send('Page.captureScreenshot',{format:'png',clip:{x:0,y:innerHeightFallback-180,width:1280,height:180,scale:2}});
+    writeFileSync(join(root,'.build/'+name+'.png'),Buffer.from(shot.data,'base64'));
+  };
+  const innerHeightFallback = await evaluate('innerHeight');
+  await scene('quality-everyday-open');
+  assert(await evaluate('window.pets[0].items.list.find(i=>i.def.id==="book").bookOpen>0.8'));
+  await evaluate('for(let i=0;i<1450;i++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  await scene('quality-everyday-page');
+  const renderedFrameMs=await evaluate(`new Promise(resolve=>{
+    for(const p of window.pets)p.paused=false;
+    const times=[];let before=0;
+    const frame=now=>{if(before)times.push(now-before);before=now;if(times.length<120)requestAnimationFrame(frame);else{for(const p of window.pets)p.paused=true;times.sort((a,b)=>a-b);resolve({median:times[60],p95:times[114]});}};
+    requestAnimationFrame(frame);
+  })`);
+  console.log('Chromium five-figure rendered frame intervals (ms):',renderedFrameMs);
+
+  // End-of-activity screenshots include the closing reach and the returned original book.
+  await evaluate(`(() => {
+    const p=window.pet;p.paused=false;
+    for(let i=0;i<42000;i++){
+      p.update(1/120);const b=p.items.list.find(i=>i.def.id==='book');
+      if(b && b.bookOpen>0.1 && b.bookOpen<0.8 && p.mind.activeSkill?.name==='read')break;
+    }
+    p.paused=true;
+  })()`);
+  await scene('quality-book-closing');
+  await evaluate('for(let i=0;i<42000 && window.pet.mind.activeSkill?.name==="read";i++){window.pet.paused=false;window.pet.update(1/120);}window.pet.paused=true;');
+  await scene('quality-bookshelf-return');
+  assert(await evaluate('window.pet.items.list.some(i=>i.def.id==="book"&&i.shelf?.key===window.qualityShelf.storageKey)'));
+  console.log('PASS Pet Quality browser: passive Take out, explicit Use, visible mouse Reload, Carry, Drop, Cancel, passive/active/stop cleaning, bookshelf storage, and rendered everyday/open/page/close/return sequences');
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
   console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close, actual cursor pistol aim/ammo/reload/return, bow charge/release, book rendering, page-fragment images, native-window visit controller and rendering');
   console.log('Screenshot: .build/browser-smoke.png');

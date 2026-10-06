@@ -16,6 +16,7 @@ import { DOODLE_LIFE, type Doodle } from './doodles';
 import type { Vec } from './math';
 import chairDef from './props/chair.json';
 import couchDef from './props/couch.json';
+import bookshelfDef from './props/bookshelf.json';
 import tvDef from './props/tv.json';
 import scooterDef from './props/scooter.json';
 import canvasDef from './props/canvas.json';
@@ -369,6 +370,7 @@ export class Thing {
    * Who's sitting on it, and on which side (-1 left, 0 the middle, 1 right). A couch holds up to five side by side
    * (whoever was there first scoots over to make room); a chair holds one; someone lying along it takes it all.
    */
+  storageKey = '';
   readonly sitters = new Map<string, { side: number; lying: boolean }>();
   /** Who's watching (a TV): it stays on while anyone is. */
   readonly watchers = new Set<string>();
@@ -399,7 +401,7 @@ export class Thing {
     const s = this.def?.seat;
     if (!s) return null;
     const side = this.sitters.get(who)?.side ?? 0, w = this.def!.bounds ? this.def!.bounds[2] - this.def!.bounds[0] : 0;
-    return this.toWorld(s[0] + side * w * 0.2, s[1]);
+    return this.toWorld(s[0] + side * w * 0.215, s[1]);
   }
   /** Move the existing rigid body, preserving identity, art and claims. */
   place(at: Vec, angle = this.tilt) {
@@ -601,11 +603,22 @@ export class Thing {
           if (p.x + 1.5 > bounds.right) side = Math.min(side, bounds.right - (p.x + 1.5));
         }
         for (const [p, pl] of this.above) if (p.x >= pl.x1 && p.x <= pl.x2) up = Math.max(up, p.y - (platY(pl, p.x) - p.r));
-        if (up > 0 || side) for (const p of this.points) { p.y -= Math.max(0, up); p.x += side; if (up > 0 && p.py > p.y) p.py = p.y; }
+        if (up > 0 || side) for (const p of this.points) { p.y -= Math.max(0, up); p.x += side; p.px += side; if (up > 0 && p.py > p.y) p.py = p.y; }
       }
     }
     for (const [p] of this.above) if (p.grounded && p.py > p.y) p.py = p.y;
     this.refresh();
+  }
+
+  /** A supported body dissipates tiny residual contact motion; hits/drags wake it immediately. */
+  settleContacts(dt: number) {
+    if (!this.rigid || this.held || this.stuck || this.movingBy || !this.points.some(p => p.grounded)) return;
+    const speed = Math.max(...this.points.map(p => Math.hypot(p.x-p.px,p.y-p.py)/dt));
+    if (speed > 35 || this.friction < 0.1) return;
+    const damp = Math.min(0.65, this.friction * dt * 35);
+    for (const p of this.points) {
+      p.px += (p.x-p.px)*damp; p.py += (p.y-p.py)*damp;
+    }
   }
 
   private drawProp(ctx: Ctx2D, alpha: number, now: number) {
@@ -838,6 +851,7 @@ export class Thing {
 /** A prop from its definition, with its top-left corner at (x, y), at his size. Rigid (every point braced to every other). */
 export function makeProp(def: PropDef, x: number, y: number, scale: number) {
   const t = new Thing('prop', { strokes: [], color: '#2a2c44', born: 0, done: true, title: def.name });
+  t.storageKey = `shelf-${t.n}-${Math.random().toString(36).slice(2,10)}`;
   t.def = def; t.forever = true; t.scale = scale; t.friction = def.friction;
   for (const [px, py] of def.outline) t.point(x + px * scale, y + py * scale);
   for (const i of def.wheels ?? []) t.points[i].r = (def.wheel ?? 4) * scale;
@@ -896,7 +910,7 @@ export function rampSlopeId(n: number, up: 1 | -1) { return PROP_ID + n * 64 + (
 export const reserveThing = () => nextProp++;
 
 /** The props that come with him (in his inventory; none are out until you drop them in). */
-export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef, workbenchDef, storageDef].map((d) => parsePropDef(d)!);
+export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef, workbenchDef, storageDef, bookshelfDef].map((d) => parsePropDef(d)!);
 
 export class Props {
   balls: Ball[] = [];
@@ -959,13 +973,14 @@ export class Props {
     return t;
   }
   /** Which props are where (saved between runs). */
-  savePlaced() { return this.placed.map(t => ({ id: t.def!.id, x: t.center.x, y: t.center.y, tilt: t.tilt, facing: t.facing, consoleConnected: t.consoleConnected, scale: t.scale, ...(t.ink ? { ink: t.ink, def: t.def } : {}), ...(t.art ? { art: t.art } : {}) })); }
-  restore(p: { id: string; x: number; y?: number; tilt?: number; scale?: number; facing?: number; consoleConnected?: boolean; ink?: unknown; def?: unknown; art?: unknown }, floor: number, scale: number) {
+  savePlaced() { return this.placed.map(t => ({ id: t.def!.id, storageKey: t.storageKey, x: t.center.x, y: t.center.y, tilt: t.tilt, facing: t.facing, consoleConnected: t.consoleConnected, scale: t.scale, ...(t.ink ? { ink: t.ink, def: t.def } : {}), ...(t.art ? { art: t.art } : {}) })); }
+  restore(p: { id: string; storageKey?: string; x: number; y?: number; tilt?: number; scale?: number; facing?: number; consoleConnected?: boolean; ink?: unknown; def?: unknown; art?: unknown }, floor: number, scale: number) {
     if (p.def) { const def = parsePropDef({ ...p.def as object, type: 'prop' }); if (def) this.defs.set(def.id, def); }
     const def = this.defs.get(p.id); if (!def) return null;
     const sc = Number.isFinite(p.scale) ? Math.max(0.2, Math.min(4, p.scale!)) : scale;
     const t = this.spawn(p.id, p.x, floor - Math.max(...def.outline.map(q => q[1])) * sc - 2, sc, p.art)!;
     if (Number.isFinite(p.y) && Math.abs(p.y!) < 20000) t.place({ x: p.x, y: p.y! }, Number.isFinite(p.tilt) ? p.tilt! : 0);
+    if (typeof p.storageKey === 'string' && /^[a-z0-9-]{1,60}$/.test(p.storageKey)) t.storageKey = p.storageKey;
     t.consoleConnected = p.consoleConnected === true;
     t.facing = p.facing === -1 ? -1 : 1;
     t.ink = parseProject(p.ink); return t;
@@ -1004,6 +1019,7 @@ export class Props {
       if (!this.separateSolids()) break;
       for (const t of this.things) t.end(bounds);
     }
+    for (const t of this.things) t.settleContacts(dt);
     const all = [...world, ...this.platforms];
     for (const b of this.balls) b.step(dt, bounds, all, this.things);
     if (moved) this.changedPlatforms();
@@ -1039,6 +1055,9 @@ export class Props {
         const av = velocity(a),
           bv = velocity(b),
           closing = (av.x - bv.x) * nx + (av.y - bv.y) * ny;
+        const tangent = -(av.x-bv.x)*ny + (av.y-bv.y)*nx;
+        const friction = Math.sqrt(a.friction*b.friction);
+        const drag = Math.max(-Math.max(0,-closing)*friction, Math.min(Math.max(0,-closing)*friction, tangent));
         for (const [t, w, sign] of [
           [a, wa, 1],
           [b, wb, -1],
@@ -1057,6 +1076,10 @@ export class Props {
               p.px -= (nx * impulse) / 120;
               p.py -= (ny * impulse) / 120;
             }
+            // Equal/opposite tangential impulses remove contact slip, not intended free motion.
+            p.px -= ny * drag * fraction * sign / 120;
+            p.py += nx * drag * fraction * sign / 120;
+            if (ny * sign < -0.5) p.grounded = true;
           }
         }
       }

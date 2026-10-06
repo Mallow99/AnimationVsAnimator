@@ -42,4 +42,4 @@ export class ActivityClock {
 }
 
 export const isSettledActivity = (name: string | undefined) =>
-  ['watchtv', 'videogame', 'playgame', 'read', 'sitdown'].includes(name ?? '');
+  ['watchtv', 'videogame', 'playgame', 'read', 'sitdown', 'sip', 'exercise', 'yoyo', 'handheld'].includes(name ?? '');

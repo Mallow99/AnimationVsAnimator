@@ -1,6 +1,7 @@
 import { Skill, arrive, type Ctx } from "./context";
 import type { PeerMsg, FighterView } from "../peer";
 import { propActions } from "../capabilities";
+import { GetDown } from "../skills";
 import { Pong } from "../pong";
 import type { Thing } from "../props";
 
@@ -64,6 +65,7 @@ export function groupPlan(
     .sort(
       (a, b) =>
         Number(b.talent === talent) - Number(a.talent === talent) ||
+        (c.relationship?.(b.id!)?.bond ?? 0.4) - (c.relationship?.(a.id!)?.bond ?? 0.4) ||
         Math.abs(a.x - c.char.x) - Math.abs(b.x - c.char.x),
     );
   const n = required[act] ?? Math.min(5, peers.length + 1);
@@ -139,6 +141,7 @@ export class GroupActivity extends Skill {
   private beat = -1;
   private target: Thing | null = null;
   private started = false;
+  private descent: GetDown | null = null;
   constructor(readonly plan: GroupPlan) {
     super();
   }
@@ -207,6 +210,19 @@ export class GroupActivity extends Skill {
         Math.abs(target.tilt) > 0.6)
     )
       return true;
+    // A ground-mode figure can still be perched on a window. Gather on the floor
+    // using the existing descent skill before asking it to walk to the meeting point.
+    if (this.phase === "meet" && !this.descent && ch.ready &&
+        Math.max(ch.body.j.footL.y, ch.body.j.footR.y) < c.world.bounds.floor - 65 * ch.scale) {
+      this.descent = new GetDown((p.x < ch.x ? -1 : 1));
+      this.descent.start(c);
+    }
+    if (this.descent) {
+      this.descent.t += dt;
+      const down = this.descent.update(c);
+      if (!down || !ch.ready) return this.t > 40;
+      this.descent.stop(c); this.descent = null;
+    }
     if (ch.mode !== "ground" && !(p.act === "couch" && ch.mode === "sit"))
       return true;
     let x = p.x + (i - (p.members.length - 1) / 2) * p.gap;
@@ -230,7 +246,7 @@ export class GroupActivity extends Skill {
           target!.scale *
           0.6;
     if (this.phase !== "do") {
-      if (this.t > 15) return true;
+      if (this.t > 40) return true;
       if (this.phase === "meet" && !arrive(c, x, 8)) return false;
       ch.stop();
       this.phase = "ready";
@@ -389,6 +405,7 @@ export class GroupActivity extends Skill {
     return u > (["chat", "couch", "watch"].includes(p.act) ? 35 : 9);
   }
   stop(c: Ctx) {
+    this.descent?.stop(c);
     for (const id of this.plan.members)
       if (id !== c.who)
         c.recordActivity?.(id, this.plan.act, this.started && !this.cancelled);

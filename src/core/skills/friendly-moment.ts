@@ -40,7 +40,7 @@ export class FriendlyMoment extends Skill {
         const item = c.items.onHim.find(
           (i) =>
             !i.def.wear &&
-            i.where !== "hand" &&
+            i.where === "belt" &&
             (i.def.use !== "draw" || pens > 1),
         );
         if (!item) {
@@ -53,6 +53,7 @@ export class FriendlyMoment extends Skill {
           token: `${c.who}:${item.uid}:${c.world.time}`,
           def: structuredClone(item.def),
           ammo: item.ammo,
+          reloadRemaining: item.reloadRemaining,
           ink: item.ink,
         });
         c.say("Here, have a look.", 1.4);

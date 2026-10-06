@@ -21,11 +21,11 @@ export class PlayHandheld extends Skill {
     if (this.item.where !== "hand" || !c.char.useHand) return true;
     const neck = c.char.body.j.neck;
     c.char.handsAt = {
-      R: { x: c.char.x + 9 * c.char.scale, y: neck.y + 22 * c.char.scale },
-      L: { x: c.char.x - 6 * c.char.scale, y: neck.y + 22 * c.char.scale },
+      [this.item.hand]: { x: c.char.x - 8 * c.char.scale, y: neck.y + 22 * c.char.scale },
+      [this.item.hand === "L" ? "R" : "L"]: { x: c.char.x + 13 * c.char.scale, y: neck.y + 22 * c.char.scale },
     };
-    this.item.aim = { x: 0, y: -1, z: 0 };
-    this.item.arcade!.step(dt);
+    this.item.aim = { x: 1, y: 0, z: 0 };
+    const events = this.item.arcade!.step(dt);
     if (this.t > this.nextComment) {
       this.nextComment = this.t + 30;
       c.say(
@@ -34,7 +34,7 @@ export class PlayHandheld extends Skill {
       );
     }
     c.mood.s.boredom = Math.max(0, c.mood.s.boredom - dt / 100);
-    return this.t > 90;
+    return this.t > 90 && events.includes('crash') || this.t > 150;
   }
   stop(c: Ctx) {
     c.char.handsAt = null;

@@ -11,7 +11,8 @@ type HeldObject = { kind: 'item'; owner: Pet; object: Item }
 /** Direct overlay transfers and one reversible trash slot. Only in-app objects enter this API. */
 export class OverlayTools {
   held: HeldObject | null = null;
-  private origin: { created: boolean; state?: Pick<Item, 'where' | 'slot' | 'hand' | 'at' | 'dir'> } | null = null;
+  using = false;
+  private origin: { created: boolean; state?: Pick<Item, 'where' | 'slot' | 'hand' | 'at' | 'dir' | 'shelf'> } | null = null;
   private wipeFrom: Vec | null = null;
   private lastTrash: { entry: HeldObject; born: number; at: number } | null = null;
   constructor(private readonly pets: () => Pet[]) {}
@@ -25,7 +26,8 @@ export class OverlayTools {
   beginItem(owner: Pet, object: Item, at: Vec) {
     if (this.held || !owner.items.list.includes(object)) return false;
     if (this.pets().some(p => p.items.carried && p.items.carried !== object)) return false;
-    this.origin = { created: false, state: { where: object.where, slot: object.slot, hand: object.hand, at: { ...object.at }, dir: { ...object.dir } } };
+    this.using = false;
+    this.origin = { created: false, state: { where: object.where, slot: object.slot, hand: object.hand, at: { ...object.at }, dir: { ...object.dir }, shelf: object.shelf ? {...object.shelf} : null } };
     owner.takeItem(object);
     object.cursorControlled = true;
     owner.userWeaponControlled = true; // Transport never swings/fires the weapon.
@@ -53,12 +55,13 @@ export class OverlayTools {
     return true;
   }
 
-  move(at: Vec, velocity: Vec) {
+  move(at: Vec, velocity: Vec, applyUse = true) {
     const e = this.held;
     if (!e) return;
     if (e.kind === 'item') {
-      if (e.object.def.use === 'erase' || e.object.def.use === 'color') this.animateInk(e.object.def.use, at);
-      if (e.object.def.use === 'wipe') {
+      if (!applyUse) this.wipeFrom = null;
+      if (applyUse && this.using && (e.object.def.use === 'erase' || e.object.def.use === 'color')) this.animateInk(e.object.def.use, at);
+      if (applyUse && this.using && e.object.def.use === 'wipe') {
         const sets = new Set(this.pets().map(p => p.ctx.doodles));
         for (const doodles of sets) wipeDoodles(doodles, this.wipeFrom ?? at, at, 14 * e.object.scale);
         this.wipeFrom = { ...at };
@@ -69,6 +72,12 @@ export class OverlayTools {
       e.object.resetMotion();
     } else if (e.kind === 'thing' && e.object.held) Object.assign(e.object.held, at, { vx: velocity.x, vy: velocity.y });
     else if (e.kind === 'ball') e.object.moveHold(at.x, at.y, velocity.x, velocity.y);
+  }
+
+  setUsing(on: boolean) {
+    this.using = on && this.held?.kind === 'item';
+    // Activation starts at the current cursor, never across the passive carrying path.
+    this.wipeFrom = null;
   }
 
   private animateInk(use: 'erase' | 'color', at: Vec) {
@@ -97,6 +106,7 @@ export class OverlayTools {
   /** Release a dragged item onto any figure, or drop the original object into the world. */
   release(at: Vec, velocity: Vec, recipient: Pet | null = null) {
     const e = this.held;
+    this.using = false;
     this.move(at, velocity);
     this.held = null;
     this.origin = null;
@@ -177,6 +187,7 @@ export class OverlayTools {
       e.object.release();
     }
     this.held = null;
+    this.using = false;
     this.origin = null;
     this.lastTrash = { entry: e, born, at: owner.ctx.world.time };
     return true;
@@ -186,7 +197,8 @@ export class OverlayTools {
   cancel() {
     const e = this.held, origin = this.origin;
     if (!e) return false;
-    this.held = null; this.origin = null; this.wipeFrom = null;
+    this.held = null;
+    this.using = false; this.origin = null; this.wipeFrom = null;
     if (e.kind === 'item') {
       e.owner.userWeaponControlled = false; e.object.cursorControlled = false;
       if (!e.owner.items.list.includes(e.object)) return true;
@@ -198,6 +210,7 @@ export class OverlayTools {
       else if (origin?.state) {
         const s = origin.state;
         if (s.where === 'hand') e.owner.items.toHand(e.object, s.hand);
+        else if (s.where === 'cursor') e.owner.giveBack(e.object);
         else if (s.where === 'belt' || s.where === 'worn') {
           if (!e.owner.items.stow(e.object)) e.owner.items.drop(e.object, 0, 0);
           // Keep the original slot when it is still free.
@@ -207,7 +220,7 @@ export class OverlayTools {
           }
         } else {
           e.object.at = { ...s.at }; e.object.dir = { ...s.dir };
-          e.owner.items.drop(e.object, 0, 0); e.object.resetMotion();
+          e.owner.items.drop(e.object, 0, 0); e.object.shelf = s.shelf; e.object.resetMotion();
         }
       }
     } else {

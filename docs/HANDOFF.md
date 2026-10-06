@@ -2,7 +2,50 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest owner feedback: interaction and rendering cleanup
+## Latest update: Pet Quality — 2026-10-06
+
+The owner's latest instruction prioritizes pet polish over the roadmap order. Implementation is
+complete on `codex/roadmap-continuation`, continuing cleanup commit `269d561` in open draft PR #3,
+stacked on `codex/desktop-life`. Stop after this update; no new Chrome/Finder milestone was started.
+
+- Added useful cups, dumbbells and yo-yos with offline actions, natural repetitions/pauses and cleanup.
+  Personality affects their choices/reactions; quieter chatter and social timing protect settled and
+  queued activities. Trusted partners are favored after relevant talents.
+- Preserved the procedural look/presets. Seating transitions blend through existing muscles/bones;
+  resting legs are quieter and a wider pixel couch comfortably separates five figures. Handheld grips
+  are horizontal/two-handed and finish at game-over. Books open, turn pages with a hand, close, and
+  return upright to a low bookshelf with five saved real-book slots. Interrupted or cursor-held books
+  do not duplicate. Grabbing/tipping the shelf releases its contents.
+- Take out is passive; explicit Use starts weapons/cleaners. Owned weapons have Carry/Drop/Put away
+  and a visible mouse Reload. Cleaners have Stop using and ignore control traversal and release.
+  Reload mechanics remain six-round magazines; progress belongs to the original gun and survives
+  interrupted bursts, cursor use, storage, saves and peer gift/recovery.
+- Contact friction and supported-body damping settle furniture without pinning it. Artwork-based loose
+  item contacts include different owners through snapshots. Hits, throws, dragging and moving still
+  work. An elevated group member now descends and recovers before gathering on the floor.
+- Mac keyboard ownership clears/suppresses pending native refocus requests; Linux Electron verifies
+  the shell paths. Stock artwork upgrades while edited/deleted example files remain intact.
+
+Validation: typecheck/build; 72 existing + 30 roadmap + 18 quality checks; full simulations seeds 1/7;
+ten-minute five-figure seed-1 and two-figure seed-7 soaks with no trouble. The seed-7 elevated gathering
+stall was reproduced and fixed. Actual Chromium checks cover the new controls and render sequences;
+inspected couch/workshop/everyday/open/page/close/return artwork. Linux Electron/Xvfb checks preload,
+focus/input and existing-install upgrades. Five-figure core profile: mean 0.822ms / p95 1.313ms per
+120Hz update with ten loose items; Chromium frame median 16.7ms / p95 16.8ms here. Windows portable
+packaging succeeds with real helpers and new definitions, without user data/keys.
+
+Remaining: Swift compilation and real Mac desktop-return/Spaces/permissions/click-through were not
+verified here. Real Windows helpers/input/mixed DPI also need hardware. Convex prop contact has
+approximate concave gaps and extreme-speed tunneling limits; cross-owner contacts resolve from
+snapshots rather than simultaneous impulses. Undo remains one session-only object, books retain
+ownership, and the main-display limitation remains. No new integration work follows this pass.
+
+Next concrete step is owner hardware acceptance in [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
+Full item audit, repeatable verification and representative images: [PET-QUALITY.md](PET-QUALITY.md).
+The earlier “return to the original thing” report still needs reproduction on the Mac; the refocus
+race guard is a candidate repair, not proof that every native cause is resolved.
+
+## Previous update: interaction and rendering cleanup
 
 The owner reported clunky/discoverability problems, thin limbs while drawing/sitting, and returning
 behavior that may involve native focus. This pass finishes those bugs and interaction coherence;

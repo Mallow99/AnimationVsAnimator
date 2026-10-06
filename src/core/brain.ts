@@ -555,7 +555,7 @@ export class Brain {
       `where: ${where}`,
       `your things: ${itemsText(c)}`,
       `your specialty: ${c.talent ?? 'drawing'}. Friends can teach each other; do not interrupt busy friends.`,
-      `workshop requests: deskwork, refine, sorttools, arrange, carrytogether, passtool, comparedrawings, checkfriend, pong, handheld, group:wave/chat/couch/watch/duet/triangle/mirror/relay. Only invite available friends.`,
+      `everyday requests: sip (needs a cup), exercise (needs a dumbbell), yoyo (needs a yo-yo), read (open/read/close a book). workshop requests: deskwork, refine, sorttools, arrange, carrytogether, passtool, comparedrawings, checkfriend, pong, handheld, group:wave/chat/couch/watch/duet/triangle/mirror/relay. Only invite available friends.`,
       `drawable blueprints: ${[...c.items.defs.values()].filter(d=>d.drawable!==false&&!d.drawn&&!d.blueprint).map(d=>`drawitem:${d.id}`).concat([...c.props?.defs.values()??[]].filter(d=>d.drawable!==false&&!d.id.startsWith('ink-')).map(d=>`drawprop:${d.id}`)).join(', ')}`,
       `shared furniture: ${(c.props?.placed ?? []).map(t=>`${t.def?.name}: ${t.def?.use}${t.ink?' (unfinished ink)':''}`).join('; ')}`,
 

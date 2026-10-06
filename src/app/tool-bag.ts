@@ -198,10 +198,14 @@ export class ToolBag {
     this.transportUse.type = "button"; this.transportUse.textContent = "Use with cursor";
     this.transportUse.onclick = () => {
       const held = this.tools.held;
-      if (held?.kind !== "item" || !isWeapon(held.object.def)) return;
-      const at = { ...held.object.at };
-      this.tools.release(at, { x: 0, y: 0 }, held.owner);
-      held.owner.takeItem(held.object);
+      if (held?.kind !== "item") return;
+      if (["wipe", "erase", "color"].includes(held.object.def.use)) {
+        this.tools.setUsing(!this.tools.using);
+      } else if (isWeapon(held.object.def)) {
+        const at = { ...held.object.at };
+        this.tools.release(at, { x: 0, y: 0 }, held.owner);
+        held.owner.useItem(held.object);
+      }
       this.keyboard = false; this.typing(false); this.changed(); this.refresh();
     };
     this.transport.append(this.transportHint, this.transportUse, cancel);
@@ -386,7 +390,8 @@ export class ToolBag {
     this.bin.classList.toggle("receiving", this.dragging);
     this.transport.hidden = !this.dragging;
     const held = this.tools.held;
-    this.transportUse.hidden = held?.kind !== "item" || !isWeapon(held.object.def);
+    this.transportUse.hidden = held?.kind !== "item" || !(isWeapon(held.object.def) || ["wipe", "erase", "color"].includes(held.object.def.use));
+    this.transportUse.textContent = this.tools.using ? "Stop using" : "Use with cursor";
     this.transportHint.textContent = held ? `${held.kind === "item" ? held.object.def.name : held.kind === "thing" ? held.object.def?.name ?? "Object" : "Ball"} · Drop on the desktop${held.kind === "item" ? " or a figure" : ""}.` : "";
     this.panelUndo.hidden = !this.tools.trashedName;
     this.panelUndo.textContent = `Undo trash: ${this.tools.trashedName ?? ""}`;
@@ -522,7 +527,19 @@ export class ToolBag {
     const action = (label: string, id: string, run: () => void) => { const button = document.createElement("button"); button.type = "button"; button.textContent = label; button.dataset.action = id; button.onclick = run; actions.append(button); };
     action(selected.kind === "owned" ? "Take out" : "Place on desktop", "place", () => { const at = satchelAt(owner.char); this.startPull(selected.kind, selected.id, at.x, at.y, false); });
     if (item) {
-      if (isWeapon(item.def)) action("Use with cursor", "use", () => { if (!this.canPull()) { this.status.textContent = "Return the tool you are using first."; return; } owner.takeItem(item); this.toggle(false); this.changed(); });
+      if (item.def.id === 'book') {
+        const shelf = owner.props.placed.find(t=>t.def?.id === 'bookshelf' && !t.held && Math.abs(t.tilt)<0.35);
+        if (shelf) action('Store on bookshelf', 'shelve', () => {
+          const occupied = this.pets().flatMap(p=>p.items.list).filter(i=>i!==item && i.shelf?.key === shelf.storageKey).map(i=>i.shelf!.slot);
+          const slot = [0,1,2,3,4].find(i=>!occupied.includes(i));
+          if (slot === undefined) { this.status.textContent = 'The bookshelf is full.'; return; }
+          owner.mind.reset(owner.ctx);
+          item.at = {...shelf.toWorld(10+slot*15,35),z:6}; item.dir = {x:1,y:0,z:0};
+          owner.items.drop(item,0,0); item.shelf = {key:shelf.storageKey,slot};
+          this.changed(); this.refresh();
+        });
+      }
+      if (isWeapon(item.def)) action("Use with cursor", "use", () => { if (!this.canPull()) { this.status.textContent = "Return the tool you are using first."; return; } owner.useItem(item); this.toggle(false); this.changed(); });
       if (item.where === "hand" && !item.def.wear) action("Store in bag", "store", () => { owner.mind.reset(owner.ctx); owner.giveBack(item); this.changed(); this.refresh(); });
       action("Drop beside figure", "drop", () => { owner.mind.reset(owner.ctx); item.at = { x: owner.char.x + 45 * owner.char.scale, y: owner.char.body.j.hip.y, z: 0 }; owner.items.drop(item, 0, 0); this.changed(); this.refresh(); });
       action("Trash", "trash", () => this.trashObject(owner, item));
@@ -534,7 +551,7 @@ export class ToolBag {
       owner.items.give(def.id, owner.char); this.changed(); this.setView("inventory");
     });
     this.details.append(name, about, actions);
-    if (item && ["wipe", "erase", "color"].includes(item.def.use)) { const hint = document.createElement("small"); hint.textContent = "Take out, then move over the drawing to use it. Cancel returns it to the bag."; this.details.append(hint); }
+    if (item && ["wipe", "erase", "color"].includes(item.def.use)) { const hint = document.createElement("small"); hint.textContent = "Take out, choose Use with cursor, then move over the drawing. Stop using lets you carry it safely. Cancel returns it to the bag."; this.details.append(hint); }
   }
   trashObject(owner: Pet, object: Item | Thing) {
     if (this.tools.trashObject(owner, object)) { this.trashed(); this.showFor(owner); }
@@ -572,7 +589,7 @@ export class ToolBag {
     this.refresh();
   }
   move(x: number, y: number, vx: number, vy: number) {
-    this.tools.move({ x, y }, { x: vx, y: vy });
+    this.tools.move({ x, y }, { x: vx, y: vy }, !this.over(x,y));
   }
   takeItem(owner: Pet, item: Item) {
     this.selected = owner.ctx.who;

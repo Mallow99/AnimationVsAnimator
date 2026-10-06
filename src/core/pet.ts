@@ -342,6 +342,8 @@ export class Pet implements Peer {
     this.acc += dt;
     this.stepWindows(dt);
     this.smoothWindows(dt);
+    const loosePeers = this.items.list.some(it => it.where === 'world' && !it.shelf)
+      ? this.others.flatMap(o => o.view().looseItemHulls ?? []) : [];
     while (this.acc >= STEP) {
       this.char.sleeping = this.mood.asleep;
       const held = this.items.list.find(it => it.where === 'hand' && !it.working && isWeapon(it.def));
@@ -352,7 +354,7 @@ export class Pet implements Peer {
       const under = this.props.thingOf(this.char.support);
       if (under && (this.char.mode === 'ground' || this.char.mode === 'sit')) under.carry(this.char.support, this.char.x);
       if (this.ownsProps) this.props.update(STEP, this.ctx.world.time, this.ctx.world.bounds, this.uiPlats.length ? [...this.windowPlats, ...this.uiPlats] : this.windowPlats, this.ctx.world.windows);
-      this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms, this.props.things);
+      this.items.stepWorld(STEP, this.ctx.world.bounds, this.ctx.world.platforms, this.props.things, loosePeers);
       this.ballContact();
       this.acc -= STEP;
     }
@@ -1121,9 +1123,17 @@ export class Pet implements Peer {
   takeItem(it: Item) {
     const cur = this.ctx.world.cursor ?? { x: it.at.x, y: it.at.y };
     this.items.toCursor(it, cur);
+    this.userWeaponControlled = false;
     this.carryHeld = false;
     this.sound('pickup', 0.8);
     this.emit({ type: 'itemTaken', name: it.def.name.toLowerCase() });
+  }
+
+  /** Only this explicit action enables a taken weapon's cursor controller. */
+  useItem(it: Item) {
+    this.takeItem(it);
+    it.cursorControlled = true;
+    this.userWeaponControlled = true;
   }
 
   /** You give it back: onto his belt (or into his hand if the belt's full). */
@@ -1373,6 +1383,7 @@ export class Pet implements Peer {
         at: { x: it.at.x, y: it.at.y },
         speed: it.speed,
         ammo: it.ammo,
+        reloadRemaining: it.reloadRemaining,
       }));
   }
 
@@ -1401,10 +1412,12 @@ export class Pet implements Peer {
     const ch = this.char, j = ch.body.j, sword = this.swordInHand;
     const joints: FighterView['joints'] = {};
     for (const n of Object.keys(j) as JointName[]) if (!ch.body.ghost.has(n)) joints[n] = { x: j[n].x, y: j[n].y, z: j[n].z };
-    const doing = this.mind.skill?.name ?? null;
+    const doing = this.mind.activeSkill?.name ?? null;
     const fp = ch.fightPose;
     return {
       ...(this.mind.activeSkill instanceof GroupActivity ? { group: this.mind.activeSkill.view } : {}),
+      looseItemHulls: this.items.list.filter(i=>i.where === 'world' && !i.shelf).map(i=>i.collisionHull),
+      shelvedBooks: this.items.list.filter(i=>i.where === "world" && i.shelf).map(i=>({...i.shelf!})),
       consoleLocations: this.items.list.filter(i=>i.def.use==='connect'&&i.where==='world').map(i=>({x:i.at.x,y:i.at.y})),
       talent: signatureTalent(this.config.personality),
       id: this.ctx.who, partner: this.partnerId, name: this.config.name, color: this.config.look.color,
@@ -1428,13 +1441,13 @@ export class Pet implements Peer {
     const ch = this.char, w = this.ctx.world, fv = from.view();
     if(m.type==='moment') {
       if(!fv.id || !this.others.some(o=>o.view().id===fv.id))return;
-      this.ctx.say(m.kind==='check'?'I’m okay. Thanks.':this.ctx.talent==='drawing'?'Try a lighter line here.':'Nice drawing!',1.5);this.ctx.recordActivity?.(fv.id,m.kind,true);return;
+      this.ctx.say(m.kind==='check'?(this.config.personality === 'competitive' ? 'Just catching my breath.' : this.config.personality === 'gentle' ? 'Thanks for checking.' : 'I’m okay. Thanks.'):this.ctx.talent==='drawing'?'Try a lighter line here.':'Nice drawing!',1.5);this.ctx.recordActivity?.(fv.id,m.kind,true);return;
     }
     if(m.type==='toolGift') {
       if(!fv.id||!this.others.some(o=>o.view().id===fv.id)||typeof m.token!=='string'||m.token.length>120||this.gifts.has(m.token))return;
       const def=parseItemDef(m.def);if(!def)return;
       this.gifts.add(m.token);if(this.gifts.size>100)this.gifts.delete(this.gifts.values().next().value!);
-      const item=this.items.give(def,this.char);if(item){item.ammo=Number.isFinite(m.ammo)?Math.max(0,Math.min(6,m.ammo)):6;item.ink=parseProject(m.ink);this.ctx.say('Thanks!',1.3);}return;
+      const item=this.items.give(def,this.char);if(item){item.ammo=Number.isFinite(m.ammo)?Math.max(0,Math.min(6,m.ammo)):6;item.reloadRemaining=Number.isFinite(m.reloadRemaining)?Math.max(0,Math.min(1.15,m.reloadRemaining!)):0;item.ink=parseProject(m.ink);this.ctx.say('Thanks!',1.3);}return;
     }
     if (m.type === 'groupInvite') {
       if (!fv.id || !this.others.some(o => o.view().id === fv.id)) return;
@@ -1468,7 +1481,7 @@ export class Pet implements Peer {
         this.weaponRequests.delete(key);
         this.items.defs.set(m.weapon.def.id, m.weapon.def);
         const made = this.items.spawn(m.weapon.def.id, m.weapon.at, this.char.scale);
-        if (made) made.ammo = m.weapon.ammo;
+        if (made) { made.ammo = m.weapon.ammo; made.reloadRemaining = Number.isFinite(m.weapon.reloadRemaining) ? Math.max(0,Math.min(1.15,m.weapon.reloadRemaining!)) : 0; }
         return;
       }
       case 'hit': this.takeHit(m, from, fv); return;

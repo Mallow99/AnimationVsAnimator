@@ -186,7 +186,7 @@ export class MoveFurniture extends Skill {
 }
 export function arrangingSkill(c: Ctx, name: string): Skill | null {
   if (name === "arrange") return new MoveFurniture();
-  if (name === "readingcorner") return new MoveFurniture("chair", "storage");
+  if (name === "readingcorner") return new MoveFurniture("chair", c.props?.placed.some(t => t.def?.id === "bookshelf") ? "bookshelf" : "storage");
   if (name === "workcorner") return new MoveFurniture("workbench", "desk");
   if (name === "carrytogether") {
     const object = c.props?.placed.find(

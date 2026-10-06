@@ -1,0 +1,71 @@
+{
+  "id": "dumbbell",
+  "name": "Dumbbell",
+  "about": "A small training weight. Slow curls with a pause between sets; no hidden health meter.",
+  "use": "exercise",
+  "length": 12,
+  "grip": 12,
+  "bounce": 0.05,
+  "shape": [
+    {
+      "pts": [
+        [
+          -12,
+          0
+        ],
+        [
+          12,
+          0
+        ]
+      ],
+      "color": "#98a4ae",
+      "width": 3
+    },
+    {
+      "pts": [
+        [
+          -12,
+          -7
+        ],
+        [
+          -6,
+          -7
+        ],
+        [
+          -6,
+          7
+        ],
+        [
+          -12,
+          7
+        ]
+      ],
+      "fill": "#434d67",
+      "width": 0
+    },
+    {
+      "pts": [
+        [
+          6,
+          -7
+        ],
+        [
+          12,
+          -7
+        ],
+        [
+          12,
+          7
+        ],
+        [
+          6,
+          7
+        ]
+      ],
+      "fill": "#434d67",
+      "width": 0
+    }
+  ],
+  "belt": "side",
+  "hit": 0
+}

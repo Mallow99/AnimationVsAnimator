@@ -1,0 +1,78 @@
+{
+  "type": "prop",
+  "id": "bookshelf",
+  "name": "Bookshelf",
+  "about": "A low bookcase. Reading figures fetch and return their actual books here; add books from Supplies.",
+  "use": "storage",
+  "actions": [
+    "store"
+  ],
+  "move": "drag",
+  "friction": 0.8,
+  "outline": [
+    [
+      0,
+      0
+    ],
+    [
+      92,
+      0
+    ],
+    [
+      92,
+      65
+    ],
+    [
+      0,
+      65
+    ]
+  ],
+  "shape": [
+    {
+      "rect": [
+        0,
+        0,
+        92,
+        65
+      ],
+      "fill": "#70533e",
+      "radius": 2
+    },
+    {
+      "rect": [
+        6,
+        5,
+        80,
+        27
+      ],
+      "fill": "#372f32"
+    },
+    {
+      "rect": [
+        6,
+        38,
+        80,
+        21
+      ],
+      "fill": "#372f32"
+    },
+    {
+      "rect": [
+        4,
+        32,
+        84,
+        5
+      ],
+      "fill": "#aa8058"
+    },
+    {
+      "rect": [
+        4,
+        59,
+        84,
+        6
+      ],
+      "fill": "#aa8058"
+    }
+  ]
+}

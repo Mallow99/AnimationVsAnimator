@@ -16,7 +16,9 @@
     "browsercheck": "node scripts/build.mjs && node scripts/browser-check.mjs",
     "soak": "node scripts/build.mjs soak && node .build/soak.mjs",
     "chromecheck": "node scripts/chrome-check.mjs",
-    "roadmapcheck": "node scripts/build.mjs roadmap-checks && node .build/roadmap-checks.mjs"
+    "roadmapcheck": "node scripts/build.mjs roadmap-checks && node .build/roadmap-checks.mjs",
+    "qualitycheck": "node scripts/build.mjs quality-checks && node .build/quality-checks.mjs",
+    "qualityprofile": "node scripts/build.mjs quality-profile && node .build/quality-profile.mjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

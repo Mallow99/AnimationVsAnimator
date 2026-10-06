@@ -1,7 +1,8 @@
 # Current controls and Mac acceptance
 
-Workshop and Household now include wearable satchels, animator tools, saved storage, crafting,
-furniture arranging, two-to-five-person activities and Pong. See [UPDATE-PLAN.md](UPDATE-PLAN.md)
+Pet Quality now polishes the Workshop/Household foundation: smoother seating, quieter everyday
+behavior, cups/dumbbells/yo-yos, real bookshelf storage, passive carrying and reliable reloads.
+See [PET-QUALITY.md](PET-QUALITY.md) for the item audit and verification. See [UPDATE-PLAN.md](UPDATE-PLAN.md)
 for the current five-update roadmap; batch scope is unlimited.
 
 ## Satchels, supplies and trash
@@ -12,7 +13,7 @@ Take row for every owned item. **Activities…** opens the activity list directl
 
 - **Bag** contains that figure's actual items, with **In bag / In hand / Wearing** states and pistol ammo.
   Click a card to inspect it; this keeps the panel open. **Take out** puts the original item on your
-  cursor. **Use with cursor** enables weapon controls. **Store in bag**, **Drop beside figure** and
+  cursor for passive carrying. **Use with cursor** explicitly enables weapon or cleaner controls. **Store in bag**, **Drop beside figure** and
   **Trash** say what they do. Dragging a card remains available.
 - **Supplies** creates new tools and furniture. Select a card, then **Give to [figure]** or **Place on
   desktop**. Owner buttons choose the recipient. A full bag asks you to free a slot or place the tool.
@@ -23,8 +24,10 @@ Take row for every owned item. **Activities…** opens the activity list directl
   remain visible while the choices scroll, and an open panel stays where you opened it.
 
 After taking an object out, drag or click to place it, or drop it onto a figure to store/pass it.
-The temporary controls in the top-right offer **Cancel** and, for weapons, **Use with cursor**.
-Escape/right-click/Cancel restores an existing item to its previous hand, worn state or bag slot;
+The temporary controls in the top-right offer **Cancel** and, for weapons/cleaners, **Use with cursor**.
+Cleaners offer **Stop using** to carry safely again. Controls themselves do not wipe/color/erase ink.
+Escape/right-click/Cancel restores an existing item to its previous hand, worn state, bag slot or
+world/shelf location; Carry → Cancel returns a cursor weapon to its bag;
 unplaced new supplies are discarded. Figures cannot snatch a tool during user-controlled use.
 
 **Trash** is also available from an object's right-click menu and Settings → Items. **Undo trash**
@@ -38,8 +41,9 @@ non-focusable. **Keyboard** explicitly enables Tab/Enter/Space; Escape closes it
 
 ## Workshop
 
-Pull a **Sponge** and move it over raw pen strokes to wipe locally. **Eraser** removes ink objects;
-**Paint bucket** does their coloring step. Put a desk, workbench or tool shelf on the desktop from
+Pull a **Sponge**, choose **Use with cursor**, then move over raw pen strokes to wipe locally.
+**Eraser** and **Paint bucket** also require explicit **Use with cursor**; they remove ink objects or
+do their coloring step. **Stop using** restores passive carrying, and dropping/passing stops use. Put a desk, workbench or tool shelf on the desktop from
 the catalog. Use the figure's action menu or talk commands, with no settings window needed:
 
 - “Make a blueprint” traces a katana on desk paper and stores a copy in the satchel.
@@ -67,6 +71,31 @@ console near the TV. Daily rhythm is optional: real night/morning and system idl
 sleep and welcome-back greetings. Drawing/building/game talents affect speed or skill; pair memories
 retain shared activities, disagreements and effective fighting moves.
 
+## Pet Quality checks on your Mac
+
+1. Start this branch with `npm ci` then `npm start`. Confirm the Swift helper starts/compiles.
+   Rapidly switch between pointer bag use, bag Keyboard, chat and Pong Keyboard. Close each control;
+   confirm focus returns to your original app without disappearing figures or switching Spaces.
+2. Take a pistol out: move it around before Use and confirm it stays passive. Explicitly Use it,
+   empty/reload with the mouse button, then Carry, Drop, pick up, Cancel and Put away. Interrupt a
+   figure's reload, let it resume and restart with a partially empty gun. Confirm one original gun.
+3. Take a sponge/eraser/bucket out and carry without using. Use, Stop using, drop, pass, trash/Undo
+   and Cancel; confirm drawings change only while explicitly using, away from the controls.
+4. Give a cup, dumbbell, yo-yo and handheld from Supplies. Run their named Activities and interrupt
+   each during a reach. Check natural handling, consistent limbs and no stranded hand/item state.
+5. Place a bookshelf and five books, one per figure. Store books on it through the bag. Read, fetch,
+   watch opening/page-turn/closing/return, interrupt, take a reading book and restart. Verify actual
+   saved books and separate slots. Drag/tip the bookcase and check contents become normal loose items.
+6. Seat all five on the couch. Let calm figures rest/read; talk, then explicitly change an activity.
+   Ambient invitations should wait. Invite a figure standing on a window to a floor gathering.
+7. Stack and lean furniture/items, leave them to settle, then drag, push, carry, strike and throw them.
+   Carry a sleeping figure gently and release close to the floor; try a hard impact separately.
+8. Leave two-to-five figures running during your normal workflow and return after idle. Restart and
+   verify owned items, ammo/reload state, furniture, books and relationships.
+
+Cloud Linux/Chromium/Electron checks do not establish native Mac focus/Spaces behavior. Windows
+portable packaging is verified; real PowerShell/input/mixed-DPI behavior still needs a Windows machine.
+
 ## Workshop/Household checks on your Mac
 
 1. Start this branch with `npm ci` then `npm start`. Open a satchel and use supplies with the mouse;
@@ -90,8 +119,11 @@ the small weapon bar shows the current tool and relevant controls.
 
 - Sword or mace: hold the left button and swipe quickly to swing.
 - Pistol: press at the grip position, hold and drag away from it to aim/fire. Release to reposition.
-  Its six-round magazine stays with the item. Press **R** to reload; the reload takes a moment.
+  Its six-round magazine stays with the item. Click **Reload** (or press **R** when the overlay has
+  keyboard focus); the reload takes about 1.15 seconds. Progress follows the gun through interruptions,
+  storage and restarts. Guns still reload; the repeated-reload failure has been fixed.
 - Bow: press at the grip position, hold and drag to aim/charge, then release to shoot an arcing arrow.
+- **Carry** switches the original weapon to passive transport; **Drop** leaves it on the desktop.
 - **Esc** or **Put away** returns a taken item to its owner. Right-click over a figure to hand it back,
   or away from the figures to drop it. A dropped item can be picked up again.
 
@@ -105,7 +137,17 @@ Open each figure's **Mind → Hyperactivity** meter. Lower values encourage sett
 make it more restless. Mood also affects duration. The default is 0.25 and settings are independent.
 Calm viewing can last around half an hour; games and reading can last several minutes.
 
-Use “Read a book” in the actions, or say “read a book.” TV activities require a placed TV.
+Use “Read a book” in Activities, or say “read a book.” Books open, turn pages, close, and return to a
+placed bookshelf after reading. **Supplies → Bookshelf → Place on desktop** creates the bookcase.
+Give real books from Supplies; an owned book's bag actions include **Store on bookshelf** when a
+usable shelf is placed. It has five slots. Right-click a shelved book to take/store/trash the original.
+Owners fetch their own shelved books; grabbing/tipping/removing the shelf releases them.
+
+Give a **Cup**, **Dumbbell** or **Yo-yo** from Supplies, then choose **Have a drink**, **Train with a
+dumbbell** or **Play with a yo-yo** in Activities. Offline phrases include “have a drink,” “lift weights”
+and “play with a yo-yo.” The figure finishes a sip/set/catch before storage, with pauses between actions.
+“Play a handheld” uses its actual pocket game. Missing supplies are explained in the activity list.
+TV activities require a placed TV.
 Ordinary conversation can continue without ending the activity. Asking for a different action
 still changes it, and removing/holding/tipping occupied furniture releases or interrupts its use.
 

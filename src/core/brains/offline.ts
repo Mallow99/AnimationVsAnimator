@@ -10,6 +10,9 @@ export interface OfflineReply {
 }
 const choose = (a: string[]) => a[Math.floor(Math.random() * a.length)];
 const ACTIONS: [RegExp, string][] = [
+  [/\b(?:sip|have a drink|drink from|drink your|tea break|coffee break)\b/, 'sip'],
+  [/\b(?:exercise|work out|workout|lift weights|dumbbell|train with)\b/, 'exercise'],
+  [/\b(?:yo-yo|yoyo)\b/, 'yoyo'],
   [/\b(?:pass|share|give).*tool\b/,'passtool'],
   [/\bcompare.*drawing\b/,'comparedrawings'],
   [/\b(?:check on|help).*friend\b/,'checkfriend'],

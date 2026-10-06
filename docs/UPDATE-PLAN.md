@@ -1,11 +1,26 @@
 # Project roadmap
 
-Owner pause: finish the current bug/coherence cleanup, then stop before the next update. Resume only
-when the owner asks to continue; the unlimited batch-scope preference remains in effect.
+## Current priority: Pet Quality (completed in this update)
 
-Owner-approved five-update plan. Batch scope is unlimited; the owner removed the one-or-two-system limit on 2026-10-06. Keep runnable builds, regression checks, visual checks and separate Mac/Windows acceptance evidence. New actions must ship with offline commands.
+The owner's 2026-10-06 instruction overrides the roadmap order: finish a coherent Pet Quality update
+before adding more Chrome/Finder integration. Batch scope remains unlimited. This update is implemented
+and cloud-verified; stop here before the next milestone. Mac/Windows hardware acceptance remains open.
 
-Current authorized work completes Workshop and Household, including the owner’s additional requests: optional movable pixel-art bag/trash shortcuts, no interaction flicker, wearable satchels, group activities for 2–5 with count-specific activities, and couch seating for five.
+Built: smoother seating and wider five-seat couch; purposeful quieter personality-driven everyday
+behavior; cups/dumbbells/yo-yos; book opening/page-turning/closing with real bookshelf fetch/return;
+passive pickup and explicit Use/Carry/Drop/Stop controls; resumable six-round gun reloads; stable contact
+friction/stacking; elevated-group descent; keyboard/refocus ownership guard. Existing item behavior,
+ownership, saves and interrupted activities were audited. See [PET-QUALITY.md](PET-QUALITY.md) for the
+item audit, visual evidence, tests, performance and remaining limits.
+
+The owner's correction is authoritative: **fix broken/infinite reloading, retain reload mechanics**.
+Books were an example, not an item-count limit. Picking up an item must not automatically use it.
+People Playground was consulted for physical-contact expectations; movable props remain movable.
+
+The existing five-update plan stays below for context. Workshop and Household are built on
+`codex/roadmap-continuation`, stacked on `codex/desktop-life`; PR #3 remains the continuation PR.
+Out of the Box and Mind & Ship are paused. Resume only on a new owner instruction, beginning with
+real-hardware acceptance of what already exists. No new Chrome/Finder feature starts in this pass.
 
 **Short version**
 1. **Steel**: combat (built; PR #2 and Mac acceptance still pending)

@@ -29,6 +29,7 @@ var lastChange = Date()
 var userApp: NSRunningApplication? = nil
 let lock = NSLock()
 var refocusWanted = false
+var keyboardLocked = false
 // Window moves waiting to happen (only the newest per window matters), done on the main loop.
 var pendingMoves: [Int: CGPoint] = [:]
 var pendingCloses: [(Int, Int)] = []
@@ -170,7 +171,10 @@ FileHandle.standardInput.readabilityHandler = { h in
   while let end = inputBuffer.firstIndex(of: "\n") {
     let line = String(inputBuffer[..<end]); inputBuffer.removeSubrange(...end)
     let parts = line.split(separator: " ")
-    if line == "refocus" { lock.lock(); refocusWanted = true; lock.unlock() }
+    if line == "keyboard on" || line == "keyboard off" {
+      lock.lock(); keyboardLocked = line == "keyboard on"; if keyboardLocked { refocusWanted = false }; lock.unlock()
+    }
+    else if line == "refocus" { lock.lock(); if !keyboardLocked { refocusWanted = true }; lock.unlock() }
     else if line == "ui on" || line == "ui off" { lock.lock(); uiOn = line == "ui on"; lock.unlock() }
     else if parts.count == 4, parts[0] == "win", let id = Int(parts[1]), let x = Double(parts[2]), let y = Double(parts[3]) {
       lock.lock(); pendingMoves[id] = CGPoint(x: x, y: y); lock.unlock()
@@ -200,7 +204,7 @@ while true {
       userApp = front
       lock.lock(); frontPid = front.processIdentifier; frontName = front.localizedName ?? ""; lock.unlock()
     }
-    lock.lock(); let want = refocusWanted; refocusWanted = false; let moves = pendingMoves; pendingMoves = [:]; let closes = pendingCloses; pendingCloses = []; lock.unlock()
+    lock.lock(); let want = refocusWanted && !keyboardLocked; refocusWanted = false; let moves = pendingMoves; pendingMoves = [:]; let closes = pendingCloses; pendingCloses = []; lock.unlock()
     // A pointer press is not a request to change the user's app/Space. Only undo
     // an actual activation of our own app, and never reactivate an already-front app.
     if want, Int(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1) == selfPid,

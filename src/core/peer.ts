@@ -14,6 +14,8 @@ import type { V3, Vec } from './math';
 
 export interface FighterView {
   id?: string;
+  looseItemHulls?: Vec[][];
+  shelvedBooks?: {key:string;slot:number}[];
   consoleLocations?: {x:number;y:number}[];
   talent?: import('./relationships').Talent;
   group?: import('./skills/group').GroupView;
@@ -62,7 +64,7 @@ export interface WeaponInfo { id: string; hit: number; cuts: boolean }
 
 export type PeerMsg =
   | {type:'moment';kind:'compare'|'check'}
-  | {type:'toolGift';token:string;def:import('./items').ItemDef;ammo:number;ink?:import('./crafting-state').InkProject}
+  | {type:'toolGift';token:string;def:import('./items').ItemDef;ammo:number;reloadRemaining?:number;ink?:import('./crafting-state').InkProject}
 
   | { type: 'groupInvite'; plan: import('./skills/group').GroupPlan }
   | { type: 'groupGo'; session: string; epoch: number }

@@ -287,6 +287,7 @@ export class Character {
    * of the screen, still glancing the way he faces), or lying along it (a couch: head on the armrest
    * behind him, feet the way he faces).
    */
+  private seatTransition: { from: Targets; left: number } | null = null;
   seatStyle: SeatStyle = 'up';
   get lounge() { return this.seatStyle === 'lounge'; }
   /** Sitting with a game controller in both hands; `padMash` (0..1) is how hard his thumbs are going. */
@@ -1069,6 +1070,12 @@ export class Character {
       case 'roll': this.rollPose(dt, t, s); break;
     }
 
+    if (this.seatTransition && ['sit','ground'].includes(this.mode)) {
+      this.seatTransition.left = Math.max(0, this.seatTransition.left-dt);
+      const u = smooth(1-this.seatTransition.left/0.45);
+      for (const n of JOINTS) if (t[n]) t[n] = lerp3(this.seatTransition.from[n]!,t[n]!,u);
+      if (!this.seatTransition.left) this.seatTransition = null;
+    }
     const b = this.body;
     const hipVY = (b.j.hip.y - b.j.hip.py) / dt;
     integrate(b.points, dt);
@@ -1209,6 +1216,11 @@ export class Character {
   }
 
   private setMode(m: Mode) {
+    if ((m === 'sit' && this.mode === 'ground') || (m === 'ground' && this.mode === 'sit')) {
+      const from: Targets = {};
+      for (const n of JOINTS) from[n] = { x: this.body.j[n].x, y: this.body.j[n].y, z: this.body.j[n].z };
+      this.seatTransition = { from, left: 0.45 };
+    } else if (m !== this.mode) this.seatTransition = null;
     if (m !== 'climb') this.climb = null;
     if (m !== 'ceiling') this.hang = null;
     if (m !== 'climb' && m !== 'ceiling') this.releaseGrips();
@@ -2402,7 +2414,7 @@ export class Character {
     const kneeAt = (k: 'L' | 'R') => this.off(hip, kneeFwd, 1 * sc, sideOf(k) * kneeSide);
     const foot = (k: 'L' | 'R') => {
       const kn = kneeAt(k);
-      const swing = this.lounge ? 0 : Math.sin(this.time * 1.7 + (k === 'L' ? 0 : 2)) * 0.12;
+      const swing = this.lounge ? 0 : Math.sin(this.time * 1.1 + (k === 'L' ? 0 : 2)) * 0.06 * Math.max(0, Math.sin(this.time * 0.12));
       const f = { x: kn.x + this.facing * Math.sin(swing) * d.shin, y: Math.min(ground - 2, kn.y + d.shin * Math.cos(swing)), z: kn.z };
       return this.off(f, 0, 0, -sideOf(k) * 3 * this.present * sc);
     };

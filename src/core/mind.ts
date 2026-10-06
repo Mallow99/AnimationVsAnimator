@@ -1,4 +1,5 @@
 import { ReadBook } from './skills/read-book';
+import { EverydayItem } from './skills/everyday-item';
 import { propActions } from './capabilities';
 import { restlessness, isSettledActivity } from './activity-pacing';
 // The offline mind ("Mode 0"): instinct, no AI.
@@ -209,6 +210,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'videogame', label: 'Play video games' }, { name: 'ride', label: 'Ride the scooter' },
   { name: 'read', label: 'Read a book' },
+  { name: 'sip', label: 'Have a drink' }, { name: 'exercise', label: 'Train with a dumbbell' }, { name: 'yoyo', label: 'Play with a yo-yo' },
   { name: 'paint', label: 'Paint on his canvas' }, { name: 'playgame', label: 'Play Othello with you on the TV' }, { name: 'duel', label: 'Spar with his friend' },
   { name: 'highfive', label: 'High five his friend' }, { name: 'fistbump', label: 'Fist bump his friend' }, { name: 'handshake', label: 'Shake hands with his friend' },
   { name: 'pattycake', label: 'Patty cake with his friend' }, { name: 'hug', label: 'Hug his friend' }, { name: 'bump', label: 'Bump into his friend (rude)' },
@@ -230,7 +232,7 @@ export const COMMANDS: { name: string; label: string }[] = [
 
 export class Mind {
   skill: Skill | null = null;
-  get activeSkill(): Skill | null { return this.skill instanceof PlanSkill ? this.skill.active ?? this.skill : this.skill; }
+  get activeSkill(): Skill | null { return this.skill instanceof PlanSkill ? this.skill.active ?? this.skill : this.skill ?? this.queued; }
   /** When he last started a duel with his friend (so they don't fight nonstop), and did something with him. */
   private duelAt = -60;
   private socialAt = -20;
@@ -320,7 +322,7 @@ export class Mind {
       : L === 'bored' || ((E === 'content' || E === 'annoyed') && this.chill) ? 'pocket' : 'normal';
     // Body language standing still, from the finer emotion.
     ch.idleStyle = E === 'annoyed' ? 'crossed' : E === 'proud' ? 'hips' : E === 'happy' ? 'behind' : E === 'nervous' || E === 'lonely' ? 'hug' : 'none';
-    ch.tapFoot = E === 'annoyed' || (E === 'bored' && this.chill);
+    ch.tapFoot = restlessness(c) > 0.45 && (E === 'annoyed' || (E === 'bored' && this.chill));
     this.mutter(c);
     this.noticeWhatYoureDoing(c);
     // Moving around tires him out (running more), on top of the slow drain over time.
@@ -385,7 +387,7 @@ export class Mind {
   private mutter(c: Ctx) {
     const w = c.world, m = c.mood, ch = c.char;
     if (w.time < this.mutterAt || m.asleep || !ch.ready || (this.skill && !['idle', 'wander', 'sit', 'ledgesit'].includes(this.skill.name))) return;
-    this.mutterAt = w.time + rand(25, 60);
+    this.mutterAt = w.time + rand(45, 100) * (1.5 - restlessness(c));
     const lines: Partial<Record<string, string[]>> = {
       annoyed: ['hmph.', 'ugh.', '*sigh*', 'whatever.'],
       happy: ['♪', '♪ la la ♪', 'hm hm hmm ♪'],
@@ -457,6 +459,7 @@ export class Mind {
     if (name.startsWith('group:')) { const plan = groupPlan(c, name.slice(6) as GroupAct); return plan ? new GroupActivity(plan) : null; }
     const workshop = workshopSkill(c, name); if (workshop) return workshop;
     if (name === 'read') return new ReadBook();
+    if (['sip','exercise','yoyo'].includes(name)) return new EverydayItem(name === 'yoyo' ? 'play' : name as 'sip' | 'exercise', name as 'sip' | 'exercise' | 'yoyo');
     if(['closetab','closewindow','pluck','restorepage','folder','file'].includes(name))return new DesktopInteraction(name as import('../shared/desktop').DesktopAction);
     if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun',true) : null;
     if(name==='drawtool')return c.items.find('draw') && c.char.useHand ? new DrawTool('foam-sword',true) : null;
@@ -482,7 +485,7 @@ export class Mind {
   }
 
   /** Forget the current plan (e.g. his body was rebuilt). */
-  reset(c: Ctx) { this.end(c); this.queued = null; }
+  reset(c: Ctx) { this.end(c); this.queued = null; this.afterThat = null; }
 
   private begin(c: Ctx, s: Skill) {
     c.look = 'default';
@@ -578,6 +581,10 @@ export class Mind {
       { name: 'grabcursor', score: c.canGrabCursor && cursorActive && near && c.world.time - this.lastGrab > 60 && (L === 'playful' || L === 'bored' || L === 'angry') ? 0.7 : 0,
         why: L === 'angry' ? 'getting back at you' : 'feeling mischievous', make: () => { this.lastGrab = c.world.time; return new GrabCursor(); } },
     ];
+    for (const [name, use] of [['sip','sip'],['exercise','exercise'],['yoyo','play']] as const) {
+      const item = c.items.find(use);
+      if (item && item.where !== 'cursor') opts.push({name,score:name === 'sip' ? 0.2+(1-s.energy)*0.2 : name === 'exercise' ? 0.05+s.energy*0.18 : 0.1+s.boredom*0.2,why:name === 'sip' ? 'a quiet drink' : name === 'exercise' ? 'a short training set' : 'practicing a pocket trick',make:()=>new EverydayItem(use,name)});
+    }
     if(c.items.find('game'))opts.push({name:'handheld',score:0.1+c.mood.s.boredom*0.15,why:'playing his pocket game',make:()=>new PlayHandheld()});
     if(c.world.time-this.socialAt>90 && propsOf(c,'tv').length && (c.peers?.()??[]).some(v=>!v.busy&&!v.asleep))opts.push({name:'pong',score:0.08+c.mood.s.boredom*0.12,why:'a game with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'pong');return plan?new GroupActivity(plan):new Idle(3);}});
     const tvToMove=propsOf(c,'tv').find(t=>!t.watchers.size&&!t.players.length),couchToUse=propsOf(c,'seat').find(t=>t.seatRoom>1);
@@ -672,7 +679,7 @@ export class Mind {
     }
     // His things lying around (you dropped them, or he did): pick them up and put them back on his belt.
     const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
-    const lying = c.items.list.find((it) => it.where === 'world' && it.def.belt !== 'none' && it.at.y > feet - 60 * ch.scale && Math.abs(it.at.y - feet) < 120 * ch.scale);
+    const lying = c.items.list.find((it) => it.where === 'world' && !it.shelf && !it.working && it.def.belt !== 'none' && it.at.y > feet - 60 * ch.scale && Math.abs(it.at.y - feet) < 120 * ch.scale);
     if (lying && ch.useHand) opts.push({ name: 'pickup', why: `his ${lying.def.name.toLowerCase()} is on the floor`, score: L === 'sleepy' ? 0.3 : 1.6, make: () => new FetchItem(lying) });
     // You've had one of his things for a while.
     const taken = c.items.carried;
@@ -798,7 +805,7 @@ export class Mind {
     // Same floor (or the same window top), both on their feet, and he isn't busy with something of his own.
     const together = !!fh && Math.abs(fh.y - hip.y) < 40 * ch.scale && ch.legCount === 2 && !!ch.useHand;
     const free = together && f.mode === 'ground' && !f.busy && !f.asleep && f.doing !== 'together' && f.doing !== 'duel' && f.doing !== 'ask';
-    const ready = this.forced || w.time - this.socialAt > 30;
+    const ready = this.forced || w.time - this.socialAt > 55 + 50 * (1 - restlessness(c));
     const happy = L === 'playful' || E === 'happy' || E === 'content' || E === 'excited';
     const opts: Option[] = [];
     const ask = (act: Act, score: number, why: string) => opts.push({ name: act, score: free && ready ? score : 0, why,
@@ -837,7 +844,7 @@ export class Mind {
   /** His friend asked to do something together: yes or no (mood, how he feels about him, whether he's busy). */
   private answerInvite(c: Ctx, act: string, name: string) {
     const L = c.mood.label, bond = c.feel.bond, ch = c.char;
-    const busy = this.skill && ['duel', 'playgame', 'reattach', 'sleep', 'nap', 'together', 'ask', 'videogame', 'paint', 'group', 'refine', 'deskwork', 'handheld'].includes(this.skill.name);
+    const busy = this.queued || this.skill && (isSettledActivity(this.skill.name) || ['sip','exercise','yoyo','duel', 'playgame', 'reattach', 'sleep', 'nap', 'together', 'ask', 'videogame', 'paint', 'group', 'refine', 'deskwork', 'handheld'].includes(this.skill.name));
     const able = ch.mode === 'ground' && ch.legCount === 2 && !!ch.useHand && !c.mood.asleep;
     let yes = !busy && able && isAct(act) && L !== 'angry' && L !== 'scared';
     if (yes) yes = chance(act === 'hug' ? (bond > 0.3 || L === 'sad' ? 0.9 : 0.3) : bond < -0.3 ? 0.25 : 0.65 + bond * 0.35);
@@ -994,14 +1001,14 @@ export class Mind {
         // His friend wants to fight: he squares up too (same weapons), unless he's busy with something of his own.
         const keep = ['playgame', 'reattach', 'sleep', 'duel', 'group', 'refine', 'deskwork', 'handheld'];
         const upHigh = c.char.support >= 0 && !c.props?.thingOf(c.char.support); // (up on a window: he can't fight from there)
-        if (this.skill && keep.includes(this.skill.name) || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand || upHigh) return;
+        if (this.queued || this.skill && (keep.includes(this.skill.name) || isSettledActivity(this.activeSkill?.name)) || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand || upHigh) return;
         this.why = `${e.name} wants to fight`;
         this.interrupt(c, new Duel(e.armed));
         return;
       }
       case 'friendFighting': {
         // His friend's fighting your cursor: he joins in (unless he's busy with something of his own).
-        const busy = this.skill && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'chase'].includes(this.skill.name);
+        const busy = this.queued || this.skill && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'chase'].includes(this.skill.name);
         if (busy || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand) return;
         if (!c.world.cursor) return;
         this.why = 'backing up his friend';
