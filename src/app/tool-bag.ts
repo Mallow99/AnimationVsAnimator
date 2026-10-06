@@ -44,7 +44,8 @@ export class ToolBag {
   private title = document.createElement("strong");
   private status = document.createElement("p");
   private choices = document.createElement("div");
-  private owners = document.createElement("div");
+  private owners = document.createElement("select");
+  private search = document.createElement("input");
   private tabs = document.createElement("nav");
   private details = document.createElement("div");
   private footer = document.createElement("footer");
@@ -134,6 +135,7 @@ export class ToolBag {
         this.suppressClick = false;
         return;
       }
+      this.selected = "all";
       this.setView("supplies");
       this.toggle();
     };
@@ -180,6 +182,12 @@ export class ToolBag {
       this.tabs.append(tab);
     }
     this.owners.className = "bag-owners";
+    this.owners.id = "bagOwner"; this.owners.setAttribute("aria-label", "Inventory target");
+    this.owners.onchange = () => { this.selected = this.owners.value; this.selection = null; this.signature = ""; this.refresh(); };
+    this.search.id = "bagSearch"; this.search.type = "search"; this.search.placeholder = "Find an item or activity";
+    this.search.setAttribute("aria-label", "Find an item or activity");
+    this.search.oninput = () => this.renderChoices();
+    for(const input of [this.search,this.owners]) input.onfocus = () => { this.keyboard=true; this.typing(true); };
     this.status.id = "bagHint";
     this.status.setAttribute("role", "status");
     this.choices.className = "bag-choices";
@@ -191,7 +199,7 @@ export class ToolBag {
     instructions.textContent = "Right-click a figure → Open bag. Bag contains its own items; Supplies adds new tools or furniture. Click a card to see its actions, or drag it onto the desktop or another figure. Activities lists things the figure can do and what each needs. Escape or Cancel puts a dragged item back. Trash has one Undo, also available here when the desktop shortcuts are hidden.";
     this.help.append(summary, instructions);
     this.footer.append(this.panelUndo, this.help);
-    this.panel.append(header, this.owners, this.tabs, this.status, this.details, this.choices, this.footer);
+    this.panel.append(header, this.owners, this.tabs, this.search, this.status, this.details, this.choices, this.footer);
     this.transport.id = "bagTransport"; this.transport.hidden = true;
     const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = "Cancel";
     cancel.onclick = () => this.cancel();
@@ -215,7 +223,7 @@ export class ToolBag {
     this.hint.textContent = "Right-click → Open bag / Activities";
     document.body.append(this.hint);
     this.root.addEventListener("mousedown", (e) => {
-      if (!this.keyboard) e.preventDefault();
+      if (!this.keyboard && !(e.target instanceof HTMLSelectElement) && !(e.target instanceof HTMLInputElement)) e.preventDefault();
       e.stopPropagation();
     });
     this.root.addEventListener("contextmenu", (e) => {
@@ -283,6 +291,12 @@ export class ToolBag {
     return (
       this.pets().find((p) => p.ctx.who === this.selected) ?? this.pets()[0]
     );
+  }
+  private targets() { return this.selected === "all" ? this.pets() : [this.current()].filter((p):p is Pet=>!!p); }
+  private itemOwner(id:string) { return this.targets().find(p=>p.items.list.some(i=>String(i.uid)===id)); }
+  showAll(view: "inventory" | "supplies" | "activities" = "inventory") {
+    const p=this.pets()[0];if(!p||this.dragging)return;
+    this.showFor(p,view);this.selected="all";this.signature="";this.refresh();
   }
   showFor(p: Pet, view: "inventory" | "supplies" | "activities" = "inventory") {
     if (this.dragging) return;
@@ -399,10 +413,10 @@ export class ToolBag {
     const actions = this.view === "activities" ? activitiesFor(owner) : [];
     const signature = JSON.stringify([
       this.view,
-      owner?.ctx.who,
+      this.selected,
       pets.map((p) => [p.ctx.who, p.config.name]),
       this.owned
-        ? owner?.items.onHim.map((i) => [i.uid, i.where, i.ammo, i.ink?.progress])
+        ? this.targets().map(p=>[p.ctx.who,p.items.list.map((i) => [i.uid, i.where, i.ammo, i.shelf, i.ink?.progress])])
         : [
             owner && [...owner.items.defs.values()],
             owner && [...owner.props.defs.values()],
@@ -412,23 +426,11 @@ export class ToolBag {
     if (signature !== this.signature) {
       const focused = document.activeElement instanceof HTMLButtonElement && this.root.contains(document.activeElement) ? document.activeElement : null;
       this.signature = signature;
-      this.title.textContent = `${owner.config.name}’s bag`;
-      this.status.textContent = this.owned ? `${owner.items.onHim.filter(i => i.where === "belt").length}/16 bag slots · Click an item for actions, or drag it out.` : this.view === "supplies" ? `New supplies for ${owner.config.name}. Click a card to give or place it.` : "Choose an activity. Missing tools, furniture or companions are shown below.";
-      this.owners.replaceChildren(
-        ...pets.map((p) => {
-          const b = document.createElement("button");
-          b.type = "button";
-          b.textContent = p.config.name;
-          b.setAttribute("aria-pressed", String(p === owner));
-          b.onclick = () => {
-            this.pendingPull = null;
-            this.selected = p.ctx.who;
-            this.selection = null;
-            this.refresh();
-          };
-          return b;
-        }),
-      );
+      this.title.textContent = "Inventory and activities";
+      const all=this.selected==="all", who=all?"all figures":owner.config.name;
+      this.status.textContent = this.owned ? `${all?"Owned items for all figures":`${owner.items.onHim.filter(i => i.where === "belt").length}/16 bag slots`} · Items on shelves and the desktop are included.` : this.view === "supplies" ? `New supplies for ${who}. Furniture places one shared object.` : `Activities for ${who}. Shared activities start once; individual activities use available figures.`;
+      this.owners.replaceChildren(new Option("All figures on the desktop","all"),...pets.map(p=>new Option(p.config.name,p.ctx.who)));
+      this.owners.value=this.selected==="all"?"all":owner.ctx.who;
       this.renderChoices();
       if (this.keyboard && this.opened && focused && !focused.isConnected) {
         const match = [...this.root.querySelectorAll("button")].find(b =>
@@ -443,11 +445,13 @@ export class ToolBag {
     const owner = this.current();
     this.choices.replaceChildren();
     if (!owner) return;
+    const matches=(text:string)=>text.toLowerCase().includes(this.search.value.trim().toLowerCase());
     const choice = (
       kind: "item" | "prop" | "owned",
       id: string,
       def: Parameters<typeof thingCard>[0],
     ) => {
+      if(!matches(def.name+" "+def.about))return;
       const button = document.createElement("button");
       button.type = "button";
       button.className = "bag-choice";
@@ -457,9 +461,10 @@ export class ToolBag {
       button.setAttribute("aria-pressed", String(this.selection?.kind === kind && this.selection.id === id));
       button.append(thingCard(def, [], 18));
       if (kind === "owned") {
-        const item = owner.items.onHim.find(i => String(i.uid) === id)!;
+        const actual=this.itemOwner(id)!;
+        const item = actual.items.list.find(i => String(i.uid) === id)!;
         const state = document.createElement("small");
-        state.textContent = item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : "In bag";
+        state.textContent = (this.selected==="all"?actual.config.name+" · ":"") + (item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : item.where === "cursor" ? "With cursor" : item.shelf ? "On bookshelf" : item.where === "world" ? "On desktop" : "In bag");
         if (item.def.use === "gun") state.textContent += ` · ${item.ammo}/6 rounds`;
         button.append(state);
       }
@@ -486,21 +491,24 @@ export class ToolBag {
     if (this.view === "activities") {
       let group = "";
       for (const activity of activitiesFor(owner)) {
+        if(!matches(activity.label+" "+activity.hint+" "+activity.group))continue;
         if (group !== activity.group) { group = activity.group; const h = document.createElement("h3"); h.textContent = group; this.choices.append(h); }
         const button = document.createElement("button"); button.type = "button"; button.className = "bag-activity"; button.dataset.action = activity.command;
         const title = document.createElement("strong"); title.textContent = activity.label;
         const hint = document.createElement("small"); hint.textContent = activity.needs ?? activity.hint;
-        button.disabled = !!activity.needs; button.append(title, hint);
-        button.onclick = () => { owner.command(`do:${activity.command}`); this.changed(); this.toggle(false); };
+        button.disabled = this.targets().every(p=>!!activitiesFor(p).find(a=>a.command===activity.command)?.needs); button.append(title, hint);
+        button.onclick = () => { const targets=this.targets();const shared=/^(group:|pong|arrange|carrytogether|readingcorner|workcorner)/.test(activity.command);
+          for(const p of shared?targets.slice(0,1):targets)if(!activitiesFor(p).find(a=>a.command===activity.command)?.needs)p.command(`do:${activity.command}`);
+          this.changed(); this.toggle(false); };
         this.choices.append(button);
       }
       const stop = document.createElement("button"); stop.type = "button"; stop.textContent = owner.mood.asleep ? "Wake up" : "Stop current activity";
-      stop.onclick = () => { owner.command("do:wake"); this.changed(); this.signature = ""; this.refresh(); };
+      stop.onclick = () => { for(const p of this.targets())p.command("do:wake"); this.changed(); this.signature = ""; this.refresh(); };
       this.choices.prepend(stop);
     } else if (this.owned) {
-      for (const item of owner.items.onHim)
+      for (const p of this.targets())for (const item of p.items.list)
         choice("owned", String(item.uid), item.def);
-      if (!owner.items.onHim.length) { const empty = document.createElement("p"); empty.className = "bag-empty"; empty.textContent = "This bag is empty. Open Supplies to give this figure a tool."; this.choices.append(empty); }
+      if (!this.targets().some(p=>p.items.list.length)) { const empty = document.createElement("p"); empty.className = "bag-empty"; empty.textContent = "This bag is empty. Open Supplies to give this figure a tool."; this.choices.append(empty); }
     } else
       for (const [kind, defs] of [
         ["item", owner.items.defs],
@@ -515,9 +523,9 @@ export class ToolBag {
   }
   private renderDetails() {
     this.details.replaceChildren();
-    const owner = this.current(), selected = this.selection;
+    const selected = this.selection, owner = selected?.kind === "owned" ? this.itemOwner(selected.id) : this.current();
     if (!owner || !selected) { this.details.hidden = true; return; }
-    const item = selected.kind === "owned" ? owner.items.onHim.find(i => String(i.uid) === selected.id) : null;
+    const item = selected.kind === "owned" ? owner.items.list.find(i => String(i.uid) === selected.id) : null;
     const def = selected.kind === "owned" ? item?.def : selected.kind === "item" ? owner.items.defs.get(selected.id) : owner.props.defs.get(selected.id);
     if (!def) { this.selection = null; this.details.hidden = true; return; }
     this.details.hidden = false;
@@ -540,15 +548,14 @@ export class ToolBag {
         });
       }
       if (isWeapon(item.def)) action("Use with cursor", "use", () => { if (!this.canPull()) { this.status.textContent = "Return the tool you are using first."; return; } owner.useItem(item); this.toggle(false); this.changed(); });
-      if (item.where === "hand" && !item.def.wear) action("Store in bag", "store", () => { owner.mind.reset(owner.ctx); owner.giveBack(item); this.changed(); this.refresh(); });
+      if (item.where !== "belt" && !item.def.wear) action("Store in bag", "store", () => { owner.mind.reset(owner.ctx); owner.giveBack(item); this.changed(); this.refresh(); });
       action("Drop beside figure", "drop", () => { owner.mind.reset(owner.ctx); item.at = { x: owner.char.x + 45 * owner.char.scale, y: owner.char.body.j.hip.y, z: 0 }; owner.items.drop(item, 0, 0); this.changed(); this.refresh(); });
       action("Trash", "trash", () => this.trashObject(owner, item));
-    } else if (selected.kind === "item") action(`Give to ${owner.config.name}`, "give", () => {
-      if (owner.items.belt.every(Boolean) && !("wear" in def && def.wear)) {
-        this.status.textContent = "The bag is full. Place this tool on the desktop or free a slot first.";
-        return;
-      }
-      owner.items.give(def.id, owner.char); this.changed(); this.setView("inventory");
+    } else if (selected.kind === "item") action(`Give to ${this.selected === "all" ? "all figures" : owner.config.name}`, "give", () => {
+      const targets=this.targets(), full=targets.filter(p=>p.items.belt.every(Boolean) && !("wear" in def && def.wear));
+      for(const p of targets)if(!full.includes(p))p.items.give(def.id,p.char);
+      this.changed(); this.setView("inventory");
+      if(full.length)this.status.textContent=`These bags are full: ${full.map(p=>p.config.name).join(", ")}. Free a slot or place the supply on the desktop.`;
     });
     this.details.append(name, about, actions);
     if (item && ["wipe", "erase", "color"].includes(item.def.use)) { const hint = document.createElement("small"); hint.textContent = "Take out, choose Use with cursor, then move over the drawing. Stop using lets you carry it safely. Cancel returns it to the bag."; this.details.append(hint); }
@@ -567,7 +574,7 @@ export class ToolBag {
     y: number,
     pointer: boolean,
   ) {
-    const owner = this.current();
+    const owner = kind === "owned" ? this.itemOwner(id) : this.current();
     const item =
       kind === "owned"
         ? owner?.items.list.find((i) => String(i.uid) === id)

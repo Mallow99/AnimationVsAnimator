@@ -22,14 +22,14 @@ evidence that motion or interaction feels right. Preserve procedural figures and
 
 ## 2. Character roster and unified controls
 
-- [ ] R1 Replace name-specific population settings with 1 stick man, 2 stick men, through 5.
-- [ ] R2 Select which preset characters appear, including one character other than the first.
+- [x] R1 Replace name-specific population settings with 1 stick man, 2 stick men, through 5.
+- [x] R2 Select which preset characters appear, including one character other than the first.
 - [ ] R3 Presets have distinct names, colors, personalities, preferences and reactions; changing
   the active roster preserves each character's saved possessions, relationships and settings.
-- [ ] R4 One Settings window with a named character selector; app settings apply globally.
-- [ ] R5 One inventory/supplies/activity interface with named selection and an All figures scope.
+- [x] R4 One Settings window with a named character selector; app settings apply globally.
+- [x] R5 One inventory/supplies/activity interface with named selection and an All figures scope.
   Give the same supply to all selected figures, preserving separate real-item ownership.
-- [ ] R6 Migrate existing saves/settings without removing edited names, appearances or items.
+- [x] R6 Migrate existing saves/settings without removing edited names, appearances or items.
 
 ## 3. Physical and social life
 

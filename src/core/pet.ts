@@ -89,7 +89,7 @@ export class Pet implements Peer {
   /** His drawings that came to life: balls, boxes, ledges (and furniture). Shared with his friend. */
   readonly props: Props;
   /** False for his friend: the main pet runs, draws and saves the furniture they share. */
-  readonly ownsProps: boolean;
+  ownsProps: boolean;
   private releasePlatforms: (()=>void)|null=null;
   /**
    * The other stick figures on screen. Set by the app. Everything he knows about them, and everything he

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {Pet,DEFAULT_CONFIG} from '../src/core/pet';
-import {companionConfig} from '../src/core/config';
+import {companionConfig,activeFigureIds,mergeConfig} from '../src/core/config';
 import {DrawTool} from '../src/core/skills/draw-tool';
 import {ShootGun} from '../src/core/skills/gun';
 import {ReadBook} from '../src/core/skills/read-book';
@@ -88,5 +88,12 @@ test('angled furniture contact dissipates deformation energy instead of launchin
  assert(Math.hypot(desk.center.x-at.x,desk.center.y-at.y)<.5);
  desk.grab(desk.center.x,desk.center.y);desk.held!.vx=800;desk.held!.vy=-700;desk.release();
  for(let i=0;i<60;i++)props.update(dt,25+i*dt,bounds,[]);assert(Math.hypot(desk.center.x-at.x,desk.center.y-at.y)>20);
+});
+test('roster selection uses stable identities, validates ids and retains legacy solo settings',()=>{
+ const solo=mergeConfig(DEFAULT_CONFIG,{figureCount:1,spawnOrder:[4,2,0,1,3]});assert.deepEqual(activeFigureIds(solo),[4]);
+ const pair=mergeConfig(solo,{figureCount:2});assert.deepEqual(activeFigureIds(pair),[4,2]);assert(pair.friend.on);
+ const invalid=mergeConfig(DEFAULT_CONFIG,{spawnOrder:[4,4,-1,99,2]});assert.deepEqual(invalid.spawnOrder,[4,2,0,1,3]);
+ assert.deepEqual(activeFigureIds(mergeConfig(DEFAULT_CONFIG,{friend:{on:false}})),[0]);
+ const profile=companionConfig(pair,4),newProfile=mergeConfig(profile,{figureCount:5});assert.equal(newProfile.name,'Ruby');assert.equal(newProfile.look.color,profile.look.color);
 });
 console.log(`${passed} living stickmen checks passed`);

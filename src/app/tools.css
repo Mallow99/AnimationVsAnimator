@@ -49,3 +49,5 @@
 
 #weaponBar button { font: inherit; border: 1px solid #998975; background: #fffaf1; padding: 5px; }
 #weaponBar button[hidden] { display: none; }
+
+.bag-owners, #bagSearch { width: 100%; box-sizing: border-box; border: 1px solid #b7b0a3; padding: 5px; font: inherit; background: #fffaf1; color: #343c3b; }

@@ -513,6 +513,20 @@ try {
   await scene('quality-bookshelf-return');
   assert(await evaluate('window.pet.items.list.some(i=>i.def.id==="book"&&i.shelf?.key===window.qualityShelf.storageKey)'));
   console.log('PASS Pet Quality browser: passive Take out, explicit Use, visible mouse Reload, Carry, Drop, Cancel, passive/active/stop cleaning, bookshelf storage, and rendered everyday/open/page/close/return sequences');
+  // Shared inventory uses the selected roster and keeps original owned objects through removal.
+  await evaluate(`(() => {window.rosterRuby=window.figurePool[4];window.rosterBook=window.rosterRuby.items.give('book',window.rosterRuby.char);window.setRoster([4]);window.toolBag.showAll('supplies');})()`);
+  assert.deepEqual(await evaluate('window.pets.map(p=>p.ctx.who)'),['pet-4']);
+  assert(await evaluate('window.pet.ownsProps && window.pet.props===window.figurePool[0].props'));
+  await click('.bag-choice[data-kind=item][data-id=cup]');await click('#bagDetails [data-action=give]');
+  assert(await evaluate('window.rosterRuby.items.list.some(i=>i.def.id==="cup")'));
+  await evaluate('window.setRoster([0,2,4]);window.toolBag.showAll("supplies")');
+  await click('.bag-choice[data-kind=item][data-id="yo-yo"]');await click('#bagDetails [data-action=give]');
+  assert(await evaluate('window.pets.every(p=>p.items.list.some(i=>i.def.id==="yo-yo"))'));
+  assert.equal(await evaluate('new Set(window.pets.map(p=>p.items.list.filter(i=>i.def.id==="yo-yo").at(-1))).size'),3);
+  await evaluate('window.setRoster([0]);window.setRoster([4]);window.toolBag.showAll()');
+  assert(await evaluate('window.pet===window.rosterRuby && window.pet.items.list.includes(window.rosterBook)'));
+  await send('Page.captureScreenshot',{format:'png'}).then(shot=>writeFileSync(join(root,'.build/living-unified-bag.png'),Buffer.from(shot.data,'base64')));
+  console.log('PASS selectable Ruby solo, stable character identity/owned book, shared furniture responsibility, All figures supplies with distinct ownership, unified target dropdown');
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
   console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close, actual cursor pistol aim/ammo/reload/return, bow charge/release, book rendering, page-fragment images, native-window visit controller and rendering');
   console.log('Screenshot: .build/browser-smoke.png');

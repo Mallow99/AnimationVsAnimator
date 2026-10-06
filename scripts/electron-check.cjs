@@ -44,11 +44,10 @@ app.whenReady().then(async () => {
   await settings.webContents.executeJavaScript('window.petShell.setConfig({aiInterval:120})');
   await until(() => overlay.webContents.executeJavaScript('window.pet.config.aiInterval === 120'));
   await settings.webContents.executeJavaScript('document.querySelector("[data-tab=items]").click(); window.petShell.command("sync")');
-  await until(() => settings.webContents.executeJavaScript('document.querySelectorAll("#propKinds .thing-card canvas").length === 9'));
-  await settings.webContents.executeJavaScript('document.querySelector("button[aria-label=\\"Wear: Helmet\\"]").click()');
+  await settings.webContents.executeJavaScript('document.querySelector("#openInventory").click()');
+  await until(() => overlay.webContents.executeJavaScript('window.toolBag.isOpen'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#bagSupplies").click();document.querySelector(".bag-choice[data-id=helmet]").click();document.querySelector("#bagDetails [data-action=give]").click();document.querySelector("#bagPanel header button:last-child").click()');
   await until(() => overlay.webContents.executeJavaScript('window.pet.items.onHim.some(i => i.def.id === "helmet" && i.where === "worn")'));
-  await settings.webContents.executeJavaScript('document.querySelector("#itemKinds").scrollIntoView({block:"start"})');
-  await pause(100);
   fs.mkdirSync(path.join(__dirname, '../.build'), {recursive:true});
   fs.writeFileSync(path.join(__dirname, '../.build/settings-smoke.png'), (await settings.webContents.capturePage()).toPNG());
   await overlay.webContents.executeJavaScript(`(() => {
@@ -120,23 +119,23 @@ app.whenReady().then(async () => {
   // settings kept in step, their own talk box and memory file.
   await until(() => overlay.webContents.executeJavaScript('window.pets.length === 2'));
   await overlay.webContents.executeJavaScript('window.petShell.openSettings(1)');
-  let second;
-  await until(() => { second = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/settings/index.html?pet=1')); return !!second && !second.webContents.isLoading(); });
+  await until(() => settings.webContents.executeJavaScript('document.querySelector("#figureTarget").value === "1"'));
+  assert.equal(BrowserWindow.getAllWindows().filter(w=>w.webContents.getURL().includes('/settings/')).length,1,'settings must reuse one window');
   const accent = (w) => w.webContents.executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()');
-  await until(async () => (await accent(second)) === '#f7931e');
-  assert.match(second.getTitle(), /Leonard/);
-  await second.webContents.executeJavaScript('document.querySelector("[data-tab=him]")?.click()');
+  await until(async () => (await accent(settings)) === '#f7931e');
+  assert.match(settings.getTitle(), /Stickmen/);
   await settings.webContents.executeJavaScript('document.querySelector("[data-tab=him]")?.click()');
-  await pause(300);
-  fs.writeFileSync(path.join(__dirname, '../.build/settings-pet1.png'), (await settings.webContents.capturePage()).toPNG());
-  fs.writeFileSync(path.join(__dirname, '../.build/settings-pet2.png'), (await second.webContents.capturePage()).toPNG());
-  await second.webContents.executeJavaScript('window.petShell.setConfig({look:{color:"#22aa55"}})');
+  fs.writeFileSync(path.join(__dirname, '../.build/settings-pet2.png'), (await settings.webContents.capturePage()).toPNG());
+  await settings.webContents.executeJavaScript('const color=document.querySelector("#color");color.value="#22aa55";color.dispatchEvent(new Event("input"));');
   await until(() => overlay.webContents.executeJavaScript('window.pets[1].config.look.color === "#22aa55"'));
-  await until(async () => (await accent(second)) === '#22aa55');
-  assert.notEqual(await accent(settings), '#22aa55', 'the first one changed color too');
+  await until(async () => (await accent(settings)) === '#22aa55');
   assert.equal(await overlay.webContents.executeJavaScript('window.pets[0].config.look.color'), '#4450d6');
-  await second.webContents.executeJavaScript('window.petShell.setConfig({fightMode:"real"})');
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({fightMode:"real"},1)');
   await until(() => overlay.webContents.executeJavaScript('window.pets[0].config.fightMode === "real" && window.pets[1].config.fightMode === "real"'));
+  await settings.webContents.executeJavaScript('const select=document.querySelector("#figureTarget");select.value="all";select.dispatchEvent(new Event("change"));document.querySelector("#openInventory").click()');
+  await until(() => overlay.webContents.executeJavaScript('document.querySelector("#bagOwner").value === "all"'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#bagSupplies").click();document.querySelector(".bag-choice[data-id=cup]").click();document.querySelector("#bagDetails [data-action=give]").click();document.querySelector("#bagPanel header button:last-child").click()');
+  assert(await overlay.webContents.executeJavaScript('window.pets.every(p=>p.items.list.some(i=>i.def.id==="cup"))'));
   await overlay.webContents.executeJavaScript('window.pets[1].onTalk()');
   await until(() => overlay.isFocusable());
   assert.match(await overlay.webContents.executeJavaScript('document.querySelector("#talkText").placeholder'), /Leonard/);
@@ -150,7 +149,7 @@ app.whenReady().then(async () => {
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'memory-2.json'), 'utf8')).summary, 'smoke two');
   await until(() => fs.existsSync(path.join(dir, 'pet-2.json')));
   assert.deepEqual(issues, []);
-  console.log('PASS Electron: overlay, fake helper, settings inventory, Othello/chat focus, configuration, two stick figures (own settings window and color, shared settings, talk box, memory file)');
+  console.log('PASS Electron: overlay, fake helper, settings inventory, Othello/chat focus, configuration, two stick figures (one settings window with target selection, distinct color, All figures supplies, shared settings, talk box, memory file)');
   app.quit();
 }).catch((err) => { console.error(err); process.exitCode = 1; app.exit(1); });
 app.on('will-quit', () => {

@@ -2,6 +2,19 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## In progress: Living Stickmen — selectable roster and shared controls
+
+The foundation commit is af56778. This follow-up adds stable five-character roster selection,
+1–5 count labels, one Settings window, target dropdowns and All figures supplies. Desktop, tray
+and Settings all open the same searchable inventory/activity panel; owned shelf/world items remain
+visible. Legacy solo settings migrate and removed characters keep their actual owned objects.
+
+Typecheck, ten sanity checks, actual Chromium and Linux Electron smoke checks passed. Electron
+used disposable data and fake windows; verified single-window target switching, distinct colors,
+All figures giving, memory files and native Linux focus/input. Screenshots are in .build. R3's
+expanded reactions and L1–L7 remain next; finish docs/LIVING-STICKMEN-PLAN.md before stopping.
+No native Mac/Windows acceptance was performed.
+
 ## In progress: Living Stickmen — foundation repaired
 
 The owner authorized the expanded update: roster presets, shared controls, physical/social life,

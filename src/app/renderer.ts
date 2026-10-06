@@ -17,7 +17,7 @@ import { createGamePanel } from './game-panel';
 import {FileHabitats} from './file-habitats';
 import {PageCutouts} from './page-cutouts';
 import type {FileWindow,DesktopAction,DesktopResult,DesktopState,PageCutout} from '../shared/desktop';
-import { companionConfig } from '../core/config';
+import { companionConfig, activeFigureIds } from '../core/config';
 import { CursorWeapon, type CursorWeaponKind } from '../core/combat/cursor-weapon';
 import { SwordMove, MOVES, STANCES, guardPose } from '../core/skills/swordplay';
 import { ToolBag } from './tool-bag';
@@ -62,12 +62,14 @@ function bounds(): Bounds {
 
 /** The stick figures: index = their id (0 = Blurp, 1 = the second one). */
 const pets: Pet[] = [];
+/** Stable save/config ids remain in the pool even when a character leaves the desktop. */
+const figures: Pet[] = [];
 const habitats = new FileHabitats((homes) => {
   shell?.fileHomes?.(homes);
   syncPeers();
 });
 const cutouts = new PageCutouts();
-const desktopPets = () => pets.filter((_, id) => !habitats.isAway(id));
+const desktopPets = () => pets.filter(p => !habitats.isAway(figures.indexOf(p)));
 const activePets = () => [...desktopPets(), ...habitats.activePets];
 function syncPeers() {
   const active = desktopPets();
@@ -84,20 +86,20 @@ const memoryLoaded: boolean[] = [];
 
 /** Save one of them (mood, things, gallery) and their memories. */
 function saveOne(id: number) {
-  const home=pets[id],p=habitats.petFor(id)??home;
+  const home=figures[id],p=habitats.petFor(id)??home;
   if (!p) return;
-  try { const saved=JSON.parse(p.save());if(home.ownsProps)saved.props=home.props.savePlaced();else delete saved.props;localStorage.setItem(saveKey(id),JSON.stringify(saved)); } catch { /* ignore */ }
+  try { const saved=JSON.parse(p.save());if(id===0)saved.props=home.props.savePlaced();else delete saved.props;localStorage.setItem(saveKey(id),JSON.stringify(saved)); } catch { /* ignore */ }
   if (!memoryLoaded[id]) return; // don't overwrite the file before we've read it
   const json = p.memory.save();
   if (shell) shell.saveMemory(id, json); else try { localStorage.setItem(memoryKey(id), json); } catch { /* ignore */ }
 }
-const save = () => {pets.forEach((_,id)=>saveOne(id));try{localStorage.setItem('file-homes',JSON.stringify(habitats.save()));}catch{}};
+const save = () => {figures.forEach((_,id)=>saveOne(id));try{localStorage.setItem('file-homes',JSON.stringify(habitats.save()));}catch{}};
 setInterval(save, 15000);
 window.addEventListener('beforeunload', save);
 
 /** Bring one of them to life: load their save and memories, and wire them to the desktop. */
 function makePet(id: number, config: PetConfig): Pet {
-  const p = id === 0 ? new Pet(bounds(), config,{identity:'pet-0'}) : new Pet(bounds(), config, { props: pets[0].props,identity:`pet-${id}` });
+  const p = id === 0 ? new Pet(bounds(), config,{identity:'pet-0'}) : new Pet(bounds(), config, { props: figures[0].props,identity:`pet-${id}` });
   try {
     // (The second one used to be saved as "friend-save"/"friend-memory": pick those up once.)
     p.load(localStorage.getItem(saveKey(id)) ?? (id === 1 ? localStorage.getItem('friend-save') : null));
@@ -141,71 +143,68 @@ function makePet(id: number, config: PetConfig): Pet {
   return p;
 }
 
-/** Their settings arrived (or changed): apply them, and add or remove the second one. */
+/** Apply a selected roster without reassigning identity, possessions or save slots. */
 function applyConfigs(configs: PetConfig[]) {
-  const count = configs[0].friend.on ? configs[0].figureCount : 1;
-  for (let id = count; id < pets.length; id++) {
-    saveOne(id);
-    habitats.returnHome(id);
-    if (talkPet === pets[id]) closeTalk();
-    pets[id].leaveWorld();
+  const ids = activeFigureIds(configs[0]), previous = new Set(pets);
+  const time = Math.max(0,...figures.map(p=>p.ctx.world.time));
+  for (let id=0;id<5;id++) {
+    if (!figures[id]) figures[id]=makePet(id,configs[id] ?? companionConfig(configs[0],id));
+    else figures[id].applyConfig(configs[id] ?? companionConfig(configs[0],id));
   }
-  pets.length = Math.min(pets.length, count);
-  for (let id = 0; id < count; id++) {
-    const cfg = configs[id] ?? companionConfig(configs[0], id);
-    if (pets[id]) pets[id].applyConfig(cfg);
-    else {
-      const p = makePet(id, cfg),
-        b = bounds();
-      p.char.body.translate(
-        ((b.right - b.left) * (id + 1)) / (count + 1) + b.left - p.char.x,
-        0,
-      );
-      pets[id] = p;
+  const next=ids.map(id=>figures[id]);
+  for (const p of pets) if (!next.includes(p)) {
+    const id=figures.indexOf(p); saveOne(id); habitats.returnHome(id);
+    if (talkPet===p) closeTalk();
+    if (toolBag.tools.held?.owner===p) toolBag.cancel();
+    if(cursorWeapon.owner===p)equipCursor("none");
+    p.leaveWorld(); p.others=[];
+  }
+  for(const p of figures)p.ownsProps=false;
+  next[0].ownsProps=true;
+  for(const [i,p]of next.entries()) {
+    p.ctx.world.time=time;
+    if(!previous.has(p)) {
+      p.char.standUp(); p.char.body.translate((innerWidth*(i+1))/(next.length+1)-p.char.x,0);
     }
   }
-  habitats.sync(pets);
-  if (!configs[0].fileHomes)
-    for (let id = 0; id < pets.length; id++) habitats.returnHome(id);
+  pets.splice(0,pets.length,...next);
+  habitats.sync(figures);
+  for(let id=0;id<figures.length;id++)if(!configs[0].fileHomes || !ids.includes(id))habitats.returnHome(id);
   if (!restoredHabitats) {
-    restoredHabitats = true;
-    if (configs[0].fileHomes)
-      try {
-        habitats.restore(
-          JSON.parse(localStorage.getItem('file-homes') ?? 'null'),
-          pets,
-        );
-      } catch {}
+    restoredHabitats=true;
+    if(configs[0].fileHomes)try{habitats.restore(JSON.parse(localStorage.getItem('file-homes')??'null'),figures);}catch{}
   }
   syncPeers();
 }
 
 const configs: PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(DEFAULT_CONFIG,id));
-pets[0] = makePet(0, configs[0]);
+figures[0] = makePet(0, configs[0]);
+pets[0] = figures[0];
 
-const setWindowsAll = (wins: WinRect[]) => { lastWins = wins; for (const p of pets) p.setWindows(wins); };
+const setWindowsAll = (wins: WinRect[]) => { lastWins = wins; for (const p of figures) p.setWindows(wins); };
 
 // Settings live in the desktop shell (pet.json, pet-2.json). Get them now, and whenever they change.
 if (shell) {
   shell.getConfigs().then((cs) => { cs.forEach((c, i) => (configs[i] = c)); applyConfigs(configs); });
   shell.onConfig(({ id, config }) => { configs[id] = config; applyConfigs(configs); });
-  shell.onCommand(({id,cmd})=>{if(cmd==='returnHome'){habitats.returnHome(id);return;} (habitats.petFor(id)??pets[id])?.command(cmd);});
+  shell.onCommand(({id,cmd})=>{if(cmd==='openInventory:all'){toolBag.showAll();return;}if(cmd==='openInventory'){toolBag.showFor(pets.includes(figures[id])?figures[id]:pets[0]);return;}if(cmd==='returnHome'){habitats.returnHome(id);return;} (habitats.petFor(id)??figures[id])?.command(cmd);});
   shell.onLife?.(sample => {for(const p of activePets())p.life(sample);});
   shell.onDesktopState?.(state=>{desktopState=state;for(const p of [...pets,...habitats.activePets])p.desktopState=state;});
   shell.onCutout?.(cutout=>cutouts.add(cutout));
   shell.onFileWindows?.(files=>habitats.refresh(files));
-  shell.onHabitat?.(({id,path})=>{if(pets[id])habitats.enter(id,pets[id],path);});
+  shell.onHabitat?.(({id,path})=>{if(figures[id] && pets.includes(figures[id]))habitats.enter(id,figures[id],path);});
   shell.onWindows((wins) => setWindowsAll(wins)); // other apps' windows become platforms
   shell.onUi((ui) => { for (const p of pets) p.setScreen(ui); }); // what you're doing: they comment on it, and sit on things in your window
   shell.onWindowsLog((line) => { if (line.startsWith('move:')) for (const p of pets) p.moveNote = line.slice(5).trim(); }); // how moving windows is going
-  setInterval(() => pets.forEach((p, id) => shell.sendStats(id,(habitats.petFor(id)??p).stats())), 400);
+  setInterval(() => figures.forEach((p, id) => shell.sendStats(id,(habitats.petFor(id)??p).stats())), 400);
   // Item definition files (yours, from the items folder) on top of the ones they come with.
-  shell.getItemDefs().then((d) => { lastDefs = d; for (const p of pets) p.addDefs(d); }, () => {});
-  shell.onItemDefs((d) => { lastDefs = d; for (const p of pets) p.addDefs(d); });
+  shell.getItemDefs().then((d) => { lastDefs = d; for (const p of figures) p.addDefs(d); }, () => {});
+  shell.onItemDefs((d) => { lastDefs = d; for (const p of figures) p.addDefs(d); });
 }
-(window as unknown as { pet: Pet }).pet = pets[0]; // handy for poking at from DevTools
+Object.defineProperty(window,'pet',{get:()=>pets[0]}); // handy for poking at from DevTools
 Object.defineProperty(window, 'friend', { get: () => pets[1] ?? null }); // the second one, the same way
 Object.defineProperty(window, 'pets', { get: () => pets });
+Object.assign(window,{setRoster:(ids:number[])=>{const order=[...ids,...[0,1,2,3,4].filter(id=>!ids.includes(id))];for(const c of configs){c.spawnOrder=order;c.figureCount=ids.length;c.friend.on=ids.length>1;}applyConfigs(configs);},figurePool:figures});
 (window as unknown as { swordplay: unknown }).swordplay = { SwordMove, MOVES, STANCES, guardPose }; // for trying sword moves from DevTools
 
 if (!shell) {
@@ -224,7 +223,7 @@ function resize() {
   canvas.width = Math.round(window.innerWidth * dpr);
   canvas.height = Math.round(window.innerHeight * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  for (const p of pets) p.setBounds(bounds());
+  for (const p of figures) p.setBounds(bounds());
 }
 window.addEventListener('resize', resize);
 resize();
@@ -503,7 +502,7 @@ function frame(now: number) {
     p.slowmo = Math.max(0, p.slowmo - Math.min(dt, 0.1));
     p.update(slow ? dt * 0.3 : dt);
   }
-  if (habitats.isAway(0)) {
+  if (!desktopPets().some(p=>p.ownsProps)) {
     propAccumulator += Math.min(0.05, Math.max(0, dt));
     propTime += Math.min(0.05, Math.max(0, dt));
     while (propAccumulator >= 1 / 120) {
@@ -539,7 +538,7 @@ function frame(now: number) {
   cutouts.update(
     dt,
     bounds(),
-    pets.map((p, id) => (habitats.isAway(id) ? undefined : p)) as Pet[],
+    figures.map((p, id) => (!pets.includes(p) || habitats.isAway(id) ? undefined : p)) as Pet[],
   );
   gamePanel.update(); pongPanel.update();
   toolBag.hover(!cursorWeapon.active && !talkOpen && !toolBag.over(last.x, last.y) ? [...desktopPets()].reverse().find(p => p.char.hitTest(last.x, last.y, 8) || p.satchelHit(last.x, last.y)) ?? null : null, now);

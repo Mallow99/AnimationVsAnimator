@@ -3,6 +3,22 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-06 — Select the roster and unify settings, inventory and supplies
+
+- Added 1–5 stickmen count labels and a selectable five-character preset roster, including Ruby solo.
+  Stable config/save identities preserve removed characters' actual items and relationship saves.
+  The active first character runs shared furniture; canonical furniture saves stay in slot zero.
+- Consolidated Settings into one window with named/All figures targeting. Kept edited names,
+  colors and personalities during legacy migration and reset; private memories require a name.
+- Unified desktop/tray/Settings inventory entry into the same Bag/Supplies/Activities panel.
+  Added a target dropdown, search, owned shelf/world item visibility and bulk supplies with separate
+  ownership and explicit full-bag feedback. Shared furniture/activity commands run once.
+- Verified typecheck, ten sanity checks, actual Chromium roster/bulk ownership/removal controls,
+  and Linux Electron single-window settings, target switching, shared settings, bulk supplies and
+  pointer/keyboard/Othello/chat focus. Inspected unified bag and settings artwork.
+- Personality reactions and physical/social-life improvements are next in this authorized update.
+  Mac focus/Spaces and Windows native hardware checks remain open.
+
 ## 2026-10-06 — Repair item continuity, book handling and rigid prop contact
 
 - Fixed deletion of earlier drawn projects/tools, stranded full-bag/passive-carry reloads and
