@@ -180,10 +180,12 @@ export class Item {
   bookOpen = 0;
   bookTarget = 0;
   bookPage = 0;
+  bookReading = false;
   yoyoDrop = 0;
   shelf: { key: string; slot: number } | null = null;
   tickBook(dt: number) {
     this.bookOpen += clamp(this.bookTarget - this.bookOpen, -dt * 1.8, dt * 1.8);
+    if (this.animatedBook) this.sticks[0].len = this.physicalLength * this.scale;
   }
   tipSpeed = 0;
   tipVel: Vec = { x: 0, y: 0 };
@@ -205,7 +207,8 @@ export class Item {
     this.at = { x: at.x, y: at.y, z: 0 };
   }
 
-  get tip(): V3 { return add3(this.at, scale3(this.dir, this.def.length * this.scale)); }
+  private get physicalLength() { return this.animatedBook ? 12 + 12 * this.bookOpen : this.def.length; }
+  get tip(): V3 { return add3(this.at, scale3(this.dir, this.physicalLength * this.scale)); }
   get butt(): V3 { return add3(this.at, scale3(this.dir, -this.def.grip * this.scale)); }
 
   /** Start physics from where it is now, moving at (vx, vy). */
@@ -213,7 +216,7 @@ export class Item {
     const tip = this.tip;
     Object.assign(this.a, { x: this.at.x, y: this.at.y, z: this.at.z, px: this.at.x - vx * dt, py: this.at.y - vy * dt, pz: this.at.z });
     Object.assign(this.b, { x: tip.x, y: tip.y, z: tip.z, px: tip.x - vx * dt, py: tip.y - vy * dt, pz: tip.z });
-    this.sticks[0].len = this.def.length * this.scale;
+    this.sticks[0].len = this.physicalLength * this.scale;
   }
 
   step(dt: number, bounds: Bounds, platforms: Platform[], solids: Thing[] = []) {
@@ -232,10 +235,10 @@ export class Item {
 
   private hull(previous = false) {
     // Custom definitions can be reloaded while their existing item stays in the world.
-    if (this.contourDef !== this.def) {
+    if (this.contourDef !== this.def || this.animatedBook && this.contourOpen !== this.bookOpen) {
       const { sprite, shape } = this.def;
       this.contour = convexHull([
-        ...shape.flatMap((st) => paddedVertices(st.pts, st.width)),
+        ...(this.animatedBook ? bookShape(this.bookOpen) : shape).flatMap((st) => paddedVertices(st.pts, st.width)),
         ...(sprite
           ? paddedVertices([
               [sprite.x, sprite.y],
@@ -249,6 +252,7 @@ export class Item {
           : []),
       ]);
       this.contourDef = this.def;
+      this.contourOpen = this.bookOpen;
     }
     const a = previous ? { x: this.a.px, y: this.a.py } : this.a;
     const b = previous ? { x: this.b.px, y: this.b.py } : this.b;
@@ -262,6 +266,19 @@ export class Item {
   }
 
   get collisionHull() { return this.hull(); }
+
+  private contourOpen = -1;
+  private bookDefCache: ItemDef | null = null;
+  private bookAnimatedCache = false;
+  /** Animate stock art only. Edited/custom covers keep their definition and collision geometry. */
+  get animatedBook() {
+    if (this.bookDefCache !== this.def) {
+      this.bookDefCache = this.def;
+      this.bookAnimatedCache = this.def.id === 'book' && !this.def.sprite &&
+        JSON.stringify(this.def.shape) === JSON.stringify(BUILTIN_ITEMS.find(d => d.id === 'book')!.shape);
+    }
+    return this.bookAnimatedCache;
+  }
 
   private moveCollision(dx: number, dy: number, normal: Vec) {
     for (const p of [this.a, this.b]) {
@@ -589,8 +606,8 @@ export class Items {
     ch.satchelReach = this.rummage ? { hand: this.rummage.hand, at: satchelAt(ch), amount: this.satchelOpen } : null;
     const j = ch.body.j;
     for (const it of this.list) {
-      // Active cursor weapons tick in their controller, including practice guns.
-      if (it.where !== 'hand' && !(it.where === 'cursor' && it.cursorControlled)) it.tickReload(dt);
+      // One clock for every owned gun, including idle hands, full bags and passive transport.
+      it.tickReload(dt);
       it.tickBook(dt);
       it.scale = ch.scale;
       if (it.where === 'worn') {
@@ -699,10 +716,12 @@ export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderin
     pose = { ...pose, at: { ...pose.at, y: pose.at.y + it.yoyoDrop * sc } };
   }
   const m = pose.mirror ? -1 : 1;
-  for (const st of it.def.id === 'book' ? bookShape(it.bookOpen, it.bookPage) : it.def.shape) {
+  const reading = it.animatedBook && it.bookReading && it.where === 'hand';
+  for (const st of it.animatedBook ? bookShape(it.bookOpen, it.bookPage, reading) : it.def.shape) {
     ctx.beginPath();
     st.pts.forEach(([along, across], i) => {
-      const x = pose.at.x + d.x * along * m * sc + ax * across * sc, y = pose.at.y + d.y * along * m * sc + ay * across * sc;
+      const acrossView = reading ? across * (Math.sign(d.x) || 1) : across;
+      const x = pose.at.x + d.x * along * m * sc + ax * acrossView * sc, y = pose.at.y + d.y * along * m * sc + ay * acrossView * sc;
       if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
     });
     if (st.fill) { ctx.closePath(); ctx.fillStyle = st.fill; ctx.fill(); }
@@ -741,7 +760,9 @@ export function itemParts(it: Item, ch?: Character): DepthPart[] {
   return poses.map((pose) => {
     const pad = it.drawPadding * pose.scale / it.scale;
     return {
-      z: (it.where === 'worn' ? pose.at.z : (it.butt.z + it.tip.z) / 2) + (it.where === 'hand' ? 0.5 : it.where === 'belt' ? -0.3 : 0),
+      z: it.bookReading && it.where === 'hand' && ch
+        ? Math.max(ch.body.j.hip.z, ch.body.j.neck.z, pose.at.z) + 6
+        : (it.where === 'worn' ? pose.at.z : (it.butt.z + it.tip.z) / 2) + (it.where === 'hand' ? 0.5 : it.where === 'belt' ? -0.3 : 0),
       pts: [
         { x: pose.at.x - pad, y: pose.at.y - pad },
         { x: pose.at.x + pad, y: pose.at.y + pad },

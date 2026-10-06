@@ -515,7 +515,11 @@ export class Thing {
   private matchShape() {
     if (!this.rigid || this.stuck) return;
     const f = this.fit(), r = this.rest!;
-    this.points.forEach((p, i) => { const w = f.toWorld(r[i].x, r[i].y); p.x = w.x; p.y = w.y; });
+    this.points.forEach((p, i) => {
+      const w = f.toWorld(r[i].x, r[i].y);
+      // Shape correction is a constraint, not an extra kick on the next Verlet step.
+      p.px += w.x - p.x; p.py += w.y - p.y; p.x = w.x; p.y = w.y;
+    });
   }
 
   /**
@@ -603,11 +607,30 @@ export class Thing {
           if (p.x + 1.5 > bounds.right) side = Math.min(side, bounds.right - (p.x + 1.5));
         }
         for (const [p, pl] of this.above) if (p.x >= pl.x1 && p.x <= pl.x2) up = Math.max(up, p.y - (platY(pl, p.x) - p.r));
-        if (up > 0 || side) for (const p of this.points) { p.y -= Math.max(0, up); p.x += side; p.px += side; if (up > 0 && p.py > p.y) p.py = p.y; }
+        if (up > 0 || side) for (const p of this.points) {
+          p.y -= Math.max(0, up); p.py -= Math.max(0, up); p.x += side; p.px += side;
+          if (up > 0) { p.grounded = true; if (p.py < p.y) p.py = p.y; }
+        }
       }
     }
     for (const [p] of this.above) if (p.grounded && p.py > p.y) p.py = p.y;
     this.refresh();
+  }
+
+  /** A supported body dissipates tiny residual contact motion; hits/drags wake it immediately. */
+  projectMotion() {
+    if (!this.rigid || this.stuck || this.held) return;
+    const c = this.center, pts = this.points;
+    const vx = pts.reduce((s,p)=>s+p.x-p.px,0)/pts.length,
+      vy = pts.reduce((s,p)=>s+p.y-p.py,0)/pts.length;
+    let inertia = 0, rotation = 0;
+    for (const p of pts) {
+      const x = p.x-c.x, y = p.y-c.y;
+      inertia += x*x+y*y; rotation += x*(p.y-p.py-vy)-y*(p.x-p.px-vx);
+    }
+    const omega = rotation/(inertia||1);
+    // Discard deformation velocity while retaining translation and angular momentum.
+    for (const p of pts) { p.px = p.x-vx+omega*(p.y-c.y); p.py = p.y-vy-omega*(p.x-c.x); }
   }
 
   /** A supported body dissipates tiny residual contact motion; hits/drags wake it immediately. */
@@ -1009,17 +1032,19 @@ export class Props {
     // has to notice when the window moves out from under it. All of them are solved together,
     // so things resting on things settle properly.
     // Window tops and the tops of other things are one-way surfaces: things land on them from above.
-    for (const t of this.things) t.begin(dt, [...world, ...this.things.filter((o) => o !== t).flatMap((o) => o.platforms)]);
+    // Rigid prop pairs use whole-art contacts below. Solving their point-based one-way tops as
+    // well deforms their frames and injects creeping tilt into stacks. Flexible bridges retain it.
+    for (const t of this.things) t.begin(dt, [...world, ...this.things.filter((o) => o !== t && (!t.rigid || !o.rigid)).flatMap((o) => o.platforms)]);
     for (let i = 0; i < 6; i++) {
       for (const t of this.things) t.pass(bounds);
       this.restOnEachOther();
     }
     for (const t of this.things) t.end(bounds);
-    for (let i=0;i<4;i++) {
+    for (let i=0;i<12;i++) {
       if (!this.separateSolids()) break;
       for (const t of this.things) t.end(bounds);
     }
-    for (const t of this.things) t.settleContacts(dt);
+    for (const t of this.things) { t.projectMotion(); t.settleContacts(dt); }
     const all = [...world, ...this.platforms];
     for (const b of this.balls) b.step(dt, bounds, all, this.things);
     if (moved) this.changedPlatforms();
@@ -1034,16 +1059,24 @@ export class Props {
         const a = this.things[i],
           b = this.things[j];
         if (!a.rigid || !b.rigid) continue;
-        const wa = a.stuck || a.held ? 0 : 1 / a.points.length,
-          wb = b.stuck || b.held ? 0 : 1 / b.points.length;
-        if (!(wa + wb)) continue;
         const offset = overlapOffset(a.collisionHull, b.collisionHull);
         if (!offset) continue;
         const length = Math.hypot(offset.x, offset.y);
-        if (length < 0.05) continue;
+        if (length < 0.001) continue;
         moved = true;
         const nx = offset.x / length,
           ny = offset.y / length;
+        const weight = (t: Thing) => {
+          const hull = t.collisionHull;
+          const area = (Math.max(...hull.map(p=>p.x))-Math.min(...hull.map(p=>p.x))) *
+            (Math.max(...hull.map(p=>p.y))-Math.min(...hull.map(p=>p.y)));
+          return 1 / Math.max(1, area / 1000 * (t.def?.move === 'push' ? 2 : 1));
+        };
+        // A supported lower body cannot be corrected down through its support. Resolve the upper
+        // body's penetration fully instead of splitting it then lifting the lower one into it again.
+        const wa = a.stuck || a.held || a.movingBy || ny > 0.5 && a.points.some(p=>p.grounded) ? 0 : weight(a),
+          wb = b.stuck || b.held || b.movingBy || ny < -0.5 && b.points.some(p=>p.grounded) ? 0 : weight(b);
+        if (!(wa + wb)) continue;
         const velocity = (t: Thing) => ({
           x:
             t.points.reduce((v, p) => v + (p.x - p.px) * 120, 0) /
@@ -1098,8 +1131,8 @@ export class Props {
       for (let e = 0; e < o.length; e++) {
         const p = up.points[o[e]], q = up.points[o[(e + 1) % o.length]];
         if (q.x >= p.x - 1) continue; // bottom edges go right-to-left (the outline is clockwise)
-        for (const low of this.things) {
-          if (low === up || low.kind === 'bridge') continue;
+      for (const low of this.things) {
+          if (low === up || low.kind === 'bridge' || up.rigid && low.rigid) continue;
           for (const c of low.points) {
             if (c.x <= q.x + 0.5 || c.x >= p.x - 0.5) continue;
             const u = (c.x - q.x) / (p.x - q.x), y = q.y + (p.y - q.y) * u, dig = y - c.y;

@@ -2,6 +2,16 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## In progress: Living Stickmen — foundation repaired
+
+The owner authorized the expanded update: roster presets, shared controls, physical/social life,
+stronger offline moods/relationships and prop physics. Follow docs/LIVING-STICKMEN-PLAN.md in order;
+stop before Out of the Box. Every working commit updates CHANGELOG.md and reports actual checks.
+Foundation repairs cover project deletion, idle/full-bag/passive reload clocks, returning hand
+poses, custom/reader-facing book art and rigid contact drift/deformation energy. The original
+five-box drift reproduction now stays settled while still responding to impacts. No native
+Mac/Windows acceptance is claimed. Roster, shared GUI and social stages are next.
+
 ## Latest update: Pet Quality — 2026-10-06
 
 The owner's latest instruction prioritizes pet polish over the roadmap order. Implementation is

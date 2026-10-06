@@ -11,7 +11,6 @@ export class DrawTool extends Skill {
   private context: Ctx | null = null;
   constructor(
     readonly id = "foam-sword",
-    private replace = false,
   ) {
     super();
   }
@@ -56,12 +55,6 @@ export class DrawTool extends Skill {
       .filter((st) => st.length >= 2);
     const onBecome = (d: Doodle) => {
       if (this.item) return;
-      for (const it of [...c.items.list])
-        if (
-          it.def.id === `ink-${base.id}`.slice(0, 30) &&
-          ["belt", "hand"].includes(it.where)
-        )
-          c.items.remove(it);
       const def = {
         ...structuredClone(base),
         id: `ink-${base.id}`.slice(0, 30),
@@ -87,10 +80,8 @@ export class DrawTool extends Skill {
         })),
       };
       c.items.defs.set(def.id, def);
-      if (this.replace)
-        for (const it of [...c.items.list])
-          if (it.def.id === base.id && ["belt", "hand"].includes(it.where))
-            c.items.remove(it);
+      // Drawing makes a new original. Even a combat replacement must not consume an owned tool
+      // or unfinished project; the missing/disarmed tool can still be recovered later.
       this.item = c.items.give(def, c.char);
       if (this.item)
         this.item.ink = {

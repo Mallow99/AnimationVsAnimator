@@ -1,6 +1,6 @@
 import type { ItemStroke } from './items';
 /** Hinged covers and a swept page, painted on the figure's existing pixel layer. */
-export function bookShape(open: number, page = 0): ItemStroke[] {
+export function bookShape(open: number, page = 0, reading = false): ItemStroke[] {
   const width = 12 + 12 * open, spine = width / 2;
   const rect = (x: number, y: number, w: number, h: number, fill: string): ItemStroke =>
     ({ pts: [[x,y],[x+w,y],[x+w,y+h],[x,y+h]], fill, color: fill, width: 0 });
@@ -16,6 +16,12 @@ export function bookShape(open: number, page = 0): ItemStroke[] {
     }
   } else {
     shapes.push(rect(2,-16,8,2,'#c7d8e5'),rect(2,-12,6,1,'#c7d8e5'),rect(0,-2,width,2,'#eee6ce'));
+  }
+  if (reading) {
+    // The page plane tilts up toward the reader; the cover's near edge is below it.
+    // A upright full-page rectangle would present the text to the viewer instead.
+    for (const shape of shapes) shape.pts = shape.pts.map(([x,y]) => [x, y * 0.38]);
+    shapes.unshift(rect(-1, -1, width+2, 3, '#354357'));
   }
   return shapes;
 }

@@ -716,7 +716,7 @@ await test('five figures reserve distinct partners and save separate relationshi
   assert.equal(c.partnerId, d.ctx.who);
   for (const p of group) p.leaveWorld();
 });
-await test('pen-made pistol retains gun behavior through save/load and does not multiply replacements', () => {
+await test('two deliberate pen-made pistols preserve distinct projects and gun behavior through save/load', () => {
   const p = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
   p.paused = true;
   for (let i = 0; i < 360; i++) p.update(1 / 120);
@@ -738,9 +738,12 @@ await test('pen-made pistol retains gun behavior through save/load and does not 
     p.mind.reset(p.ctx);
     p.paused = true;
   }
-  assert.equal(p.items.list.filter((it) => it.def.id === 'ink-gun').length, 1);
+  const pistols = p.items.list.filter((it) => it.def.id === 'ink-gun');
+  assert.equal(pistols.length, 2);
+  assert.equal(new Set(pistols.map(it=>it.uid)).size, 2);
   const copy = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
   copy.load(p.save());
+  assert.equal(copy.items.list.filter(it=>it.def.id === 'ink-gun').length, 2);
   const gun = copy.items.find('gun');
   assert(gun?.def.drawn);
   assert.equal(gun.def.id, 'ink-gun');
@@ -761,7 +764,9 @@ await test('pistol magazines survive bursts and reload before another round can 
   skill.start(p.ctx);
   for (let i = 0; i < 1200; i++) {
     skill.t += 1 / 120;
-    if (skill.update(p.ctx, 1 / 120)) break;
+    const done = skill.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+    if (done) break;
   }
   skill.stop(p.ctx);
   assert.equal(fired.length, 3);
@@ -1149,9 +1154,9 @@ await test('actual cursor pistols aim manually, consume their own ammo and reloa
   );
   control.press(false);
   control.reload();
-  for (let i = 0; i < 60; i++) control.update(1 / 60, [p]);
+  for (let i = 0; i < 60; i++) { p.update(1 / 60); control.update(1 / 60, [p]); }
   assert.equal(gun.ammo, 0);
-  for (let i = 0; i < 12; i++) control.update(1 / 60, [p]);
+  for (let i = 0; i < 12; i++) { p.update(1 / 60); control.update(1 / 60, [p]); }
   assert.equal(gun.ammo, 6);
   control.detach();
   assert(!p.userWeaponControlled && !gun.cursorControlled);

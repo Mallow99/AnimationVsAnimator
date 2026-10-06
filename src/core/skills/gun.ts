@@ -65,7 +65,6 @@ export class ShootGun extends Skill {
       windup: true,
       hitIn: Math.max(0, this.wait),
     };
-    gun.tickReload(dt);
     if (gun.reloadRemaining > 0) return false;
     this.wait -= dt;
     if (this.wait > 0) return false;

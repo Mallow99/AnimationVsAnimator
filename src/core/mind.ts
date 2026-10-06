@@ -461,8 +461,8 @@ export class Mind {
     if (name === 'read') return new ReadBook();
     if (['sip','exercise','yoyo'].includes(name)) return new EverydayItem(name === 'yoyo' ? 'play' : name as 'sip' | 'exercise', name as 'sip' | 'exercise' | 'yoyo');
     if(['closetab','closewindow','pluck','restorepage','folder','file'].includes(name))return new DesktopInteraction(name as import('../shared/desktop').DesktopAction);
-    if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun',true) : null;
-    if(name==='drawtool')return c.items.find('draw') && c.char.useHand ? new DrawTool('foam-sword',true) : null;
+    if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun') : null;
+    if(name==='drawtool')return c.items.find('draw') && c.char.useHand ? new DrawTool('foam-sword') : null;
     if (name === 'wake') { c.mood.asleep = false; return new Sequence('wake', [{ wait: 0.1 }]); }
     if (name === 'grabcursor' && !c.canGrabCursor) return null;
     if (name === 'loseArm' || name === 'loseLeg') {
@@ -610,7 +610,7 @@ export class Mind {
     const swordTaken = c.items.list.some((it) => it.def.use === 'swing' && it.where === 'cursor') && !c.items.list.some((it) => it.def.use === 'swing' && it.where !== 'cursor');
     const opts: Option[] = [];
     if(canDraw && c.drawTools && fresh)opts.push({name:'drawtool',why:'making something useful with his pen',
-      score:0.18+s.boredom*0.4,make:()=>{this.lastDoodle=w.time;const tool=c.items.list.find(it=>!it.def.drawn && ['swing','smash','gun'].includes(it.def.use) && ['belt','hand'].includes(it.where));return new DrawTool(tool?.def.id ?? 'foam-sword',true);}});
+      score:0.18+s.boredom*0.4,make:()=>{this.lastDoodle=w.time;const tool=c.items.list.find(it=>!it.def.drawn && ['swing','smash','gun'].includes(it.def.use) && ['belt','hand'].includes(it.where));return new DrawTool(tool?.def.id ?? 'foam-sword');}});
     const draw = (name: string, shape: keyof typeof LIVE_SHAPES, becomes: Becomes, then: PlanStep[], why: string, score: number) =>
       opts.push({ name, why, score: canDraw && fresh ? score : 0, make: () => { this.lastDoodle = w.time; return new PlanSkill(this, [{ draw: LIVE_SHAPES[shape], title: shape, becomes }, ...then]); } });
     draw('drawball', 'ball', 'ball', [{ do: 'kick' }], 'wants something to kick around', fun * 0.8 + s.boredom * 0.1);

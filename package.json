@@ -18,7 +18,8 @@
     "chromecheck": "node scripts/chrome-check.mjs",
     "roadmapcheck": "node scripts/build.mjs roadmap-checks && node .build/roadmap-checks.mjs",
     "qualitycheck": "node scripts/build.mjs quality-checks && node .build/quality-checks.mjs",
-    "qualityprofile": "node scripts/build.mjs quality-profile && node .build/quality-profile.mjs"
+    "qualityprofile": "node scripts/build.mjs quality-profile && node .build/quality-profile.mjs",
+    "sanitycheck": "node scripts/build.mjs living-checks && node .build/living-checks.mjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

@@ -27,7 +27,7 @@ import type { Memory, NoteKind } from './memory';
 
 const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // Ordinary conversation during a match should not replace the seated game skill.
-const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:read|watch|play|close|take|restore|enter|shoot|fire|high five|hug|dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
+const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:read|watch|play|close|take|restore|enter|shoot|fire|float|perform|show me|have a drink|sip|exercise|train|lift|arrange|move|carry|sort|refine|chat together|talk together|high five|hug|dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
 
 /** What he has and where, in words: "pen (in your satchel), wooden sword (the person took it)". */
 function itemsText(c: Ctx) {

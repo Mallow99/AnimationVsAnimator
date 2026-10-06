@@ -142,7 +142,9 @@ export class CursorWeapon {
       }),
       receive: () => {},
     };
-    item?.tickReload(dt);
+    // Owned guns advance on their owner's inventory clock in every location.
+    // Practice guns have no owner and use this controller's clock.
+    if (!this.owner) item?.tickReload(dt);
     if (
       def &&
       item &&

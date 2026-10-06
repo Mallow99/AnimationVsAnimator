@@ -41,7 +41,7 @@ test('reload follows the actual gun through storage, cursor use, cancellation an
   const q=fixture()[0];q.load(p.save());const restored=q.items.find('gun')!;
   assert.equal(restored.reloadRemaining,gun.reloadRemaining);assert.equal(restored.ammo,0);
   p.useItem(gun);const control=new CursorWeapon();control.attach(gun,p);control.reload();control.reload();
-  for(let i=0;i<120;i++)control.update(dt,[p]);assert.equal(gun.ammo,6);assert.equal(gun.reloadRemaining,0);
+  for(let i=0;i<120;i++){p.update(dt);control.update(dt,[p]);}assert.equal(gun.ammo,6);assert.equal(gun.reloadRemaining,0);
   control.detach();p.giveBack(gun);assert.equal(p.items.list.filter(i=>i.def.id==='gun').length,1);
 });
 test('pickup never enables weapon use and a cursor gun can return to passive transport',()=>{
