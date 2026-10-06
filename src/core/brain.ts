@@ -29,9 +29,9 @@ const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // Ordinary conversation during a match should not replace the seated game skill.
 const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:read|watch|play|close|take|restore|enter|shoot|fire|high five|hug|dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
 
-/** What he has and where, in words: "pen (on your belt), wooden sword (the person took it)". */
+/** What he has and where, in words: "pen (in your satchel), wooden sword (the person took it)". */
 function itemsText(c: Ctx) {
-  const where = { belt: 'on your belt', hand: 'in your hand', worn: 'wearing it', world: 'lying on the ground', cursor: 'the person took it' } as const;
+  const where = { belt: 'in your satchel', hand: 'in your hand', worn: 'wearing it', world: 'lying on the ground', cursor: 'the person took it' } as const;
   return c.items.list.map((it) => `${it.def.name.toLowerCase()} (${where[it.where]})`).join(', ') || 'nothing';
 }
 
@@ -108,7 +108,7 @@ export function parseDrawing(raw: unknown): Vec[][] | null {
 function parseStep(raw: unknown, saved: MadeMove[]): PlanStep | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  if (typeof o.do === 'string') return ACTIONS.includes(o.do) ? { do:o.do,...(typeof o.with==='string' && o.with.trim()?{with:o.with.trim().slice(0,40)}:{}) } : null;
+  if (typeof o.do === 'string') return (ACTIONS.includes(o.do) || /^draw(?:item|prop):[a-z0-9-]{1,30}$/.test(o.do)) ? { do:o.do,...(typeof o.with==='string' && o.with.trim()?{with:o.with.trim().slice(0,40)}:{}) } : null;
   if (typeof o.say === 'string' && o.say.trim()) return { say: o.say.trim().slice(0, 140) };
   if (num(o.wait) !== null) return { wait: Math.min(5, Math.max(0, num(o.wait)!)) };
   if (typeof o.walk === 'string' && ['left', 'right', 'cursor', 'away'].includes(o.walk)) return { walk: o.walk as 'left' };
@@ -480,7 +480,7 @@ export class Brain {
         ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`]
         : []),
       '- {"draw": [strokes], "title": "..."} draw something with your pen (see DRAWING). Only works if you have your pen.',
-      'YOUR BELT: you wear a belt (left hip, right hip, back, and a pocket) where you keep your things. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mace ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
+      'YOUR SATCHEL: your wearable bag holds your stored tools. You reach into it to take them out and put them back naturally. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mace ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
       'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling), "perch" (hop up and sit on something in their window, like a chat message).',
       'DRAWING YOUR WAY: "ramp" draws a ramp up onto a window and walks up it; "bridge" draws a bridge across a gap to a window; "drawramp" draws one to jump off. Your drawings are solid and have weight.',
@@ -554,6 +554,11 @@ export class Brain {
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,
+      `your specialty: ${c.talent ?? 'drawing'}. Friends can teach each other; do not interrupt busy friends.`,
+      `workshop requests: deskwork, refine, sorttools, arrange, carrytogether, passtool, comparedrawings, checkfriend, pong, handheld, group:wave/chat/couch/watch/duet/triangle/mirror/relay. Only invite available friends.`,
+      `drawable blueprints: ${[...c.items.defs.values()].filter(d=>d.drawable!==false&&!d.drawn&&!d.blueprint).map(d=>`drawitem:${d.id}`).concat([...c.props?.defs.values()??[]].filter(d=>d.drawable!==false&&!d.id.startsWith('ink-')).map(d=>`drawprop:${d.id}`)).join(', ')}`,
+      `shared furniture: ${(c.props?.placed ?? []).map(t=>`${t.def?.name}: ${t.def?.use}${t.ink?' (unfinished ink)':''}`).join('; ')}`,
+
       ...(c.game && c.game.state !== 'closed'
         ? [
             `game: Othello on your TV with the person (${c.game.state}); black/person ${c.game.score.you}, white/you ${c.game.score.him}. You can talk while staying seated. Keep plan empty unless the person explicitly asks for another activity. The board handles your moves offline; never claim a move you did not make.`,

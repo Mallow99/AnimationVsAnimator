@@ -6,7 +6,7 @@
 //    with every window. A few settings are about the app, not one of them (climbing windows, the AI
 //    service, fights...): those are kept the same in both.
 
-import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray, dialog } from 'electron';
+import { app, powerMonitor, BrowserWindow, ipcMain, Menu, screen, shell, Tray, dialog } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_CONFIG, friendConfig, companionConfig, mergeConfig, PROVIDERS, type PetConfig, type ProviderId } from '../core/config';
@@ -42,7 +42,7 @@ const configPath = (id: number) => path.join(app.getPath('userData'), id ? `pet-
 const configs: PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(DEFAULT_CONFIG,id));
 let config = configs[0];
 /** Settings that are about the app (or both of them), kept the same in both stick figures. */
-const SHARED: (keyof PetConfig)[] = ['windows', 'moveWindows', 'screenAware', 'knockCursor', 'mischief', 'fightMode', 'friend', 'provider', 'model', 'sfx', 'volume', 'figureCount', 'debugCombat', 'closeWindows', 'browserPlay', 'fileHomes'];
+const SHARED: (keyof PetConfig)[] = ['windows', 'moveWindows', 'screenAware', 'knockCursor', 'mischief', 'fightMode', 'friend', 'provider', 'model', 'sfx', 'volume', 'figureCount', 'debugCombat', 'closeWindows', 'browserPlay', 'fileHomes', 'showBag', 'showTrash', 'inkLifetime', 'consoleRequired', 'dailyRhythm'];
 let saveTimer: NodeJS.Timeout | undefined;
 const dirty = new Set<number>();
 
@@ -395,6 +395,7 @@ ipcMain.on('items:openFolder', () => { readItemDefs(); shell.openPath(itemsDir()
 // The talk box on the desktop needs keyboard focus for a moment, then gives it back.
 ipcMain.on('pet:typing', (_e, on: boolean) => {
   if (!win) return;
+  if (win.isFocusable() === !!on) return; // Avoid recreating/toggling a native panel for duplicate focus messages.
   if (on) {
     win.setFocusable(true);
     win.focus();
@@ -414,7 +415,7 @@ ipcMain.on('brain:setKey', (_e, key: string) => {
   for (const sw of settingsWins.values()) sw.webContents.send('brain:keyStatus', llm.keyStatus(config.provider));
 });
 // You pressed on him. On macOS that (wrongly) activates our app, so hand focus right back.
-ipcMain.on('pet:pressed', () => watcher?.refocus());
+ipcMain.on('pet:pressed', () => { if (!win?.isFocusable()) watcher?.refocus(); });
 // He grabbed your cursor (mischief mode) or knocked it flying. Overlay coordinates → screen coordinates.
 ipcMain.on('pet:moveCursor', (_e, x: number, y: number) => {
   if (!(config.mischief || config.knockCursor) || !watcher || !Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -489,6 +490,8 @@ ipcMain.handle(
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 app.whenReady().then(() => {
+  const life = () => win?.webContents.send('world:life', {hour:new Date().getHours(),idleSeconds:powerMonitor.getSystemIdleTime()});
+  setInterval(life,10000).unref();
   loadConfig();
   // He lives in the menu bar, not the Dock. Keep an Edit menu so copy/paste
   // shortcuts work in the settings window's text boxes.

@@ -1,8 +1,8 @@
 {
   "type": "prop",
-  "id": "desk",
-  "name": "Desk",
-  "about": "Draw blueprints here, rest tools on the top, and use a nearby chair.",
+  "id": "workbench",
+  "name": "Workbench",
+  "about": "Color and polish ink tools or furniture into durable objects. Projects resume here.",
   "use": "work",
   "outline": [
     [
@@ -30,7 +30,7 @@
         6,
         38
       ],
-      "fill": "#6e5a48",
+      "fill": "#4b6051",
       "radius": 1
     },
     {
@@ -40,7 +40,7 @@
         26,
         38
       ],
-      "fill": "#8a735e",
+      "fill": "#687e61",
       "radius": 2
     },
     {
@@ -111,6 +111,7 @@
     18
   ],
   "actions": [
+    "refine",
     "drawhere",
     "store",
     "move"

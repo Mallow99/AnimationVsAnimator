@@ -269,7 +269,7 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
     if (j.hip.x < 0 || j.hip.x > 1400 || j.hip.y > 800) out++;
     if (pet.char.support >= 0) onWin++;
   });
-  check('with windows: climbs up and gets down', seen.has('climb') && seen.has('getdown') && out === 0, `${[...seen].join(',')} onWindowFrames=${onWin}`);
+  check('with windows: climbs up and gets down', seen.has('climb') && seen.has('getdown') && out === 0, `${[...seen].join(',')} onWindowFrames=${onWin} mode=${pet.char.mode} support=${pet.char.support} safeDrop=${pet.ctx.lessons.safeDrop} options=${pet.mind.weigh(pet.ctx).map(o=>o.name).join(',')}`);
 }
 { // Cheap learning: a jump down that hurts makes him warier of that height.
   const pet = new Pet(bounds);

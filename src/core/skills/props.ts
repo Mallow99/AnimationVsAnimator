@@ -1,5 +1,6 @@
 import { ActivityClock, activitySeconds, restlessness } from '../activity-pacing';
 // Furniture activities, separated from combat and climbing.
+import { propActions, type PropAction } from '../capabilities';
 import { Skill, arrive, type Ctx } from './context';
 import type { Thing, PropDef } from '../props';
 import type { SeatStyle } from '../character';
@@ -10,7 +11,8 @@ import { seatedTalk } from './together';
 /** The props of a kind (seat, tv, ride, canvas) that are standing up on the floor, nearest first. */
 export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
   const ch = c.char;
-  return (c.props?.placed ?? []).filter((t) => t.def!.use === use && Math.abs(t.tilt) < 0.35 && !t.held)
+  const action: Partial<Record<PropDef['use'],PropAction>> = {seat:'sit',tv:'watch',ride:'ride',canvas:'paint',work:'drawhere',storage:'store'};
+  return (c.props?.placed ?? []).filter((t) => (action[use] ? propActions(t.def!).includes(action[use]!) : t.def!.use === use) && Math.abs(t.tilt) < 0.35 && !t.held)
     .sort((a, b) => Math.abs(a.center.x - ch.x) - Math.abs(b.center.x - ch.x));
 }
 

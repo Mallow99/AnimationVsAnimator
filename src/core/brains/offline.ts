@@ -10,6 +10,31 @@ export interface OfflineReply {
 }
 const choose = (a: string[]) => a[Math.floor(Math.random() * a.length)];
 const ACTIONS: [RegExp, string][] = [
+  [/\b(?:pass|share|give).*tool\b/,'passtool'],
+  [/\bcompare.*drawing\b/,'comparedrawings'],
+  [/\b(?:check on|help).*friend\b/,'checkfriend'],
+  [/\b(?:handheld|game boy|gameboy|pocket console)\b/, 'handheld'],
+  [/\bpong\b/, 'pong'],
+  [/\b(?:carry(?: it)? together|carry.*with.*friend|help.*carry)\b/, 'carrytogether'],
+  [/\b(?:move|pull|arrange|put|push).*(?:tv|television).*(?:couch|seat)\b/, 'arrange'],
+  [/\breading corner\b/, 'readingcorner'],
+  [/\b(?:work corner|work area)\b/, 'workcorner'],
+  [/\b(?:group wave|wave together)\b/, 'group:wave'],
+  [/\b(?:group chat|group conversation|talk together|chat together)\b/, 'group:chat'],
+  [/\b(?:couch huddle|all.*couch|group.*couch)\b/, 'group:couch'],
+  [/\b(?:group watch|everyone.*watch|all.*watch|watch together)\b/, 'group:watch'],
+  [/\b(?:duet|two.*mirror)\b/, 'group:duet'],
+  [/\b(?:hands in|triangle)\b/, 'group:triangle'],
+  [/\b(?:four.*dance|two.pair dance)\b/, 'group:mirror'],
+  [/\b(?:wave relay|five.*wave)\b/, 'group:relay'],
+  [/\b(?:refine|polish|finish|color in|colour in)\b/, 'refine'],
+  [/\b(?:sort|store|tidy)(?: the| your)? (?:tools|weapons|items)\b/, 'sorttools'],
+  [/\b(?:blueprint|work at (?:the )?desk)\b/, 'deskwork'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? katana\b/, 'drawitem:katana'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? (?:tv|television)\b/, 'drawprop:tv'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? couch\b/, 'drawprop:couch'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? chair\b/, 'drawprop:chair'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? desk\b/, 'drawprop:desk'],
   [/\b(?:watch|watching)(?: a| the| some)? (?:tv|television|movie|film)\b/, 'watchtv'],
   [/\b(?:read|reading)(?: a| your| the)?(?: book)?\b/, 'read'],
   [/\b(?:close|shut) (?:this |the |that )?tab\b/, 'closetab'],
@@ -165,8 +190,11 @@ export function offlineReply(c: Ctx, text: string): OfflineReply {
       continue;
     }
     const action = ACTIONS.find(([re]) => re.test(clause));
-    if (!action) continue;
-    let doName = action[1];
+    const definitions = [...c.items.defs.values(),...(c.props?.defs.values()??[])];
+    const mentions=(name:string)=>new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`,'i').test(clause);
+    const drawing = /\b(?:draw|sketch|make)\b/.test(clause) ? definitions.find(d=>d.drawable!==false && (mentions(d.name)||mentions(d.id))) : undefined;
+    if (!action && !drawing) continue;
+    let doName = drawing && (!action || !action[1].startsWith('draw')) ? `${c.props?.defs.has(drawing.id)?'drawprop':'drawitem'}:${drawing.id}` : action![1];
     if (doName === 'pushwindow' && /kick/.test(clause)) doName = 'kickwindow';
     if (doName === 'spar' && c.mood.label === 'angry') doName = 'brawl';
     const repeats = Math.min(

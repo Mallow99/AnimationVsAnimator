@@ -1,4 +1,5 @@
 import { ReadBook } from './skills/read-book';
+import { propActions } from './capabilities';
 import { restlessness, isSettledActivity } from './activity-pacing';
 // The offline mind ("Mode 0"): instinct, no AI.
 //
@@ -22,6 +23,11 @@ import {
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 import { AskTogether, isAct, NapTogether, ShoulderBump, Together, WaveAt, type Act } from './skills/together';
+import { GroupActivity, groupPlan, validGroupPlan, type GroupPlan, type GroupAct } from './skills/group';
+import { FriendlyMoment } from './skills/friendly-moment';
+import { PlayHandheld } from './skills/handheld';
+import { arrangingSkill } from './skills/arrange';
+import { workshopSkill } from './skills/workshop';
 import { DrawTool } from './skills/draw-tool';
 import { ShootGun } from './skills/gun';
 import { DesktopInteraction } from './skills/desktop';
@@ -95,6 +101,7 @@ class PlanSkill extends Skill {
   constructor(private mind: Mind, private steps: PlanStep[]) { super(); }
   /** Shows as whatever step he's on ("hop", "move", ...). */
   get name() { return this.sub?.name ?? 'plan'; }
+  get active(): Skill | null { return this.sub instanceof PlanSkill ? this.sub.active : this.sub; }
 
   update(c: Ctx, dt: number): boolean {
     if (this.sub) {
@@ -208,6 +215,13 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'chat', label: 'Go talk to his friend' }, { name: 'waveat', label: 'Wave at his friend' }, { name: 'sitwith', label: 'Sit with his friend' }, { name: 'naptogether', label: 'Nap next to his friend' }, { name: 'jointv', label: 'Join his friend at the TV' },
   {name:'closetab',label:'Close connected Chrome tab'}, {name:'closewindow',label:'Close front window'},
   {name:'pluck',label:'Take selected page element'}, {name:'restorepage',label:'Restore the Chrome page'}, {name:'folder',label:'Enter a real folder'}, {name:'file',label:'Enter a real file'},
+  ...[['wave','Group wave (2–5)'],['chat','Group conversation (2–5)'],['couch','Couch huddle (2–5)'],['watch','Watch together (2–5)'],['duet','Mirrored duet (2)'],['triangle','Hands in (3)'],['mirror','Two-pair dance (4)'],['relay','Wave relay (5)']].map(([act,label]) => ({name:`group:${act}`,label})),
+  { name:'passtool',label:'Pass a spare tool to a friend' }, {name:'comparedrawings',label:'Compare drawings'}, {name:'checkfriend',label:'Check on a hurt friend'},
+  { name: 'handheld', label: 'Play the handheld game' },
+  { name: 'pong', label: 'Play Pong with a friend' },
+  { name: 'arrange', label: 'Move the TV beside the couch' }, { name: 'carrytogether', label: 'Carry the TV with a friend' }, { name: 'readingcorner', label: 'Arrange a reading corner' }, { name: 'workcorner', label: 'Arrange the work area' },
+  { name: 'deskwork', label: 'Draw a blueprint at the desk' }, { name: 'refine', label: 'Refine an ink project at the workbench' }, { name: 'sorttools', label: 'Sort loose tools onto the shelf' },
+  { name: 'drawprop:tv', label: 'Draw a working TV' }, { name: 'drawprop:couch', label: 'Draw a couch' }, { name: 'drawprop:chair', label: 'Draw a chair' }, { name: 'drawprop:desk', label: 'Draw a desk' }, { name: 'drawitem:katana', label: 'Draw a katana' },
   { name: 'drawtool', label: 'Draw a working tool' }, { name: 'drawgun', label: 'Draw a pistol' },
   { name: 'gun', label: 'Fire pistol at the cursor' },
   { name: 'shoot', label: 'Shoot arrows at the cursor' },
@@ -216,9 +230,11 @@ export const COMMANDS: { name: string; label: string }[] = [
 
 export class Mind {
   skill: Skill | null = null;
+  get activeSkill(): Skill | null { return this.skill instanceof PlanSkill ? this.skill.active ?? this.skill : this.skill; }
   /** When he last started a duel with his friend (so they don't fight nonstop), and did something with him. */
   private duelAt = -60;
   private socialAt = -20;
+  private arrangeAt = -90;
   private last = '';
   private queued: Skill | null = null;
   private pokes: number[] = [];
@@ -411,6 +427,11 @@ export class Mind {
     return true;
   }
 
+  acceptGroup(c: Ctx, plan: GroupPlan, sender: string) {
+    if (!validGroupPlan(plan, sender, c.who) || !c.char.whole || c.mood.asleep || c.char.hp < 0.25 || c.mood.s.energy < 0.15 || c.char.mode !== 'ground' || (this.skill && !['idle','wander','sit','explore','sigh','stretch'].includes(this.skill.name)) || this.queued) return false;
+    this.interrupt(c, new GroupActivity(structuredClone(plan))); return true;
+  }
+
   /** Carry out a plan from his AI brain. */
   perform(c: Ctx, steps: PlanStep[], why: string) {
     const ch = c.char;
@@ -424,6 +445,12 @@ export class Mind {
 
   /** Build the skill for a command name (null if he can't do it right now). */
   makeSkill(c: Ctx, name: string): Skill | null {
+    const arrange = arrangingSkill(c, name); if (arrange) return arrange;
+    if(['passtool','comparedrawings','checkfriend'].includes(name)) return new FriendlyMoment(name==='passtool'?'pass':name==='comparedrawings'?'compare':'check');
+    if (name === 'handheld') return new PlayHandheld();
+    if (name === 'pong') { const plan = groupPlan(c, 'pong'); return plan ? new GroupActivity(plan) : null; }
+    if (name.startsWith('group:')) { const plan = groupPlan(c, name.slice(6) as GroupAct); return plan ? new GroupActivity(plan) : null; }
+    const workshop = workshopSkill(c, name); if (workshop) return workshop;
     if (name === 'read') return new ReadBook();
     if(['closetab','closewindow','pluck','restorepage','folder','file'].includes(name))return new DesktopInteraction(name as import('../shared/desktop').DesktopAction);
     if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun',true) : null;
@@ -483,7 +510,7 @@ export class Mind {
     // Annoyed isn't angry, but he's not in the mood for fun and games either.
     const grumpy = c.mood.emotion === 'annoyed', FUN = ['dance', 'chase', 'spar', 'hop', 'hang', 'bounce', 'backflip', 'frontflip', 'showoff', 'drawball', 'surf'];
     const excited = c.mood.emotion === 'excited';
-    const opts = this.options(c).map((o) => ({ ...o, score: o.score * (this.biases[o.name] ?? 1) * (grumpy && FUN.includes(o.name) ? 0.25 : excited && FUN.includes(o.name) ? 1.4 : 1) }));
+    const opts = this.options(c).map((o) => ({ ...o, score: o.score * (1 + Math.min(16,(c.foe?.()?.id ? c.relationship?.(c.foe!()!.id!)?.activities[o.name.replace('group:','')] : 0) ?? 0) * 0.015) * (this.biases[o.name] ?? 1) * (grumpy && FUN.includes(o.name) ? 0.25 : excited && FUN.includes(o.name) ? 1.4 : 1) }));
     // Square the scores so strong urges win more often; avoid repeating himself.
     let total = 0;
     const weights = opts.map((o) => {
@@ -546,6 +573,18 @@ export class Mind {
       { name: 'grabcursor', score: c.canGrabCursor && cursorActive && near && c.world.time - this.lastGrab > 60 && (L === 'playful' || L === 'bored' || L === 'angry') ? 0.7 : 0,
         why: L === 'angry' ? 'getting back at you' : 'feeling mischievous', make: () => { this.lastGrab = c.world.time; return new GrabCursor(); } },
     ];
+    if(c.items.find('game'))opts.push({name:'handheld',score:0.1+c.mood.s.boredom*0.15,why:'playing his pocket game',make:()=>new PlayHandheld()});
+    if(c.world.time-this.socialAt>90 && propsOf(c,'tv').length && (c.peers?.()??[]).some(v=>!v.busy&&!v.asleep))opts.push({name:'pong',score:0.08+c.mood.s.boredom*0.12,why:'a game with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'pong');return plan?new GroupActivity(plan):new Idle(3);}});
+    const tvToMove=propsOf(c,'tv').find(t=>!t.watchers.size&&!t.players.length),couchToUse=propsOf(c,'seat').find(t=>t.seatRoom>1);
+    if(tvToMove && couchToUse && Math.abs(tvToMove.center.x-couchToUse.center.x)>250*c.char.scale && c.world.time-this.arrangeAt>90)opts.push({name:'arrange',score:0.05,why:'making a shared TV corner',make:()=>{this.arrangeAt=c.world.time;return arrangingSkill(c,'arrange')!;}});
+    const hurtFriend=(c.peers?.()??[]).find(v=>v.hp<0.5&&!v.asleep&&v.doing!=='duel');
+    if(hurtFriend && c.world.time-this.socialAt>30)opts.push({name:'checkfriend',score:0.5,why:'checking on a friend',make:()=>{this.socialAt=c.world.time;return new FriendlyMoment('check');}});
+    if ((c.peers?.() ?? []).filter(v => !v.busy && !v.asleep && !v.group).length && c.world.time - this.socialAt > 60) opts.push({ name: 'group:wave', score: 0.1 + c.mood.s.boredom * 0.12, why: 'getting friends together', make: () => { this.socialAt = c.world.time; const plan = groupPlan(c, 'wave'); return plan ? new GroupActivity(plan) : new Idle(3); } });
+    for (const name of ['deskwork', 'refine', 'sorttools']) {
+      const s = workshopSkill(c, name);
+      const available = name === 'refine' ? (c.items.list.some(i => i.ink) || c.props?.placed.some(t=>t.ink&&!t.sitters.size)) && propsOf(c, 'work').some(t => propActions(t.def!).includes('refine')) : name === 'sorttools' ? propsOf(c, 'storage').length && c.items.list.some(i => i.where === 'world') : !!s;
+      if (s && available) opts.push({ name, score: 0.06 + c.mood.s.boredom * 0.1, why: 'working with his tools', make: () => workshopSkill(c, name)! });
+    }
     return opts;
   }
 
@@ -780,7 +819,7 @@ export class Mind {
     opts.push({ name: 'waveat', score: apart && !f.asleep && f.doing !== 'duel' && (ready || this.forced) && Math.abs(f.x - ch.x) < 800 && L !== 'angry' && bond > -0.4 ? 0.5 + s.boredom * 0.3 : 0,
       why: `calling out to ${f.name}`, make: () => { this.socialAt = w.time; return new WaveAt(); } });
     // He's sitting on the couch with room next to him: go sit with him.
-    const seatOf = f.mode === 'sit' && together ? (c.props?.placed ?? []).find((t) => t.def!.use === 'seat' && t.sitters.size === 1 && t.seatRoom > 1 && !t.sitters.has(c.who) && Math.abs(t.center.x - f.x) < 80 * ch.scale) : undefined;
+    const seatOf = f.mode === 'sit' && together ? (c.props?.placed ?? []).find((t) => t.def!.use === 'seat' && t.sitters.size > 0 && t.sitters.size < t.seatRoom && !t.sitters.has(c.who) && Math.abs(t.center.x - f.x) < 80 * ch.scale) : undefined;
     opts.push({ name: 'sitwith', score: seatOf && bond > -0.2 && L !== 'angry' ? 0.65 + bond * 0.3 + (1 - s.energy) * 0.3 : 0, why: `sitting with ${f.name}`,
       make: () => { this.socialAt = w.time; return new SitOnProp(seatOf!, rand(15, 30)); } });
     // He's at the TV: join him (watch with him, or play against him).
@@ -793,7 +832,7 @@ export class Mind {
   /** His friend asked to do something together: yes or no (mood, how he feels about him, whether he's busy). */
   private answerInvite(c: Ctx, act: string, name: string) {
     const L = c.mood.label, bond = c.feel.bond, ch = c.char;
-    const busy = this.skill && ['duel', 'playgame', 'reattach', 'sleep', 'nap', 'together', 'ask', 'videogame', 'paint'].includes(this.skill.name);
+    const busy = this.skill && ['duel', 'playgame', 'reattach', 'sleep', 'nap', 'together', 'ask', 'videogame', 'paint', 'group', 'refine', 'deskwork', 'handheld'].includes(this.skill.name);
     const able = ch.mode === 'ground' && ch.legCount === 2 && !!ch.useHand && !c.mood.asleep;
     let yes = !busy && able && isAct(act) && L !== 'angry' && L !== 'scared';
     if (yes) yes = chance(act === 'hug' ? (bond > 0.3 || L === 'sad' ? 0.9 : 0.3) : bond < -0.3 ? 0.25 : 0.65 + bond * 0.35);
@@ -846,7 +885,7 @@ export class Mind {
     }
     if (ch.support >= 0) {
       const onFor = c.world.time - this.onWindowSince;
-      const want = 0.15 + Math.min(onFor / 60, 1) * 0.6 + (L === 'sleepy' ? 0.3 : 0);
+      const want = 0.15 + Math.min(onFor / 90, 3) * 0.7 + (L === 'sleepy' ? 0.3 : 0);
       const safe = c.lessons.safeDrop * ch.scale;
       const hops = ([-1, 1] as const).map((side) => ({ side, drop: dropFrom(c, side) })).filter((o) => o.drop < safe);
       const climbs = ([-1, 1] as const).map((side) => ({ side, o: climbDownOption(c, side) })).filter((x) => x.o && x.o.drop < safe);
@@ -948,7 +987,7 @@ export class Mind {
       }
       case 'challenged': {
         // His friend wants to fight: he squares up too (same weapons), unless he's busy with something of his own.
-        const keep = ['playgame', 'reattach', 'sleep', 'duel'];
+        const keep = ['playgame', 'reattach', 'sleep', 'duel', 'group', 'refine', 'deskwork', 'handheld'];
         const upHigh = c.char.support >= 0 && !c.props?.thingOf(c.char.support); // (up on a window: he can't fight from there)
         if (this.skill && keep.includes(this.skill.name) || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand || upHigh) return;
         this.why = `${e.name} wants to fight`;

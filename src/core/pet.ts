@@ -10,8 +10,15 @@ import { Mood, MOOD_PRESETS, type MoodState } from './mood';
 import { Mind, type MindEvent } from './mind';
 import { DEFAULT_LESSONS, type Ctx } from './skills';
 import { windowPlatforms, windowSides, windowWalls, type WinRect } from './world';
-import { beltParts, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
-import { drawItem, itemParts, itemFromDrawing, Items, type Item, type ItemDef } from './items';
+import { drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
+import { propActions } from './capabilities';
+import { parseProject } from './crafting-state';
+import { LifeRhythm, type LifeSample } from './life-rhythm';
+import { signatureTalent } from './personality';
+import { parseRelationship, relationship, type Relationship } from './relationships';
+import { GroupActivity } from './skills/group';
+import { satchelAt, satchelParts } from './satchel';
+import { drawItem, itemParts, itemFromDrawing, parseItemDef, Items, type Item, type ItemDef } from './items';
 import { Props, parseCanvasArt, type Ball, type Thing } from './props';
 import type { Doodle } from './doodles';
 import type { Platform } from './physics';
@@ -87,9 +94,12 @@ export class Pet implements Peer {
    */
   others: Peer[] = [];
   partnerId: string | null = null;
-  private relationships = new Map<string, { bond: number }>();
+  private relationships = new Map<string, Relationship>();
   private soloFeeling = { bond: 0.4 };
   readonly projectiles = new Projectiles();
+  private gifts = new Set<string>();
+  readonly rhythm = new LifeRhythm();
+  life(sample: LifeSample) { if(this.config.dailyRhythm)this.rhythm.receive(this.ctx,sample); }
   /** A stable partner for an exchange, selected again only while free. */
   partner(): Peer | null {
     const existing = this.others.find((o) => o.view().id === this.partnerId);
@@ -120,10 +130,13 @@ export class Pet implements Peer {
     if (!id) return this.soloFeeling;
     let value = this.relationships.get(id);
     if (!value) {
-      value = { bond: this.soloFeeling.bond };
+      value = relationship(this.soloFeeling.bond);
       this.relationships.set(id, value);
     }
     return value;
+  }
+  private relation(id:string) {
+    let r=this.relationships.get(id);if(!r){r=relationship(this.soloFeeling.bond);this.relationships.set(id,r);}return r;
   }
   /** Release seat/TV claims and queued social work when a figure leaves the desktop. */
   leaveWorld() {
@@ -182,6 +195,8 @@ export class Pet implements Peer {
   onTalk: (() => void) | null = null;
   /** "Settings" in his menu. */
   onOpenSettings: (() => void) | null = null;
+  onSatchel: (() => void) | null = null;
+  satchelHit(x: number, y: number) { const at = satchelAt(this.char); return Math.abs(x - at.x) < 8 * this.char.scale && y > at.y - 5 * this.char.scale && y < at.y + 10 * this.char.scale; }
   /** Sound effects (the app plays them): footsteps, thuds, snaps, whooshes... */
   onSound: ((name: string, strength: number) => void) | null = null;
   /** The menu you get by right-clicking him. */
@@ -220,7 +235,7 @@ export class Pet implements Peer {
   private uiSeen: { id: number; x: number; y: number; w: number; h: number }[] = [];
   private uiNext = 0;
   /** Saved props whose definition (one of your files) hasn't arrived yet. */
-  private pendingProps: { id: string; x: number; art?: unknown }[] = [];
+  private pendingProps: { id: string; x: number; y?: number; tilt?: number; art?: unknown; def?: unknown; ink?: unknown }[] = [];
   /** Moving windows didn't work (no permission?): don't try again until this time. */
   private windowAccess = new WindowAccess();
   /** The desktop helper's latest word on moving windows ("moved a window", "no permission yet"...). */
@@ -271,6 +286,12 @@ export class Pet implements Peer {
       looseWeapons: () => [...pet.looseWeapons(), ...pet.others.flatMap(o => o.view().looseWeapons ?? [])],
       claimWeapon: weapon => pet.claimWeapon(weapon),
       peers: () => pet.others.map(o=>o.view()),
+      get inkLifetime() { return pet.config.inkLifetime; },
+      get consoleRequired() { return pet.config.consoleRequired; },
+      get talent() { return signatureTalent(pet.config.personality); },
+      relationship: id => pet.relation(id),
+      recordActivity: (id,act,success) => { const r=pet.relation(id);if(success){r.activities[act]=Math.min(1000,(r.activities[act]??0)+1);r.bond=Math.min(1,r.bond+0.015);}else{r.disagreements++;r.lastDisagreement=act;r.bond=Math.max(-1,r.bond-0.01);} },
+      tellTo: (id, m) => { pet.others.find(o => o.view().id === id)?.receive(m, pet); },
       selectPeer: (id) => pet.selectPeer(id),
       get hyperactivity() {return pet.config.hyperactivity;},
       get personality() {return pet.config.personality;},
@@ -302,9 +323,12 @@ export class Pet implements Peer {
   /** Advance by real elapsed seconds (any frame rate). */
   update(dt: number) {
     if (!Number.isFinite(dt) || dt <= 0) return;
-    dt = Math.min(dt, 0.1); // after a stall (laptop asleep), don't try to catch up forever
+    dt = Math.min(dt, 0.1);
+    if(this.config.dailyRhythm)this.rhythm.step(this.ctx,dt); // after a stall (laptop asleep), don't try to catch up forever
     this.ctx.world.time += dt;
     this.game.update(this.ctx.world.time);
+    if(this.ownsProps){const consoles=[...this.items.list.filter(i=>i.def.use==='connect'&&i.where==='world').map(i=>i.at),...this.others.flatMap(o=>o.view().consoleLocations??[])];for(const t of this.props.placed)if(propActions(t.def!).includes('watch'))t.consoleConnected=consoles.some(at=>Math.abs(at.x-t.center.x)<100*t.scale&&Math.abs(at.y-t.center.y)<100*t.scale);}
+
     this.ctx.canGrabCursor = this.config.mischief && !!this.onMoveCursor;
     if (this.freeze > 0) { this.freeze -= dt; dt = 0; }
     this.acc += dt;
@@ -312,7 +336,7 @@ export class Pet implements Peer {
     this.smoothWindows(dt);
     while (this.acc >= STEP) {
       this.char.sleeping = this.mood.asleep;
-      const held = this.items.list.find(it => it.where === 'hand' && isWeapon(it.def));
+      const held = this.items.list.find(it => it.where === 'hand' && !it.working && isWeapon(it.def));
       this.char.carryPose = held ? { hand: held.hand, use: held.def.use, twoHand: !!held.def.cuts || held.def.use === 'shoot' } : null;
       if (held && this.char.locomotion === 'run' && !this.char.fightPose && !this.char.handsAt && !this.char.handTarget) held.aimLocal = [0.55, 0.83];
       this.char.step(STEP);
@@ -474,8 +498,8 @@ export class Pet implements Peer {
     const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
     const extras: DepthPart[] = [
-      ...beltParts(this.char, '#3a2a22'),
-      ...this.items.onHim.filter((it) => !(it.where === 'belt' && it.slot === 3)).flatMap((it) => itemParts(it, this.char)),
+      ...satchelParts(this.char, this.items.satchelOpen),
+      ...this.items.onHim.filter((it) => it.where !== 'belt').flatMap((it) => itemParts(it, this.char)),
       ...(this.char.gamepad && this.char.mode === 'sit' ? [controllerPart(this.char)] : []),
     ];
     if (look.pixel > 1) {
@@ -813,7 +837,7 @@ export class Pet implements Peer {
 
   /** Is the cursor over him, one of his loose limbs, or one of his things? (decides whether clicks reach us or the desktop) */
   hit(x: number, y: number) {
-    return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null || this.items.hitWorld(x, y) !== null || this.props.ballAt(x, y) !== null || this.props.thingAt(x, y) !== null;
+    return this.char.hitTest(x, y) !== null || this.char.hitLimb(x, y) !== null || this.items.hitWorld(x, y) !== null || this.items.onHim.some(i => i.where === 'hand' && i.distTo(x,y) < 8) || this.props.ballAt(x, y) !== null || this.props.thingAt(x, y) !== null;
   }
 
   private emit(e: MindEvent) {
@@ -1003,10 +1027,18 @@ export class Pet implements Peer {
 
   /** Right-click on him: his menu. Returns true if it opened. */
   contextMenu(x: number, y: number) {
+    const prop = this.props.placed.find(t => t.contains(x,y));
+    if (prop && !this.char.hitTest(x,y,10)) {
+      const capabilities = propActions(prop.def!);
+      const actions: Record<string,string> = {sit:'sitdown',watch:'watchtv',ride:'ride',paint:'paint',drawhere:'deskwork',refine:'refine',store:'sorttools'};
+      this.menu = {at:{x,y}, hover:-1, rows:[...capabilities.filter(a=>actions[a]).map(a=>({label:`${a === 'drawhere' ? 'Make blueprint on' : a === 'refine' ? 'Refine at' : a === 'store' ? 'Sort tools on' : 'Use'} ${prop.def!.name.toLowerCase()}`,act:()=>this.command(`do:${actions[a]}`)})), ...(capabilities.includes('watch') ? [{label:'Play Pong',act:()=>this.command('do:pong')},{label:'Move beside couch',act:()=>this.command('do:arrange')}] : []), {label:'Supplies',act:()=>this.onSatchel?.()}]};
+      return true;
+    }
     if (!this.char.hitTest(x, y, 10)) { this.menu = null; return false; }
     this.pendingPoke = null;
     const rows: { label: string; act: () => void }[] = [];
     rows.push({ label: `Talk to ${this.config.name}`, act: () => this.onTalk?.() });
+    if (this.onSatchel) rows.push({ label: 'Open satchel', act: () => this.onSatchel?.() });
     const carried = this.items.carried;
     if (carried) rows.push({ label: `Give back ${carried.def.name.toLowerCase()}`, act: () => this.giveBack(carried) });
     for (const it of this.items.onHim) rows.push({ label: `Take ${it.def.name.toLowerCase()}`, act: () => this.takeItem(it) });
@@ -1110,11 +1142,14 @@ export class Pet implements Peer {
 
   /** One of his hits reached another figure: tell them (they work out what it does, and answer if it didn't land clean). */
   private hitFriend(o: Peer, joint: JointName, vx: number, vy: number, power: number, weapon: ItemDef | null, at: Vec, kind: HitKind = 'cross') {
+    const opponentId = o.view().id, moveName = this.char.attack?.name;
+    const previousHp = o.view().hp;
     o.receive({ type: 'hit', joint, vx, vy, power, weapon: weapon ? { id: weapon.id, hit: weapon.hit, cuts: !!weapon.cuts } : null, at, kind }, this);
+    if(opponentId && moveName && o.view().hp < previousHp){const r=this.relation(opponentId);r.vulnerable[moveName]=Math.min(1000,(r.vulnerable[moveName]??0)+1);}
   }
 
   /** The sword in his hand, if he's holding one. */
-  private get swordInHand() { return this.items.list.find((it) => it.where === 'hand' && it.def.use === 'swing') ?? null; }
+  private get swordInHand() { return this.items.list.find((it) => it.where === 'hand' && !it.working && it.def.use === 'swing') ?? null; }
 
   /** Where his blade's been for the last split second (a fast cut leaves a smear, like a cartoon's). */
   private smear: { a: Vec; b: Vec; t: number }[] = [];
@@ -1123,7 +1158,7 @@ export class Pet implements Peer {
     this.smear = this.smear.filter((s) => now - s.t < 0.09);
     // (Only the cut itself smears, not the wind-up; outside a fight, any really fast swing does.)
     const fp = this.char.fightPose;
-    if (!sword || (fp ? !fp.act : sword.tipSpeed < 900)) { if (!sword) this.smear = []; return; }
+    if (!sword || sword.working || (fp ? !fp.act : sword.tipSpeed < 900)) { if (!sword) this.smear = []; return; }
     const a = sword.butt, b = sword.tip;
     this.smear.push({ a: { x: a.x + (b.x - a.x) * 0.35, y: a.y + (b.y - a.y) * 0.35 }, b: { x: b.x, y: b.y }, t: now });
   }
@@ -1331,6 +1366,9 @@ export class Pet implements Peer {
     const doing = this.mind.skill?.name ?? null;
     const fp = ch.fightPose;
     return {
+      ...(this.mind.activeSkill instanceof GroupActivity ? { group: this.mind.activeSkill.view } : {}),
+      consoleLocations: this.items.list.filter(i=>i.def.use==='connect'&&i.where==='world').map(i=>({x:i.at.x,y:i.at.y})),
+      talent: signatureTalent(this.config.personality),
       id: this.ctx.who, partner: this.partnerId, name: this.config.name, color: this.config.look.color,
       busy: !!doing && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'duel', 'spar'].includes(doing), doing,
       x: ch.x, facing: ch.facing as 1 | -1, mode: ch.mode, legCount: ch.legCount, whole: ch.whole, scale: ch.scale,
@@ -1340,7 +1378,7 @@ export class Pet implements Peer {
       blade: sword ? { a: sword.butt, b: sword.tip, speed: sword.tipSpeed, id: sword.def.id } : null,
       looseWeapons: this.looseWeapons(),
       armed: this.items.list.some((it) => it.def.use === 'swing' && (it.where === 'hand' || it.where === 'belt')),
-      social: this.mind.skill instanceof Together ? { act: this.mind.skill.act, phase: this.mind.skill.phase } : null,
+      social: this.mind.activeSkill instanceof Together ? { act: this.mind.activeSkill.act, phase: this.mind.activeSkill.phase } : null,
       asleep: this.mood.asleep, mood: this.mood.label,
     };
   }
@@ -1350,9 +1388,25 @@ export class Pet implements Peer {
     // A reflected endpoint is not a new partner: keep the sender's existing peer route.
     if (from.view().id === this.ctx.who) from = this.partner() ?? from;
     const ch = this.char, w = this.ctx.world, fv = from.view();
+    if(m.type==='moment') {
+      if(!fv.id || !this.others.some(o=>o.view().id===fv.id))return;
+      this.ctx.say(m.kind==='check'?'I’m okay. Thanks.':this.ctx.talent==='drawing'?'Try a lighter line here.':'Nice drawing!',1.5);this.ctx.recordActivity?.(fv.id,m.kind,true);return;
+    }
+    if(m.type==='toolGift') {
+      if(!fv.id||!this.others.some(o=>o.view().id===fv.id)||typeof m.token!=='string'||m.token.length>120||this.gifts.has(m.token))return;
+      const def=parseItemDef(m.def);if(!def)return;
+      this.gifts.add(m.token);if(this.gifts.size>100)this.gifts.delete(this.gifts.values().next().value!);
+      const item=this.items.give(def,this.char);if(item){item.ammo=Number.isFinite(m.ammo)?Math.max(0,Math.min(6,m.ammo)):6;item.ink=parseProject(m.ink);this.ctx.say('Thanks!',1.3);}return;
+    }
+    if (m.type === 'groupInvite') {
+      if (!fv.id || !this.others.some(o => o.view().id === fv.id)) return;
+      if (!this.mind.acceptGroup(this.ctx, m.plan, fv.id)) from.receive({type:'groupCancel', session:m.plan.session}, this);
+      return;
+    }
+    if (m.type === 'groupGo' || m.type === 'groupCancel') { if (fv.id && this.mind.activeSkill instanceof GroupActivity) this.mind.activeSkill.receive(this.ctx, m, fv.id); return; }
     const dir = Math.sign(ch.x - fv.x) || 1;
     if (fv.id && fv.id!==this.ctx.who && fv.id!=='cursor' && ['invite','challenge','hit','bump'].includes(m.type)) {
-      const involved=['duel','together','ask'].includes(this.mind.skill?.name??'');
+      const involved=['duel','together','ask','group'].includes(this.mind.activeSkill?.name??'');
       if (involved && this.partnerId && this.partnerId!==fv.id) {
         if(m.type==='invite')from.receive({type:'reply',act:m.act,yes:false},this);
         if(m.type!=='hit' && m.type!=='bump')return;
@@ -1410,7 +1464,7 @@ export class Pet implements Peer {
       case 'challenge': this.emit({ type: 'challenged', name: fv.name, armed: m.armed }); return;
       case 'invite': this.emit({ type: 'invited', act: m.act, name: fv.name }); return;
       case 'reply': this.emit({ type: 'replied', act: m.act, yes: m.yes, name: fv.name }); return;
-      case 'go': if (this.mind.skill instanceof Together && this.mind.skill.act === m.act) this.mind.skill.go(m.topic); return;
+      case 'go': if (this.mind.activeSkill instanceof Together && this.mind.activeSkill.act === m.act) this.mind.activeSkill.go(m.topic); return;
       case 'cancel': this.emit({ type: 'socialCancel', name: fv.name }); return;
       case 'talk': {
         // Someone said something to him: he answers (and waves back at a "hey!"), if he's awake and able.
@@ -1678,7 +1732,7 @@ export class Pet implements Peer {
     const sword = this.swordInHand;
     if (sword && this.char.fightPose?.act && sword.tipSpeed < 420) this.bladeOnOthers(sword, (o) => (this.bladeCooldown.get(o) ?? -1) < w.time);
     for (const it of this.items.list) {
-      if (it.where !== 'hand' || it.def.hit <= 0 || it.tipSpeed < 420) continue;
+      if (it.where !== 'hand' || it.working || it.def.hit <= 0 || it.tipSpeed < 420) continue;
       const a = it.butt, b = it.tip, v = it.tipVel, power = Math.min(1.5, it.tipSpeed / 1200) * it.def.hit;
       const ready = (o: object) => (this.bladeCooldown.get(o) ?? -1) < w.time;
       const seg = (x: number, y: number) => distToSegment(x, y, a.x, a.y, b.x, b.y);
@@ -1988,7 +2042,7 @@ export class Pet implements Peer {
       const x = Math.min(b.right - 80, Math.max(b.left + 80, this.char.x + side * (130 + Math.random() * 200)));
       const t = this.props.spawn(id, x, b.top + 10, this.char.scale);
       if (t) { this.sound('poof', 0.7); this.emit({ type: 'propSpawned', id: t.def!.id, name: t.def!.name }); }
-    } else if (verb === 'channel') { const t = this.props.placed[Number(id)]; if (t?.def?.use === 'tv') { t.channel = (t.channel + 1) % 4; this.sound('click', 0.5); } }
+    } else if (verb === 'channel') { const t = this.props.placed[Number(id)]; if (t?.def && propActions(t.def).includes('watch')) { t.channel = (t.channel + 1) % 4; this.sound('click', 0.5); } }
     else if (verb === 'remove') { const t = this.props.placed[Number(id)]; if (t) { this.props.remove(t); this.sound('poof', 0.4); } }
     else if (verb === 'clear') for (const t of this.props.placed) this.props.remove(t);
   }
@@ -2003,7 +2057,7 @@ export class Pet implements Peer {
     for (const p of waiting) {
       const def = this.props.defs.get(p.id);
       if (!def) continue;
-      this.props.spawn(p.id, p.x, this.ctx.world.bounds.floor - Math.max(...def.outline.map((q) => q[1])) * this.char.scale - 2, this.char.scale, p.art);
+      this.props.restore(p, this.ctx.world.bounds.floor, this.char.scale);
     }
     this.onCollections?.();
   }
@@ -2036,8 +2090,7 @@ export class Pet implements Peer {
       const d = JSON.parse(json);
       this.mood.load(d.mood);
       if(d.bonds && typeof d.bonds==='object')for(const [id,value] of Object.entries(d.bonds).slice(0,8)) {
-        const n=(value as {bond?:unknown})?.bond;
-        if(typeof n==='number' && Number.isFinite(n))this.relationships.set(id,{bond:Math.max(-1,Math.min(1,n))});
+        const parsed = parseRelationship(value); if (parsed) this.relationships.set(id, parsed);
       }
       if (Number.isFinite(d.bond)) this.ctx.feel.bond = Math.max(-1, Math.min(1, d.bond));
       if (Number.isFinite(d.lessons?.safeDrop)) this.ctx.lessons.safeDrop = Math.max(40, Math.min(600, d.lessons.safeDrop));
@@ -2057,9 +2110,8 @@ export class Pet implements Peer {
       if (this.ownsProps && Array.isArray(d.props)) for (const p of d.props.slice(0, 12)) {
         if (!p || typeof p.id !== 'string' || !Number.isFinite(p.x)) continue;
         const def = this.props.defs.get(p.id);
-        if (!def) { this.pendingProps.push(p); continue; } // one of yours: its file loads a moment later
-        const h = Math.max(...def.outline.map((q) => q[1])) * this.char.scale;
-        this.props.spawn(p.id, p.x, this.ctx.world.bounds.floor - h - 2, this.char.scale, p.art);
+        if (!def && !p.def) { this.pendingProps.push(p); continue; } // one of yours: its file loads a moment later
+        this.props.restore(p, this.ctx.world.bounds.floor, this.char.scale);
       }
     } catch { /* corrupt save: start fresh */ }
   }

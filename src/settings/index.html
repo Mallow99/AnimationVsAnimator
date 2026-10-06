@@ -218,7 +218,7 @@
       <div class="group">
         <h2>Inventory</h2>
         <div class="card"><div class="list" id="itemKinds"></div></div>
-        <p class="note">Everything he could have. <b>Drop it in</b> drops it from the top of the screen near him and he goes to get it; <b>Give him</b> puts it on his belt; <b>Wear</b> equips his helmet or boots. Your own items (below) show up here too.</p>
+        <p class="note">Everything he could have. <b>Drop it in</b> drops it from the top of the screen near him and he goes to get it; <b>Give him</b> puts it in his satchel; <b>Wear</b> equips his helmet or boots. Your own items (below) show up here too.</p>
       </div>
       <div class="group">
         <h2>Props</h2>
@@ -266,6 +266,11 @@
           <label class="row-label" for="personality">His offline personality</label>
           <select id="personality"><option value="inventive">Inventive</option><option value="competitive">Competitive</option><option value="gentle">Gentle</option><option value="mischievous">Mischievous</option><option value="adventurous">Adventurous</option></select>
           <label class="switch"><span>Make tools with his pen</span><input type="checkbox" id="drawTools" /></label>
+          <label class="switch"><span>Show supplies bag shortcut <small>(drag to reposition)</small></span><input type="checkbox" id="showBag" /></label>
+          <label class="switch"><span>Show trash can <small>(drag to reposition)</small></span><input type="checkbox" id="showTrash" /></label>
+          <label class="switch"><span>Require a console for new Pong games</span><input type="checkbox" id="consoleRequired" /></label>
+          <label class="switch"><span>Follow the local day/night rhythm</span><input type="checkbox" id="dailyRhythm" /></label>
+          <div id="workshopSliders"></div>
           <label class="switch"><span>Developer: show break pressure during fights</span><input type="checkbox" id="debugCombat" /></label>
           <label class="row-label" for="fightMode">Fights</label>
           <select id="fightMode">

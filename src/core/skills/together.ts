@@ -29,7 +29,7 @@ const ASK: Record<Act, string[]> = {
 /** Small talk: what the one who came over says, and what the other answers. */
 export const TALK: [string, string[]][] = [
   ['nice day', ['is it?', 'sure', 'every day is a day']], ['I\'m bored', ['same', 'wanna fight?', 'go draw something']],
-  ['seen my pen?', ['nope', 'it\'s on your belt', 'what pen']], ['what\'s the cursor doing', ['moving', 'plotting', 'no idea']],
+  ['seen my pen?', ['nope', 'it\'s in your satchel', 'what pen']], ['what\'s the cursor doing', ['moving', 'plotting', 'no idea']],
   ['you hungry?', ['we don\'t eat', 'always', '...for what']], ['nice sword', ['thanks', 'it\'s foam', 'want it?']],
   ['I can do a backflip', ['prove it', 'me too', 'sure you can']], ['tag, you\'re it', ['no', 'not now', 'ugh fine']],
 ];
@@ -205,6 +205,7 @@ export class Together extends Skill {
   }
 
   stop(c: Ctx) {
+    const id=c.foe?.()?.id;if(id)c.recordActivity?.(id,this.act,this.done);
     c.char.handsAt = null; c.char.faceLock = null;
     if (!this.done) { this.done = true; c.tell?.({ type: 'cancel' }); }
   }

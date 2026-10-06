@@ -14,6 +14,12 @@ import { basis, clamp, cross3, dot3, norm3, scale3, sub3, add3, type V3, type Ve
 import { collide, collidePlatforms, integrate, makePoint, platY, solveSticks, type Bounds, type Platform, type Point, type Stick } from './physics';
 import type { Character } from './character';
 import penDef from './items/pen.json';
+import spongeDef from './items/sponge.json';
+import eraserDef from './items/eraser.json';
+import bucketDef from './items/paint-bucket.json';
+import handheldDef from './items/handheld.json';
+import consoleDef from './items/console.json';
+import type { Runner } from './tv-game';
 import swordDef from './items/wooden-sword.json';
 import ballDef from './items/bouncy-ball.json';
 import maceDef from './items/mace.json';
@@ -26,9 +32,11 @@ import helmetDef from './items/helmet.json';
 import bootsDef from './items/boots.json';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import type { DepthPart } from './render';
+import { satchelAt } from './satchel';
+import { parseProject, type InkProject } from './crafting-state';
 
 /** What he does with it: draw (a pen), swing (a sword), smash (a mace, overhead), throw (a ball), shoot (a bow), none (just carries it). */
-export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'shoot' | 'gun' | 'none';
+export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'shoot' | 'gun' | 'wipe' | 'erase' | 'color' | 'game' | 'connect' | 'none';
 export type BeltSpot = 'side' | 'back' | 'pocket' | 'none';
 /** A line through `pts`, or (with `fill`) a flat filled shape, optionally with an edge line. */
 export interface ItemStroke { pts: [number, number][]; color: string; width: number; fill?: string }
@@ -47,6 +55,9 @@ export interface ItemDef {
   cuts?: boolean;
   /** Made from one of his drawings (not a file). */
   drawn?: boolean;
+  blueprint?: string;
+  drawable?: boolean;
+  refinable?: boolean;
 }
 
 /** Check a definition (from a file you wrote, or from the AI). Returns null if it's unusable. */
@@ -79,11 +90,14 @@ export function parseItemDef(raw: unknown): ItemDef | null {
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 140) : '',
-    use: o.use === 'draw' || o.use === 'swing' || o.use === 'smash' || o.use === 'throw' || o.use === 'shoot' || o.use === 'gun' ? o.use : 'none',
+    use: o.use === 'draw' || o.use === 'swing' || o.use === 'smash' || o.use === 'throw' || o.use === 'shoot' || o.use === 'gun' || o.use === 'wipe' || o.use === 'erase' || o.use === 'color' || o.use === 'game' || o.use === 'connect' ? o.use : 'none',
     length, grip,
     belt: o.belt === 'side' || o.belt === 'back' || o.belt === 'pocket' ? o.belt : o.belt === 'none' ? 'none' : 'side',
     hit: num(o.hit, 0, 0, 3), bounce: num(o.bounce, 0.3, 0, 0.92), shape, sprite,
     wear: o.wear === 'head' || o.wear === 'feet' ? o.wear : undefined,
+    blueprint: typeof o.blueprint === 'string' && /^[a-z0-9-]{1,30}$/.test(o.blueprint) ? o.blueprint : undefined,
+    drawable: o.drawable !== false, refinable: o.refinable !== false,
+    drawn: o.drawn === true || undefined,
     cuts: o.cuts === true ? true : undefined,
   };
 }
@@ -107,14 +121,14 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef, spongeDef, eraserDef, bucketDef, handheldDef, consoleDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
-export const SLOT_NAMES = ['left hip', 'right hip', 'back', 'pocket'];
+export const SLOT_NAMES = Array.from({ length: 16 }, (_, i) => `satchel ${i + 1}`);
 const SLOTS = SLOT_NAMES.length;
 /** Which slots each kind of thing likes, best first. */
 const PREFER: Record<BeltSpot, number[]> = { side: [1, 0, 2], back: [2, 1, 0], pocket: [3, 0, 1], none: [] };
-export const preferredSlots = (d: ItemDef) => PREFER[d.belt];
+export const preferredSlots = (d: ItemDef) => [...new Set([...PREFER[d.belt], ...Array.from({ length: SLOTS }, (_, i) => i)])];
 
 let nextUid = 1;
 export interface ItemPose { at: V3; dir: V3; scale: number; mirror?: boolean }
@@ -142,8 +156,11 @@ export class Item {
   /** How fast its tip is moving (px/s), and which way (px/s), for hits. */
   /** Pistol magazine stays with the item across bursts and saves. */
   ammo = 6;
+  ink?: InkProject;
+  arcade: Runner | null = null;
   /** A user controller owns its pose while aiming/swinging. */
   cursorControlled = false;
+  working = false;
   tipSpeed = 0;
   tipVel: Vec = { x: 0, y: 0 };
   private lastTip: V3 | null = null;
@@ -154,7 +171,7 @@ export class Item {
   thrownBy: 'him' | 'you' = 'him';
 
   constructor(
-    readonly def: ItemDef,
+    public def: ItemDef,
     at: Vec = { x: 0, y: 0 },
     public scale = 1,
   ) {
@@ -365,7 +382,9 @@ export class Items {
   defs = new Map<string, ItemDef>(BUILTIN_ITEMS.map((d) => [d.id, d]));
   list: Item[] = [];
   /** What's in each belt slot. */
-  belt: (Item | null)[] = [null, null, null, null];
+  belt: (Item | null)[] = Array(SLOTS).fill(null);
+  private rummage: { hand: 'L' | 'R'; left: number } | null = null;
+  get satchelOpen() { return this.rummage ? Math.sin(this.rummage.left / 0.45 * Math.PI) : 0; }
   /** The built-in things he's been given (so new ones that come with an update get handed to him once). */
   known = new Set<string>();
   /** Called when something moves between places (the Items tab updates). */
@@ -407,10 +426,10 @@ export class Items {
       this.unslot(it); it.where = 'worn'; it.aim = null; it.aimLocal = null;
       this.onChange?.(); return true;
     }
-    if (it.def.belt === 'none') return false;
     if (it.where === 'belt') return true;
     const slot = preferredSlots(it.def).find((s) => !this.belt[s]);
     if (slot === undefined) return false;
+    if (it.where === 'hand') this.rummage = { hand: it.hand, left: 0.45 };
     this.unslot(it);
     this.belt[slot] = it; it.slot = slot; it.where = 'belt'; it.aim = null; it.aimLocal = null;
     this.onChange?.();
@@ -431,6 +450,7 @@ export class Items {
   toHand(it: Item, hand: 'L' | 'R') {
     const other = this.inHand(hand);
     if (other && other !== it && !this.stow(other)) this.drop(other, 0, 0);
+    if (it.where === 'belt') this.rummage = { hand, left: 0.45 };
     this.unslot(it);
     it.where = 'hand'; it.hand = hand; it.aim = null; it.aimLocal = null;
     this.onChange?.();
@@ -486,33 +506,23 @@ export class Items {
     return it;
   }
 
-  /** Where a belt slot is right now, and which way an item hangs from it. */
-  slotPose(ch: Character, slot: number): { at: V3; dir: V3 } {
-    const j = ch.body.j, sc = ch.scale, B = basis(ch.yaw);
-    // The belt sits around his hips, square to his torso.
-    const up = norm3(sub3(j.neck, j.hip));
-    const left = norm3(sub3(B.left, scale3(up, dot3(B.left, up))));
-    const fwd = norm3(cross3(left, up));
-    const fixedFwd = dot3(fwd, B.fwd) < 0 ? scale3(fwd, -1) : fwd;
-    const r = 4.5 * sc;
-    const off = slot === 0 ? scale3(left, r) : slot === 1 ? scale3(left, -r) : slot === 3 ? scale3(fixedFwd, r * 0.6) : scale3(fixedFwd, -r);
-    const at = add3(j.hip, off);
-    if (slot === 3) return { at: add3(at, scale3(up, -3 * sc)), dir: norm3(scale3(up, -1)) }; // in his pocket
-    if (slot === 2) {
-      // Across his back: handle up behind his shoulder, blade down the back of his leg.
-      return { at: add3(at, scale3(up, 5 * sc)), dir: norm3(add3(scale3(up, -0.85), scale3(fixedFwd, -0.45))) };
-    }
-    // At a hip: hanging down, clipped to the belt, tipped back a little.
-    return { at, dir: norm3(add3(scale3(up, -1), scale3(fixedFwd, -0.25))) };
+  /** Legacy slot numbers remain in saves; all stored tools now live at the satchel opening. */
+  slotPose(ch: Character, _slot: number): { at: V3; dir: V3 } {
+    return { at: satchelAt(ch), dir: { x: 0, y: 1, z: 0 } };
   }
 
   /** Physics for the things lying around (and flying through the air): one fixed step. */
   stepWorld(dt: number, bounds: Bounds, platforms: Platform[], solids: Thing[] = []) {
-    for (const it of this.list) if (it.where === 'world') it.step(dt, bounds, platforms, solids);
+    for (const it of [...this.list]) if (it.where === 'world') {
+      if (it.ink && it.ink.remaining >= 0) { it.ink.remaining = Math.max(0, it.ink.remaining - dt); if (!it.ink.remaining) { this.remove(it); continue; } }
+      it.step(dt, bounds, platforms, solids);
+    }
   }
 
   /** Move every item to where it belongs this frame (loose ones move in `stepWorld`). */
   update(ch: Character, dt: number, bounds: Bounds, platforms: Platform[], cursor: Vec | null) {
+    if (this.rummage) { this.rummage.left -= dt; if (this.rummage.left <= 0) this.rummage = null; }
+    ch.satchelReach = this.rummage ? { hand: this.rummage.hand, at: satchelAt(ch), amount: this.satchelOpen } : null;
     const j = ch.body.j;
     for (const it of this.list) {
       it.scale = ch.scale;
@@ -564,7 +574,7 @@ export class Items {
 
   // ── saving: what he owns and where (anything lying around or with you goes back on his belt) ──
   save() {
-    return this.list.filter((it) => !it.def.drawn || it.where !== 'world').map((it) => ({ id: it.def.id, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', ...(it.def.use==='gun'?{ammo:it.ammo}:{}), def: it.def.drawn ? it.def : undefined }));
+    return this.list.map(it => ({ id: it.def.id, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', ...(it.where === 'world' ? { world: { at: it.at, dir: it.dir } } : {}), ...(it.ink ? { ink: it.ink } : {}), ...(it.def.use === 'gun' ? { ammo: it.ammo } : {}), def: it.def.drawn || !BUILTIN_ITEMS.some(d => d.id === it.def.id) ? it.def : undefined }));
   }
   /**
    * `known`: the built-ins he'd been given when this was saved. Missing (an older save) means
@@ -573,17 +583,22 @@ export class Items {
   load(data: unknown, ch: Character, known?: unknown) {
     if (!Array.isArray(data)) return;
     this.known = new Set(Array.isArray(known) ? known.filter((k): k is string => typeof k === 'string') : ['pen', 'sword']);
-    this.list = []; this.belt = [null, null, null, null];
-    for (const d of data.slice(0, 12)) {
+    this.list = []; this.belt = Array(SLOTS).fill(null);
+    for (const d of data.slice(0, 40)) {
       if (!d || typeof d !== 'object') continue;
-      const o = d as { id?: string; slot?: number; worn?: boolean; ammo?:number; def?: unknown };
+      const o = d as { id?: string; slot?: number; worn?: boolean; ammo?:number; ink?:unknown; world?:{at?:V3;dir?:V3}; def?: unknown };
       const def = o.def ? parseItemDef(o.def) : this.defs.get(String(o.id));
       if (!def) continue;
-      if (o.def) def.drawn = true;
+      if (o.def && o.ink) def.drawn = true;
       const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale);
       if(def.use==='gun' && Number.isInteger(o.ammo))it.ammo=Math.max(0,Math.min(6,o.ammo!));
       this.list.push(it);
-      if (def.wear && o.worn === false) {
+      it.ink = parseProject(o.ink);
+      if (o.world && Number.isFinite(o.world.at?.x) && Number.isFinite(o.world.at?.y)) {
+        it.where = 'world'; it.at = { x: clamp(o.world.at!.x, ch.bounds.left, ch.bounds.right), y: clamp(o.world.at!.y, ch.bounds.top, ch.bounds.floor), z: 0 };
+        if (Number.isFinite(o.world.dir?.x) && Number.isFinite(o.world.dir?.y)) it.dir = norm3({x: o.world.dir!.x, y: o.world.dir!.y, z: 0});
+        it.loosen();
+      } else if (def.wear && o.worn === false) {
         it.where = 'world'; it.at = { x: ch.x + ch.facing * 30 * ch.scale, y: ch.bounds.floor - 22 * ch.scale, z: 0 }; it.loosen();
       } else if (typeof o.slot === 'number' && o.slot >= 0 && o.slot < SLOTS && !this.belt[o.slot] && def.belt !== 'none') { this.belt[o.slot] = it; it.slot = o.slot; it.where = 'belt'; }
       else if (!this.stow(it)) { it.where = 'world'; it.at = { x: ch.x + 20, y: ch.body.j.hip.y, z: 0 }; it.loosen(); }
@@ -594,6 +609,7 @@ export class Items {
 
 /** Draw an item along its current direction. Smooth lines (the pixel layer can pixelate it). */
 export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, it: Item, alpha = 1, pose: ItemPose = it) {
+  if (it.ink && it.ink.remaining >= 0) alpha *= Math.max(0.15, Math.min(1, it.ink.remaining / 15));
   const sc = pose.scale, d = pose.dir;
   // "across" = sideways to the item on screen.
   let ax = -d.y, ay = d.x;
@@ -615,6 +631,13 @@ export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderin
     });
     if (st.fill) { ctx.closePath(); ctx.fillStyle = st.fill; ctx.fill(); }
     if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * sc; ctx.stroke(); }
+  }
+  if(it.arcade){
+    ctx.save();ctx.translate(pose.at.x,pose.at.y);ctx.transform(d.x*sc,d.y*sc,ax*sc,ay*sc,0,0);
+    ctx.fillStyle='#203b2d';ctx.fillRect(3,-8,16,13);ctx.fillStyle='#b5d47f';
+    ctx.fillRect(6,2-it.arcade.y*11,2,3);
+    for(const b of it.arcade.blocks)ctx.fillRect(3+b.x*16,3-b.h*13,2,b.h*13);
+    ctx.restore();
   }
   ctx.restore();
 }

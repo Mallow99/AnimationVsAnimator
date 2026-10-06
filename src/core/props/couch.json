@@ -217,5 +217,7 @@
       "radius": 1,
       "fill": "#5f4c3b"
     }
-  ]
+  ],
+  "seats": 5,
+  "move": "push"
 }

@@ -20,6 +20,11 @@ import tvDef from './props/tv.json';
 import scooterDef from './props/scooter.json';
 import canvasDef from './props/canvas.json';
 import deskDef from './props/desk.json';
+import workbenchDef from './props/workbench.json';
+import storageDef from './props/storage.json';
+import { propActions, PROP_ACTIONS, type PropAction } from './capabilities';
+import { Pong, paintPong } from './pong';
+import { parseProject, type InkProject } from './crafting-state';
 import type { WinRect } from './world';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import { PixelLayer, DEFAULT_LOOK, type Ctx2D } from './render';
@@ -103,9 +108,15 @@ export type ThingKind = 'box' | 'ledge' | 'ramp' | 'bridge' | 'prop';
 export interface PropDef {
   id: string; name: string; about: string;
   /** What he does with it: sit on it, watch it, ride it, or just stand on it. */
-  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'none';
+  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'work' | 'storage' | 'none';
   /** Its solid shape: points around its edge, clockwise on screen. Edges facing up are things to stand on. */
   outline: [number, number][];
+  actions?: PropAction[];
+  seats?: number;
+  drawable?: boolean;
+  refinable?: boolean;
+  movable?: boolean;
+  move?: 'carry' | 'drag' | 'push';
   /** Where his bottom goes when he sits on it. */
   seat?: [number, number];
   /** The TV screen: x, y, width, height. */
@@ -187,7 +198,11 @@ export function parsePropDef(raw: unknown): PropDef | null {
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 160) : '',
-    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' ? o.use : 'none',
+    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' || o.use === 'work' || o.use === 'storage' ? o.use : 'none',
+    actions: Array.isArray(o.actions) ? o.actions.filter((s): s is PropAction => PROP_ACTIONS.includes(s)).slice(0,8) : [],
+    seats: Math.round(num(o.seats, id === 'couch' ? 5 : 1, 1, 5)),
+    move: o.move === 'carry' || o.move === 'drag' || o.move === 'push' ? o.move : undefined,
+    drawable: o.drawable !== false, refinable: o.refinable !== false, movable: o.movable !== false,
     outline, seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
     wheels: Array.isArray(o.wheels) ? o.wheels.filter((i): i is number => Number.isInteger(i) && i >= 0 && i < outline.length) : undefined,
     wheel: num(o.wheel, 4, 1, 20), friction: num(o.friction, 0.6, 0, 1),
@@ -257,6 +272,9 @@ export class Thing {
   platforms: Platform[] = [];
   /** Made by you from his inventory (not a drawing: doesn't fade). */
   forever = false;
+  ink?: InkProject;
+  movingBy: string | null = null;
+  facing: 1 | -1 = 1;
   /** For props: its definition, and the drawing with its own colors. */
   def: PropDef | null = null;
   private localColored: { pts: { x: number; y: number }[]; color: string; width: number }[] = [];
@@ -267,6 +285,8 @@ export class Thing {
   channel = 0;
   /** A TV with its console on: what's on screen instead of a show (his own game, or the board you two are playing). */
   arcade: Runner | null = null;
+  pong: Pong | null = null;
+  consoleConnected = false;
   /** Two players: the second one's game (split screen), and who's playing (player one first). */
   arcade2: Runner | null = null;
   players: string[] = [];
@@ -346,13 +366,13 @@ export class Thing {
   get seatAt(): Vec | null { return this.def?.seat ? this.toWorld(this.def.seat[0], this.def.seat[1]) : null; }
 
   /**
-   * Who's sitting on it, and on which side (-1 left, 0 the middle, 1 right). A couch holds two side by side
+   * Who's sitting on it, and on which side (-1 left, 0 the middle, 1 right). A couch holds up to five side by side
    * (whoever was there first scoots over to make room); a chair holds one; someone lying along it takes it all.
    */
-  readonly sitters = new Map<string, { side: -1 | 0 | 1; lying: boolean }>();
+  readonly sitters = new Map<string, { side: number; lying: boolean }>();
   /** Who's watching (a TV): it stays on while anyone is. */
   readonly watchers = new Set<string>();
-  get seatRoom() { return this.def?.bounds && this.def.bounds[2] - this.def.bounds[0] > 90 ? 2 : 1; }
+  get seatRoom() { return this.def?.seats ?? 1; }
   /** Take a seat, coming from x. False if it's full. */
   claimSeat(who: string, fromX: number, lying = false): boolean {
     if (this.sitters.has(who)) return true;
@@ -360,24 +380,32 @@ export class Thing {
     if (others.length >= this.seatRoom || (lying && others.length)) return false;
     // Someone lying along the couch sits up to make room.
     for (const [k, o] of this.sitters) if (o.lying) this.sitters.set(k, { ...o, lying: false });
-    const mid = this.seatAt;
-    if (!others.length || !mid) { this.sitters.set(who, { side: 0, lying }); return true; }
-    // The second one sits on the side he came from; the first one scoots to the other side.
-    const side: -1 | 1 = fromX < mid.x ? -1 : 1;
-    for (const [k, o] of this.sitters) this.sitters.set(k, { ...o, side: (-side) as -1 | 1 });
-    this.sitters.set(who, { side, lying });
+    const old = [...this.sitters.entries()].sort((a, b) => a[1].side - b[1].side);
+    if (fromX < (this.seatAt?.x ?? 0)) old.unshift([who, { side: 0, lying }]);
+    else old.push([who, { side: 0, lying }]);
+    this.sitters.clear();
+    for (const [id, value] of old) this.sitters.set(id, value);
+    this.reseat();
     return true;
   }
-  leaveSeat(who: string) {
-    this.sitters.delete(who);
-    if (this.sitters.size === 1) for (const [k, o] of this.sitters) this.sitters.set(k, { ...o, side: 0 });
+  private reseat() {
+    const n = this.sitters.size;
+    let i = 0;
+    for (const [who, value] of this.sitters) this.sitters.set(who, { ...value, side: n < 2 ? 0 : (i++ / (n - 1) * 2 - 1) * (n > 2 ? 1.5 : 1) });
   }
+  leaveSeat(who: string) { this.sitters.delete(who); this.reseat(); }
   /** Where this one sits (his side of the couch). */
   seatFor(who: string): Vec | null {
     const s = this.def?.seat;
     if (!s) return null;
     const side = this.sitters.get(who)?.side ?? 0, w = this.def!.bounds ? this.def!.bounds[2] - this.def!.bounds[0] : 0;
     return this.toWorld(s[0] + side * w * 0.2, s[1]);
+  }
+  /** Move the existing rigid body, preserving identity, art and claims. */
+  place(at: Vec, angle = this.tilt) {
+    const center = this.center, turn = angle - this.tilt, cs = Math.cos(turn), sn = Math.sin(turn);
+    for (const p of this.points) { const x = p.x - center.x, y = p.y - center.y; p.x = at.x + cs * x - sn * y; p.y = at.y + sn * x + cs * y; p.px = p.x; p.py = p.y; }
+    this.refresh();
   }
   /** How far it's tipped over (radians; 0 = upright). */
   get tilt() { const f = this.frame(); return Math.atan2(f.uy, f.ux); }
@@ -585,7 +613,10 @@ export class Thing {
     // Flat, filled art (the newer style) paints its screen on top of the body; line art paints it underneath.
     const flat = def.shape.some((st) => st.fill);
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = alpha * (this.ink && this.ink.remaining >= 0 ? Math.max(0.15,Math.min(1,this.ink.remaining/15)) : 1);
+    if (propActions(def).includes('watch') && this.facing === -1) {
+      const center = this.center;ctx.translate(center.x,center.y);ctx.rotate(this.tilt);ctx.scale(-1,1);ctx.rotate(-this.tilt);ctx.translate(-center.x,-center.y);
+    }
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (def.sprite) {
       const at = this.toWorld(0, 0);
@@ -605,6 +636,7 @@ export class Thing {
       if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * this.scale; ctx.stroke(); }
     }
     if (flat) this.drawScreen(ctx, now, true);
+    if (propActions(def).includes('watch')) { const p = this.toWorld(this.facing > 0 ? def.bounds![2] : def.bounds![0], 14);ctx.fillStyle='#e7d3a0';ctx.fillRect(p.x-2,p.y,4*this.scale,4*this.scale); }
     ctx.restore();
   }
 
@@ -627,11 +659,13 @@ export class Thing {
       const c = [this.toWorld(sx, sy), this.toWorld(sx + sw, sy), this.toWorld(sx + sw, sy + sh), this.toWorld(sx, sy + sh)];
       c.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath();
     }
-    ctx.fillStyle = def.use === 'canvas' ? '#fff8e8' : this.on ? '#1d2b4a' : '#22232c';
+    ctx.fillStyle = (propActions(def).includes('paint') || propActions(def).includes('drawhere')) ? '#fff8e8' : this.on ? '#1d2b4a' : '#22232c';
     ctx.fill();
-    if (this.on && def.use === 'tv') {
+    if (this.on && propActions(def).includes('watch')) {
       ctx.save(); ctx.clip();
-      if (this.board) this.drawBoard(ctx, this.board, sx, sy, sw, sh);
+      if (this.pong) {
+        const at = this.toWorld(sx,sy); ctx.save();ctx.translate(at.x,at.y);ctx.rotate(this.tilt);ctx.scale(this.scale,this.scale);paintPong(ctx,this.pong,0,0,sw,sh);ctx.restore();
+      } else if (this.board) this.drawBoard(ctx, this.board, sx, sy, sw, sh);
       else if (this.arcade && this.arcade2) {
         // Split screen: player one on top, player two below.
         this.drawArcade(ctx, this.arcade, sx, sy, sw, sh / 2, '#ffd23f');
@@ -640,7 +674,7 @@ export class Thing {
       else this.drawShow(ctx, sx, sy, sw, sh, now);
       ctx.restore();
     }
-    if (this.art && def.use === 'canvas') {
+    if (this.art && (propActions(def).includes('paint') || propActions(def).includes('drawhere'))) {
       ctx.save(); ctx.clip(); ctx.strokeStyle = this.art.color; ctx.lineWidth = 2 * this.scale;
       const size = Math.min(sw, sh) * 0.8;
       for (const stroke of this.art.shape) {
@@ -862,7 +896,7 @@ export function rampSlopeId(n: number, up: 1 | -1) { return PROP_ID + n * 64 + (
 export const reserveThing = () => nextProp++;
 
 /** The props that come with him (in his inventory; none are out until you drop them in). */
-export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef].map((d) => parsePropDef(d)!);
+export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef, workbenchDef, storageDef].map((d) => parsePropDef(d)!);
 
 export class Props {
   balls: Ball[] = [];
@@ -925,7 +959,17 @@ export class Props {
     return t;
   }
   /** Which props are where (saved between runs). */
-  savePlaced() { return this.placed.map((t) => ({ id: t.def!.id, x: Math.round(t.center.x), ...(t.art ? { art: t.art } : {}) })); }
+  savePlaced() { return this.placed.map(t => ({ id: t.def!.id, x: t.center.x, y: t.center.y, tilt: t.tilt, facing: t.facing, consoleConnected: t.consoleConnected, scale: t.scale, ...(t.ink ? { ink: t.ink, def: t.def } : {}), ...(t.art ? { art: t.art } : {}) })); }
+  restore(p: { id: string; x: number; y?: number; tilt?: number; scale?: number; facing?: number; consoleConnected?: boolean; ink?: unknown; def?: unknown; art?: unknown }, floor: number, scale: number) {
+    if (p.def) { const def = parsePropDef({ ...p.def as object, type: 'prop' }); if (def) this.defs.set(def.id, def); }
+    const def = this.defs.get(p.id); if (!def) return null;
+    const sc = Number.isFinite(p.scale) ? Math.max(0.2, Math.min(4, p.scale!)) : scale;
+    const t = this.spawn(p.id, p.x, floor - Math.max(...def.outline.map(q => q[1])) * sc - 2, sc, p.art)!;
+    if (Number.isFinite(p.y) && Math.abs(p.y!) < 20000) t.place({ x: p.x, y: p.y! }, Number.isFinite(p.tilt) ? p.tilt! : 0);
+    t.consoleConnected = p.consoleConnected === true;
+    t.facing = p.facing === -1 ? -1 : 1;
+    t.ink = parseProject(p.ink); return t;
+  }
 
   get platforms() { return [...this.things.flatMap((t) => t.platforms), ...this.wet.values()]; }
   /** Things he can get on top of (for "get on what he drew"). */
@@ -939,9 +983,11 @@ export class Props {
    * Returns true if any platform moved (so his ground gets updated).
    */
   update(dt: number, now: number, bounds: Bounds, world: Platform[], wins?: WinRect[]) {
+    for (const t of this.things) if (t.pong && t.on) t.pong.step(dt);
     const before = this.things.length;
-    this.things = this.things.filter((t) => t.forever || now - t.doodle.born < DOODLE_LIFE);
-    this.balls = this.balls.filter((b) => now - b.doodle.born < DOODLE_LIFE);
+    for (const t of this.things) if (t.ink && t.ink.remaining >= 0 && !t.held && !t.movingBy && !t.sitters.size && !t.watchers.size && !t.players.length && !t.load.size) t.ink.remaining = Math.max(0, t.ink.remaining - dt);
+    this.things = this.things.filter(t => t.ink ? t.ink.remaining !== 0 : t.forever || !!t.held || !!t.sitters.size || !!t.load.size || now - t.doodle.born < DOODLE_LIFE);
+    this.balls = this.balls.filter((b) => !!b.heldBy || now - b.doodle.born < DOODLE_LIFE);
     const moved = this.things.length !== before || this.things.length > 0;
     if (wins) for (const t of this.things) t.followWindows(wins);
     // Everything steps every time: there are only ever a few, and a thing resting on a window

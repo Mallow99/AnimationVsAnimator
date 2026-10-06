@@ -26,6 +26,11 @@ export interface PetConfig {
   fileHomes: boolean;
   browserPlay: boolean;
   drawTools: boolean;
+  inkLifetime: number;
+  consoleRequired: boolean;
+  dailyRhythm: boolean;
+  showBag: boolean;
+  showTrash: boolean;
   scale: number;   // overall size (1 ≈ 90 px tall)
   look: Look;
   body: BodyStyle;
@@ -85,7 +90,8 @@ export interface PetConfig {
 export const DEFAULT_CONFIG: PetConfig = {
   name: 'Blurp',
   personality: 'inventive', figureCount: 2, debugCombat: false,
-  closeWindows: false, fileHomes:false, browserPlay: false, drawTools: true,
+  closeWindows: false, fileHomes:false, browserPlay: false, drawTools: true, inkLifetime: 300, consoleRequired: false, dailyRhythm: true,
+  showBag: false, showTrash: false,
   scale: 1.1,
   look: { ...DEFAULT_LOOK },
   body: { ...DEFAULT_BODY },
@@ -134,6 +140,7 @@ const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 80, provider
 
 /** Every adjustable number: its limits, and how the settings window labels it. */
 export const RANGES: Record<string, Range> = {
+  'inkLifetime': {min:0,max:1800,step:30,label:'Ink lifetime',hint:'Seconds of unused ink life. 0 disables expiry; holding and supporting pause it.'},
   'figureCount': { min: 2, max: 5, step: 1, label: 'Figures', hint: 'A small group, each with their own settings' },
   'hyperactivity': { min: 0, max: 1, step: 0.05, label: 'Hyperactivity', hint: 'Calm ← → restless. Mood also changes how long he settles into activities.' },
   'aiInterval': { min: 40, max: 300, step: 10, label: 'AI thinking interval', hint: 'Full mode: seconds between his own ideas (higher uses fewer calls)' },
@@ -195,6 +202,7 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   if (!Object.hasOwn(PROVIDERS, out.provider)) out.provider = base.provider;
   // A bad model name, or one left over from before he had a choice of services: use the service's default.
   if (!/^[a-z0-9._:/-]+$/i.test(out.model) || /^claude-/.test(out.model)) out.model = PROVIDERS[out.provider].model;
+  out.inkLifetime = Number.isFinite(out.inkLifetime) ? Math.max(0, Math.min(86400, out.inkLifetime)) : base.inkLifetime;
   return out;
 }
 

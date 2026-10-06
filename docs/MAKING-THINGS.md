@@ -18,7 +18,7 @@ The quickest way to start: **copy an example file, give it a new name, and chang
 
 ## 1. Items (things he carries)
 
-An item hangs on his belt, he takes it out to use it, and you can take it from him.
+An item lives in his wearable satchel. He reaches in to use it, and you can pull it from his hand or satchel.
 
 ```json
 {
@@ -45,7 +45,7 @@ An item hangs on his belt, he takes it out to use it, and you can take it from h
 | `use`   | what he does with it (see below). |
 | `length`| pixels from his hand to the far end (at his normal size). |
 | `grip`  | pixels of handle sticking out behind his hand. |
-| `belt`  | where he keeps it: `side` (a hip), `back`, `pocket` (small things, hidden), or `none` (he can't put it away). |
+| `belt`  | legacy preferred slot: `side`, `back`, `pocket`, or `none`. These values still load, but tools now store in the satchel; worn equipment stays attached. |
 | `hit`   | how hard it hits: `0` harmless, `1` a wooden sword, `2` a big hit. Anything that hits can knock your cursor flying. |
 | `bounce`| how bouncy it is when it lands: `0` a thud, `0.9` a super ball. Leave it out for `0.3`. |
 | `cuts`  | `true` for a real blade (like `katana.json`): in a real fight it can take a limb off or run someone through. |
@@ -183,7 +183,26 @@ knee, `along` is across the leg) and mirrored when he turns left. Take/drop/give
 Only one item can occupy each equipment location; a replacement drops the previous one. This is
 cosmetic clothing, with no armor or health system.
 
-Games are played on the TV (its console is part of the TV): his own runner game, and Othello with you.
+TVs play his runner, Othello with you, and companion Pong. Handhelds run the runner. General → Require a console for Pong is off by default; enable it to require a loose console near the TV.
+
+### Workshop and furniture capabilities
+
+New items include `sponge` (wipe raw pen strokes under the cursor), `eraser` (remove ink objects),
+`paint-bucket` (color an ink project), `handheld` (runner game), and `console` (connect near a TV).
+Their `use` values are `wipe`, `erase`, `color`, `game`, and `connect`.
+
+Props infer their actions from `use` and may also advertise `actions`: `sit`, `watch`, `ride`,
+`paint`, `drawhere`, `refine`, `store`, and `move`. Use `work` with a `screen` paper rectangle for a
+traced blueprint desk; add the `refine` action for a workbench. Use `storage` for a tool shelf.
+`seats` sets capacity (1–5). `move` may be `carry`, `drag`, or `push`; `movable: false` disables moving.
+`drawable: false` disables blueprint drawing; `refinable: false` keeps a definition as ink.
+A new advertised behavior still needs a corresponding skill; these capabilities select existing skills.
+
+“Draw a chair” traces its actual definition and creates ink furniture with the same outline and uses.
+“Draw a katana” creates an ink weapon. “Refine it” colors and polishes the same object at a workbench.
+General → Ink lifetime sets the loose ink lifespan; zero disables expiry. Held/stored items and occupied
+furniture pause their lifetime. Ink progress, embedded art, ammo, ownership and loose placements save
+with the figure. Custom definitions and existing inventories remain readable.
 
 ## 3. Making your own version of him
 

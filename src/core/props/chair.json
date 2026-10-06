@@ -117,5 +117,6 @@
       "fill": "#6e5a48",
       "radius": 1
     }
-  ]
+  ],
+  "move": "carry"
 }

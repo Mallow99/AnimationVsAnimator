@@ -1,37 +1,70 @@
 # Current controls and Mac acceptance
 
-The latest milestone adds the overlay grab bag and reversible trash. Adaptive combat, actual cursor
-weapons, quiet activities, sleeping pickup and full hitboxes remain available. Future expansions are
-in [UPDATE-PLAN.md](UPDATE-PLAN.md).
+Workshop and Household now include wearable satchels, animator tools, saved storage, crafting,
+furniture arranging, two-to-five-person activities and Pong. See [UPDATE-PLAN.md](UPDATE-PLAN.md)
+for the current five-update roadmap; batch scope is unlimited.
 
-## Grab bag, giving and trash
+## Satchels, supplies and trash
 
-Open the **bag at bottom left**. Choose a figure under **For**, then drag an illustrated tool or
-furniture out of the catalog. Drop a tool on any figure to give it to that figure, or elsewhere to
-drop/throw it. Loose items can be picked up and passed the same way. The same item and ammunition
-travel together. Transporting a weapon this way does not fire/swing it; use Take for combat controls.
+Click a figure's pixel satchel, or choose **Open satchel** from its menu. The inventory contains
+its actual owned items. **Tools & furniture supplies** opens the catalog; owner buttons choose who
+receives a new tool. Pull an item onto the desktop or another figure. You can also grab an equipped
+hand item directly. Actual weapons taken from a hand use the existing combat controls below.
 
-Click a catalog choice, or focus it with Tab and press Enter/Space, to hold an object until your next
-click places it. **Escape** or right-click ends transport and drops it safely. Settings and the
-existing equipped-item Take menu remain available.
+General → **Show supplies bag shortcut** and **Show trash can** enable the optional pixel icons.
+Both start hidden. Drag either shortcut to reposition it; its placement survives restart.
+Mouse use leaves the overlay non-focusable. **Keyboard** explicitly enables Tab/Enter/Space.
+Click a choice then click to place, or drag it; Escape/right-click drops transport safely.
 
-Drag a held item, furniture or live drawing into the **trash can at bottom right**. **Undo** beside
-the can retrieves the last object. Undo is one object deep and lasts until the app closes. Occupied
-furniture releases its activity when trashed; restored furniture is available to use again. Trash
-only handles in-app objects. Sponge cleaning and saved world storage are still future work.
+Drop an in-app object into the optional trash can; **Undo** retrieves the last object with the same
+identity, art and ammo. Undo lasts for this session. Trashed objects stay absent after restart.
 
-## Bag/trash checks on your Mac
+## Workshop
 
-1. On `codex/roadmap-continuation`, run `npm ci`, then `npm start`. Open the bag and drag out a
-   book, pistol and chair. Verify opening/closing the catalog does not switch Spaces.
-2. Give the book to Leonard; drop the pistol, then pick it up and pass it. Take it through the menu,
-   fire one round, drop it and pass it again. Check the magazine stays with the same item.
-3. Trash an item and click Undo. Repeat with a chair, an occupied TV/couch and a live drawn object.
-   Check activities stop, nothing duplicates, and the restored object can be used again.
-4. Hold still after dragging furniture, then release; it should fall without a surprise throw.
-   Try Tab/Enter/Space, Escape, a smaller viewport, and returning clicks/focus to Chrome afterward.
-5. Trash an item, quit/restart and confirm it stays removed. Repeat with Undo before quitting and
-   confirm the restored item reloads. Undo itself does not survive restart.
+Pull a **Sponge** and move it over raw pen strokes to wipe locally. **Eraser** removes ink objects;
+**Paint bucket** does their coloring step. Put a desk, workbench or tool shelf on the desktop from
+the catalog. Use the figure's action menu or talk commands, with no settings window needed:
+
+- “Make a blueprint” traces a katana on desk paper and stores a copy in the satchel.
+- “Sort tools” picks up loose tools and places them on the shelf; placements save.
+- “Draw a katana / TV / couch / chair / desk” traces and brings a working ink object to life.
+- “Refine it” works at the bench: color, polish, then one durable original object.
+- Interrupted projects keep progress and resume after restart. General → Ink lifetime controls
+  loose ink expiry; zero disables it. Held/stored items and occupied props pause expiry.
+
+## Groups, arranging and game night
+
+Add companions in settings (up to five). Actions work offline; only free, awake, unhurt figures join.
+
+- “Group wave”, “Group conversation”, “Couch huddle”, and “Watch together” work with 2–5 figures.
+- “Mirrored duet” needs two, “Hands in” three, “Two-pair dance” four, and “Wave relay” five.
+- “Move the TV to the couch” moves and turns it toward the couch. “Carry it together” uses two
+  figures. “Make a reading corner” and “Make a work corner” arrange their corresponding furniture.
+- “Pass a tool”, “Compare drawings”, and “Check on your friend” create small peer moments.
+- “Play Pong” starts a two-figure match to five points. Others can watch the same TV; **Join**
+  lets you move a paddle with the mouse. **Keyboard** enables arrow keys; Escape/Leave releases
+  keyboard focus. **Rematch** starts another round. “Play a handheld” uses its own runner screen.
+
+General → Require a console for Pong is off by default for compatibility. When enabled, put a
+console near the TV. Daily rhythm is optional: real night/morning and system idle time influence
+sleep and welcome-back greetings. Drawing/building/game talents affect speed or skill; pair memories
+retain shared activities, disagreements and effective fighting moves.
+
+## Workshop/Household checks on your Mac
+
+1. Start this branch with `npm ci` then `npm start`. Open a satchel and use supplies with the mouse;
+   verify no one disappears or switches Spaces. Toggle and relocate the two shortcuts.
+2. Pull, pass, store, trash and undo tools. Use Keyboard, Escape and a smaller display. Confirm
+   normal Chrome focus/click-through returns after explicit keyboard navigation.
+3. Wipe two nearby drawings locally. Draw/refine a katana, interrupt and restart mid-project;
+   complete it and restart again. Verify one durable katana, saved ammo, shelf positions and desk art.
+4. Seat all five figures on a couch. Run each count-specific activity; interrupt one participant
+   and verify everyone releases its claims/hands. Busy and sleeping figures should decline.
+5. Move the TV to the couch, grab/tip it mid-move and try occupied/blocked furniture. Restart to
+   confirm arrangements. Play a full Pong match with two players and a third spectator; try joining,
+   rematching, leaving and console gating. Try a handheld and returning after the computer is idle.
+
+Cloud Linux/Chromium tests do not establish Mac Spaces/focus, real native helpers or Windows behavior.
 
 ## Use a figure's actual weapon
 

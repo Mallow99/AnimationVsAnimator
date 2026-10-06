@@ -8,6 +8,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
         duel: 1.5,
         spar: 1.35,
         videogame: 1.35,
+        pong: 1.4,
         highfive: 1.2,
         drawtool: 0.8,
         chat: 0.9,
@@ -15,6 +16,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
     case 'gentle':
       return {
         duel: 0.45,
+        refine: 1.8, arrange: 1.6, sorttools: 1.4, checkfriend: 1.6,
         bump: 0.2,
         hug: 1.7,
         chat: 1.5,
@@ -33,6 +35,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
     case 'adventurous':
       return {
         explore: 1.5,
+        pong: 1.5, handheld: 1.5,
         climb: 1.4,
         backflip: 1.3,
         surf: 1.4,
@@ -41,6 +44,7 @@ export function personalityBiases(p: Personality): Record<string, number> {
     default:
       return {
         doodle: 1.5,
+        deskwork: 1.6, comparedrawings: 1.4,
         drawtool: 1.7,
         drawball: 1.4,
         drawbox: 1.3,
@@ -48,4 +52,8 @@ export function personalityBiases(p: Personality): Record<string, number> {
         chat: 1.2,
       };
   }
+}
+
+export function signatureTalent(p: Personality): import('./relationships').Talent {
+  return p === 'competitive' ? 'fighting' : p === 'gentle' ? 'building' : p === 'adventurous' ? 'games' : 'drawing';
 }

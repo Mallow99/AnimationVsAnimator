@@ -659,7 +659,7 @@ export class DoodleSkill extends Skill {
    * `shape`: strokes in a box from -0.5 to 0.5 (y down). Left out = one of his usual pictures.
    * `becomes`: it comes to life when it's done (a ball, a box, a ledge, an item).
    */
-  constructor(private shape?: Vec[][], private title = '', private opts: { becomes?: Becomes; place?: DrawPlace; surface?: Thing } = {}) { super(); }
+  constructor(private shape?: Vec[][], private title = '', private opts: { becomes?: Becomes; place?: DrawPlace; surface?: Thing; size?: number } = {}) { super(); }
   private doodle: Doodle | null = null;
   private plan: Vec[][] = [];
   private si = 0; private pi = 0; private along = 0;
@@ -678,7 +678,7 @@ export class DoodleSkill extends Skill {
     const shape0 = this.shape ?? SHAPES[name];
     const shape = this.opts.becomes === 'ramp' && ch.facing < 0 ? shape0.map((st) => st.map((p) => ({ x: -p.x, y: p.y }))) : shape0;
     const place = this.opts.place ?? 'front', floor = Math.max(j.footL.y, j.footR.y) + 2;
-    let size = (place === 'air' ? 64 : place === 'floor' ? 50 : 46) * sc;
+    let size = this.opts.size ?? (place === 'air' ? 64 : place === 'floor' ? 50 : 46) * sc;
     let cx = ch.x + ch.facing * (place === 'front' ? 40 : place === 'floor' ? 36 : 50) * sc;
     let cy = place === 'floor' ? floor - size * 0.47 : place === 'air' ? floor - 100 * sc : j.neck.y + 8 * sc;
     const surface = this.opts.surface, screen = surface?.def?.screen;
@@ -755,7 +755,7 @@ export class DoodleSkill extends Skill {
       return false;
     }
     // Move the pen along the stroke at a steady speed.
-    this.along += 120 * ch.scale * dt;
+    this.along += (c.talent === 'drawing' ? 150 : 120) * ch.scale * dt;
     while (this.pi < stroke.length - 1) {
       const a = stroke[this.pi], b = stroke[this.pi + 1], seg = Math.hypot(b.x - a.x, b.y - a.y);
       if (this.along < seg) break;

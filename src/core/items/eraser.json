@@ -1,0 +1,1 @@
+{"id":"eraser","name":"Ink eraser","about":"Erase an ink object under the cursor. Its maker notices.","use":"erase","length":12,"grip":2,"belt":"pocket","hit":0,"shape":[{"pts":[[-2,-5],[12,-5],[12,5],[-2,5]],"fill":"#d79c9b","width":0},{"pts":[[4,-5],[12,-5],[12,5],[4,5]],"fill":"#ece2c9","width":0}]}

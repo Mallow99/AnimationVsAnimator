@@ -2,6 +2,7 @@ import type { Pet } from './pet';
 import type { Item } from './items';
 import type { Ball, Thing } from './props';
 import type { Vec } from './math';
+import { wipeDoodles } from './sponge';
 
 type HeldObject = { kind: 'item'; owner: Pet; object: Item }
   | { kind: 'thing'; owner: Pet; object: Thing }
@@ -10,6 +11,7 @@ type HeldObject = { kind: 'item'; owner: Pet; object: Item }
 /** Direct overlay transfers and one reversible trash slot. Only in-app objects enter this API. */
 export class OverlayTools {
   held: HeldObject | null = null;
+  private wipeFrom: Vec | null = null;
   private lastTrash: { entry: HeldObject; born: number; at: number } | null = null;
   constructor(private readonly pets: () => Pet[]) {}
 
@@ -25,6 +27,7 @@ export class OverlayTools {
     owner.takeItem(object);
     object.cursorControlled = true;
     owner.userWeaponControlled = true; // Transport never swings/fires the weapon.
+    this.wipeFrom = { ...at };
     this.held = { kind: 'item', owner, object };
     this.move(at, { x: 0, y: 0 });
     return true;
@@ -48,12 +51,41 @@ export class OverlayTools {
     const e = this.held;
     if (!e) return;
     if (e.kind === 'item') {
+      if (e.object.def.use === 'erase' || e.object.def.use === 'color') this.animateInk(e.object.def.use, at);
+      if (e.object.def.use === 'wipe') {
+        const sets = new Set(this.pets().map(p => p.ctx.doodles));
+        for (const doodles of sets) wipeDoodles(doodles, this.wipeFrom ?? at, at, 14 * e.object.scale);
+        this.wipeFrom = { ...at };
+      }
       e.object.at = { ...at, z: 30 };
       e.object.dir = { x: 0, y: 1, z: 0 };
       e.object.loosen();
       e.object.resetMotion();
     } else if (e.kind === 'thing' && e.object.held) Object.assign(e.object.held, at, { vx: velocity.x, vy: velocity.y });
     else if (e.kind === 'ball') e.object.moveHold(at.x, at.y, velocity.x, velocity.y);
+  }
+
+  private animateInk(use: 'erase' | 'color', at: Vec) {
+    for (const owner of this.pets()) {
+      const item = owner.items.list.find(i => i.ink && i.where === 'world' && i.distTo(at.x, at.y) < 14);
+      const prop = owner.props.things.find(t => t.ink && !t.held && !t.movingBy && !t.sitters.size && !t.watchers.size && t.contains(at.x, at.y));
+      const object = item ?? prop; if (!object?.ink) continue;
+      if (use === 'erase') {
+        if (item) owner.items.remove(item); else if (prop) {
+          for (const p of this.pets()) if (prop.platforms.some(pl => pl.id === p.char.support)) p.mind.reset(p.ctx);
+          owner.props.remove(prop);
+        }
+        owner.ctx.say(owner.config.personality === 'competitive' ? 'Hey! I made that!' : 'My drawing…', 1.6);
+        if (owner.char.ready && Math.abs(owner.char.x - at.x) < 55) owner.char.walkTo(owner.char.x + (owner.char.x < at.x ? -30 : 30));
+      } else if (object.ink.progress < 0.6) {
+        const source = item ? owner.items.defs.get(object.ink.source) : owner.props.defs.get(object.ink.source);
+        if (!source || source.refinable === false) continue;
+        object.ink.progress = 0.6;
+        object.def = { ...object.def!, shape: structuredClone(source.shape), sprite: structuredClone(source.sprite) } as typeof object.def;
+        owner.ctx.say('Thanks! I’ll polish it.', 1.5);
+      }
+      return;
+    }
   }
 
   /** Release a dragged item onto any figure, or drop the original object into the world. */
@@ -80,6 +112,10 @@ export class OverlayTools {
         e.object.thrownAt = e.owner.ctx.world.time;
       }
     } else e.object.release();
+    if(e.kind==='item'&&e.object.def.use==='connect'&&!recipient){
+      const tv=e.owner.props.placed.find(t=>t.def?.use==='tv'&&Math.abs(t.center.x-at.x)<100*e.object.scale);
+      if(tv){tv.consoleConnected=true;e.owner.ctx.say('Console connected.',1.4);}
+    }
     return true;
   }
 

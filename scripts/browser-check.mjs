@@ -142,6 +142,7 @@ try {
   await evaluate('document.querySelector(".game-close").click(); document.querySelector("#talkClose").click()');
   // New desktop controls and data-image fragments render in the real overlay page.
   await send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+  await pause(100);
   await evaluate("window.equipCursor('sword')");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('#weaponBar')).display"),'flex');
   await evaluate("document.querySelector('#weaponBar button').click()");assert.equal(await evaluate('window.cursorWeapon.kind'),'none');
@@ -197,6 +198,8 @@ try {
   const centerOf = async selector => evaluate(`(() => {const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
   const mouse = async (type, at, down = false) => send('Input.dispatchMouseEvent', {type,...at,button:type==='mouseMoved'?'none':'left',buttons:down?1:0,clickCount:1});
   const click = async selector => { const at=await centerOf(selector);await mouse('mouseMoved',at);await mouse('mousePressed',at,true);await mouse('mouseReleased',at); };
+  assert(await evaluate('document.querySelector("#grabBag").hidden && document.querySelector("#trashCan").hidden'));
+  await evaluate('window.pet.config.showBag=true;window.pet.config.showTrash=true;window.toolBag.refresh()');
   await click('#grabBag');
   assert.equal(await evaluate('document.querySelector("#bagPanel").hidden'),false);
   assert(await evaluate('document.querySelectorAll(".bag-choice canvas").length >= 17'));
@@ -252,6 +255,7 @@ try {
   await mouse('mousePressed',{x:520,y:220},true);await mouse('mouseReleased',{x:520,y:220});
   assert.equal(await evaluate('window.toolBag.dragging'),false);
   await click('#grabBag');
+  await click('#bagKeyboard');
   await evaluate('document.querySelector(".bag-choice[data-id=book]").focus()');
   assert.equal(await evaluate('document.activeElement.dataset.id'), 'book');
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
@@ -263,14 +267,92 @@ try {
   assert(await evaluate('!window.pets.some(p=>p.userWeaponControlled || p.items.carried)'));
   // The open bag remains inside a small viewport, with a scrollable catalog.
   await send('Emulation.setDeviceMetricsOverride',{width:360,height:480,deviceScaleFactor:1,mobile:false});
+  await pause(100);
+  await evaluate('window.toolBag.refresh()');
   await click('#grabBag');
+  assert(await evaluate('!document.querySelector("#bagPanel").hidden'),'small-screen supplies did not open');
   assert(await evaluate('(() => {const r=document.querySelector("#bagPanel").getBoundingClientRect();return r.left>=0 && r.top>=0 && r.right<=innerWidth && r.bottom<=innerHeight;})()'));
   const smallBagShot=await send('Page.captureScreenshot',{format:'png'});
   writeFileSync(join(root,'.build/browser-grab-bag-small.png'),Buffer.from(smallBagShot.data,'base64'));
+  // Optional shortcuts move and persist; the wearable inventory remains usable with both hidden.
+  await click('[aria-label="Close grab bag"]');
+  const shortcutBefore = await centerOf('#grabBag');
+  const relocated = {x:shortcutBefore.x-85,y:shortcutBefore.y+60};
+  await mouse('mousePressed',shortcutBefore,true);await mouse('mouseMoved',relocated,true);await mouse('mouseReleased',relocated);
+  const shortcutAfter = await centerOf('#grabBag');assert(Math.abs(shortcutAfter.x-shortcutBefore.x)>40);assert(await evaluate('!!localStorage.getItem("overlay-tools-placement")'));
+  await evaluate('window.pet.config.showBag=false;window.pet.config.showTrash=false;window.toolBag.refresh();window.toolBag.showFor(window.pet)');
+  assert(await evaluate('!document.querySelector("#bagPanel").hidden && document.querySelector("#grabBag").hidden && document.querySelector("#trashCan").hidden'));
+  assert(await evaluate('document.querySelectorAll(".bag-choice[data-kind=owned]").length > 0'));
+  await click('[aria-label="Close grab bag"]');
+  await send('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+  await pause(100);
+  await evaluate(`(() => {
+    const previous=window.pet;const cfg={...structuredClone(previous.config),windows:false,dailyRhythm:false};for(const p of window.pets)p.leaveWorld();const a=new previous.constructor({left:0,right:innerWidth,top:0,floor:innerHeight},cfg,{identity:'visual-0'});window.pets.splice(0,window.pets.length,a);window.pet=a;
+    while(window.pets.length<5){const i=window.pets.length,names=['Blurp','Leonard','Moss','Violet','Ruby'],colors=['#557ed6','#f7931e','#48a879','#ad72d3','#e46d67'];const p=new a.constructor(a.ctx.world.bounds,{...structuredClone(a.config),name:names[i],look:{...a.config.look,color:colors[i]},windows:false,dailyRhythm:false},{props:a.props,identity:'visual-'+i});window.pets.push(p);}
+    for(const [i,p] of window.pets.entries()){p.config.windows=false;p.config.dailyRhythm=false;p.mind.reset(p.ctx);p.paused=true;p.setWindows([]);p.items.list.filter(q=>q.where==='world').forEach(q=>p.items.remove(q));p.char.body.translate(520+i*38-p.char.x,0);p.mind.holdUntil=Infinity;}
+    for(const p of window.pets)p.others=window.pets.filter(q=>q!==p);
+    for(let i=0;i<360;i++)for(const p of window.pets)p.update(1/120);
+    a.props.spawn('couch',610,a.ctx.world.bounds.floor-56*a.char.scale-2,a.char.scale);
+    for(let i=0;i<360;i++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets)p.paused=false;
+    a.command('do:group:couch');
+    for(let i=0;i<2400;i++){for(const p of window.pets)p.update(1/120);if(window.pets.every(p=>p.char.mode==='sit'&&p.view().group?.phase==='do'))break;}
+    if(!window.pets.every(p=>p.char.mode==='sit'))throw new Error('Five-person visual fixture did not seat: '+JSON.stringify(window.pets.map(p=>({mode:p.char.mode,group:p.view().group,time:p.ctx.world.time,bounds:p.ctx.world.bounds,whole:p.char.whole,hp:p.char.hp,why:p.mind.why,x:p.char.x}))));
+    for(let i=0;i<240;i++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets)if(Math.abs(p.char.body.j.hip.y-a.props.placed[0].seatFor(p.ctx.who).y)>10)throw new Error('Visual sitter is off the cushion');
+    for(const p of window.pets)p.paused=true;
+  })()`);
+  await pause(100);
+  const groupShot=await send('Page.captureScreenshot',{format:'png'});writeFileSync(join(root,'.build/browser-couch-five.png'),Buffer.from(groupShot.data,'base64'));
+  await evaluate(`(() => {
+    const a=window.pet;for(const p of window.pets)p.mind.reset(p.ctx);for(const t of [...a.props.things])a.props.remove(t);
+    for(const [i,p]of window.pets.entries()){p.char.standUp();p.char.body.translate(260+i*140-p.char.x,0);}
+    a.props.spawn('desk',430,730,1);a.props.spawn('workbench',610,730,1);a.props.spawn('storage',800,770,1);
+    for(let i=0;i<360;i++)for(const p of window.pets)p.update(1/120);
+    a.command('do:deskwork');a.paused=false;
+    for(let i=0;i<3600&&!a.props.placed.find(t=>t.def.id==='desk').art;i++)a.update(1/120);
+    a.mind.reset(a.ctx);a.paused=true;
+    const b=window.pets[1];b.command('do:drawitem:katana');b.paused=false;
+    for(let i=0;i<3600&&!b.items.list.some(q=>q.ink);i++)b.update(1/120);
+    b.mind.reset(b.ctx);b.command('do:refine');
+    for(let i=0;i<2400;i++){b.update(1/120);if(b.items.list.some(q=>q.ink?.progress>0.35))break;}
+    if(!b.items.list.some(q=>q.ink?.progress>0.35))throw new Error('Workshop visual fixture did not refine');
+    b.paused=true;
+  })()`);
+  await pause(100);
+  const workShot=await send('Page.captureScreenshot',{format:'png'});writeFileSync(join(root,'.build/browser-workshop.png'),Buffer.from(workShot.data,'base64'));
+  // New Pong controls use the actual companion game, including keyboard focus from a hidden preview.
+  await evaluate(`(() => {
+    const a=window.pet;for(const p of window.pets){p.mind.reset(p.ctx);p.char.standUp();p.paused=true;}
+    for(let i=0;i<360;i++)for(const p of window.pets)p.update(1/120);
+    const tv=a.props.spawn('tv',260,720,1);for(let i=0;i<240;i++)a.update(1/120);
+    for(const [i,p]of window.pets.entries()){p.mood.asleep=i>1;p.paused=i>1;}
+    a.command('do:pong');for(let i=0;i<2400&&!tv.pong;i++)for(const p of window.pets.slice(0,2))p.update(1/120);
+    if(!tv.pong)throw new Error('Pong controls fixture did not start');
+    for(const p of window.pets)p.paused=true;window.pongFixture=tv.pong;tv.pong.time=9;
+  })()`);
+  await pause(100);
+  assert(await evaluate('document.querySelector("#pongPanel canvas").hidden'));
+  await click('#pongPanel button:nth-child(3)');
+  assert(await evaluate('document.activeElement===document.querySelector("#pongPanel canvas")'));
+  const paddleBefore=await evaluate('window.pongFixture.paddles[0]');
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown'});
+  await send('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowDown',code:'ArrowDown'});
+  assert(await evaluate('window.pongFixture.paddles[0]')>paddleBefore);
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});
+  await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+  assert.equal(await evaluate('window.pongFixture.user'),null);
+  await click('#pongPanel button:nth-child(1)');
+  const court=await centerOf('#pongPanel canvas');await mouse('mouseMoved',{x:court.x,y:court.y-35});
+  assert.equal(await evaluate('window.pongFixture.user'),0);
+  await evaluate('window.pongFixture.winner=0;window.pongFixture.score[0]=5');await pause(100);
+  await click('#pongPanel button:nth-child(2)');assert.deepEqual(await evaluate('window.pongFixture.score'),[0,0]);
+  await evaluate('window.pet.mind.reset(window.pet.ctx)');await pause(100);
+  assert(await evaluate('document.querySelector("#pongPanel").hidden'));
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
   console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close, actual cursor pistol aim/ammo/reload/return, bow charge/release, book rendering, page-fragment images, native-window visit controller and rendering');
   console.log('Screenshot: .build/browser-smoke.png');
-  console.log('PASS browser: physical bag art, mouse pull/drop/give, ammo preservation, loose item selection, trash/undo identity, furniture undo, click-to-place, keyboard/Escape, small-screen bag bounds');
+  console.log('PASS browser: physical bag art, mouse pull/drop/give, ammo preservation, loose item selection, trash/undo identity, furniture undo, click-to-place, keyboard/Escape, small-screen bag bounds, 5-person couch/workshop rendering, real Pong mouse/keyboard/join/rematch controls');
 } finally {
   socket?.close(); browser.kill();
   await new Promise((done) => { if (browser.exitCode !== null) done(); else browser.once('close', done); });

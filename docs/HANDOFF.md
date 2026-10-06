@@ -2,46 +2,75 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest milestone: overlay grab bag and reversible trash — Update 2, first part
+## Latest milestone: Workshop and Household
 
-Continued [UPDATE-PLAN.md](UPDATE-PLAN.md) from the last tested `codex/desktop-life` build
-(`a674a44`). This focused batch adds two connected systems: pulling objects into the world and
-removing/retrieving them. The combat/pacing milestone below remains the baseline; Mac acceptance
-is still outstanding. Work is on `codex/roadmap-continuation`.
+The owner authorized completing missing Update 2 work plus the next two old updates, then supplied
+an expanded five-update plan. [UPDATE-PLAN.md](UPDATE-PLAN.md) is now the current plan; the previous
+plan is archived in UPDATE-PLAN-LEGACY.md. Batch scope is unlimited by explicit owner instruction.
+This branch completes Workshop and Household, including their new tools/talents/clock/Pong additions.
+Work is on `codex/roadmap-continuation`, stacked on `codex/desktop-life` (`a674a44`). GitHub PR #2
+is still draft/open; the uploaded plan's assumption that combat was merged was not true on inspection.
 
-- A small illustrated grab bag at the bottom left opens a scrollable catalog using actual item/prop
-  art, including custom definitions. Choose a current figure as the initial owner, drag a tool or
-  furniture out, or click/keyboard-select it and place it with the next click. Escape/right-click
-  cancels transport by dropping the object safely. The catalog stays inside small viewports.
-- Drop a pulled or loose item onto either figure to give/pass the original item. Weapons carried
-  this way do not swing or fire; taking an equipped weapon through the existing menu still enables
-  its combat controls. Transfers preserve identity, magazine and saved ownership. This is user input,
-  not a new autonomous cross-figure exchange; those continue through `peer.ts`.
-- A trash can at bottom right accepts user-held items, furniture and live drawn objects. Undo beside
-  the can retrieves the last object with its identity/ammo/artwork intact. Removing occupied furniture
-  releases its activities and shared claims. Retrieved drawings retain their remaining lifetime and
-  leave old window anchors behind. A removed companion's trashed item returns through a current owner.
-- Trash is limited to in-app objects. Undo is one object deep and lasts for this session; it is not
-  serialized. Normal item/prop saves omit trashed objects and include restored objects. Existing
-  inventory formats, belt silhouette, shared props and character presets are retained.
+Implemented:
 
-Verified in this cloud: typecheck/build; 72 focused checks; full simulation seed 1; two-figure and
-five-figure 300-second soaks seed 1, both reporting no trouble. Actual Chromium mouse checks cover
-bag pull/drop/give, magazine retention, loose-item selection, item/furniture trash and undo,
-controller cleanup, click-to-place, keyboard/Escape and a 360×480 catalog. Inspected normal/small
-bag screenshots. Linux Electron/Xvfb covers actual preload focus IPC, native mouse pull/trash/undo,
-continued drag after catalog close, returning to non-focusable state, and existing settings/chat/game
-checks. No provider calls were used. These do not establish Mac Spaces/click-through or Windows behavior.
+- Pixel supplies/trash shortcuts, hidden by default, independently enabled in General and draggable
+  with saved placements. Satchel click/menu works with both hidden. Pointer catalog use never toggles
+  native focus; Keyboard explicitly enables it, including a held selection that Escape can cancel.
+  Duplicate typing IPC is ignored. This addresses the focus transition responsible for overlay flicker;
+  Mac Spaces behavior still needs real hardware verification.
+- Wearable satchels replace belt rendering, with a reach/flap motion and 16 slots. Legacy slot indices
+  still load, and worn helmets/boots remain attached. Owned satchel entries move the original item.
+  Direct equipped-hand selection uses visible art. Existing weapon cursor controls remain available.
+- Sponge clips only local raw strokes; eraser removes ink objects and prompts a reaction; paint bucket
+  colors a project before polishing. Supplies expose a useful desk, workbench and tool shelf. Desk paper
+  receives a traced katana blueprint and a copy goes in the satchel. Shelf sorting picks/places loose
+  tools; world item placements/ammo and furniture position/tilt/facing/art save.
+- Definitions advertise use capabilities, movement type and draw/refine permissions. Blueprint drawing
+  traces actual tool/furniture art, with matching outline and actions. Workbench color/polish progresses
+  on the same object, preserving state and ownership. Interrupted ink projects save/resume. General's
+  ink lifetime is tunable; zero disables expiry, and held/stored/supporting objects pause it.
+- Group invitations coordinate 2–5 through JSON peer snapshots/messages: wave/chat/couch/watch for
+  any group, duet for two, hands-in for three, paired mirroring for four, relay for five. Couch seating
+  reserves five distinct spots and recenters them. Forward-facing legs hang in front of furniture;
+  backrest collision no longer lifts hips off the cushions. Late-added companions use local clocks
+  for synchronized starts. Interruptions release claims, hands, watcher/controller state and movement.
+- Carry/drag/push furniture, clear routes, braced grips, light lifting, and cooperative TV carries.
+  Occupied furniture waits briefly; grabbing/tipping/blocking cancels. TV/couch, reading and work
+  arrangements save. Moving platform reports cannot carry a figure beyond screen bounds between steps.
+- Pair trust, shared activity preferences, disagreement memory and landed-move rivalry memory save.
+  Small tool gifts use exclusive ownership and bounded JSON/deduplication; compare/check moments work
+  offline. Personality specialties improve drawing/refining speed or game skill, favor a game expert
+  for invitations and a drawing expert for feedback. Real system idle/time arrives via Electron;
+  daily rhythm is optional and doesn't wake an explicit daytime nap.
+- Real Pong physics, first-to-five scoring, winners, rematches, spectators and the same live TV state
+  in a pixel preview. Join supports mouse or explicit keyboard controls. Handhelds run the existing
+  runner on their own screens. Optional console gating starts off for legacy compatibility.
+- Every new action ships with an offline command and the optional AI's validated action vocabulary.
+  Custom named drawing requests take priority over incidental words in their names. Existing provider
+  cadence/cost controls remain; no paid provider calls were used.
 
-Next: run the short [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md) bag/trash acceptance list on Mac.
-Continue Update 2 with a local sponge and a useful desk/storage activity. Taking equipped objects
-directly by dragging, saved world storage, satchel replacement and the prop-use audit remain open.
-Workshop, furniture-moving skills, handhelds and a new companion game remain later updates.
+Validation: typecheck/build; 72 existing regressions and 25 roadmap regressions; full simulation seed 1;
+300-second two- and five-figure soaks seed 1 with no trouble. Chromium checks cover pointer/keyboard
+supplies, trash/undo, hidden shortcuts, saved repositioning, small-screen bounds, existing combat/book/
+Othello controls, rendered five-seat/workshop scenes, and real Pong mouse/keyboard/join/rematch controls. Linux Electron/Xvfb checks actual preload
+focus IPC and mouse transport, explicit keyboard pulling/Escape and existing configuration/chat/game
+behavior. Inspected normal/small supplies, couch and workshop screenshots. Windows x64 portable
+packaging succeeds; its real PowerShell helpers are present and app-data/provider keys are excluded.
 
-## Latest milestone: adaptive weapons, quiet activities, sleeping pickup and full hitboxes
+Remaining: no real Mac/Windows run was possible here. Use [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md)
+for acceptance. Native permissions/Spaces/click-through, multiple monitors/mixed DPI and clock/idle
+behavior need hardware checks. Props use conservative convex collision, not precise concave gaps.
+Undo remains one session-only object. Talents use existing personality specialties, not new artwork.
+
+Next: owner acceptance of Steel/Workshop/Household. Out of the Box starts by verifying installed Chrome,
+native closing and Finder associations on real hardware; its explicit gate remains in the new plan.
+Mind & Ship (provider discovery, onboarding, profiling, backup/restore, reduced motion and replay clips)
+remains later authorized roadmap work, not claimed shipped in this milestone.
+
+## Previous milestone: adaptive weapons, quiet activities, sleeping pickup and full hitboxes
 
 The owner asked to plan future work in focused updates instead of rediscovering the whole project.
-Read [UPDATE-PLAN.md](UPDATE-PLAN.md): ten updates, each with 8–12 features, dependencies, completion
+Read the archived [UPDATE-PLAN-LEGACY.md](UPDATE-PLAN-LEGACY.md): ten updates, each with 8–12 features, dependencies, completion
 criteria and a new-ideas inbox. It includes every request about combat, fewer GUI controls, satchel
 storage, drawing/moving furniture, TV orientation/previews, real companion games, handhelds/console,
 workshop refinement and possible ink lifespans, quiet pacing, sleep-carry, Chrome, real folders,

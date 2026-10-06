@@ -237,6 +237,7 @@ export class Character {
    * both hands (as far as his arms reach). Null = his normal arms.
    */
   handsAt: { L?: Vec; R?: Vec; lean?: number } | null = null;
+  satchelReach: { hand: 'L' | 'R'; at: Vec; amount: number } | null = null;
   /** Sword fighting: the pose the fight skill wants this frame (null = not holding a sword up). */
   fightPose: FightPose | null = null;
   /** Fight footwork: the fight skill drives his speed directly (lunges, dashes), and his depth (passing in front). */
@@ -743,12 +744,17 @@ export class Character {
       return;
     }
     if (!onIt) return;
-    const dy = platY(now, this.x) - platY(before, this.x);
+    let dy = platY(now, this.x) - platY(before, this.x);
     // Use the window's own position when we know it (covering part of the edge
     // changes the edge's ends but doesn't move the window).
-    const dx = now.wx !== undefined && before.wx !== undefined ? now.wx - before.wx
+    let dx = now.wx !== undefined && before.wx !== undefined ? now.wx - before.wx
       : Math.abs((now.x1 - before.x1) - (now.x2 - before.x2)) < 1 ? now.x1 - before.x1
         : now.win === undefined && Math.abs((now.x2 - now.x1) - (before.x2 - before.x1)) < 3 ? ((now.x1 + now.x2) - (before.x1 + before.x2)) / 2 : 0;
+    // Platform reports can arrive after the body's collision step (or during a hit pause).
+    // A thrown prop or window must not carry his hips outside the screen between steps.
+    const hip=this.body.j.hip;
+    dx=clamp(dx,this.bounds.left+hip.r-hip.x,this.bounds.right-hip.r-hip.x);
+    dy=clamp(dy,this.bounds.top+hip.r-hip.y,this.bounds.floor-hip.r-hip.y);
     if (!dx && !dy) return;
     this.body.translate(dx, dy);
     this.rootX += dx;
@@ -1105,7 +1111,9 @@ export class Character {
     // in front of (his neck resting on the TV's top read as falling over, and he'd ragdoll).
     // (On a chair or the couch his seat holds his hips: they mustn't come to rest on its armrest or back,
     // or on something drawn over it.)
-    const onThings = this.mode === 'ground' || this.mode === 'sit' && this.seat ? [b.j.footL, b.j.footR] : this.mode === 'sit' ? [b.j.footL, b.j.footR, b.j.hip] : b.points;
+    // Seated legs hang in front of furniture. Landing the feet on its backrest would lift the hips
+    // away from the seat, especially when a couch huddle faces fully forward.
+    const onThings = this.mode === 'sit' && this.seat ? [] : this.mode === 'ground' ? [b.j.footL, b.j.footR] : this.mode === 'sit' ? [b.j.footL, b.j.footR, b.j.hip] : b.points;
     const impact = this.sleeping ? b.points.map(p => ({vx: (p.x - p.px) / dt, vy: (p.y - p.py) / dt})) : null;
     for (let i = 0; i < 8; i++) {
       solveSticks(b.sticks);
@@ -1962,6 +1970,12 @@ export class Character {
     const fp = this.fightPose;
     let fought = false;
     const ha = this.handsAt;
+    if (this.satchelReach && !g && !fp && !ha && !this.handTarget) {
+      const reach = this.satchelReach, hand = reach.hand === 'L' ? handL : handR;
+      const target = this.reachToward(neckT, reach.at, reach.hand);
+      const blended = { x: hand.x + (target.x - hand.x) * reach.amount, y: hand.y + (target.y - hand.y) * reach.amount, z: hand.z + (target.z - hand.z) * reach.amount };
+      if (reach.hand === 'L') handL = blended; else handR = blended;
+    }
     if (ha && !g && !fp) {
       if (ha.L) handL = this.reachToward(neckT, ha.L, 'L');
       if (ha.R) handR = this.reachToward(neckT, ha.R, 'R');

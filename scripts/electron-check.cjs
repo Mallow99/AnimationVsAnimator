@@ -31,7 +31,7 @@ app.whenReady().then(async () => {
   await settings.webContents.executeJavaScript('window.petShell.setConfig({aiInterval:120})');
   await until(() => overlay.webContents.executeJavaScript('window.pet.config.aiInterval === 120'));
   await settings.webContents.executeJavaScript('document.querySelector("[data-tab=items]").click(); window.petShell.command("sync")');
-  await until(() => settings.webContents.executeJavaScript('document.querySelectorAll("#propKinds .thing-card canvas").length === 6'));
+  await until(() => settings.webContents.executeJavaScript('document.querySelectorAll("#propKinds .thing-card canvas").length === 8'));
   await settings.webContents.executeJavaScript('document.querySelector("button[aria-label=\\"Wear: Helmet\\"]").click()');
   await until(() => overlay.webContents.executeJavaScript('window.pet.items.onHim.some(i => i.def.id === "helmet" && i.where === "worn")'));
   await settings.webContents.executeJavaScript('document.querySelector("#itemKinds").scrollIntoView({block:"start"})');
@@ -57,15 +57,18 @@ app.whenReady().then(async () => {
   await overlay.webContents.executeJavaScript('document.querySelector("#talkClose").click()');
   await until(() => !overlay.isFocusable());
   // Bag focus/drag/close passes through the actual preload IPC and Electron input path.
+  assert(await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").hidden && document.querySelector("#trashCan").hidden'));
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({showBag:true,showTrash:true})');
+  await until(() => overlay.webContents.executeJavaScript('!document.querySelector("#grabBag").hidden'));
   await overlay.webContents.executeJavaScript('for(const p of window.pets){p.mind.reset(p.ctx);p.paused=true;}document.querySelector("#grabBag").click()');
-  await until(() => overlay.isFocusable());
+  assert(!overlay.isFocusable(), 'pointer opening a bag changed native focus');
   assert(await overlay.webContents.executeJavaScript('!document.querySelector("#bagPanel").hidden'));
   const card = await overlay.webContents.executeJavaScript('(() => {const el=document.querySelector(".bag-choice[data-id=book]");el.scrollIntoView({block:"nearest"});const r=el.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()');
   overlay.webContents.sendInputEvent({type:'mouseMove',...card});
   overlay.webContents.sendInputEvent({type:'mouseDown',...card,button:'left',clickCount:1});
   await until(() => overlay.webContents.executeJavaScript('window.toolBag.dragging'));
   await overlay.webContents.executeJavaScript('window.electronBagBook=window.toolBag.tools.held.object');
-  assert(overlay.isFocusable(), 'bag drag lost focus when the catalog closed');
+  assert(!overlay.isFocusable(), 'pointer pulling an item changed native focus');
   const bin = await overlay.webContents.executeJavaScript('(() => {const r=document.querySelector("#trashCan").getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()');
   overlay.webContents.sendInputEvent({type:'mouseMove',...bin});
   overlay.webContents.sendInputEvent({type:'mouseUp',...bin,button:'left',clickCount:1});
@@ -75,10 +78,23 @@ app.whenReady().then(async () => {
   await overlay.webContents.executeJavaScript('document.querySelector("#undoTrash").click()');
   assert(await overlay.webContents.executeJavaScript('window.pet.items.list.includes(window.electronBagBook)'));
   await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").click()');
+  assert(!overlay.isFocusable(), 'reopening the bag changed native focus');
+  await overlay.webContents.executeJavaScript('document.querySelector("#bagKeyboard").click()');
   await until(() => overlay.isFocusable());
   await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").click()');
   await until(() => !overlay.isFocusable());
-  console.log('PASS Electron: bag opens keyboard focus, real mouse pull/trash/undo, drag focus survives catalog close, close/release return non-focusable overlay');
+  await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").click();document.querySelector("#bagKeyboard").click()');
+  await until(() => overlay.isFocusable());
+  await overlay.webContents.executeJavaScript('document.querySelector(".bag-choice[data-id=book]").focus()');
+  overlay.webContents.sendInputEvent({type:'keyDown',keyCode:'Return'});
+  overlay.webContents.sendInputEvent({type:'keyUp',keyCode:'Return'});
+  await until(() => overlay.webContents.executeJavaScript('window.toolBag.dragging'));
+  assert(overlay.isFocusable(),'keyboard pull lost focus before Escape could cancel');
+  overlay.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});
+  overlay.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});
+  await until(() => !overlay.isFocusable());
+  assert(await overlay.webContents.executeJavaScript('!window.toolBag.dragging'));
+  console.log('PASS Electron: optional pixel bag, real pointer pull/trash/undo without changing native focus, explicit keyboard navigation and close return focus');
   await overlay.webContents.executeJavaScript('for(const p of window.pets)p.paused=false');
   // The second stick figure: their own settings window in their own color, their own config, the shared
   // settings kept in step, their own talk box and memory file.

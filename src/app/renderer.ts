@@ -12,6 +12,7 @@ import type { Bounds } from '../core/physics';
 import type { WinRect } from '../core/world';
 import type { BrainRequest } from '../core/brain';
 import { playBlip, playSfx } from './sfx';
+import { createPongPanel } from './pong-panel';
 import { createGamePanel } from './game-panel';
 import {FileHabitats} from './file-habitats';
 import {PageCutouts} from './page-cutouts';
@@ -43,6 +44,7 @@ interface PetShell {
   onItemDefs(cb: (defs: unknown[]) => void): void;
   setTyping(on: boolean): void;
   desktopAction(id:number,action:DesktopAction):Promise<DesktopResult>;
+  onLife?(cb:(sample:import('../core/life-rhythm').LifeSample)=>void):void;
   onDesktopState(cb:(state:DesktopState)=>void):void;
   onCutout(cb:(cutout:PageCutout)=>void):void;
   onFileWindows(cb:(windows:FileWindow[])=>void):void;
@@ -114,6 +116,7 @@ function makePet(id: number, config: PetConfig): Pet {
   p.onBlip = (pitch) => playBlip(pitch * (id ? 0.85 : 1), p.config.volume);
   p.onSound = (name, strength) => playSfx(name, strength, p.config.volume, (id ? 0.75 : 0.8) + p.mood.s.happiness * 0.4);
   p.onTalk = () => openTalk(p);
+  p.onSatchel = () => toolBag.showFor(p);
   if (shell) {
     p.onDesktopAction=async action=>{const result=await shell.desktopAction(id,action);if(result.ok && action==='restorepage')cutouts.clear();return result;};
     p.desktopState=desktopState;
@@ -182,6 +185,7 @@ if (shell) {
   shell.getConfigs().then((cs) => { cs.forEach((c, i) => (configs[i] = c)); applyConfigs(configs); });
   shell.onConfig(({ id, config }) => { configs[id] = config; applyConfigs(configs); });
   shell.onCommand(({id,cmd})=>{if(cmd==='returnHome'){habitats.returnHome(id);return;} (habitats.petFor(id)??pets[id])?.command(cmd);});
+  shell.onLife?.(sample => {for(const p of activePets())p.life(sample);});
   shell.onDesktopState?.(state=>{desktopState=state;for(const p of [...pets,...habitats.activePets])p.desktopState=state;});
   shell.onCutout?.(cutout=>cutouts.add(cutout));
   shell.onFileWindows?.(files=>habitats.refresh(files));
@@ -227,7 +231,12 @@ const talk = document.getElementById('talk') as HTMLFormElement;
 const talkText = document.getElementById('talkText') as HTMLInputElement;
 let talkOpen = false, talkIdle = 0, gameTyping = false, toolsTyping = false;
 let talkPet: Pet = pets[0];
-const syncTyping = () => shell?.setTyping(talkOpen || gameTyping || toolsTyping);
+let typingSent = false;
+const syncTyping = () => {
+  const on = talkOpen || gameTyping || toolsTyping || pongTyping;
+  if (on === typingSent) return;
+  typingSent = on; shell?.setTyping(on);
+};
 function openTalk(p: Pet = talkPet) {
   if (talkOpen && talkPet !== p) talkPet.listening = false;
   talkPet = p;
@@ -280,15 +289,17 @@ const overTalk = (x: number, y: number) => {
 };
 // The Othello window belongs to whichever of them invited you (the first one, if neither has).
 const gamePet = () => pets.find((p) => p.game.state !== 'closed') ?? pets[0];
+let pongTyping = false;
+const pongPanel = createPongPanel(desktopPets, on => { pongTyping = on; syncTyping(); });
 const gamePanel = createGamePanel(gamePet, (on) => { gameTyping = on; syncTyping(); }, () => openTalk(gamePet()));
 
 // ── click-through ──
 // The window ignores the mouse (clicks fall through to your desktop) except while the cursor is over one
 // of them, their menu or the talk box, you're dragging one, or you're carrying one of their things.
 let ignoring = true;
-const onPet = (p: Pet, x: number, y: number) => p.dragging || p.hit(x, y) || p.uiHit(x, y) || p.carrying;
+const onPet = (p: Pet, x: number, y: number) => p.dragging || p.hit(x, y) || p.satchelHit(x, y) || p.uiHit(x, y) || p.carrying;
 function updateClickThrough(x: number, y: number) {
-  const want = !cursorWeapon.active && !(toolBag.dragging || toolBag.over(x, y) || gamePanel.dragging || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
+  const want = !cursorWeapon.active && !(toolBag.dragging || toolBag.over(x, y) || gamePanel.dragging || pongPanel.over(x,y) || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);
@@ -340,6 +351,7 @@ let vel = { x: 0, y: 0 };
 const toolBag = new ToolBag(desktopPets, save, on => { toolsTyping = on; syncTyping(); }, () => !cursorWeapon.active);
 Object.assign(window, { toolBag });
 window.addEventListener('mousemove', (e) => {
+  lastPointerAt = performance.now();
   const now = performance.now();
   const dt = Math.max((now - last.t) / 1000, 1 / 240);
   // Smoothed mouse velocity, used when you throw one of them.
@@ -353,7 +365,7 @@ window.addEventListener('mousemove', (e) => {
   updateClickThrough(e.clientX, e.clientY);
 });
 /** Which of them the mouse is on (the one drawn on top first), or null. */
-const petAt = (x: number, y: number) => habitats.hit(x,y,lastWins) ?? [...desktopPets()].reverse().find((p) => p.hit(x, y) || p.uiHit(x, y) || p.carrying) ?? null;
+const petAt = (x: number, y: number) => habitats.hit(x,y,lastWins) ?? [...desktopPets()].reverse().find((p) => p.hit(x, y) || p.satchelHit(x, y) || p.uiHit(x, y) || p.carrying) ?? null;
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (toolBag.dragging) { toolBag.cancel(); updateClickThrough(e.clientX, e.clientY); return; }
@@ -377,9 +389,15 @@ window.addEventListener('mousedown', (e) => {
   if (toolBag.over(e.clientX, e.clientY)) return;
   if (toolBag.dragging) { shell?.pressed(); return; }
   if(cursorWeapon.active){cursorWeapon.pointer(e.clientX,e.clientY);cursorWeapon.press(true);shell?.pressed();return;}
-  if (overTalk(e.clientX, e.clientY) || gamePanel.over(e.clientX, e.clientY)) return;
+  if (pongPanel.over(e.clientX,e.clientY) || overTalk(e.clientX, e.clientY) || gamePanel.over(e.clientX, e.clientY)) return;
   if(cutouts.grab(e.clientX,e.clientY)){shell?.pressed();return;}
   if (talkOpen && !talkPet.hit(e.clientX, e.clientY)) closeTalk(); // clicked away: done talking
+  const satchel = [...desktopPets()].reverse().find(p => p.satchelHit(e.clientX, e.clientY));
+  if (satchel) { toolBag.showFor(satchel); updateClickThrough(e.clientX, e.clientY); return; }
+  for (const p of [...desktopPets()].reverse()) {
+    const item = p.items.onHim.find(i => i.where === 'hand' && i.distTo(e.clientX, e.clientY) < 5);
+    if (item && toolBag.tools.beginItem(p, item, { x: e.clientX, y: e.clientY })) return;
+  }
   // Whoever you clicked right on; otherwise the first one (and the furniture), then the other one's things.
   const now = performance.now(), who = petAt(e.clientX, e.clientY);
   // Items have one owner even when furniture and several figures overlap their hitboxes.
@@ -436,6 +454,7 @@ function drawFakeWindows() {
 // ── frame loop ──
 let prev = performance.now();
 let propAccumulator=0,propTime=0;
+let lastPointerAt = performance.now();
 let toolsRefreshAt = 0;
 function frame(now: number) {
   const dt = (now - prev) / 1000;
@@ -469,7 +488,7 @@ function frame(now: number) {
     }
   }
   habitats.update(slow ? dt * 0.3 : dt);
-  if (now > toolsRefreshAt) { toolBag.refresh(); toolsRefreshAt = now + 1000; }
+  if (now > toolsRefreshAt) { if(!shell)for(const p of activePets())p.life({hour:new Date().getHours(),idleSeconds:(now-lastPointerAt)/1000}); toolBag.refresh(); toolsRefreshAt = now + 1000; }
   if (cursorWeapon.owner && cursorWeapon.item && (!cursorWeapon.owner.items.list.includes(cursorWeapon.item) || cursorWeapon.item.where !== 'cursor')) {
     cursorWeapon.detach(); weaponBar.style.display = 'none';
   }
@@ -488,7 +507,7 @@ function frame(now: number) {
     bounds(),
     pets.map((p, id) => (habitats.isAway(id) ? undefined : p)) as Pet[],
   );
-  gamePanel.update();
+  gamePanel.update(); pongPanel.update();
   updateClickThrough(last.x, last.y);
   if (talkOpen) {
     placeTalk();
@@ -496,7 +515,7 @@ function frame(now: number) {
       closeTalk();
   }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-  if (fakeWins.length) drawFakeWindows();
+  if (fakeWins.length && pets[0]?.config.windows) drawFakeWindows();
   // Furniture first (behind both of them), then whoever's nearer to you in front (a dash passes in front of the other one).
   pets[0]?.drawProps(ctx);
   for (const p of [...desktopPets()].sort(

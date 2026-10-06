@@ -44,6 +44,12 @@ export interface Ctx {
   hyperactivity?: number;
   personality?: import('../config').Personality;
   drawTools?: boolean;
+  talent?: import('../relationships').Talent;
+  relationship?: (id:string)=>import('../relationships').Relationship;
+  recordActivity?: (id:string,act:string,success:boolean)=>void;
+  inkLifetime?: number;
+  consoleRequired?: boolean;
+  tellTo?: (id: string, m: PeerMsg) => void;
   peers?: () => FighterView[];
   selectPeer?: (id: string) => boolean;
   looseWeapons?: () => import('../combat/armament').LooseWeapon[];
@@ -126,9 +132,10 @@ export abstract class Skill {
 
 export function arrive(c: Ctx, x: number, tol = 8) {
   const ch = c.char;
-  if (!ch.ready || ch.walking) return false;
+  if (!ch.ready) return false;
   // (Never tighter than where his own walking calls it "there", or he'd stop short and wait forever.)
-  if (Math.abs(ch.x - x) <= Math.max(tol, 6) * ch.scale) return true;
+  if (Math.abs(ch.x - x) <= Math.max(tol, 6) * ch.scale) { ch.stop(); return true; }
+  if (ch.walking) return false;
   // Up on a piece of furniture (or something he drew) and the spot's past its edge: he hops down rather than
   // waiting at the edge forever. (Off a window, getting down is its own skill.)
   const offProp = ch.support >= 0 && !!c.props?.thingOf(ch.support);

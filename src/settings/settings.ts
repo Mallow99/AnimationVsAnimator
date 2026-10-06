@@ -199,7 +199,7 @@ for (const row of PRESET_ROWS) {
 // ── sliders (built from the config's range table) ──
 const sliders: [HTMLInputElement, HTMLElement, string][] = [];
 for (const [key, r] of Object.entries(RANGES)) {
-  const host = key === 'hyperactivity' ? $('activitySliders') : key === 'scale' ? $('sizeSlider') : key === 'volume' ? $('volumeSlider') : key.startsWith('look.') ? $('lookSliders') : $('bodySliders');
+  const host = key === 'inkLifetime' ? $('workshopSliders') : key === 'hyperactivity' ? $('activitySliders') : key === 'scale' ? $('sizeSlider') : key === 'volume' ? $('volumeSlider') : key.startsWith('look.') ? $('lookSliders') : $('bodySliders');
   const wrap = document.createElement('label');
   wrap.className = 'slider';
   wrap.innerHTML = `<span class="top"><span class="row-label">${r.label}</span><span></span></span><input type="range" min="${r.min}" max="${r.max}" step="${r.step}" id="s-${key}" /><small>${r.hint}</small>`;
@@ -226,7 +226,7 @@ $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.t
 $<HTMLInputElement>('sfx').addEventListener('change', (e) => set({ sfx: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('destructible').addEventListener('change', (e) => set({ destructible: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('friendOn').addEventListener('change', (e) => set({ friend: { on: (e.target as HTMLInputElement).checked } }));
-for(const id of ['debugCombat','drawTools','browserPlay','closeWindows','fileHomes'] as const)$<HTMLInputElement>(id).addEventListener('change',()=>set({[id]:$<HTMLInputElement>(id).checked}));
+for(const id of ['debugCombat','drawTools','browserPlay','closeWindows','fileHomes','showBag','showTrash','consoleRequired','dailyRhythm'] as const)$<HTMLInputElement>(id).addEventListener('change',()=>set({[id]:$<HTMLInputElement>(id).checked}));
 $<HTMLSelectElement>('figureCount').addEventListener('change',()=>set({figureCount:Number($<HTMLSelectElement>('figureCount').value)}));
 $<HTMLSelectElement>('personality').addEventListener('change',()=>set({personality:$<HTMLSelectElement>('personality').value}));
 for(const button of document.querySelectorAll<HTMLButtonElement>('[data-weapon]'))button.onclick=()=>shell.command(`cursorWeapon:${button.dataset.weapon}`);
@@ -306,6 +306,10 @@ function render(c: PetConfig) {
   for(const id of ['browserPlay','closeWindows','fileHomes'] as const)$<HTMLInputElement>(id).checked=c[id];
   $<HTMLInputElement>('debugCombat').checked=c.debugCombat;
   $<HTMLInputElement>('drawTools').checked=c.drawTools;
+  $<HTMLInputElement>('consoleRequired').checked=c.consoleRequired;
+  $<HTMLInputElement>('dailyRhythm').checked=c.dailyRhythm;
+  $<HTMLInputElement>('showBag').checked=c.showBag;
+  $<HTMLInputElement>('showTrash').checked=c.showTrash;
   $('duelNow').toggleAttribute('disabled', !c.friend.on);
   $<HTMLInputElement>('sfx').checked = c.sfx;
   $<HTMLInputElement>('windows').checked = c.windows;
@@ -417,16 +421,16 @@ shell.onCollections((c) => {
 shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); if (c.items) renderItems(c.items); if (c.props) renderProps(c.props); });
 
 // ── Items tab ──
-const SLOTS = ['left hip', 'right hip', 'back', 'pocket'];
+const SLOTS = Array.from({length:16},(_,i)=>`slot ${i+1}`);
 function renderItems(v: ItemsView) {
-  const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `on his belt (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'worn' ? 'wearing it' : it.where === 'world' ? 'lying around' : 'you have it';
+  const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `in his satchel (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'worn' ? 'wearing it' : it.where === 'world' ? 'lying around' : 'you have it';
   $('itemList').replaceChildren(...(v.list.length ? v.list.map((it) => moveRow(it.name + (it.drawn ? ' (drawn)' : ''), 0, [
     ...(it.where === 'belt' || it.where === 'hand' || it.where === 'worn' ? [['Take', () => shell.command(`item:take:${it.uid}`)] as [string, () => void]] : []),
     ...(it.where === 'cursor' || it.where === 'world' ? [['Give back', () => shell.command(`item:return:${it.uid}`)] as [string, () => void]] : []),
     ['Put away', () => shell.command(`item:remove:${it.uid}`)],
   ], where(it))) : [emptyNote('He has nothing. Give him something below.')]));
   // His inventory: every kind of thing there is. Drop one in (it falls from the top of the screen and he
-  // goes to get it), or put it straight on his belt.
+  // goes to get it), or put it straight in his satchel.
   $('itemKinds').replaceChildren(...v.kinds.filter((k) => !k.drawn).map((k) => thingCard(k, [
     ['Drop it in', () => shell.command(`item:spawn:${k.id}`)],
     [k.wear ? 'Wear' : 'Give him', () => shell.command(`item:give:${k.id}`)],

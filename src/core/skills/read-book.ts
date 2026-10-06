@@ -33,7 +33,7 @@ export class ReadBook extends Skill {
       return true;
     if (this.seat) {
       this.seat.t += dt;
-      if (this.seat.update(c)) return true;
+      if (this.seat.update(c)) { this.seat.stop(c); this.seat = null; }
     } else if (ch.ready) ch.sit();
     if (ch.mode !== 'sit') return this.t > 25;
     if (book.where !== 'hand') c.items.wield(book, ch.useHand);

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('petShell', {
   onFileWindows:on('world:files'),
   onFileNote:on('world:fileNote'),
   onDesktopState:on('desktop:state'),
+  onLife:on('world:life'),
   onCutout:on('desktop:cutout'),
   onHabitat:on('desktop:habitat'),
   desktopAction:(id:number,action:string)=>ipcRenderer.invoke('desktop:action',id,action),
