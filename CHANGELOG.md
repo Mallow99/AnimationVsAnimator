@@ -3,7 +3,17 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
-## 2026-10-08 — Complete physical/social life and Pet Quality acceptance
+## 2026-10-08 — Research Pet Quality Update 2
+
+- Added a source-backed proposal grounded in animation principles, offline decision continuity,
+  group steering/turn-taking, official Box2D contacts and People Playground object properties.
+- Ranked native acceptance, attention/motion, resumable routines, social history/timing, contact
+  fidelity and useful item candidates; included measurable acceptance and clutter/ownership checks.
+- Linked the research from roadmap/handoff. Research only: no runtime changes or new integration.
+- Verified source content and local document links; git diff whitespace check passed. The completed
+  implementation (`7a9e0a0`) and its 140 checks/34m52s soak remain the acceptance baseline.
+
+## 2026-10-08 — Complete physical/social life and Pet Quality acceptance (`7a9e0a0`)
 
 - Replaced seat slides with brace/lift/small scoot/settle motion and fixed spawn walking references.
   Group conversations share turns, listening and distinct preset replies; ordinary chat includes

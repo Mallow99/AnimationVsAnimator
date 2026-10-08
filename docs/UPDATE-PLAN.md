@@ -24,6 +24,7 @@ See [PET-QUALITY.md](PET-QUALITY.md) for the item audit, evidence and limitation
 
 The owner requested research for **Pet Quality Update 2** after finishing this update. That research
 is a separate recommendation, not a new implementation milestone. No integration work resumes now.
+The ordered, source-backed proposal is [PET-QUALITY-2-RESEARCH.md](PET-QUALITY-2-RESEARCH.md).
 
 The existing five-update plan stays below for context. Workshop and Household are built on
 `codex/roadmap-continuation`, stacked on `codex/desktop-life`; PR #3 remains the continuation PR.

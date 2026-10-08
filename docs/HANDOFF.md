@@ -57,6 +57,9 @@ items resolve against peer snapshots. Undo is one session-only object, books ret
 main-display limits remain. A soak checks exercised paths, not every possible native/user action.
 
 Next concrete step: owner hardware acceptance, then review the separate Pet Quality 2 research.
+Research only: [PET-QUALITY-2-RESEARCH.md](PET-QUALITY-2-RESEARCH.md) ranks attention/motion,
+activity continuity, social timing, physical affordances and useful everyday objects, with primary
+sources and acceptance criteria. No Update 2 implementation has started.
 
 ## Previous update: interaction and rendering cleanup
 
