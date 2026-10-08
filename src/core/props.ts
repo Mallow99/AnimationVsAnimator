@@ -1,4 +1,4 @@
-import { convexHull, paddedVertices, polygonDistance, overlapOffset } from './geometry';
+import { convexHull, paddedVertices, polygonDistance, overlapOffset, compoundOffset, sweepConvex } from './geometry';
 // His drawings coming to life, Animator vs. Animation style. A ball he drew turns into a
 // real ball (he kicks it around; you can grab and throw it). Boxes, ramps, ledges and bridges
 // turn into real things with weight: they fall, tip over, stack, and you can drag them around.
@@ -14,6 +14,7 @@ import { convexHull, paddedVertices, polygonDistance, overlapOffset } from './ge
 import { collide, collidePlatforms, integrate, makePoint, platY, solveSticks, type Bounds, type Platform, type Point, type Stick } from './physics';
 import { DOODLE_LIFE, type Doodle } from './doodles';
 import type { Vec } from './math';
+import lampDef from './props/lamp.json';
 import chairDef from './props/chair.json';
 import couchDef from './props/couch.json';
 import bookshelfDef from './props/bookshelf.json';
@@ -79,7 +80,7 @@ export class Ball {
         x: p.x + radius * Math.cos((i * Math.PI) / 8),
         y: p.y + radius * Math.sin((i * Math.PI) / 8),
       }));
-      const offset = overlapOffset(circle, solid.collisionHull);
+      const offset = solid.contactOffset(circle);
       if (!offset) continue;
       const len = Math.hypot(offset.x, offset.y),
         nx = offset.x / len,
@@ -109,9 +110,13 @@ export type ThingKind = 'box' | 'ledge' | 'ramp' | 'bridge' | 'prop';
 export interface PropDef {
   id: string; name: string; about: string;
   /** What he does with it: sit on it, watch it, ride it, or just stand on it. */
-  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'work' | 'storage' | 'none';
+  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'work' | 'storage' | 'light' | 'none';
   /** Its solid shape: points around its edge, clockwise on screen. Edges facing up are things to stand on. */
   outline: [number, number][];
+  /** Optional convex physical parts, keeping leg/handle gaps open. Legacy files use their hull. */
+  collision?: [number, number][][];
+  /** Relative material density; size still determines mass. */
+  density?: number;
   actions?: PropAction[];
   seats?: number;
   drawable?: boolean;
@@ -199,12 +204,17 @@ export function parsePropDef(raw: unknown): PropDef | null {
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 160) : '',
-    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' || o.use === 'work' || o.use === 'storage' ? o.use : 'none',
-    actions: Array.isArray(o.actions) ? o.actions.filter((s): s is PropAction => PROP_ACTIONS.includes(s)).slice(0,8) : [],
+    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' || o.use === 'work' || o.use === 'storage' || o.use === 'light' ? o.use : 'none',
+    actions: Array.isArray(o.actions) ? o.actions.filter((s): s is PropAction => PROP_ACTIONS.includes(s)).slice(0,PROP_ACTIONS.length) : [],
     seats: Math.round(num(o.seats, id === 'couch' ? 5 : 1, 1, 5)),
     move: o.move === 'carry' || o.move === 'drag' || o.move === 'push' ? o.move : undefined,
     drawable: o.drawable !== false, refinable: o.refinable !== false, movable: o.movable !== false,
-    outline, seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
+    outline, collision: Array.isArray(o.collision) ? o.collision.slice(0,12).flatMap(raw=>{
+      if(!Array.isArray(raw))return [];const points=raw.slice(0,12).map(pt).filter((p):p is [number,number]=>!!p);
+      const hull=convexHull(points.map(([x,y])=>({x,y})));
+      return hull.length>=3?[hull.map(p=>[p.x,p.y] as [number,number])]:[];
+    }) : undefined,
+    density: num(o.density,1,.1,10), seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
     wheels: Array.isArray(o.wheels) ? o.wheels.filter((i): i is number => Number.isInteger(i) && i >= 0 && i < outline.length) : undefined,
     wheel: num(o.wheel, 4, 1, 20), friction: num(o.friction, 0.6, 0, 1),
     sprite,
@@ -283,6 +293,9 @@ export class Thing {
   friction = 0.6;
   /** A TV: switched on (he's watching). */
   on = false;
+  manualLight:boolean|null=null;
+  lightUsers=new Set<string>();
+  syncLight(){if(this.def?.use==='light')this.on=this.manualLight??this.lightUsers.size>0;}
   channel = 0;
   /** A TV with its console on: what's on screen instead of a show (his own game, or the board you two are playing). */
   arcade: Runner | null = null;
@@ -362,6 +375,11 @@ export class Thing {
     }
     return this.visualContour.map((p) => this.toWorld(p.x, p.y));
   }
+
+  get collisionHulls(): Vec[][] {
+    return this.def?.collision?.length ? this.def.collision.map(part=>part.map(([x,y])=>this.toWorld(x,y))) : [this.collisionHull];
+  }
+  contactOffset(hull:Vec[]) {return compoundOffset([hull],this.collisionHulls);}
 
   /** Where he sits, if it's a seat. */
   get seatAt(): Vec | null { return this.def?.seat ? this.toWorld(this.def.seat[0], this.def.seat[1]) : null; }
@@ -671,6 +689,10 @@ export class Thing {
       if (st.fill) { ctx.fillStyle = st.fill; ctx.fill(); }
       if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * this.scale; ctx.stroke(); }
     }
+    if(def.use==='light'&&this.on){
+      const a=this.toWorld(9,11),b=this.toWorld(33,11),d=this.toWorld(29,18),e=this.toWorld(13,18);
+      ctx.fillStyle='#ffe3a0';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(d.x,d.y);ctx.lineTo(e.x,e.y);ctx.closePath();ctx.fill();
+    }
     if (flat) this.drawScreen(ctx, now, true);
     if (propActions(def).includes('watch')) { const p = this.toWorld(this.facing > 0 ? def.bounds![2] : def.bounds![0], 14);ctx.fillStyle='#e7d3a0';ctx.fillRect(p.x-2,p.y,4*this.scale,4*this.scale); }
     ctx.restore();
@@ -933,9 +955,11 @@ export function rampSlopeId(n: number, up: 1 | -1) { return PROP_ID + n * 64 + (
 export const reserveThing = () => nextProp++;
 
 /** The props that come with him (in his inventory; none are out until you drop them in). */
-export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef, workbenchDef, storageDef, bookshelfDef].map((d) => parsePropDef(d)!);
+export const BUILTIN_PROPS: PropDef[] = [lampDef,chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef, workbenchDef, storageDef, bookshelfDef].map((d) => parsePropDef(d)!);
 
 export class Props {
+  private contactTick = 0;
+  private contacts = new Map<string,{nx:number;ny:number;anchor:number;seen:number}>();
   balls: Ball[] = [];
   things: Thing[] = [];
   /** Wet ink: a line he's drawing right now that's already solid enough to stand on (a ramp or bridge on its way). */
@@ -996,14 +1020,15 @@ export class Props {
     return t;
   }
   /** Which props are where (saved between runs). */
-  savePlaced() { return this.placed.map(t => ({ id: t.def!.id, storageKey: t.storageKey, x: t.center.x, y: t.center.y, tilt: t.tilt, facing: t.facing, consoleConnected: t.consoleConnected, scale: t.scale, ...(t.ink ? { ink: t.ink, def: t.def } : {}), ...(t.art ? { art: t.art } : {}) })); }
-  restore(p: { id: string; storageKey?: string; x: number; y?: number; tilt?: number; scale?: number; facing?: number; consoleConnected?: boolean; ink?: unknown; def?: unknown; art?: unknown }, floor: number, scale: number) {
+  savePlaced() { return this.placed.map(t => ({ id: t.def!.id, storageKey: t.storageKey, x: t.center.x, y: t.center.y, tilt: t.tilt, facing: t.facing, manualLight:t.manualLight, consoleConnected: t.consoleConnected, scale: t.scale, ...(t.ink ? { ink: t.ink, def: t.def } : {}), ...(t.art ? { art: t.art } : {}) })); }
+  restore(p: { id: string; storageKey?: string; x: number; y?: number; tilt?: number; scale?: number; facing?: number; manualLight?: boolean|null; consoleConnected?: boolean; ink?: unknown; def?: unknown; art?: unknown }, floor: number, scale: number) {
     if (p.def) { const def = parsePropDef({ ...p.def as object, type: 'prop' }); if (def) this.defs.set(def.id, def); }
     const def = this.defs.get(p.id); if (!def) return null;
     const sc = Number.isFinite(p.scale) ? Math.max(0.2, Math.min(4, p.scale!)) : scale;
     const t = this.spawn(p.id, p.x, floor - Math.max(...def.outline.map(q => q[1])) * sc - 2, sc, p.art)!;
     if (Number.isFinite(p.y) && Math.abs(p.y!) < 20000) t.place({ x: p.x, y: p.y! }, Number.isFinite(p.tilt) ? p.tilt! : 0);
     if (typeof p.storageKey === 'string' && /^[a-z0-9-]{1,60}$/.test(p.storageKey)) t.storageKey = p.storageKey;
+    t.manualLight=typeof p.manualLight==='boolean'?p.manualLight:null;t.syncLight();
     t.consoleConnected = p.consoleConnected === true;
     t.facing = p.facing === -1 ? -1 : 1;
     t.ink = parseProject(p.ink); return t;
@@ -1021,9 +1046,14 @@ export class Props {
    * Returns true if any platform moved (so his ground gets updated).
    */
   update(dt: number, now: number, bounds: Bounds, world: Platform[], wins?: WinRect[]) {
+    this.contactTick++;
+    for(const [key,c]of this.contacts)if(this.contactTick-c.seen>2)this.contacts.delete(key);
+    // Only fast translation needs a swept pass. Rotation continues through discrete contacts.
+    const fast=this.things.some(t=>!t.held&&!t.movingBy&&t.points.some(p=>Math.hypot(p.x-p.px,p.y-p.py)>3));
+    const starts=fast?new Map(this.things.filter(t=>t.rigid).map(t=>[t.n,{center:t.center,tilt:t.tilt,hulls:t.collisionHulls}])):null;
     for (const t of this.things) if (t.pong && t.on) t.pong.step(dt);
     const before = this.things.length;
-    for (const t of this.things) if (t.ink && t.ink.remaining >= 0 && !t.held && !t.movingBy && !t.sitters.size && !t.watchers.size && !t.players.length && !t.load.size) t.ink.remaining = Math.max(0, t.ink.remaining - dt);
+    for (const t of this.things) if (t.ink && t.ink.remaining >= 0 && !t.held && !t.movingBy && !t.sitters.size && !t.watchers.size && !t.players.length && !t.lightUsers.size && !t.load.size) t.ink.remaining = Math.max(0, t.ink.remaining - dt);
     this.things = this.things.filter(t => t.ink ? t.ink.remaining !== 0 : t.forever || !!t.held || !!t.sitters.size || !!t.load.size || now - t.doodle.born < DOODLE_LIFE);
     this.balls = this.balls.filter((b) => !!b.heldBy || now - b.doodle.born < DOODLE_LIFE);
     const moved = this.things.length !== before || this.things.length > 0;
@@ -1040,6 +1070,7 @@ export class Props {
       this.restOnEachOther();
     }
     for (const t of this.things) t.end(bounds);
+    if(starts)this.sweepSolids(starts);
     for (let i=0;i<12;i++) {
       if (!this.separateSolids()) break;
       for (const t of this.things) t.end(bounds);
@@ -1051,6 +1082,25 @@ export class Props {
     return moved;
   }
 
+  private sweepSolids(starts:Map<number,{center:Vec;tilt:number;hulls:Vec[][]}>) {
+    for(let i=0;i<this.things.length;i++)for(let j=i+1;j<this.things.length;j++) {
+      const a=this.things[i],b=this.things[j],sa=starts.get(a.n),sb=starts.get(b.n);
+      if(!sa||!sb||a.held||b.held||a.movingBy||b.movingBy||Math.abs(a.tilt-sa.tilt)>.15||Math.abs(b.tilt-sb.tilt)>.15)continue;
+      const ac=a.center,bc=b.center,delta={x:ac.x-sa.center.x-bc.x+sb.center.x,y:ac.y-sa.center.y-bc.y+sb.center.y};
+      if(Math.hypot(delta.x,delta.y)<=3)continue;
+      let first:ReturnType<typeof sweepConvex>=null;
+      for(const x of sa.hulls)for(const y of sb.hulls){const hit=sweepConvex(x,y,delta);if(hit&&(!first||hit.time<first.time))first=hit;}
+      if(!first)continue;
+      const wa=a.stuck?0:1,wb=b.stuck?0:1;if(!wa&&!wb)continue;
+      const closing=delta.x*first.normal.x+delta.y*first.normal.y;
+      for(const [t,w,sign]of [[a,wa,1],[b,wb,-1]] as const)for(const p of t.points){
+        const fraction=w/(wa+wb),dx=-delta.x*(1-first.time)*fraction*sign,dy=-delta.y*(1-first.time)*fraction*sign;
+        p.x+=dx;p.px+=dx;p.y+=dy;p.py+=dy;
+        if(closing<0){p.px+=first.normal.x*closing*fraction*sign;p.py+=first.normal.y*closing*fraction*sign;}
+      }
+    }
+  }
+
   /** Resolve whole-body overlap, with no positional correction added as artificial velocity. */
   private separateSolids() {
     let moved = false;
@@ -1059,7 +1109,7 @@ export class Props {
         const a = this.things[i],
           b = this.things[j];
         if (!a.rigid || !b.rigid) continue;
-        const offset = overlapOffset(a.collisionHull, b.collisionHull);
+        const offset = compoundOffset(a.collisionHulls, b.collisionHulls);
         if (!offset) continue;
         const length = Math.hypot(offset.x, offset.y);
         if (length < 0.001) continue;
@@ -1070,7 +1120,7 @@ export class Props {
           const hull = t.collisionHull;
           const area = (Math.max(...hull.map(p=>p.x))-Math.min(...hull.map(p=>p.x))) *
             (Math.max(...hull.map(p=>p.y))-Math.min(...hull.map(p=>p.y)));
-          return 1 / Math.max(1, area / 1000 * (t.def?.move === 'push' ? 2 : 1));
+          return 1 / Math.max(1, area / 1000 * (t.def?.density ?? 1) * (t.def?.move === 'push' ? 2 : 1));
         };
         // A supported lower body cannot be corrected down through its support. Resolve the upper
         // body's penetration fully instead of splitting it then lifting the lower one into it again.
@@ -1090,7 +1140,20 @@ export class Props {
           closing = (av.x - bv.x) * nx + (av.y - bv.y) * ny;
         const tangent = -(av.x-bv.x)*ny + (av.y-bv.y)*nx;
         const friction = Math.sqrt(a.friction*b.friction);
-        const drag = Math.max(-Math.max(0,-closing)*friction, Math.min(Math.max(0,-closing)*friction, tangent));
+        const key=`${a.n}:${b.n}`,ac=a.center,bc=b.center,coordinate=-(ac.x-bc.x)*ny+(ac.y-bc.y)*nx;
+        let contact=this.contacts.get(key);
+        const controlled=!!(a.held||b.held||a.movingBy||b.movingBy);
+        if(!contact||contact.nx*nx+contact.ny*ny<.98||controlled) {
+          contact={nx,ny,anchor:coordinate,seen:this.contactTick};this.contacts.set(key,contact);
+        }
+        contact.seen=this.contactTick;
+        // A friction anchor resists tiny accumulated slip at rest. Its force is bounded by the
+        // contact load, so a push breaks static friction instead of secretly pinning the bodies.
+        const limit=(Math.max(0,-closing)+Math.abs(ny)*2000/120)*friction;
+        const desired=tangent+(controlled?0:(coordinate-contact.anchor)*120);
+        const drag=Math.max(-limit,Math.min(limit,desired));
+        if(Math.abs(desired)>limit)contact.anchor=coordinate;
+        if(this.contacts.size>256)this.contacts.delete(this.contacts.keys().next().value!);
         for (const [t, w, sign] of [
           [a, wa, 1],
           [b, wb, -1],

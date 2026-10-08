@@ -10,11 +10,12 @@ export class EverydayItem extends Skill {
   private fetch: FetchItem | null = null;
   private elapsed = 0;
   private stowing = false;
-  constructor(private use: 'sip' | 'exercise' | 'play', readonly name: 'sip' | 'exercise' | 'yoyo') {
-    super(); this.tool = new Tool(use as ItemUse);
+  constructor(private use: 'sip' | 'exercise' | 'play', readonly name: 'sip' | 'exercise' | 'yoyo',private original:Item|null=null,elapsed=0) {
+    super(); this.tool = new Tool(use as ItemUse);this.elapsed=elapsed;
   }
+  continuation(c:Ctx){const item=this.item,elapsed=this.elapsed;return item&&!this.stowing?()=>c.items.list.includes(item)&&item.where!=='cursor'?new EverydayItem(this.use,this.name,item,elapsed):null:null;}
   start(c: Ctx) {
-    this.item = c.items.find(this.use);
+    this.item = this.original ?? c.items.find(this.use);
     if (!this.item || this.item.where === 'cursor') { c.say(`I need my ${this.use === 'sip' ? 'cup' : this.use === 'exercise' ? 'dumbbell' : 'yo-yo'}.`, 1.5); this.item = null; return; }
     this.tool.item = this.item;
     if (this.item.where === 'world') { this.fetch = new FetchItem(this.item, false); this.fetch.start(c); }
@@ -55,6 +56,6 @@ export class EverydayItem extends Skill {
   }
   stop(c: Ctx) {
     this.fetch?.stop(c); c.char.handsAt = null; c.char.handTarget = null;
-    if (this.item) { this.item.yoyoDrop = 0; this.item.aim = null; if (this.item.where === 'hand' && !c.items.stow(this.item)) c.items.drop(this.item,0,0); }
+    if (this.item&&c.items.list.includes(this.item)) { this.item.yoyoDrop = 0; this.item.aim = null; if (this.item.where === 'hand' && !c.items.stow(this.item)) c.items.drop(this.item,0,0); }
   }
 }

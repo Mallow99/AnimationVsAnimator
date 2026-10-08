@@ -1,3 +1,4 @@
+import { ReadingLight } from './domestic';
 import { Skill, arrive, type Ctx } from "./context";
 import { DoodleSkill } from "../skills";
 import { DrawTool } from "./draw-tool";
@@ -112,6 +113,7 @@ export class DeskWork extends Skill {
   private drawing: DoodleSkill | null = null;
   private chair: Thing | null = null;
   private savedBlueprint = false;
+  private light=new ReadingLight();
   constructor(
     private desk: Thing,
     private id = "katana",
@@ -127,7 +129,8 @@ export class DeskWork extends Skill {
     )
       return true;
     if (!this.drawing) {
-      if (this.t > 15 || !c.char.useHand) return true;
+      if (this.t > 25 || !c.char.useHand) return true;
+      if(!this.light.prepare(c,dt))return false;
       const paper = this.desk.toWorld(28, -3);
       const chair = propsOf(c, "seat").find(
         (t) =>
@@ -198,6 +201,7 @@ export class DeskWork extends Skill {
     return done;
   }
   stop(c: Ctx) {
+    this.light.stop(c);
     this.drawing?.stop(c);
     if (this.chair) {
       this.chair.leaveSeat(c.who);

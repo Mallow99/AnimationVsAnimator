@@ -13,6 +13,7 @@ import type { LimbId } from './body';
 import { preferredSlots, type Item, type ItemUse } from './items';
 
 import { Skill, arrive, type Ctx, type LookMode } from './skills/context';
+import { Handling } from './skills/handling';
 import { STANCES, SwordMove, type MoveName } from './skills/swordplay';
 export { Skill, DEFAULT_LESSONS, type Ctx, type World, type Lessons, type LookMode } from './skills/context';
 export { propsOf, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PlayBoardGame } from './skills/props';
@@ -587,6 +588,8 @@ export class Tool {
   /** Why he couldn't get it: you have it, it's lying around, he has no hands, he doesn't own one. */
   why: 'gone' | 'lying' | 'nohands' | 'none' | '' = '';
   private t = 0;
+  private taking = new Handling();
+  private storing = new Handling();
   constructor(private use: ItemUse) {}
 
   fetch(c: Ctx, dt: number): 'working' | 'ready' | 'none' {
@@ -595,14 +598,13 @@ export class Tool {
     if (!hand) { this.why = 'nohands'; return 'none'; }
     const it = this.item ??= c.items.find(this.use);
     if (!it) { this.why = 'none'; return 'none'; }
+    if(!c.items.list.includes(it)){this.why='gone';return 'none';}
     if (it.where === 'cursor') { this.why = 'gone'; return 'none'; }
     if (it.where === 'world') { this.why = 'lying'; return 'none'; }
     if (it.where === 'hand') { ch.handTarget = null; return 'ready'; }
     // On his belt: reach down to it and pull it out.
     const slot = c.items.slotPose(ch, it.slot).at;
-    ch.handTarget = { x: slot.x, y: slot.y };
-    const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
-    if (Math.hypot(h.x - slot.x, h.y - slot.y) < 6 * ch.scale || this.t > 0.7) {
+    if (this.taking.reach(c,slot,dt)) {
       c.items.toHand(it, hand);
       ch.handTarget = null;
       c.sound?.('pickup');
@@ -627,9 +629,7 @@ export class Tool {
     const slot = preferredSlots(it.def).find((s) => !c.items.belt[s]);
     if (slot === undefined) { ch.handTarget = null; return true; } // belt's full: he just keeps holding it
     const at = c.items.slotPose(ch, slot).at;
-    ch.handTarget = { x: at.x, y: at.y };
-    const h = ch.body.j[it.hand === 'L' ? 'handL' : 'handR'];
-    if (Math.hypot(h.x - at.x, h.y - at.y) < 6 * ch.scale || this.stowT > 0.7) {
+    if (this.storing.reach(c,at,dt)) {
       c.items.stow(it);
       ch.handTarget = null;
       c.sound?.('pickup');
@@ -931,6 +931,7 @@ export class FetchItem extends Skill {
   private phase: 'go' | 'grab' | 'stow' = 'go';
   private tool: Tool;
   private next = 0;
+  private handling = new Handling();
   constructor(private item: Item, private comment = true) { super(); this.tool = new Tool(item.def.use); this.tool.item = item; }
   start(c: Ctx) { c.look = 'target'; }
   update(c: Ctx, dt: number) {
@@ -954,15 +955,13 @@ export class FetchItem extends Skill {
       return false;
     }
     // Bend down and grab it by the handle.
-    ch.handTarget = { x: it.at.x, y: it.at.y };
-    const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
-    if (Math.hypot(h.x - it.at.x, h.y - it.at.y) < 7 * ch.scale) {
+    if (this.handling.reach(c,it.at,dt)) {
       c.items.toHand(it, hand);
       ch.handTarget = null;
       c.sound?.('pickup');
       if (this.comment && chance(0.5)) c.say(pick(['mine.', 'got it', 'there you are']), 1.2);
       this.phase = 'stow';
-    } else if (this.t - this.next > 3) { ch.handTarget = null; this.phase = 'go'; }
+    } else if (this.t - this.next > 3) { ch.handTarget = null; this.phase = 'go'; this.handling=new Handling(); }
     return false;
   }
   stop(c: Ctx) { c.char.handTarget = null; }

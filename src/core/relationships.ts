@@ -5,6 +5,7 @@ export interface Relationship {
   care:number;
   rivalry:number;
   lastShared:string;
+  recent:string[];
   activities: Record<string, number>;
   vulnerable: Record<string, number>;
   disagreements: number;
@@ -12,7 +13,7 @@ export interface Relationship {
 }
 export function relationship(bond = 0.4): Relationship {
   return {
-    bond,cooperation:.5,care:0,rivalry:0,lastShared:"",
+    bond,cooperation:.5,care:0,rivalry:0,lastShared:"",recent:[],
     activities: {},
     vulnerable: {},
     disagreements: 0,
@@ -38,6 +39,7 @@ export function parseRelationship(raw: unknown): Relationship | null {
     );
   for(const key of ['cooperation','care','rivalry'] as const)if(typeof o[key]==='number'&&Number.isFinite(o[key]))r[key]=Math.max(0,Math.min(1,o[key] as number));
   r.lastShared=typeof o.lastShared==='string'?o.lastShared.slice(0,40):'';
+  r.recent=Array.isArray(o.recent)?o.recent.filter((v):v is string=>typeof v==='string'&&/^[a-z0-9:-]{1,40}$/.test(v)).slice(-8):[];
   r.activities = counts(o.activities);
   r.vulnerable = counts(o.vulnerable);
   r.disagreements =

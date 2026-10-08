@@ -3,6 +3,25 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-08 — Pet Quality 2: contact, handling, continuity and domestic life
+
+- Added bounded compound furniture contours, persistent resting friction, density-weighted contact
+  and swept fast translation; preserved dragging, pushing, throws and custom artwork fallback.
+- Added reusable notice/reach/grip handling, saved original-book bookmarks and one safe interrupted
+  activity that resumes after brief reactions. Explicit commands and lost resources cancel it.
+- Improved directed group turns, listener timing and saved shared history; conversations can continue
+  when one member leaves. Added an automatic/manual lamp, blanket, snack box and actual-ball catch.
+- Hardened ownership cleanup, object hit-testing and body selection through shared furniture; All
+  activities choose an eligible initiator and shared catch/lamp commands start once.
+- Passed typecheck, 140 existing regressions, full simulation, actual Chromium/Linux Electron input,
+  18 focused regressions (lamp intent check added for this commit), and three two-hour simulated
+  feature soaks (seeds 7/21: 7,274 audits each; seed 17: 7,200 including unattended life), no issues.
+  Browser visual fixtures cover all presets and both facings; final visual/expanded acceptance continues.
+- Furnished Linux Electron median PSS about 321 MiB, 339 after twelve Settings cycles, 385 after another
+  minute. No Mac estimate or leak guarantee. Native hardware and rotation/extreme-speed limits remain.
+- Owner expanded Update 2 with personalized motion/names, richer friendships/gifts, handheld peer
+  play and developing satchel details; those features are the next working milestone.
+
 ## 2026-10-08 — Start Pet Quality 2 with bounded rendering and resource evidence
 
 - Recorded the owner's authorization and ordered implementation/acceptance checklist.

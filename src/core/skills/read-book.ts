@@ -5,6 +5,8 @@ import type { Thing } from '../props';
 import { propsOf, SitOnProp } from './props';
 import { FetchItem, Tool } from '../skills';
 import { clamp, smooth, rand } from '../math';
+import { ReadingLight } from './domestic';
+import { Handling } from './handling';
 
 /** Fetch, open, read at natural page breaks, close, and return the same book. */
 export class ReadBook extends Skill {
@@ -20,12 +22,21 @@ export class ReadBook extends Skill {
   private nextPage = 12;
   private pageTime = -1;
   private reachTime = 0;
+  private returning = new Handling();
+  private light=new ReadingLight();
+  constructor(private original:Item|null=null,elapsed=0){super();this.clock.elapsed=elapsed;this.nextPage=elapsed+12;}
+
+  continuation(c:Ctx) {
+    const book=this.book,elapsed=this.clock.elapsed;
+    if(!book||this.phase==='close'||this.phase==='return')return null;
+    return ()=>c.items.list.includes(book)&&book.where!=='cursor'?new ReadBook(book,elapsed):null;
+  }
 
   start(c: Ctx) {
     if (!c.char.useHand) return;
     // Include loose/shelved books. Never conjure another when the owner is carrying the only one.
     const isBook = (it: Item) => it.def.id === 'book' || it.ink?.source === 'book';
-    this.book = c.items.list.find(it => isBook(it) && it.where !== 'cursor') ??
+    this.book = this.original ?? c.items.list.find(it => isBook(it) && it.where !== 'cursor') ??
       (c.items.list.some(isBook) ? null : c.items.give('book', c.char));
     if (!this.book) { c.say('My book is with you.', 1.5); return; }
     this.shelf = c.props?.placed.filter(t => t.def?.id === 'bookshelf' && !t.held && Math.abs(t.tilt) < 0.35)
@@ -47,6 +58,7 @@ export class ReadBook extends Skill {
       }
       const result = this.tool.fetch(c, dt);
       if (result !== 'ready') return result === 'none' || this.t > 25;
+      if(!this.light.prepare(c,dt))return this.t>25;
       const seat = propsOf(c, 'seat').find(t => t.sitters.has(c.who) || t.sitters.size < t.seatRoom);
       if (seat) { this.seat = new SitOnProp(seat, 3600, ch.facing as 1 | -1); this.seat.start(c); }
       this.phase = 'sit'; this.phaseTime = 0;
@@ -65,16 +77,15 @@ export class ReadBook extends Skill {
       c.look = 'target'; c.lookTarget = this.shelf?.center ?? null;
       if (!this.shelf || !c.props?.things.includes(this.shelf) || this.shelf.held || Math.abs(this.shelf.tilt) > 0.35) return true;
       if (!arrive(c, this.shelf.center.x, 10)) return this.phaseTime > 18;
-      ch.handTarget = this.shelf.toWorld(22, 35);
       this.reachTime += dt;
-      if (this.reachTime < 0.6) return false;
+      if (!this.returning.reach(c,this.shelf.toWorld(22,35),dt)) return false;
       this.returnBook(c); return true;
     }
     if (book.where !== 'hand') return true;
     const n = ch.body.j.neck, sc = ch.scale;
     const ready = smooth(clamp(this.phaseTime / 0.8, 0, 1));
     book.bookTarget = this.phase === 'close' ? 0 : ready;
-    if (this.pageTime >= 0) this.pageTime += dt;
+    if (this.pageTime >= 0) {this.pageTime += dt;if(this.pageTime>=.85){book.bookmark=Math.min(9999,book.bookmark+1);this.pageTime=-1;}}
     const page = this.pageTime >= 0 ? clamp(this.pageTime / 0.85, 0, 1) : 0;
     book.bookPage = page < 1 ? page : 0;
     book.bookReading = true;
@@ -116,8 +127,9 @@ export class ReadBook extends Skill {
   }
   stop(c: Ctx) {
     c.char.handsAt = null; c.char.handTarget = null;
-    this.fetch?.stop(c); this.seat?.stop(c);
+    this.fetch?.stop(c); this.seat?.stop(c);this.light.stop(c);
     if (!this.seat && c.char.mode === 'sit') c.char.standUp();
+    if(this.book&&!c.items.list.includes(this.book))return;
     if (this.book) { this.book.bookTarget = 0; this.book.bookPage = 0; this.book.bookReading = false; }
     // Interruptions stow locally; completing the activity walks back to the shelf first.
     if (this.book?.where === 'hand' && !c.items.stow(this.book)) c.items.drop(this.book, 0, 0);

@@ -80,7 +80,8 @@ not claims that arbitrary stacks, concave geometry or tunneling are solved today
 
 ## Stop point
 
-First collect Mac feedback on the completed update, then decide the final Pet Quality 2 scope using
-these priorities. Keep Chrome/Finder milestones paused. The implementation and original acceptance
+The owner subsequently authorized Pet Quality 2 while away from their Mac. The implementation
+and evidence are tracked in [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md). Collect native hardware
+feedback before resuming integration work. Keep Chrome/Finder milestones paused. The implementation and original acceptance
 results remain in [PET-QUALITY.md](PET-QUALITY.md), with the owner sequence in
 [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).

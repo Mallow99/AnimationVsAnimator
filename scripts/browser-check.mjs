@@ -6,9 +6,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
+import { build } from 'esbuild';
 
 const root = resolve(import.meta.dirname, '..');
 const dist = join(root, 'dist');
+const presetBuild=await build({entryPoints:[join(root,'src/core/presets.ts')],bundle:true,platform:'node',format:'esm',write:false});
+const {BUNDLES,PRESET_ROWS}=await import('data:text/javascript;base64,'+Buffer.from(presetBuild.outputFiles[0].text).toString('base64'));
+const visualPresets=[...BUNDLES,...[0,1,2,3].map(i=>({name:'mix-'+i,look:Object.assign({},...PRESET_ROWS.map(r=>r.variants[i].look)),body:Object.assign({},...PRESET_ROWS.map(r=>r.variants[i].body))}))];
 const server = createServer((req, res) => {
   const file = resolve(dist, '.' + new URL(req.url, 'http://localhost').pathname);
   if (!file.startsWith(dist + '/') || !existsSync(file)) { res.writeHead(404); res.end(); return; }
@@ -283,8 +287,9 @@ try {
   await until(()=>evaluate('!window.cursorWeapon.active && !window.friend.items.list.includes(window.bagGun)'));
   await click('#undoTrash');assert(await evaluate('window.friend.items.list.includes(window.bagGun) && window.bagGun.ammo===2'));
   // Pick that same book up from the world, drag it into the can, then click Undo.
-  await evaluate('window.bagBook.at={x:300,y:240,z:0};window.bagBook.dir={x:0,y:1,z:0};window.bagBook.loosen();window.bagBook.resetMotion()');
-  const grip=await evaluate('({x:window.bagBook.a.x,y:window.bagBook.a.y})');
+  if(await evaluate('window.toolBag.isOpen'))await click('[aria-label="Close bag"]');
+  await evaluate('window.bagBook.at={x:1200,y:window.pet.ctx.world.bounds.floor-18,z:0};window.bagBook.dir={x:0,y:1,z:0};window.bagBook.loosen();window.bagBook.resetMotion();for(let j=0;j<300;j++)for(const p of window.pets)p.update(1/120)');
+  const grip=await evaluate('(() => {const hull=window.bagBook.collisionHull;return {x:hull.reduce((n,p)=>n+p.x,0)/hull.length,y:hull.reduce((n,p)=>n+p.y,0)/hull.length};})()');
   await mouse('mousePressed',grip,true);
   assert(await evaluate('window.toolBag.tools.held?.object===window.bagBook'));
   const bin=await centerOf('#trashCan');
@@ -572,6 +577,52 @@ try {
   })()`);
   await scene('living-duel-spectators');assert(await evaluate('window.pets.slice(2).every(p=>p.char.hp===1 && p.mind.activeSkill?.name!=="duel")'));
   console.log('PASS Living Stickmen browser: rendered five couch seats, brace/lift/shift scoot phases, group listening and spectator-safe combat; live sanity audit clean');
+  // Update 2: stock supplies, actual Activities buttons and physical motion phases.
+  await evaluate(`(() => {
+    window.toolBag.cancel();window.cursorWeapon.detach();
+    for(const p of window.pets){p.mind.reset(p.ctx);for(const item of [...p.items.list])p.items.remove(item);p.command('respawn');p.mind.reset(p.ctx);p.paused=true;p.char.standUp();p.mind.holdUntil=Infinity;p.items.give('book',p.char);p.items.give('bouncy-ball',p.char);}
+    for(const t of [...window.pet.props.things])window.pet.props.remove(t);
+    for(const [i,p]of window.pets.entries()){p.char.placeHome([350,850,650,1030,1240][i]);p.char.hp=1;p.mood.s.energy=.8;p.mood.asleep=false;for(const id of ['blanket','snack-box'])p.items.give(id,p.char);}
+    window.pet.props.spawn('couch',390,innerHeight-57,1);window.pet.props.spawn('lamp',660,innerHeight-31,1);
+    for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);
+    window.toolBag.showFor(window.pets[1],'activities');
+  })()`);
+  assert(await evaluate('Array.from(document.querySelectorAll(".bag-activity")).some(b=>b.textContent.includes("Have a snack"))'));
+  await click('.bag-activity[data-action=snack]');assert(!await evaluate('window.toolBag.isOpen'));
+  await evaluate('for(let j=0;j<600;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  assert(await evaluate('window.pets[1].items.list.some(i=>i.def.id==="snack-box"&&i.snackOpen>0.8)'));
+  await evaluate('window.pets[0].command("do:blanket");window.pets[2].command("do:read");for(let j=0;j<1400;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  await scene('pq2-domestic');
+  for(const [phase,ticks]of [['pause',200],['snack-reach',120],['snack-lower',240]]){
+    await evaluate(`for(let j=0;j<${ticks};j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);await scene('pq2-domestic-'+phase);
+  }
+  await evaluate(`(() => {for(const p of window.pets){p.mind.reset(p.ctx);p.char.standUp();p.char.placeHome(210+window.pets.indexOf(p)*180);p.mood.s.energy=.8;p.mood.asleep=false;p.paused=false;}for(const t of [...window.pet.props.things])window.pet.props.remove(t);for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);if(!window.pet.items.list.some(i=>i.def.id==='bouncy-ball'))window.pet.items.give('bouncy-ball',window.pet.char);window.toolBag.showFor(window.pet,'activities');})()`);
+  assert(!await evaluate('document.querySelector(".bag-activity[data-action=catch]").disabled'),JSON.stringify(await evaluate('window.pets.map(p=>({view:p.view(),why:p.mind.why}))')));
+  await click('.bag-activity[data-action=catch]');assert(!await evaluate('window.toolBag.isOpen'));
+  await evaluate('for(let j=0;j<1800&&window.pet.view().group?.phase!=="do";j++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.paused=true;');
+  assert.equal(await evaluate('window.pet.view().group?.act'),'catch',JSON.stringify(await evaluate('window.pets.map(p=>({mode:p.char.mode,energy:p.mood.s.energy,doing:p.mind.activeSkill?.name,group:p.view().group,why:p.mind.why,items:p.items.list.map(i=>[i.def.id,i.where])}))')));await scene('pq2-catch-ready');
+  for(const [phase,ticks]of [['throw',145],['flight',20],['receive',40]]){await evaluate(`for(let j=0;j<${ticks};j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);await scene('pq2-catch-'+phase);}
+  assert(await evaluate('window.pets.every(p=>p.char.hp===1)'));assert.deepEqual(await evaluate('window.checkSanity()'),[]);
+  await evaluate('for(const p of window.pets)p.mind.reset(p.ctx);window.toolBag.showFor(window.pet,"supplies")');
+  await click('.bag-choice[data-id=blanket]');await click('#bagDetails [data-action=place]');
+  assert(await evaluate('window.toolBag.dragging && !window.toolBag.tools.using && !window.cursorWeapon.active && !window.pet.items.carried?.working'));
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});assert(!await evaluate('window.toolBag.dragging'));
+  console.log('PASS Update 2 browser: real snack/catch buttons, passive blanket transport/cancel, lamp/blanket/snack and catch motion frames, safe spectators and live audit');
+  // Both facings for every bundle and every stance/walk/color/thickness/pixel preset variant.
+  await evaluate('window.pq2PresetBase=structuredClone(window.pet.config)');
+  for(const preset of visualPresets)for(const facing of [-1,1]){
+    await evaluate(`(() => {
+      for(const p of window.pets)p.leaveWorld();
+      const p=window.pet,v=${JSON.stringify(preset)},base=structuredClone(window.pq2PresetBase);
+      p.applyConfig({...base,look:{...base.look,...v.look},body:{...base.body,...v.body},windows:false,dailyRhythm:false,destructible:false});
+      window.pets.splice(0,window.pets.length,p);p.others=[];p.paused=true;p.mind.holdUntil=Infinity;for(const i of [...p.items.list])p.items.remove(i);p.command('respawn');p.char.placeHome(520);
+      for(let j=0;j<600;j++)p.update(1/120);p.char.facing=${facing};p.char.yaw=${facing<0?'Math.PI':'0'};
+      p.items.give('book',p.char);p.paused=false;p.command('do:read');for(let j=0;j<500;j++)p.update(1/120);p.paused=true;
+    })()`);
+    await scene('pq2-preset-'+preset.name.toLowerCase()+'-'+(facing<0?'left':'right'));
+    assert.deepEqual(await evaluate('window.checkSanity()'),[]);
+  }
+  console.log('PASS Update 2 visual fixtures: all appearance/movement variants and four bundles, both facings, original reader book and live audits');
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
   console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close, actual cursor pistol aim/ammo/reload/return, bow charge/release, book rendering, page-fragment images, native-window visit controller and rendering');
   console.log('Screenshot: .build/browser-smoke.png');

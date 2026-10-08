@@ -21,6 +21,7 @@ export interface FighterView {
   group?: import('./skills/group').GroupView;
   partner?: string | null;
   name: string;
+  personality?:import('./config').Personality;
   color: string;
   /** Doing something of his own that he wouldn't drop for a fight (a game, sleeping...). */
   busy: boolean;
@@ -55,6 +56,7 @@ export interface FighterView {
    * meet, in place and ready, or doing it. */
   social: { act: string; phase: 'meet' | 'ready' | 'do' } | null;
   asleep: boolean;
+  energy?:number;
   /** His mood, in a word ('happy', 'angry'...): the other one reads it before asking him anything. */
   mood: string;
 }
@@ -64,7 +66,7 @@ export interface WeaponInfo { id: string; hit: number; cuts: boolean }
 
 export type PeerMsg =
   | {type:'moment';kind:'compare'|'check'}
-  | {type:'toolGift';token:string;def:import('./items').ItemDef;ammo:number;reloadRemaining?:number;ink?:import('./crafting-state').InkProject}
+  | {type:'toolGift';token:string;def:import('./items').ItemDef;ammo:number;reloadRemaining?:number;bookmark?:number;ink?:import('./crafting-state').InkProject}
 
   | { type: 'groupInvite'; plan: import('./skills/group').GroupPlan }
   | { type: 'groupGo'; session: string; epoch: number }

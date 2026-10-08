@@ -58,6 +58,8 @@ An item lives in his wearable satchel. He reaches in to use it, and you can pull
 | `draw`  | draws with it (like his pen). Without a `draw` item, he can't draw at all. |
 | `swing` | swings it like a sword: practice slashes, and at your cursor when he's mad. |
 | `smash` | brings it down overhead like a hammer: on your cursor, or on the window he's standing on. |
+| `rest` | fetches a blanket, rests, folds and stores the original. |
+| `snack` | opens a reusable snack box, takes a quiet snack, closes and stores it. |
 | `throw` | throws it at your cursor, or bounces it off the floor and catches it. Give it a `bounce`. |
 | `shoot` | shoots arrows with it like a bow (see `bow.json`): at your cursor, and in fights from a distance. Draw it with its middle at 0 along, `grip` as long as `length` (so it's centered in his hand), the limbs bowing forward; copy `bow.json` and change the colors. |
 | `none`  | just carries it around. |
@@ -192,7 +194,7 @@ New items include `sponge` (wipe raw pen strokes under the cursor), `eraser` (re
 Their `use` values are `wipe`, `erase`, `color`, `game`, and `connect`.
 
 Props infer their actions from `use` and may also advertise `actions`: `sit`, `watch`, `ride`,
-`paint`, `drawhere`, `refine`, `store`, and `move`. Use `work` with a `screen` paper rectangle for a
+`paint`, `drawhere`, `refine`, `store`, `move`, and `switch`. Use `work` with a `screen` paper rectangle for a
 traced blueprint desk; add the `refine` action for a workbench. Use `storage` for a tool shelf.
 `seats` sets capacity (1–5). `move` may be `carry`, `drag`, or `push`; `movable: false` disables moving.
 `drawable: false` disables blueprint drawing; `refinable: false` keeps a definition as ink.
@@ -235,3 +237,22 @@ preserved when bundled examples improve.
 - What he *does* with each `use` is a "skill" in `src/core/skills.ts` (`SwordSwing`,
   `ThrowItem`, `SitOnProp`, `WatchTV`, `RideScooter`...). A brand-new kind of `use` needs a new
   skill, which is code, not just a file.
+
+
+### Contact contours and reading lamps
+
+`collision` optionally supplies up to 12 convex polygons, each with 3–12 corners `[x,y]` in the
+same coordinates as the art. For example, a tabletop and two separate legs let a small item rest
+between the legs. Each piece is normalized to a convex hull; invalid pieces are ignored.
+Without valid pieces, the existing visible-art convex hull remains the fallback. `outline` still
+defines the rigid body, floor support and platforms, so this is not full concave/rotating physics.
+
+`density` (0.1–10; default 1) changes relative contact weight, together with area and movement type.
+It is not kilograms. Persistent friction contacts resist resting slip but deliberate manipulation
+and impacts can break contact. Swept translation tests cover 3000 px/s against a thin solid; extreme
+rotation and loose-item-to-loose-item sweeps remain outside that guarantee.
+
+`use: "light"` advertises a lamp's `switch` action. The stock lamp shows a lit shade and uses a
+switch at `[18,35]`; custom lamps should keep that switch within reach. Automatic reader/work
+claims are transient. A manual on/off choice is saved; “Use automatic light” clears that override.
+Blanket/snack animations transform stock artwork only; edited artwork stays as supplied.

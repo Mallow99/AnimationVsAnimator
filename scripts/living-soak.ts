@@ -16,12 +16,12 @@ const cfg={...structuredClone(DEFAULT_CONFIG),windows:false,dailyRhythm:false,de
 let pets:Pet[]=[];
 function create(){const first=new Pet(bounds,cfg,{identity:'pet-0'});return [first,...[1,2,3,4].map(id=>new Pet(bounds,companionConfig(cfg,id),{props:first.props,identity:`pet-${id}`}))];}
 pets=create();
-let active=pets,elapsed=0,audits=0,step=0;
+let active=pets,elapsed=0,audits=0,step=0,nextAudit=1;
 const coverage:{feature:string;seconds:number;result:string}[]=[];
 function peers(){for(const p of pets){p.others=active.includes(p)?active.filter(q=>q!==p):[];p.ownsProps=p===active[0];if(active.includes(p))p.enterWorld();}}
 function audit(){audits++;assert.deepEqual(checkSanity(pets,active),[],`live audit at ${elapsed.toFixed(2)}s`);for(const p of active){const h=p.char.body.j.hip;assert(h.x>=bounds.left-15&&h.x<=bounds.right+15&&h.y>=bounds.top-200&&h.y<=bounds.floor+15,`${p.config.name} left the desktop`);}}
-function run(seconds:number,observe=()=>{}){
- for(let i=0;i<Math.ceil(seconds/dt);i++){for(const p of active)p.update(dt);observe();elapsed+=dt;if(++step%120===0)audit();}
+function run(seconds:number,observe=()=>{},frameDt=dt){
+ for(let i=0;i<Math.ceil(seconds/frameDt);i++){for(const p of active)p.update(frameDt);observe();elapsed+=frameDt;step++;if(elapsed>=nextAudit){audit();nextAudit=elapsed+1;}}
 }
 function record(feature:string,at:number,result:string){coverage.push({feature,seconds:Number((elapsed-at).toFixed(2)),result});console.log(`PASS ${feature}: ${result}`);}
 function room(props:[string,number][]=[]){
@@ -35,7 +35,7 @@ function commands(feature:string,requests:[number,string][],seconds=65){
  const at=elapsed,seen=new Map<number,Set<string>>();for(const [id,cmd]of requests){seen.set(id,new Set());pets[id].command(`do:${cmd}`);}
  run(seconds,()=>{for(const [id]of requests){const name=pets[id].mind.activeSkill?.name;if(name)seen.get(id)!.add(name);}});
  for(const [id,cmd]of requests){
-  const expected=cmd.startsWith('group:')||['pong','carrytogether'].includes(cmd)?'group':cmd.startsWith('drawitem:')||cmd==='drawgun'?'drawtool':cmd.startsWith('drawprop:')?'drawfurniture':['readingcorner','workcorner'].includes(cmd)?'arrange':['passtool','comparedrawings','checkfriend'].includes(cmd)?'moment':cmd;
+  const expected=cmd.startsWith('group:')||['pong','catch','carrytogether'].includes(cmd)?'group':cmd.startsWith('drawitem:')||cmd==='drawgun'?'drawtool':cmd.startsWith('drawprop:')?'drawfurniture':['readingcorner','workcorner'].includes(cmd)?'arrange':['passtool','comparedrawings','checkfriend'].includes(cmd)?'moment':cmd;
   assert(seen.get(id)!.has(expected),`${feature}: ${cmd} never started its requested skill (${[...seen.get(id)!]})`);
  }
  for(const p of pets)p.mind.reset(p.ctx);run(2);audit();record(feature,at,'started, observed, completed or explicitly stopped; claims and ownership clean');
@@ -54,7 +54,7 @@ for(const def of pets[0].items.defs.values()){
  assert(tools.trashObject(other,item));assert(!other.items.list.includes(item));assert(tools.undo({x:1050,y:700}));
  assert(other.items.list.includes(item));other.giveBack(item);run(1);audit();
 }
-record('all 19 stock item lifecycles',at,'passive take/move, cancel, pass, trash/undo, store, original identity retained');
+record(`all ${pets[0].items.defs.size} stock item lifecycles`,at,'passive take/move, cancel, pass, trash/undo, store, original identity retained');
 // Every furniture definition is placed, dragged and released through the same path.
 room();at=elapsed;
 for(const def of pets[0].props.defs.values()){
@@ -62,9 +62,12 @@ for(const def of pets[0].props.defs.values()){
  assert(tools.release({x:1200,y:560},{x:100,y:0}));run(3);
  const t=pets[0].props.placed.find(t=>t.def?.id===def.id)!;assert(t);assert(tools.trashObject(pets[0],t));assert(tools.undo({x:1200,y:650}));run(2);pets[0].props.remove(t);
 }
-record('all nine stock furniture lifecycles',at,'place, rigid dragging, release, settle, trash/undo');
+record(`all ${pets[0].props.defs.size} stock furniture lifecycles`,at,'place, rigid dragging, release, settle, trash/undo');
 room([['bookshelf',1100],['couch',650]]);
 commands('five parallel everyday activities',[[0,'sip'],[1,'exercise'],[2,'yoyo'],[3,'handheld'],[4,'read']],75);
+room([['couch',650],['lamp',470]]);for(const p of pets)for(const id of ['blanket','snack-box'])p.items.give(id,p.char);
+commands('blanket rest, snack and reading light',[[0,'blanket'],[1,'snack'],[2,'read']],95);
+room();pets[0].items.give('bouncy-ball',pets[0].char);commands('catch with three spectators',[[0,'catch']],35);assert(pets.every(p=>p.char.hp===1));
 room([['bookshelf',650]]);commands('book open/read/page/close/return',[[0,'read']],360);
 room([['couch',650],['tv',950]]);commands('TV and Othello invitation',[[0,'watchtv'],[1,'videogame'],[2,'playgame']],45);
 room([['canvas',450],['desk',650],['workbench',1000]]);commands('painting, blueprint and drawing',[[0,'paint'],[1,'deskwork'],[2,'drawitem:katana'],[3,'drawprop:chair'],[4,'drawgun']],80);
@@ -107,6 +110,8 @@ boxes[4].hit(boxes[4].center.x,boxes[4].center.y,700,-350);run(10);assert(Math.h
 pets[0].props.spawn('couch',900,760,1);const desk=pets[0].props.spawn('desk',1040,730,1)!;desk.place({x:1040,y:745},.4);run(30);
 record('stacking, impact and leaning',at,'resting stack drift <0.5px; impact moves it; mixed contact remains finite');
 // Finish in ordinary unattended life; choices are no longer held by the fixture.
-for(const p of active){p.paused=false;p.mind.holdUntil=0;p.mood.s.energy=.65;}run(180);audit();
-writeFileSync('.build/living-soak-report.json',JSON.stringify({seed:Number(process.env.LIVING_SOAK_SEED??21),simulatedSeconds:Number(elapsed.toFixed(2)),audits,coverage,issues:[]},null,2));
-console.log(`PASS scheduled Living Stickmen soak: ${elapsed.toFixed(1)} simulated seconds, ${audits} live audits, ${coverage.length} feature phases; no issues. Report: .build/living-soak-report.json`);
+room([['couch',750],['bookshelf',1050],['lamp',500],['tv',1400]]);
+const tailDt=Number(process.env.LIVING_SOAK_TAIL_FPS??120)===30?1/30:dt;at=elapsed;
+for(const p of active){p.paused=false;p.mind.holdUntil=0;p.mood.s.energy=.65;}run(Math.max(180,Number(process.env.LIVING_SOAK_SECONDS??0)-elapsed),()=>{if(step%18000===0)console.log(`Soak progress: ${elapsed.toFixed(0)} simulated seconds, ${audits} audits`);},tailDt);audit();record('unattended furnished life',at,'autonomous offline behavior; every-second live audits clean');
+writeFileSync(`.build/living-soak-report-${Number(process.env.LIVING_SOAK_SEED??21)}.json`,JSON.stringify({seed:Number(process.env.LIVING_SOAK_SEED??21),simulatedSeconds:Number(elapsed.toFixed(2)),audits,featureFps:120,unattendedFps:1/tailDt,physicsHz:120,coverage,issues:[]},null,2));
+console.log(`PASS scheduled Living Stickmen soak: ${elapsed.toFixed(1)} simulated seconds, ${audits} live audits, ${coverage.length} feature phases; no issues. Report: .build/living-soak-report-${Number(process.env.LIVING_SOAK_SEED??21)}.json`);

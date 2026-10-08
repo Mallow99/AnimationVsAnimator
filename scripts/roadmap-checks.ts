@@ -347,7 +347,11 @@ test("five figures can actually group onto a couch and clean up seat reservation
     );
   pets[0].mind.reset(pets[0].ctx);
   for (let i = 0; i < 0.5 / dt; i++) for (const p of pets) p.update(dt);
-  assert.equal(couch.sitters.size, 0);
+  assert.equal(couch.sitters.size, 4, "the remaining conversation lost its seats");
+  assert(pets.slice(1).every(p=>p.mind.skill instanceof GroupActivity));
+  for(let i=0;i<50/dt;i++)for(const p of pets)p.update(dt);
+  assert.equal(couch.sitters.size,0,"completed conversation leaked seats");
+  assert(pets.every(p=>!(p.mind.skill instanceof GroupActivity)));
 });
 test("TV moves through a clear route, faces the couch, and restores its rigid arrangement", () => {
   const [p] = fixture();

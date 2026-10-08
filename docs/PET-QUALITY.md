@@ -36,7 +36,7 @@ history now feeds cooperation, care and friendly rivalry.
 | Windows portable build | x64 packaged; renderer/settings/main/preload hashes match, two real PowerShell helpers + 28 definitions included; no local saves, keys or source |
 
 The persistent [soak report](verification/living-soak-2026-10-08.json) records seed and each phase.
-`npm run livingsoak` regenerates `.build/living-soak-report.json`; `LIVING_SOAK_SEED` selects a replay.
+`npm run livingsoak` regenerates `.build/living-soak-report-<seed>.json`; `LIVING_SOAK_SEED` selects a replay.
 `npm run sanitycheck` runs the focused regressions. General → Development checks runs a bounded
 read-only audit instead of changing/freezing the world. Logs/screenshots regenerate under `.build/`.
 

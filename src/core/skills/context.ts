@@ -128,6 +128,8 @@ export abstract class Skill {
   /** Called every frame. Return true when finished. */
   abstract update(c: Ctx, dt: number): boolean;
   stop(_c: Ctx) {}
+  /** Only safe tasks opt in. A temporary reaction may resume their original resources. */
+  continuation(_c:Ctx):(()=>Skill|null)|null {return null;}
 }
 
 export function arrive(c: Ctx, x: number, tol = 8) {

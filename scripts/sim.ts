@@ -749,6 +749,9 @@ function calmPet() {
   check('pen taken: he can\'t draw, and says so', pet.ctx.doodles.length === 0 && said.some((t) => /pen/.test(t)), said.join(' | '));
   // Wait for him to ask for it back, holding it near him. (Calm, so he isn't off on the monkey bars.)
   let snatched = false;
+  // Isolate asking back from unrelated autonomous long reading/rest. The multi-hour soak
+  // leaves autonomous choices enabled; active reading/controller protection has its own regressions.
+  pet.mind.holdUntil=Infinity;
   pet.command('mood:calm');
   pet.command('setMood:{"energy":0.35}'); // (too tired for the monkey bars, which would keep him busy)
   petFor(40, pet, () => {

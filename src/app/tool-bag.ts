@@ -410,13 +410,13 @@ export class ToolBag {
     this.panelUndo.hidden = !this.tools.trashedName;
     this.panelUndo.textContent = `Undo trash: ${this.tools.trashedName ?? ""}`;
     for (const tab of this.tabs.querySelectorAll("button")) tab.setAttribute("aria-pressed", String(tab.dataset.view === this.view));
-    const actions = this.view === "activities" ? activitiesFor(owner) : [];
+    const actions = this.view === "activities" ? this.targets().map(p=>activitiesFor(p)) : [];
     const signature = JSON.stringify([
       this.view,
       this.selected,
       pets.map((p) => [p.ctx.who, p.config.name]),
       this.owned
-        ? this.targets().map(p=>[p.ctx.who,p.items.list.map((i) => [i.uid, i.where, i.ammo, i.shelf, i.ink?.progress])])
+        ? this.targets().map(p=>[p.ctx.who,p.items.list.map((i) => [i.uid, i.where, i.ammo, i.shelf, i.bookmark, i.ink?.progress])])
         : [
             owner && [...owner.items.defs.values()],
             owner && [...owner.props.defs.values()],
@@ -465,6 +465,7 @@ export class ToolBag {
         const item = actual.items.list.find(i => String(i.uid) === id)!;
         const state = document.createElement("small");
         state.textContent = (this.selected==="all"?actual.config.name+" · ":"") + (item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : item.where === "cursor" ? "With cursor" : item.shelf ? "On bookshelf" : item.where === "world" ? "On desktop" : "In bag");
+        if(item.bookmark>0)state.textContent += ` · Page ${item.bookmark+1}`;
         if (item.def.use === "gun") state.textContent += ` · ${item.ammo}/6 rounds`;
         button.append(state);
       }
@@ -489,16 +490,18 @@ export class ToolBag {
       this.choices.append(button);
     };
     if (this.view === "activities") {
+      const choices=this.targets().map(p=>({p,activities:activitiesFor(p)}));
       let group = "";
       for (const activity of activitiesFor(owner)) {
         if(!matches(activity.label+" "+activity.hint+" "+activity.group))continue;
         if (group !== activity.group) { group = activity.group; const h = document.createElement("h3"); h.textContent = group; this.choices.append(h); }
         const button = document.createElement("button"); button.type = "button"; button.className = "bag-activity"; button.dataset.action = activity.command;
         const title = document.createElement("strong"); title.textContent = activity.label;
-        const hint = document.createElement("small"); hint.textContent = activity.needs ?? activity.hint;
-        button.disabled = this.targets().every(p=>!!activitiesFor(p).find(a=>a.command===activity.command)?.needs); button.append(title, hint);
-        button.onclick = () => { const targets=this.targets();const shared=/^(group:|pong|arrange|carrytogether|readingcorner|workcorner)/.test(activity.command);
-          for(const p of shared?targets.slice(0,1):targets)if(!activitiesFor(p).find(a=>a.command===activity.command)?.needs)p.command(`do:${activity.command}`);
+        const ready=choices.filter(({activities})=>activities.some(a=>a.command===activity.command&&!a.needs));
+        const hint = document.createElement("small"); hint.textContent = ready.length ? activity.hint+(ready.length<choices.length?` · ${ready.length}/${choices.length} ready`:"") : activity.needs ?? activity.hint;
+        button.disabled = !ready.length; button.append(title, hint);
+        button.onclick = () => { const ready=this.targets().filter(p=>activitiesFor(p).some(a=>a.command===activity.command&&!a.needs));const shared=/^(group:|pong|catch|lamp|arrange|carrytogether|readingcorner|workcorner)/.test(activity.command);
+          for(const p of shared?ready.slice(0,1):ready)p.command(`do:${activity.command}`);
           this.changed(); this.toggle(false); };
         this.choices.append(button);
       }

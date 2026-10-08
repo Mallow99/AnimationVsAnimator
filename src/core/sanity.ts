@@ -28,7 +28,7 @@ export function checkSanity(figures:readonly Pet[],active:readonly Pet[]=figures
  const worlds=new Set(figures.map(p=>p.props));
  for(const props of worlds)for(const t of props.things){
   if(t.points.some(q=>![q.x,q.y,q.px,q.py].every(Number.isFinite)))report(`${t.def?.name??'Prop'}: invalid physics coordinates`);
-  for(const id of [...t.sitters.keys(),...t.watchers,...t.players])if(!ids.has(id))report(`${t.def?.name??'Prop'}: stale seat/player claim`);
+  for(const id of [...t.sitters.keys(),...t.watchers,...t.players,...t.lightUsers])if(!ids.has(id))report(`${t.def?.name??'Prop'}: stale seat/player claim`);
   if(t.movingBy&&!ids.has(t.movingBy))report(`${t.def?.name??'Prop'}: stale mover claim`);
  }
  return issues;

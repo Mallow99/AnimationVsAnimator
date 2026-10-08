@@ -2,7 +2,7 @@
 
 Pet Quality / Living Stickmen adds selectable preset characters, unified controls, physical scooting,
 group conversations, spectator-safe combat, stronger offline needs and discoverable furniture moving.
-Books, cups, dumbbells, yo-yos and existing tools use the shared inventory. See [PET-QUALITY.md](PET-QUALITY.md)
+Books, cups, dumbbells, yo-yos, blankets, snack boxes and existing tools use the shared inventory. See [PET-QUALITY.md](PET-QUALITY.md)
 for the item audit and cloud verification, and [UPDATE-PLAN.md](UPDATE-PLAN.md) for the stop point.
 
 ## Roster and settings
@@ -171,12 +171,36 @@ placed bookshelf after reading. **Supplies → Bookshelf → Place on desktop** 
 Give real books from Supplies; an owned book's bag actions include **Store on bookshelf** when a
 usable shelf is placed. It has five slots. Right-click a shelved book to take/store/trash the original.
 Owners fetch their own shelved books; grabbing/tipping/removing the shelf releases them.
+A page bookmark belongs to each original book and saves between runs. The Bag shows its page.
+A brief poke/petting/spare-tool reaction can resume a safe activity with that same item. Stop, a new
+activity, departure, missing limbs, sleep or taking the required item cancels that continuation.
+Only one activity is retained, for at most a minute; active routines are not replayed across restart.
 
 Give a **Cup**, **Dumbbell** or **Yo-yo** from Supplies, then choose **Have a drink**, **Train with a
 dumbbell** or **Play with a yo-yo** in Activities. Offline phrases include “have a drink,” “lift weights”
 and “play with a yo-yo.” The figure finishes a sip/set/catch before storage, with pauses between actions.
 “Play a handheld” uses its actual pocket game. Missing supplies are explained in the activity list.
 TV activities require a placed TV.
+
+Give a **Blanket** or **Snack box** from Supplies, then choose **Rest under a blanket** or **Have a
+snack**. Blankets unfold on a seat or the floor, then fold and store; snack boxes open for a quiet
+break, then close and store. These use the original item and can be stopped/taken at any time.
+No hunger meter or replenishment chore is added.
+
+Place a **Lamp** from Supplies. A nearby reader or figure preparing a desk blueprint reaches for
+its switch; the last automatic user switches it off. Right-click the lamp for **Switch on/off** or
+**Use automatic light** after a manual choice. Manual on/off survives restart and takes precedence.
+The lamp can be dragged, moved, thrown, trashed and restored like other furniture.
+
+Give a **Bouncy ball** to one figure and choose **Play catch** with a free companion. They gather,
+look toward the actual ball, toss and receive it. One original remains owned by the starting figure.
+A missed/blocked pass or interruption leaves it on the desktop for normal pickup. Spectators are
+not combat targets. Offline phrases: “play catch”, “rest under a blanket”, “have a snack”, “switch
+the lamp”. Optional AI uses the same action vocabulary and requirements.
+
+Group conversations address listeners, pause between readable turns and refer to recent shared
+games/drawings/help. Started conversations can continue after a participant leaves if at least two
+remain; choreographed activities still stop when a required member leaves.
 Ordinary conversation can continue without ending the activity. Asking for a different action
 still changes it, and removing/holding/tipping occupied furniture releases or interrupts its use.
 

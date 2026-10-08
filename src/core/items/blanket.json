@@ -1,0 +1,79 @@
+{
+  "id": "blanket",
+  "name": "Blanket",
+  "about": "A folded blanket. Fetch it, rest under it, then fold and put the original away.",
+  "use": "rest",
+  "length": 24,
+  "grip": 8,
+  "belt": "pocket",
+  "hit": 0,
+  "bounce": 0.08,
+  "shape": [
+    {
+      "pts": [
+        [
+          -8,
+          -4
+        ],
+        [
+          24,
+          -4
+        ],
+        [
+          24,
+          11
+        ],
+        [
+          -8,
+          11
+        ]
+      ],
+      "fill": "#858eb6",
+      "width": 0
+    },
+    {
+      "pts": [
+        [
+          -6,
+          -2
+        ],
+        [
+          22,
+          -2
+        ],
+        [
+          22,
+          1
+        ],
+        [
+          -6,
+          1
+        ]
+      ],
+      "fill": "#adb8d6",
+      "width": 0
+    },
+    {
+      "pts": [
+        [
+          -5,
+          5
+        ],
+        [
+          19,
+          5
+        ],
+        [
+          19,
+          7
+        ],
+        [
+          -5,
+          7
+        ]
+      ],
+      "fill": "#626d99",
+      "width": 0
+    }
+  ]
+}

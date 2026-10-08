@@ -17,6 +17,9 @@ export function activitiesFor(p: Pet): ActivityChoice[] {
   add('Everyday', 'Have a drink', 'sip', 'Sip, pause and put the cup away.', !owns('sip') ? 'Give this figure a cup from Supplies.' : undefined);
   add('Everyday', 'Train with a dumbbell', 'exercise', 'Slow curls and a break between sets.', !owns('exercise') ? 'Give this figure a dumbbell from Supplies.' : undefined);
   add('Everyday', 'Play with a yo-yo', 'yoyo', 'Try a few tricks, catch and rest.', !owns('play') ? 'Give this figure a yo-yo from Supplies.' : undefined);
+  add('Everyday','Rest under a blanket','blanket','Fetch, unfold, rest quietly, fold and put away.', !owns('rest')?'Give this figure a blanket from Supplies.':undefined);
+  add('Everyday','Have a snack','snack','Open the box, take a snack and put it away.', !owns('snack')?'Give this figure a snack box from Supplies.':undefined);
+  add('Everyday','Switch a lamp','lamp','Reach for the switch. Your choice overrides automatic reading light.', !capability('switch')?'Place a lamp from Supplies.':undefined);
   add('Everyday', 'Read a book' , 'read', 'Settle down with a book.');
   add('Everyday', 'Sit down', 'sitdown', 'Use a free chair or couch.', !capability('sit') ? 'Place a chair or couch from Supplies.' : undefined);
   add('Everyday', 'Watch TV', 'watchtv', 'Relax and watch a show.', !capability('watch') ? 'Place a TV from Supplies.' : undefined);
@@ -39,6 +42,7 @@ export function activitiesFor(p: Pet): ActivityChoice[] {
     add('Together', label, `group:${act}`, hint, needs);
   }
   const tv = !capability('watch') ? 'Place a TV from Supplies.' : undefined;
+  add('Games','Play catch','catch','Two friends pass one actual ball; a missed catch leaves it on the desktop.', !p.items.list.some(i=>i.def.id==='bouncy-ball'&&i.where!=='cursor')?'Give this figure a bouncy ball from Supplies.':friends<1?'Needs two free, awake figures on the floor.':!['ground','sit'].includes(p.char.mode)?'Bring this figure down to the floor.':undefined);
   add('Games', 'Play Pong', 'pong', 'Two players, spectators and a paddle you can join.', tv ?? (friends < 1 ? 'Needs two free, awake figures on the floor.' : !['ground', 'sit'].includes(p.char.mode) ? 'Bring this figure down to the floor.' : p.config.consoleRequired && !props.some(t => t.def?.use === 'tv' && t.consoleConnected) ? 'Place a console beside the TV.' : undefined));
   add('Games', 'Play Othello with me', 'playgame', 'Play a board game on the TV.', tv);
   add('Games', 'Play video games', 'videogame', 'Play the runner game on the TV.', tv);

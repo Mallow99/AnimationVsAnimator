@@ -1,4 +1,5 @@
 import {everydayReply} from "./personality";
+import { DomesticItem,SwitchLamp } from './skills/domestic';
 import { ReadBook } from './skills/read-book';
 import { EverydayItem } from './skills/everyday-item';
 import { propActions } from './capabilities';
@@ -211,6 +212,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'videogame', label: 'Play video games' }, { name: 'ride', label: 'Ride the scooter' },
   { name: 'read', label: 'Read a book' },
+  {name:'blanket',label:'Rest under a blanket'}, {name:'snack',label:'Have a snack'}, {name:'lamp',label:'Switch a lamp'}, {name:'catch',label:'Play catch with a friend'},
   { name: 'sip', label: 'Have a drink' }, { name: 'exercise', label: 'Train with a dumbbell' }, { name: 'yoyo', label: 'Play with a yo-yo' },
   { name: 'paint', label: 'Paint on his canvas' }, { name: 'playgame', label: 'Play Othello with you on the TV' }, { name: 'duel', label: 'Spar with his friend' },
   { name: 'highfive', label: 'High five his friend' }, { name: 'fistbump', label: 'Fist bump his friend' }, { name: 'handshake', label: 'Shake hands with his friend' },
@@ -240,6 +242,7 @@ export class Mind {
   private arrangeAt = -90;
   private last = '';
   private queued: Skill | null = null;
+  private suspended:{make:()=>Skill|null;expires:number;why:string}|null=null;
   private pokes: number[] = [];
   private lookAt: { x: number; y: number } | null = null;
   private lookUntil = 0;
@@ -282,6 +285,7 @@ export class Mind {
 
   update(c: Ctx, dt: number) {
     c.mood.tick(dt);
+    if(this.suspended&&(c.world.time>=this.suspended.expires||!c.char.whole||c.char.hp<.25||c.mood.asleep))this.suspended=null;
     if (c.char.support !== this.lastSupport && c.char.mode === 'ground') {
       this.lastSupport = c.char.support;
       this.onWindowSince = c.char.support >= 0 ? c.world.time : -1;
@@ -295,6 +299,11 @@ export class Mind {
         const glow = AFTERGLOW[this.skill.name];
         if (glow) c.mood.nudge(glow);
         this.end(c);
+        const suspended=this.suspended;this.suspended=null;
+        if(suspended&&c.world.time<suspended.expires&&c.char.whole&&c.char.hp>=.25&&!c.mood.asleep&&!this.queued) {
+          const resumed=suspended.make();
+          if(resumed){this.queued=resumed;this.why=`returning to ${resumed.name}: ${suspended.why}`;this.afterThat=null;return;}
+        }
         const next = this.afterThat?.();
         this.afterThat = null;
         if (next) { this.queued = next.make(); this.why = next.why; return; }
@@ -320,7 +329,7 @@ export class Mind {
     const doing=this.activeSkill?.name??'';
     const social=['group','together','ask','checkfriend','sitwith','jointv'].includes(doing);
     const creative=['drawtool','doodle','read','paint','deskwork','refine','drawball','drawbox'].includes(doing);
-    const quiet=['read','sitdown','sip','sleep','nap','watchtv'].includes(doing);
+    const quiet=['blanket','snack','read','sitdown','sip','sleep','nap','watchtv'].includes(doing);
     if(social)m.nudge({socialNeed:-dt/65,contentment:dt/250,frustration:-dt/100});
     if(creative)m.nudge({inspiration:-dt/120,contentment:dt/300});
     if(quiet)m.nudge({frustration:-dt/90,contentment:dt/350});
@@ -465,6 +474,9 @@ export class Mind {
     const arrange = arrangingSkill(c, name); if (arrange) return arrange;
     if(['passtool','comparedrawings','checkfriend'].includes(name)) return new FriendlyMoment(name==='passtool'?'pass':name==='comparedrawings'?'compare':'check');
     if (name === 'handheld') return new PlayHandheld();
+    if (name === 'lamp') return new SwitchLamp(SwitchLamp.nearest(c));
+    if (name === 'blanket' || name === 'snack') return new DomesticItem(name === 'blanket' ? 'rest' : 'snack');
+    if (name === 'catch') { const plan=groupPlan(c,'catch');return plan?new GroupActivity(plan):null; }
     if (name === 'pong') { const plan = groupPlan(c, 'pong'); return plan ? new GroupActivity(plan) : null; }
     if (name.startsWith('group:')) { const plan = groupPlan(c, name.slice(6) as GroupAct); return plan ? new GroupActivity(plan) : null; }
     const workshop = workshopSkill(c, name); if (workshop) return workshop;
@@ -495,7 +507,7 @@ export class Mind {
   }
 
   /** Forget the current plan (e.g. his body was rebuilt). */
-  reset(c: Ctx) { this.end(c); this.queued = null; this.afterThat = null; }
+  reset(c: Ctx) { this.suspended=null;this.end(c); this.queued = null; this.afterThat = null; }
 
   private begin(c: Ctx, s: Skill) {
     c.look = 'default';
@@ -517,9 +529,16 @@ export class Mind {
 
   /** Drop whatever he's doing (gestures too) and (optionally) do this next. */
   private interrupt(c: Ctx, next?: Skill) {
+    this.suspended=null;
     this.end(c);
     c.char.cancelGesture();
     this.queued = next ?? null;
+  }
+  private react(c:Ctx,next?:Skill) {
+    if(!next)return;
+    const make=!this.queued?this.skill?.continuation(c):null;
+    const saved=this.suspended??(make?{make,expires:c.world.time+60,why:this.why}:null);
+    this.interrupt(c,next);this.suspended=saved;
   }
 
   // ───────────── choosing what to do ─────────────
@@ -595,6 +614,9 @@ export class Mind {
       const item = c.items.find(use);
       if (item && item.where !== 'cursor') opts.push({name,score:name === 'sip' ? 0.2+(1-s.energy)*0.2 : name === 'exercise' ? 0.05+s.energy*0.18 : 0.1+s.boredom*0.2,why:name === 'sip' ? 'a quiet drink' : name === 'exercise' ? 'a short training set' : 'practicing a pocket trick',make:()=>new EverydayItem(use,name)});
     }
+    if(c.items.find('rest')?.where!=='cursor' && c.items.find('rest'))opts.push({name:'blanket',score:.1+(1-s.energy)*.45+(c.personality==='gentle'?.12:0),why:'a quiet blanket break',make:()=>new DomesticItem('rest')});
+    if(c.items.find('snack')?.where!=='cursor' && c.items.find('snack'))opts.push({name:'snack',score:.12+s.frustration*.2,why:'taking a snack break',make:()=>new DomesticItem('snack')});
+    if(c.items.list.some(i=>i.def.id==='bouncy-ball'&&i.where!=='cursor') && c.world.time-this.socialAt>90 && (c.peers?.()??[]).some(availableForGroup))opts.push({name:'catch',score:.15+s.boredom*.25+(c.personality==='competitive'?.1:0),why:'playing catch with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'catch');return plan?new GroupActivity(plan):new Idle(3);}});
     if(c.items.find('game'))opts.push({name:'handheld',score:0.1+c.mood.s.boredom*0.15,why:'playing his pocket game',make:()=>new PlayHandheld()});
     if(c.world.time-this.socialAt>90 && propsOf(c,'tv').length && (c.peers?.()??[]).some(v=>!v.busy&&!v.asleep))opts.push({name:'pong',score:0.08+c.mood.s.boredom*0.12,why:'a game with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'pong');return plan?new GroupActivity(plan):new Idle(3);}});
     const tvToMove=propsOf(c,'tv').find(t=>!t.watchers.size&&!t.players.length),couchToUse=propsOf(c,'seat').find(t=>t.seatRoom>1);
@@ -1038,7 +1060,7 @@ export class Mind {
         c.memory.count('itemsTaken');
         c.say(everydayReply(c.personality,'taken'), 1.6);
         this.takenAt = c.world.time;
-        if (ch.mode === 'ground' && !(this.skill instanceof Reattach)) this.interrupt(c, new Sequence('hey', [{ face: 'cursor' }, { gesture: 'shrug' }]));
+        if (ch.mode === 'ground' && !(this.skill instanceof Reattach)) this.react(c, new Sequence('hey', [{ face: 'cursor' }, { gesture: 'shrug' }]));
         return;
       }
       case 'itemDropped': {
@@ -1117,7 +1139,7 @@ export class Mind {
         // Lean into it, unless he's in the middle of something important.
         if ((ch.mode === 'ground' || ch.mode === 'sit') && !(this.skill instanceof Sequence && this.skill.name === 'enjoy')) {
           if (ch.mode === 'sit') ch.standUp();
-          this.interrupt(c, new Sequence('enjoy', [{ gesture: 'nuzzle', atCursor: true }]));
+          this.react(c, new Sequence('enjoy', [{ gesture: 'nuzzle', atCursor: true }]));
           this.why = 'you\'re petting him';
         }
         if (chance(0.4)) c.say((chance(0.3) ? c.memory.recall('petted') : null) ?? pick([':)', '♪', 'hehe', 'mmm']), 1.2);
@@ -1331,7 +1353,7 @@ export class Mind {
     }
     if (ch.mode === 'sit' && L !== 'angry' && chance(0.6)) { c.say('?', 1); return; } // can't be bothered to get up
     if (ch.mode === 'sit') ch.standUp();
-    this.interrupt(c, react ?? undefined);
+    this.react(c, react ?? undefined);
   }
 
   /** What he does once he's back on his feet after falling. */

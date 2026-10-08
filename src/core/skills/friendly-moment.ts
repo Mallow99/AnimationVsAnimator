@@ -51,7 +51,7 @@ export class FriendlyMoment extends Skill {
         }
         c.items.remove(item);
         c.tellTo?.(this.peer!, {
-          type: "toolGift",
+          type: "toolGift",bookmark:item.bookmark,
           token: `${c.who}:${item.uid}:${c.world.time}`,
           def: structuredClone(item.def),
           ammo: item.ammo,

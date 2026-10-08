@@ -392,7 +392,14 @@ window.addEventListener('mousemove', (e) => {
   updateClickThrough(e.clientX, e.clientY);
 });
 /** Which of them the mouse is on (the one drawn on top first), or null. */
-const petAt = (x: number, y: number) => habitats.hit(x,y,lastWins) ?? [...desktopPets()].reverse().find((p) => p.hit(x, y) || p.satchelHit(x, y) || p.uiHit(x, y) || p.carrying) ?? null;
+const petAt = (x: number, y: number) => {
+  const figures=[...desktopPets()].reverse();
+  // Shared furniture must not steal a click from the figure drawn in front of it.
+  return habitats.hit(x,y,lastWins) ?? figures.find(p=>p.char.hitTest(x,y)!==null ||
+    p.char.hitLimb(x,y)!==null || p.satchelHit(x,y) || p.uiHit(x,y) ||
+    p.items.onHim.some(i=>i.where==='hand'&&i.distTo(x,y)<8)) ??
+    figures.find(p=>p.hit(x,y)||p.carrying) ?? null;
+};
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (toolBag.dragging) { toolBag.cancel(); updateClickThrough(e.clientX, e.clientY); return; }

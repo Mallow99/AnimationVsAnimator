@@ -33,6 +33,17 @@ presets, offline operation, separate peer messages, actual item ownership and sh
    - [ ] Real Chromium/Electron input, visual motion inspection, resource lifecycle run and packaging.
    - [ ] Every working commit includes CHANGELOG and chat changelog; update controls/roadmap/handoff/PR.
 
+8. **Owner's personalization expansion (2026-10-08)**
+   - [ ] Reusable personality motion/voice/bag templates: distinct walking, sitting and speech while
+     preserving selected appearance/movement presets and limb proportions.
+   - [ ] Cohesive default names for the first two figures; preserve custom names and stable save ids.
+   - [ ] Richer saved friendship dimensions, contextual moods, thoughtful gifts and shared preferences.
+   - [ ] Several drawn wrapping styles, actual books/flowers/other gifts, acceptance and ownership checks.
+   - [ ] Reader-facing handheld screen, meaningful button/reaction timing and peer handheld games.
+   - [ ] Treat the console as an optional TV attachment; remove robotic connection chatter.
+   - [ ] Distinct satchel colors/clips and bounded earned stickers; saved and understandable progress.
+   - [ ] Extend lifecycle/soak/browser/visual acceptance to this expansion before final delivery.
+
 Baseline implementation: `7a9e0a0`; research: `a3caee5`. Prior acceptance: 140 checks and 34m52s
 scheduled simulated soak. Initial Linux RAM medians: ordinary 1/2/5 = 325/308/309 MiB PSS;
 five + nine furniture + twenty items = 347 MiB; Settings open = 422 MiB; after twelve Settings

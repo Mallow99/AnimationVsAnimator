@@ -2,6 +2,7 @@ import { Skill, arrive, type Ctx } from "./context";
 import { propActions } from "../capabilities";
 import type { Thing } from "../props";
 import { GroupActivity, groupPlan } from "./group";
+import { Handling } from './handling';
 
 /** Find a floor destination with furniture clearance. No route through other solid furniture. */
 export function arrangement(c: Ctx, object: Thing, near: Thing): number | null {
@@ -56,6 +57,7 @@ export class MoveFurniture extends Skill {
   private asked = false;
   private baseY = 0;
   private carrying = false;
+  private preparing = new Handling();
   constructor(
     private id = "tv",
     private nearId = "couch",
@@ -112,6 +114,9 @@ export class MoveFurniture extends Skill {
     if (this.phase === "go") {
       if (!arrive(c, o.center.x - dir * (width / 2 + 18 * ch.scale), 10))
         return false;
+      ch.posture.hunch=Math.max(ch.posture.hunch,.12);
+      if(!this.preparing.reach(c,{x:o.center.x-dir*width/2,y:Math.min(o.center.y,ch.body.j.neck.y+14*ch.scale)},dt,true))return false;
+      ch.handTarget=null;
       this.phase = "move";
       o.movingBy = c.who;
       ch.stop();

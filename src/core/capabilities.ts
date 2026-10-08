@@ -8,6 +8,7 @@ export const PROP_ACTIONS = [
   "refine",
   "store",
   "move",
+  "switch",
 ] as const;
 export type PropAction = (typeof PROP_ACTIONS)[number];
 export function propActions(def: PropDef): PropAction[] {
@@ -18,6 +19,7 @@ export function propActions(def: PropDef): PropAction[] {
     canvas: "paint",
     work: "drawhere",
     storage: "store",
+    light:"switch",
   };
   return [
     ...new Set([

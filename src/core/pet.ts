@@ -1,3 +1,4 @@
+import {SwitchLamp} from './skills/domestic';
 import {MoveFurniture} from "./skills/arrange";
 import { isWeapon, type LooseWeapon } from './combat/armament';
 // The Pet ties everything together: body + mood + mind + speech, and turns
@@ -155,7 +156,7 @@ export class Pet implements Peer {
     for(const item of this.items.list)if(item.shelf&&!this.items.stow(item))this.items.drop(item,0,0);
     for (const th of this.props.things) {
       th.leaveSeat(this.ctx.who);
-      th.watchers.delete(this.ctx.who);
+      th.watchers.delete(this.ctx.who);th.lightUsers.delete(this.ctx.who);th.syncLight();
       th.players = th.players.filter((who) => who !== this.ctx.who);
     }
     this.partnerId = null;
@@ -312,7 +313,7 @@ export class Pet implements Peer {
       get consoleRequired() { return pet.config.consoleRequired; },
       get talent() { return signatureTalent(pet.config.personality); },
       relationship: id => pet.relation(id),
-      recordActivity: (id,act,success) => { const r=pet.relation(id);if(success){r.activities[act]=Math.min(1000,(r.activities[act]??0)+1);r.bond=Math.min(1,r.bond+0.015);r.cooperation=Math.min(1,r.cooperation+.025);r.lastShared=act;
+      recordActivity: (id,act,success) => { const r=pet.relation(id);if(success){r.activities[act]=Math.min(1000,(r.activities[act]??0)+1);r.bond=Math.min(1,r.bond+0.015);r.cooperation=Math.min(1,r.cooperation+.025);r.lastShared=act;r.recent.push(act);if(r.recent.length>8)r.recent.shift();
         if(act==='check'||act==='hug')r.care=Math.min(1,r.care+.05);
         if(['duel','pong','videogame'].includes(act))r.rivalry=Math.min(1,r.rivalry+.025);
         pet.mood.nudge({socialNeed:-.04,contentment:.03});}else{r.lastDisagreement=act;pet.mood.nudge({frustration:.025});} },
@@ -1067,6 +1068,7 @@ export class Pet implements Peer {
     if (prop && !this.char.hitTest(x,y,10)) {
       const capabilities = propActions(prop.def!);
       const actions = {
+        switch:{label:prop.on?'Switch off':'Switch on',make:()=>new SwitchLamp(prop)},
         sit: { label: 'Sit here', make: () => new SitOnProp(prop) },
         watch: { label: 'Watch this TV', make: () => new WatchTV(prop) },
         ride: { label: 'Ride this scooter', make: () => new RideScooter(prop) },
@@ -1081,6 +1083,7 @@ export class Pet implements Peer {
           this.mind.startActivity(this.ctx, action.make(), 'you chose this furniture');
         } }] : [];
       });
+      if(capabilities.includes('switch')&&prop.manualLight!==null)rows.push({label:'Use automatic light',act:()=>{prop.manualLight=null;prop.syncLight();}});
       if (capabilities.includes('watch')) rows.push({ label: 'Play Pong here', act: () => {
         const plan = groupPlan(this.ctx, 'pong', prop);
         if (plan) this.mind.startActivity(this.ctx, new GroupActivity(plan));
@@ -1443,7 +1446,7 @@ export class Pet implements Peer {
       shelvedBooks: this.items.list.filter(i=>i.where === "world" && i.shelf).map(i=>({...i.shelf!})),
       consoleLocations: this.items.list.filter(i=>i.def.use==='connect'&&i.where==='world').map(i=>({x:i.at.x,y:i.at.y})),
       talent: signatureTalent(this.config.personality),
-      id: this.ctx.who, partner: this.partnerId, name: this.config.name, color: this.config.look.color,
+      id: this.ctx.who, partner: this.partnerId, name: this.config.name, personality:this.config.personality, color: this.config.look.color,
       busy: this.mind.hasQueued || !!doing && !['idle', 'wander', 'sit', 'sitdown', 'ledgesit', 'explore', 'sigh', 'stretch', 'duel', 'spar'].includes(doing), doing,
       x: ch.x, facing: ch.facing as 1 | -1, mode: ch.mode, legCount: ch.legCount, whole: ch.whole, scale: ch.scale,
       joints, headR: ch.d.headR,
@@ -1453,7 +1456,7 @@ export class Pet implements Peer {
       looseWeapons: this.looseWeapons(),
       armed: this.items.list.some((it) => it.def.use === 'swing' && (it.where === 'hand' || it.where === 'belt')),
       social: this.mind.activeSkill instanceof Together ? { act: this.mind.activeSkill.act, phase: this.mind.activeSkill.phase } : null,
-      asleep: this.mood.asleep, mood: this.mood.label,
+      asleep: this.mood.asleep, energy:this.mood.s.energy, mood: this.mood.label,
     };
   }
 
@@ -1470,7 +1473,7 @@ export class Pet implements Peer {
       if(!fv.id||!this.others.some(o=>o.view().id===fv.id)||typeof m.token!=='string'||m.token.length>120||this.gifts.has(m.token))return;
       const def=parseItemDef(m.def);if(!def)return;
       this.gifts.add(m.token);if(this.gifts.size>100)this.gifts.delete(this.gifts.values().next().value!);
-      const item=this.items.give(def,this.char);if(item){item.ammo=Number.isFinite(m.ammo)?Math.max(0,Math.min(6,m.ammo)):6;item.reloadRemaining=Number.isFinite(m.reloadRemaining)?Math.max(0,Math.min(1.15,m.reloadRemaining!)):0;item.ink=parseProject(m.ink);this.ctx.say('Thanks!',1.3);}return;
+      const item=this.items.give(def,this.char);if(item){item.ammo=Number.isFinite(m.ammo)?Math.max(0,Math.min(6,m.ammo)):6;item.reloadRemaining=Number.isFinite(m.reloadRemaining)?Math.max(0,Math.min(1.15,m.reloadRemaining!)):0;item.bookmark=Number.isFinite(m.bookmark)?Math.max(0,Math.min(9999,Math.floor(m.bookmark!))):0;item.ink=parseProject(m.ink);this.ctx.say('Thanks!',1.3);}return;
     }
     if (m.type === 'groupInvite') {
       if (!fv.id || !this.others.some(o => o.view().id === fv.id)) return;
@@ -1986,7 +1989,7 @@ export class Pet implements Peer {
   /** A snapshot of his inner state (shown as live bars in settings). */
   stats() {
     return {
-      name: this.config.name,
+      name: this.config.name, personality:this.config.personality,
       mood: { ...this.mood.s },
       label: this.mood.emotion,
       asleep: this.mood.asleep,
