@@ -181,6 +181,8 @@ export class Duel extends Skill {
       real = c.fightMode === 'real';
     this.endPose(c);
     this.ending = this.t + 1.8;
+    const peer=c.foe?.()?.id;
+    if(peer)c.recordActivity?.(peer,'duel',!real&&how!=='cut');
     if (how === 'won') {
       c.say(
         real

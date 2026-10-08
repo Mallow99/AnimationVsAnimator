@@ -3,7 +3,30 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
-## 2026-10-06 — Select the roster and unify settings, inventory and supplies
+## 2026-10-08 — Complete physical/social life and Pet Quality acceptance
+
+- Replaced seat slides with brace/lift/small scoot/settle motion and fixed spawn walking references.
+  Group conversations share turns, listening and distinct preset replies; ordinary chat includes
+  available 3–5 figures while reading, sleep and queued work retain their activity.
+- Kept duels exclusive and protected spectators from incidental figure attacks/third challengers.
+  Exposed exact-object Move beside furniture actions and strengthened autonomous TV arrangement.
+- Added social/creative need, frustration and contentment with activity/rest causes, saved state,
+  Mood/Mind rows and optional AI context. Cooperation, care and friendly rivalry affect invitations,
+  reassurance and partners. Group/Pong/friendly-duel completion records real shared history;
+  interrupted activities do not automatically lower affection.
+- Fixed inactive owners reserving hidden bookshelf slots and restored furniture-platform subscriptions
+  on rejoin. Added a bounded read-only in-app sanity audit and removed hidden duplicate Settings catalogs.
+- Added a repeatable scheduled lifecycle/activity soak with requested-skill assertions and a saved
+  phase report. Passed typecheck/build, 140 regressions, full seed-7 sim, and 2,092.4 simulated seconds /
+  2,159 audits / 26 phases with no reported issues (seed 21). Actual Chromium and Linux Electron
+  input/focus checks passed; visually inspected books, scoots, five seats and group/combat artwork.
+- Five-figure core mean/p95 1.327/1.805ms; loaded Chromium median/p95 16.7/33.4ms. Windows x64 package
+  includes current bundles/helpers/definitions without saves/keys. Updated checklist, controls,
+  roadmap, handoff and visual evidence. Stop before more Chrome/Finder work.
+- Remaining: real Mac focus/Spaces/Swift/click-through and Windows native input/DPI; approximate
+  concave contacts, extreme-speed tunneling, snapshot contacts, session-only Undo and main display.
+
+## 2026-10-06 — Select the roster and unify settings, inventory and supplies (`8bc46a8`)
 
 - Added 1–5 stickmen count labels and a selectable five-character preset roster, including Ruby solo.
   Stable config/save identities preserve removed characters' actual items and relationship saves.
@@ -19,7 +42,7 @@ remaining issues here. Entries describe shipped behavior; unverified hardware be
 - Personality reactions and physical/social-life improvements are next in this authorized update.
   Mac focus/Spaces and Windows native hardware checks remain open.
 
-## 2026-10-06 — Repair item continuity, book handling and rigid prop contact
+## 2026-10-06 — Repair item continuity, book handling and rigid prop contact (`af56778`)
 
 - Fixed deletion of earlier drawn projects/tools, stranded full-bag/passive-carry reloads and
   double-clock reloads. Owned guns now advance once on the inventory clock; practice guns use

@@ -223,7 +223,6 @@
         <button class="btn ghost" id="reloadItems">Reload definitions</button>
         <button class="btn ghost" id="openItems">Open items folder</button>
       </details>
-<div id="itemList" hidden></div><div id="itemKinds" hidden></div><div id="propKinds" hidden></div><div id="propPlaced" hidden></div>
     </section>
 
     <section data-panel="look" hidden>
@@ -263,6 +262,7 @@
           <label class="switch"><span>Require a console for new Pong games</span><input type="checkbox" id="consoleRequired" /></label>
           <label class="switch"><span>Follow the local day/night rhythm</span><input type="checkbox" id="dailyRhythm" /></label>
           <div id="workshopSliders"></div>
+          <details><summary>Development checks</summary><button class="btn ghost small" id="sanityCheck" type="button">Check live world</button><p id="sanityResult" role="status" class="note">Checks ownership, coordinates, controllers and shared claims.</p></details>
           <label class="switch"><span>Developer: show break pressure during fights</span><input type="checkbox" id="debugCombat" /></label>
           <label class="row-label" for="fightMode">Fights</label>
           <select id="fightMode">

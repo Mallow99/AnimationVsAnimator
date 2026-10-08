@@ -1,9 +1,23 @@
 # Current controls and Mac acceptance
 
-Pet Quality now polishes the Workshop/Household foundation: smoother seating, quieter everyday
-behavior, cups/dumbbells/yo-yos, real bookshelf storage, passive carrying and reliable reloads.
-See [PET-QUALITY.md](PET-QUALITY.md) for the item audit and verification. See [UPDATE-PLAN.md](UPDATE-PLAN.md)
-for the current five-update roadmap; batch scope is unlimited.
+Pet Quality / Living Stickmen adds selectable preset characters, unified controls, physical scooting,
+group conversations, spectator-safe combat, stronger offline needs and discoverable furniture moving.
+Books, cups, dumbbells, yo-yos and existing tools use the shared inventory. See [PET-QUALITY.md](PET-QUALITY.md)
+for the item audit and cloud verification, and [UPDATE-PLAN.md](UPDATE-PLAN.md) for the stop point.
+
+## Roster and settings
+
+General → population chooses **1 stick man** through **5 stick men**. Select the preset characters
+who appear; the selected order determines the active roster. Blurp is inventive, Leonard competitive,
+Moss gentle, Violet mischievous and Ruby adventurous. One figure can be any preset, including Ruby.
+Edited names/colors and individual settings/items/relationships remain saved when a character leaves.
+Leaving puts away that character's shelved books, freeing the shared slots.
+
+**Settings** opens one window. Choose a name or **All figures** at the top. Appearance/movement and
+mood actions apply to the selected scope; population and app settings apply globally. Private chat and
+memory editing need a named target. Personality presets are built in rather than another app editor.
+Settings → Items opens the same inventory; custom-file tools stay under a collapsed section.
+General → Development checks → **Check live world** reports ownership, coordinates and shared claims.
 
 ## Satchels, supplies and trash
 
@@ -11,12 +25,15 @@ Right-click a figure → **Open bag**, click its wearable satchel, or tell it �
 A brief hover hint points to this menu. The figure menu has one inventory entry instead of a separate
 Take row for every owned item. **Activities…** opens the activity list directly.
 
-- **Bag** contains that figure's actual items, with **In bag / In hand / Wearing** states and pistol ammo.
+Choose a name or **All figures**, and use Search to narrow the shared inventory.
+
+- **Bag** contains actual owned items, with bag/hand/worn/world/bookshelf/cursor states and pistol ammo.
   Click a card to inspect it; this keeps the panel open. **Take out** puts the original item on your
   cursor for passive carrying. **Use with cursor** explicitly enables weapon or cleaner controls. **Store in bag**, **Drop beside figure** and
   **Trash** say what they do. Dragging a card remains available.
 - **Supplies** creates new tools and furniture. Select a card, then **Give to [figure]** or **Place on
-  desktop**. Owner buttons choose the recipient. A full bag asks you to free a slot or place the tool.
+  desktop**. The target selector chooses recipients; **Give to all** creates a distinct item for each active figure.
+  A full bag explains which figure needs a slot or a placed tool.
 - **Activities** lists everyday, workshop, drawing, group, game, arranging and friend activities.
   Unavailable entries explain the missing tools, furniture or free companions. **Stop current activity**
   releases the current activity; **Wake up** is shown for a sleeping figure.
@@ -30,7 +47,7 @@ Escape/right-click/Cancel restores an existing item to its previous hand, worn s
 world/shelf location; Carry → Cancel returns a cursor weapon to its bag;
 unplaced new supplies are discarded. Figures cannot snatch a tool during user-controlled use.
 
-**Trash** is also available from an object's right-click menu and Settings → Items. **Undo trash**
+**Trash** is also available from an object's right-click menu and the shared bag. **Undo trash**
 in the bag restores the last original object even when the trash shortcut is hidden. Undo lasts for
 this session and preserves identity, art and ammo. Bulk furniture trash only allows the last object
 back. Furniture actions such as **Sit here** and **Make a blueprint here** use the object clicked.
@@ -55,11 +72,15 @@ the catalog. Use the figure's action menu or talk commands, with no settings win
 
 ## Groups, arranging and game night
 
-Add companions in settings (up to five). Actions work offline; only free, awake, unhurt figures join.
+Choose 2–5 preset figures in Settings. Actions work offline; free, awake, healthy figures can join,
+including quiet sitters. Readers, sleeping figures and queued/settled work keep their activity.
+Conversation with three or more available figures becomes a group conversation with separate turns;
+listeners look toward the current speaker. Ordinary one-on-one interactions remain available.
 
 - “Group wave”, “Group conversation”, “Couch huddle”, and “Watch together” work with 2–5 figures.
 - “Mirrored duet” needs two, “Hands in” three, “Two-pair dance” four, and “Wave relay” five.
-- “Move the TV to the couch” moves and turns it toward the couch. “Carry it together” uses two
+- Right-click movable furniture → **Move beside [matching furniture]**, or use the named Activity.
+  “Move the TV to the couch” actually moves and turns it toward the couch. “Carry it together” uses two
   figures. “Make a reading corner” and “Make a work corner” arrange their corresponding furniture.
 - “Pass a tool”, “Compare drawings”, and “Check on your friend” create small peer moments.
 - “Play Pong” starts a two-figure match to five points. Others can watch the same TV; **Join**
@@ -69,7 +90,11 @@ Add companions in settings (up to five). Actions work offline; only free, awake,
 General → Require a console for Pong is off by default for compatibility. When enabled, put a
 console near the TV. Daily rhythm is optional: real night/morning and system idle time influence
 sleep and welcome-back greetings. Drawing/building/game talents affect speed or skill; pair memories
-retain shared activities, disagreements and effective fighting moves.
+retain shared activities, cooperation, care, friendly rivalry, disagreements and effective fighting moves.
+Successful play and reassurance influence future partners/reactions; interruptions do not erase affection.
+Social/creative need, frustration and contentment appear in Mood and the Mind view. Duels stay between
+the agreed opponents, with other figures safe from incidental combat hits. Couch recentering uses
+small brace/lift/scoot/settle steps rather than a continuous slide.
 
 ## Pet Quality checks on your Mac
 
@@ -86,7 +111,11 @@ retain shared activities, disagreements and effective fighting moves.
 5. Place a bookshelf and five books, one per figure. Store books on it through the bag. Read, fetch,
    watch opening/page-turn/closing/return, interrupt, take a reading book and restart. Verify actual
    saved books and separate slots. Drag/tip the bookcase and check contents become normal loose items.
-6. Seat all five on the couch. Let calm figures rest/read; talk, then explicitly change an activity.
+6. Try Ruby alone, then select a different 2–5 roster. Switch Settings targets and give a supply to All.
+   Remove/rejoin a figure with a shelved book, and confirm the original book/settings remain.
+   Seat all five on the couch, remove one sitter and watch physical scooting. Start a group conversation
+   and a duel with spectators; check turn-taking, listening and safe bystanders.
+   Seat all five on the couch. Let calm figures rest/read; talk, then explicitly change an activity.
    Ambient invitations should wait. Invite a figure standing on a window to a floor gathering.
 7. Stack and lean furniture/items, leave them to settle, then drag, push, carry, strike and throw them.
    Carry a sleeping figure gently and release close to the floor; try a hard impact separately.

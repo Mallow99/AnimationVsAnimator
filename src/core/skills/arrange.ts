@@ -59,20 +59,21 @@ export class MoveFurniture extends Skill {
   constructor(
     private id = "tv",
     private nearId = "couch",
+    private objectNumber?:number,
   ) {
     super();
   }
   start(c: Ctx) {
     this.object =
       c.props?.placed.find(
-        (t) => t.def?.id === this.id || t.ink?.source === this.id,
+        (t) => this.objectNumber!==undefined ? t.n===this.objectNumber : t.def?.id === this.id || t.ink?.source === this.id,
       ) ?? null;
     this.near =
-      c.props?.placed.find(
+      c.props?.placed.filter(
         (t) =>
           t !== this.object &&
           (t.def?.id === this.nearId || t.ink?.source === this.nearId),
-      ) ?? null;
+      ).sort((a,b)=>Math.abs(a.center.x-(this.object?.center.x??c.char.x))-Math.abs(b.center.x-(this.object?.center.x??c.char.x)))[0] ?? null;
     if (!this.object || !this.near)
       c.say(`I need a ${this.id} and ${this.nearId}.`, 1.6);
     else this.destination = arrangement(c, this.object, this.near);

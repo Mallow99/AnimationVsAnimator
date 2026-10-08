@@ -1,3 +1,4 @@
+import { conversationLine } from "../personality";
 import { Skill, arrive, type Ctx } from "./context";
 import type { PeerMsg, FighterView } from "../peer";
 import { propActions } from "../capabilities";
@@ -48,7 +49,7 @@ export const availableForGroup = (v: FighterView) =>
   !v.asleep &&
   v.whole &&
   v.hp > 0.25 &&
-  v.mode === "ground" &&
+  ["ground","sit"].includes(v.mode) &&
   !v.group &&
   !["duel", "together", "ask"].includes(v.doing ?? "");
 
@@ -60,12 +61,16 @@ export function groupPlan(
 ): GroupPlan | null {
   if (!GROUP_ACTS.includes(act)) return null;
   const talent = act === "carry" ? "building" : act === "pong" ? "games" : null;
+  const affinity=(id:string)=>{
+    const r=c.relationship?.(id);
+    return (r?.bond??.4)+(r?.cooperation??.5)*.2+(act==='pong'&&(r?.bond??.4)>=0?(r?.rivalry??0)*.25:0);
+  };
   const peers = (c.peers?.() ?? [])
     .filter(availableForGroup)
     .sort(
       (a, b) =>
         Number(b.talent === talent) - Number(a.talent === talent) ||
-        (c.relationship?.(b.id!)?.bond ?? 0.4) - (c.relationship?.(a.id!)?.bond ?? 0.4) ||
+        affinity(b.id!) - affinity(a.id!) ||
         Math.abs(a.x - c.char.x) - Math.abs(b.x - c.char.x),
     );
   const n = required[act] ?? Math.min(5, peers.length + 1);
@@ -141,6 +146,7 @@ export class GroupActivity extends Skill {
   private beat = -1;
   private target: Thing | null = null;
   private started = false;
+  private finished = false;
   private descent: GetDown | null = null;
   constructor(readonly plan: GroupPlan) {
     super();
@@ -171,7 +177,7 @@ export class GroupActivity extends Skill {
   receive(c: Ctx, m: PeerMsg, sender: string) {
     if (!this.plan.members.includes(sender)) return;
     if (m.type === "groupCancel" && m.session === this.plan.session)
-      this.cancelled = true;
+      {this.cancelled = !m.finished;this.finished=!!m.finished;}
     // A companion may have joined much later and have a different simulation clock.
     // Start the short shared delay on receipt instead of copying the leader's local timestamp.
     if (
@@ -230,11 +236,7 @@ export class GroupActivity extends Skill {
       if (!target!.claimSeat(c.who, ch.x)) return true;
       const seat = target!.seatFor(c.who)!;
       x = seat.x;
-      if (ch.mode === "sit")
-        ch.seat = {
-          ...seat,
-          x: ch.seat!.x + (seat.x - ch.seat!.x) * Math.min(1, dt * 8),
-        };
+      if (ch.mode === "sit") ch.scootTo(seat);
     }
     if (p.act === "watch" || p.act === "pong")
       x = target!.center.x + target!.facing * (80 * ch.scale + i * p.gap);
@@ -270,7 +272,7 @@ export class GroupActivity extends Skill {
     }
     const u = c.world.time - this.epoch;
     if (u < 0) return false;
-    if (peers.some((v) => v!.group?.session !== p.session)) return true;
+    if (this.finished || peers.some((v) => v!.group?.session !== p.session)) return true;
     const neck = ch.body.j.neck,
       sc = ch.scale;
     if (!this.started) {
@@ -289,8 +291,10 @@ export class GroupActivity extends Skill {
         if (target!.movingBy && target!.movingBy !== c.who) return true;
         target!.movingBy = c.who;
         const dx = p.destination! - target!.center.x;
-        if (!Number.isFinite(dx) || Math.abs(dx) < 3) {
+        if (!Number.isFinite(dx)) return true;
+        if (Math.abs(dx) < 3) {
           target!.facing = p.destination! < p.x ? 1 : -1;
+          this.finished=true;
           return true;
         }
         const next =
@@ -352,7 +356,8 @@ export class GroupActivity extends Skill {
           );
           c.mood.nudge({ happiness: target!.pong.winner === i ? 0.08 : 0.01 });
         }
-        return u > 20 && target!.pong.time + 2 < u;
+        this.finished=u > 20 && target!.pong.time + 2 < u;
+        return this.finished;
       }
       return u > 180;
     }
@@ -384,32 +389,32 @@ export class GroupActivity extends Skill {
         };
       }
     }
-    if (beat !== this.beat) {
+    if(p.act==='chat'||p.act==='couch'){
+      const turn=Math.floor(u/3.8),speaker=turn%p.members.length,person=p.members[speaker];
+      const view=person===c.who?null:peers.find(v=>v!.id===person);
+      c.lookTarget=view?.joints.head??{x:p.x,y:neck.y};
+      if(speaker===i && turn!==this.beat){
+        this.beat=turn;const topic=Math.floor(turn/p.members.length);
+        c.say(conversationLine(c.personality,topic,speaker!==0),2.1);
+        c.mood.nudge({socialNeed:-.08,contentment:.02});
+      }
+      // Speakers gesture briefly; listeners look toward them and settle during pauses.
+      ch.handsAt=speaker===i && u%3.8<1.3?{R:{x:neck.x+ch.facing*12*sc,y:neck.y+16*sc}}:null;
+      ch.posture.hunch += speaker===i?0:Math.sin(u*2)*.035;
+    } else if (beat !== this.beat) {
       this.beat = beat;
-      if (
-        (p.act === "chat" || p.act === "couch") &&
-        beat % 4 === 0 &&
-        Math.floor(beat / 4) % p.members.length === i
-      )
-        c.say(
-          c.personality === "competitive"
-            ? "Who’s up for a challenge?"
-            : c.personality === "gentle"
-              ? "Glad everyone’s here."
-              : "We should make something together.",
-          1.6,
-        );
       if (p.act === "triangle" && beat % 3 === 0 && i === 0)
         c.burst?.(p.x, neck.y + 12 * sc, 6);
     }
-    return u > (["chat", "couch", "watch"].includes(p.act) ? 35 : 9);
+    this.finished=u > (["chat", "couch", "watch"].includes(p.act) ? 45 : 9);
+    return this.finished;
   }
   stop(c: Ctx) {
     this.descent?.stop(c);
     for (const id of this.plan.members)
       if (id !== c.who)
-        c.recordActivity?.(id, this.plan.act, this.started && !this.cancelled);
-    this.broadcast(c, { type: "groupCancel", session: this.plan.session });
+        c.recordActivity?.(id, this.plan.act, this.started && this.finished && !this.cancelled);
+    this.broadcast(c, { type: "groupCancel", session: this.plan.session, finished:this.finished && !this.cancelled });
     c.char.handsAt = null;
     c.char.handTarget = null;
     c.char.stop();

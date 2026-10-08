@@ -381,6 +381,7 @@ ipcMain.on('config:reset', (_e, id: unknown) => {
   const i = petIndex(id);
   setConfig(i, { ...DEFAULT_CONFIG, name: configs[i].name, personality:configs[i].personality, persona:configs[i].persona, figureCount:configs[0].figureCount, spawnOrder:configs[0].spawnOrder, friend:configs[0].friend, look: { ...DEFAULT_CONFIG.look, color: configs[i].look.color } });
 });
+ipcMain.on('pet:sanity',(_e,issues:unknown)=>{if(Array.isArray(issues))settingsWins.get(0)?.webContents.send('pet:sanity',issues.filter(x=>typeof x==='string').slice(0,30));});
 ipcMain.on('pet:stats', (_e, id: unknown, stats: unknown) => settingsWins.get(0)?.webContents.send('pet:stats', {id:petIndex(id),stats}));
 ipcMain.on('pet:collections', (_e, id: unknown, data: unknown) => settingsWins.get(0)?.webContents.send('pet:collections', {id:petIndex(id),data}));
 ipcMain.on('pet:command',(_e,id:unknown,cmd:string)=>{if(cmd==='returnHome')homes=homes.filter(h=>h.id!==petIndex(id));win?.webContents.send('pet:command',{id:petIndex(id),cmd});});

@@ -68,7 +68,7 @@ export type PeerMsg =
 
   | { type: 'groupInvite'; plan: import('./skills/group').GroupPlan }
   | { type: 'groupGo'; session: string; epoch: number }
-  | { type: 'groupCancel'; session: string }
+  | { type: 'groupCancel'; session: string; finished?:boolean }
 
   | { type: 'weaponRequest'; uid: number }
   | { type: 'weaponGrant'; uid: number; weapon: import('./combat/armament').LooseWeapon }

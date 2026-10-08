@@ -22,7 +22,9 @@ export class FriendlyMoment extends Skill {
         (a, b) =>
           (this.kind === "compare"
             ? Number(b.talent === "drawing") - Number(a.talent === "drawing")
-            : 0) || Math.abs(a.x - c.char.x) - Math.abs(b.x - c.char.x),
+            : this.kind === "check"
+              ? (c.relationship?.(b.id!)?.care??0)-(c.relationship?.(a.id!)?.care??0)
+              : 0) || Math.abs(a.x - c.char.x) - Math.abs(b.x - c.char.x),
       )[0];
     this.peer = target?.id ?? null;
   }

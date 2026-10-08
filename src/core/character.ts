@@ -282,6 +282,21 @@ export class Character {
   private ledge: { x: number; dir: number } | null = null;
   /** Sitting on a seat (a chair, a couch): where his bottom goes. A skill keeps it up to date if the seat moves. */
   seat: Vec | null = null;
+  private scoot: {from:Vec;to:Vec;time:number} | null = null;
+  get scooting() {return this.scoot!==null;}
+  /** Brace, lift, shift a small distance, then settle before another scoot. */
+  scootTo(at:Vec) {
+    if(this.mode!=='sit'||!this.seat)return;
+    if(this.scoot)return;
+    const dx=at.x-this.seat.x;
+    if(Math.abs(dx)<.75*this.scale){this.seat={...at};return;}
+    this.scoot={from:{...this.seat},to:{x:this.seat.x+Math.sign(dx)*Math.min(Math.abs(dx),18*this.scale),y:at.y},time:0};
+  }
+  /** Spawn placement also moves the walking reference and planted feet. */
+  placeHome(x:number) {
+    const dx=x-this.x;this.body.translate(dx,0);this.rootX+=dx;this.goalX=null;this.rootVX=0;
+    for(const f of [this.feet.L,this.feet.R]){f.x+=dx;f.fromX+=dx;f.toX+=dx;}
+  }
   /**
    * How he's sitting on a seat: sitting up (a chair), leaning back, sitting square to you (turned out
    * of the screen, still glancing the way he faces), or lying along it (a couch: head on the armrest
@@ -1033,6 +1048,11 @@ export class Character {
     this.dt = dt;
     this.time += dt;
     this.modeTime += dt;
+    if(this.scoot){
+      if(this.mode!=='sit'||!this.seat)this.scoot=null;
+      else {const m=this.scoot;m.time+=dt;const u=Math.min(1,m.time/.9),slide=smooth(clamp((u-.22)/.5,0,1));
+        this.seat={x:m.from.x+(m.to.x-m.from.x)*slide,y:m.from.y+(m.to.y-m.from.y)*slide};if(u===1)this.scoot=null;}
+    }
     this.stun = Math.max(0, this.stun - dt);
     this.hitstun = Math.max(0, this.hitstun - dt);
     const wasBroken=this.stagger>0;
@@ -2404,7 +2424,8 @@ export class Character {
     if (this.seatStyle === 'lie') { this.seatLiePose(t, s); return; }
     const d = this.d, sc = this.scale, P = this.posture, st = this.seat!, legLen = d.thigh + d.shin;
     this.rootX = st.x;
-    const hip = this.pt(st.x, st.y - 3 * sc);
+    const lift=this.scoot?Math.sin(Math.PI*Math.min(1,this.scoot.time/.9))*4*sc:0;
+    const hip = this.pt(st.x, st.y - 3 * sc-lift);
     const lean = (this.lounge ? -9 : 1.5 + P.hunch * 6) * sc;
     const neck = this.off(hip, lean, -Math.sqrt(Math.max(d.torso ** 2 - lean ** 2, 1)));
     const ground = Math.min(this.bounds.floor, st.y + legLen);
@@ -2422,7 +2443,7 @@ export class Character {
     const hand = (k: 'L' | 'R') => this.handsAt?.[k] ? this.reachToward(neck, this.handsAt[k]!, k) : this.gamepad ? this.padHand(hip, k)
       : this.handTarget && k === this.useHand
       ? this.pt(this.handTarget.x, this.handTarget.y, neck.z)
-      : this.lounge ? this.off(hip, -3 * sc, -1 * sc, sideOf(k) * 11 * sc) : this.off(kneeAt(k), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
+      : this.scoot ? this.pt(st.x-Math.sign(this.scoot.to.x-this.scoot.from.x)*9*sc,st.y-2*sc,sideOf(k)*9*sc) : this.lounge ? this.off(hip, -3 * sc, -1 * sc, sideOf(k) * 11 * sc) : this.off(kneeAt(k), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
     this.fillLimbs(t, hip, neck, (this.lounge ? -0.1 : 0.1) + P.hunch * 0.6, 0, hand('L'), hand('R'), fL, fR);
     t.kneeL = kneeAt('L'); t.kneeR = kneeAt('R');
     Object.assign(s, { hip: 0.4, neck: 0.25, head: 0.25, kneeL: 0.2, kneeR: 0.2, footL: 0.12, footR: 0.12, elbowL: 0.08, elbowR: 0.08, handL: 0.1, handR: 0.1 });

@@ -1,6 +1,10 @@
 export type Talent = "drawing" | "fighting" | "building" | "games";
 export interface Relationship {
   bond: number;
+  cooperation:number;
+  care:number;
+  rivalry:number;
+  lastShared:string;
   activities: Record<string, number>;
   vulnerable: Record<string, number>;
   disagreements: number;
@@ -8,7 +12,7 @@ export interface Relationship {
 }
 export function relationship(bond = 0.4): Relationship {
   return {
-    bond,
+    bond,cooperation:.5,care:0,rivalry:0,lastShared:"",
     activities: {},
     vulnerable: {},
     disagreements: 0,
@@ -32,6 +36,8 @@ export function parseRelationship(raw: unknown): Relationship | null {
         )
         .map(([key, v]) => [key, Math.max(0, Math.min(1000, v as number))]),
     );
+  for(const key of ['cooperation','care','rivalry'] as const)if(typeof o[key]==='number'&&Number.isFinite(o[key]))r[key]=Math.max(0,Math.min(1,o[key] as number));
+  r.lastShared=typeof o.lastShared==='string'?o.lastShared.slice(0,40):'';
   r.activities = counts(o.activities);
   r.vulnerable = counts(o.vulnerable);
   r.disagreements =

@@ -200,7 +200,9 @@ try {
   const click = async selector => { const at=await centerOf(selector);await mouse('mouseMoved',at);await mouse('mousePressed',at,true);await mouse('mouseReleased',at); };
   assert(await evaluate('document.querySelector("#grabBag").hidden && document.querySelector("#trashCan").hidden'));
   // Discover the bag through the figure's real right-click menu, with both shortcuts hidden.
-  const head = await evaluate('({x:window.pet.char.body.j.head.x,y:window.pet.char.body.j.head.y})');
+  await evaluate('window.pet.char.stop()');
+  // Use the torso: moving the pointer itself makes his head look toward it.
+  const head = await evaluate('(() => {const j=window.pet.char.body.j;return {x:(j.neck.x+j.hip.x)/2,y:(j.neck.y+j.hip.y)/2};})()');
   await mouse('mouseMoved', head);
   await send('Input.dispatchMouseEvent',{type:'mousePressed',...head,button:'right',clickCount:1});
   await send('Input.dispatchMouseEvent',{type:'mouseReleased',...head,button:'right',clickCount:1});
@@ -527,6 +529,49 @@ try {
   assert(await evaluate('window.pet===window.rosterRuby && window.pet.items.list.includes(window.rosterBook)'));
   await send('Page.captureScreenshot',{format:'png'}).then(shot=>writeFileSync(join(root,'.build/living-unified-bag.png'),Buffer.from(shot.data,'base64')));
   console.log('PASS selectable Ruby solo, stable character identity/owned book, shared furniture responsibility, All figures supplies with distinct ownership, unified target dropdown');
+  await evaluate(`(() => {
+    window.toolBag.close();window.setRoster([0,1,2,3,4]);window.pet.props.things.length=0;
+    for(const [i,p] of window.pets.entries()){
+      p.paused=true;p.mind.reset(p.ctx);p.mind.holdUntil=Infinity;p.mood.asleep=false;p.command('resetMood');p.char.hp=1;p.freeze=0;p.applyConfig({...p.config,windows:false,scale:1,dailyRhythm:false,destructible:false});p.setWindows([]);p.command('respawn');
+    }
+    for(let j=0;j<1000;j++)for(const p of window.pets)p.update(1/120);
+    for(const [i,p]of window.pets.entries())p.char.placeHome(140+i*70);
+    window.livingCouch=window.pet.props.spawn('couch',640,innerHeight-57,1);
+    for(let j=0;j<360;j++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets){p.mind.reset(p.ctx);p.paused=false;}window.pet.command('do:group:couch');
+    for(let j=0;j<2400&&!window.pets.every(p=>p.view().group?.phase==='do');j++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets)p.paused=true;
+  })()`);
+  assert(await evaluate('window.pets.every(p=>p.char.mode==="sit" && p.view().group?.members.length===5)'),JSON.stringify(await evaluate('window.pets.map(p=>({mode:p.char.mode,hp:p.char.hp,skill:p.mind.activeSkill?.name,group:p.view().group,x:p.char.x,y:p.char.body.j.footL.y,why:p.mind.why}))')));
+  await scene('living-five-couch');
+  // Recenter live individual activities after a member leaves; exercise their actual scoot loop.
+  await evaluate(`(() => {
+    for(const p of window.pets){p.mind.reset(p.ctx);p.char.standUp();p.paused=false;p.command('do:sitdown');}
+    for(let j=0;j<1200;j++)for(const p of window.pets)p.update(1/120);
+    window.pets[4].mind.reset(window.pets[4].ctx);
+    for(let j=0;j<5;j++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets)p.paused=true;
+  })()`);
+  await scene('living-scoot-brace');
+  await evaluate('for(let j=0;j<34;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');await scene('living-scoot-lift');
+  await evaluate('for(let j=0;j<42;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');await scene('living-scoot-shift');
+  await evaluate(`(() => {
+    for(const p of window.pets){window.livingCouch.leaveSeat(p.ctx.who);p.char.standUp();p.paused=false;}window.pet.command('do:chat');
+    for(let j=0;j<2000&&!window.pets.every(p=>p.view().group?.phase==='do');j++)for(const p of window.pets)p.update(1/120);
+    for(let j=0;j<490;j++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets)p.paused=true;
+  })()`);
+  await scene('living-group-listening');
+  assert.deepEqual(await evaluate('window.checkSanity()'),[]);
+  await evaluate(`(() => {
+    for(const [i,p]of window.pets.entries()){p.mind.reset(p.ctx);p.char.standUp();p.char.placeHome(220+i*160);p.paused=false;p.mind.holdUntil=Infinity;}
+    window.pets[0].selectPeer(window.pets[1].ctx.who);window.pets[1].selectPeer(window.pets[0].ctx.who);
+    window.pets[0].command('do:duel');
+    for(let j=0;j<700;j++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets)p.paused=true;
+  })()`);
+  await scene('living-duel-spectators');assert(await evaluate('window.pets.slice(2).every(p=>p.char.hp===1 && p.mind.activeSkill?.name!=="duel")'));
+  console.log('PASS Living Stickmen browser: rendered five couch seats, brace/lift/shift scoot phases, group listening and spectator-safe combat; live sanity audit clean');
   assert.deepEqual(errors, [], 'Unexpected browser exceptions');
   console.log('PASS browser: painting, seated Othello, captures, pet turn, concurrent chat, removable gear, keyboard navigation, dragging, bounds, close, actual cursor pistol aim/ammo/reload/return, bow charge/release, book rendering, page-fragment images, native-window visit controller and rendering');
   console.log('Screenshot: .build/browser-smoke.png');

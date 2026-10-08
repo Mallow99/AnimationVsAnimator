@@ -12,7 +12,7 @@ if (what === 'lab') {
   mkdirSync('dist/lab', { recursive: true });
   const html = readFileSync('src/lab/lab.html', 'utf8').replace('/*__LAB_SCRIPT__*/', () => out.outputFiles[0].text.replace(/<\/script/g, '<\\/script'));
   writeFileSync('dist/lab/index.html', html);
-} else if (what === 'sim' || what === 'checks' || what === 'roadmap-checks' || what === 'quality-checks' || what === 'quality-profile' || what === 'living-checks' || what === 'soak') {
+} else if (what === 'sim' || what === 'checks' || what === 'roadmap-checks' || what === 'quality-checks' || what === 'quality-profile' || what === 'living-checks' || what === 'living-soak' || what === 'soak') {
   await build({ ...common, entryPoints: [`scripts/${what}.ts`], outfile: `.build/${what}.mjs`, platform: 'node', format: 'esm' });
 } else {
   await Promise.all([

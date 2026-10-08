@@ -1,21 +1,29 @@
 # Project roadmap
 
-## Current priority: Pet Quality (completed in this update)
+## Current priority: Pet Quality / Living Stickmen (completed)
 
-The owner's 2026-10-06 instruction overrides the roadmap order: finish a coherent Pet Quality update
-before adding more Chrome/Finder integration. Batch scope remains unlimited. This update is implemented
-and cloud-verified; stop here before the next milestone. Mac/Windows hardware acceptance remains open.
+The owner's expanded request overrides the integration roadmap. Core principle: **figures should feel
+alive without AI** through purposeful activity, physical transitions, personality and social continuity.
+The ordered checklist is [LIVING-STICKMEN-PLAN.md](LIVING-STICKMEN-PLAN.md). This update includes:
 
-Built: smoother seating and wider five-seat couch; purposeful quieter personality-driven everyday
-behavior; cups/dumbbells/yo-yos; book opening/page-turning/closing with real bookshelf fetch/return;
-passive pickup and explicit Use/Carry/Drop/Stop controls; resumable six-round gun reloads; stable contact
-friction/stacking; elevated-group descent; keyboard/refocus ownership guard. Existing item behavior,
-ownership, saves and interrupted activities were audited. See [PET-QUALITY.md](PET-QUALITY.md) for the
-item audit, visual evidence, tests, performance and remaining limits.
+- Foundation repairs for drawn-project continuity, one reload clock per original gun, custom and
+  reader-facing book artwork, returning hand targets, closed/open contours and stable rigid stacking.
+- Selectable five-character presets and 1–5 population labels; one named/All figures Settings window
+  and shared searchable Bag/Supplies/Activities, preserving legacy saves and individual ownership.
+- Brace/lift/scoot/settle seating, actual discoverable furniture movement, exclusive duels and group
+  conversations with timed turns/listeners. Stronger offline needs and saved cooperation/care/rivalry
+  affect activities, reactions and partners. Roster departures/rejoins release/reconnect shared claims.
+- Read-only built-in sanity checks, feature/lifecycle soak, simulations, real Chromium/Electron input,
+  visual inspection, performance checks and Windows portable packaging. Native Mac/Windows checks
+  remain explicit. Every working commit has a changelog and sanity checks.
 
-The owner's correction is authoritative: **fix broken/infinite reloading, retain reload mechanics**.
-Books were an example, not an item-count limit. Picking up an item must not automatically use it.
-People Playground was consulted for physical-contact expectations; movable props remain movable.
+Cups, dumbbells, yo-yos, handhelds, real bookshelf books and useful existing tools remain included.
+**Fix broken/infinite reloading; retain reload mechanics.** Books were an example, not an item limit.
+Pickup is passive; Use is explicit. Stable contact must retain manipulation and impact response.
+See [PET-QUALITY.md](PET-QUALITY.md) for the item audit, evidence and limitations.
+
+The owner requested research for **Pet Quality Update 2** after finishing this update. That research
+is a separate recommendation, not a new implementation milestone. No integration work resumes now.
 
 The existing five-update plan stays below for context. Workshop and Household are built on
 `codex/roadmap-continuation`, stacked on `codex/desktop-life`; PR #3 remains the continuation PR.

@@ -56,7 +56,7 @@ export interface MadeMove { name: string; frames: Keyframe[] }
 
 /** Longest made-up move: this many poses, this many seconds. Longest plan: this many steps. */
 const MAX_FRAMES = 16, MAX_MOVE_SECONDS = 10, MAX_STEPS = 8;
-const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust'];
+const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust','socialNeed','inspiration','frustration','contentment'];
 
 const num = (v: unknown) => (typeof v === 'number' || typeof v === 'string') && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
 
@@ -489,7 +489,7 @@ export class Brain {
       ...(bodyGuide ? BODY_GUIDE : []),
       ...(drawGuide ? DRAW_GUIDE : []),
       '',
-      'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust. {} if nothing changed.',
+      'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust, socialNeed (wanting company), inspiration (wanting to make/learn), frustration, contentment. {} if nothing changed.',
       '',
       'MEMORY: "remember" is a list of up to 3 short notes to keep for the long term, written by you, in your own voice (first person). Only things worth remembering for days: facts about the person (their name, what they like, what they told you), promises, big events, strong opinions. Not every little thing; usually it\'s empty.',
       "Use what you remember naturally (bring it up, hold grudges, be glad), but don't recite it.",
@@ -550,7 +550,7 @@ export class Brain {
     return [
       '[state]',
       `time: ${d.toLocaleDateString('en-US', { weekday: 'long' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
-      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)})`,
+      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)}, social need ${f(s.socialNeed)}, inspiration ${f(s.inspiration)}, frustration ${f(s.frustration)}, contentment ${f(s.contentment)})`,
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,
@@ -574,7 +574,7 @@ export class Brain {
         : [
             `body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`,
           ]),
-      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}`).join('; ') || 'alone'}`,
+      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}${p.id ? `, bond ${c.relationship?.(p.id)?.bond.toFixed(2)??'new'}`:''}`).join('; ') || 'alone'}`,
       `relationship with current partner: ${c.feel.bond.toFixed(2)}`,
       `connected Chrome page: ${c.desktopState?.().browser?.title ?? 'none'}. Page selection: ${c.desktopState?.().browser?.selected ? 'available to take' : 'none'}. Use desktop actions only when asked.`,
       `available actions now: ${mind

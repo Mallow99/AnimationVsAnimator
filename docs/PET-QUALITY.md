@@ -1,10 +1,68 @@
-# Pet Quality — 2026-10-06
+# Pet Quality / Living Stickmen — 2026-10-08
 
 This update takes priority over Out of the Box. It preserves the procedural figures, colors,
 personalities, appearance/movement presets and offline operation. No new Chrome/Finder feature
 is included. Stop after this update; the next roadmap milestone needs a new instruction.
 
-## What changed
+## Living Stickmen extension
+
+The expanded request is finished, including selectable preset rosters, unified Settings/Bag scope,
+physical couch scoots, real group conversations, safe combat spectators and richer offline needs.
+Delivered behavior is in [HANDOFF.md](HANDOFF.md); controls and native acceptance are in
+[CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
+
+Sanity review repaired five confirmed foundation bugs: earlier drawn projects being deleted,
+idle/full-bag/passive reload stalls, stale returning-book hand targets, mismatched closed-book
+contours and stock animation overriding custom artwork. Reader-facing pages/depth, stable stacks
+and leaning, roster bookshelf-slot release and reconnecting furniture platforms have regressions.
+Props remain draggable, throwable, movable and responsive to hits. Completed group/Pong/friendly-duel
+history now feeds cooperation, care and friendly rivalry.
+
+### Final cloud acceptance
+
+| Check | Result and practical limit |
+| --- | --- |
+| Typecheck / build | Passed |
+| Existing / roadmap / quality / Living Stickmen regressions | 72 + 30 + 18 + 20 = **140 passed** |
+| Full simulation | Seed 7 passed, including its ten-minute windows/cursor phase |
+| Scheduled feature/lifecycle soak | **2,092.4 simulated seconds (34m 52.4s), 2,159 live audits, 26 phases, zero reported issues**, seed 21 |
+| Soak coverage | All 19 stock item and nine furniture take/place/drag/pass/cancel/trash/undo lifecycles; everyday activities, reading, TV/Othello, crafting, refining, sorting, all count-specific groups, Pong, arranging/carrying/corners, gifts/reassurance, duel spectators, cursor gun/reload/restart, roster rejoin, sleeping pickup, stacking/impact/leaning and unattended life |
+| Soak activity contract | Confirms the requested skill starts, observes the phase, then verifies cleanup after completion or explicit interruption. Does not prove every possible combination or native integration. |
+| Random life soaks | Earlier ten-minute seed-7 runs with two and five figures passed; scheduled acceptance also exercises groups of 2, 3, 4 and 5 |
+| Actual Chromium | Pointer/keyboard bag, explicit Use/Carry/Reload/Drop/Cancel, cleaning, ownership, roster, bulk supplies, games and five-figure rendering/motion checks passed |
+| Actual Linux Electron/Xvfb | Real preload/IPC, one Settings window, named/All targets, saved memory/config, fake windows, upgrades, pointer/keyboard/chat/game focus and live sanity UI passed |
+| Core performance | Five figures + ten loose items + couch/bookshelf: mean **1.327ms**, p95 **1.805ms** per combined 120Hz update; two figures mean 0.511ms / p95 0.668ms. Shared cloud CPU; excludes rendering/native costs. |
+| Rendered performance | Five-figure Chromium median **16.7ms**, p95 **33.4ms**, 120 intervals while other acceptance jobs shared CPU; earlier isolated runs gave p95 16.8ms. Not Mac performance. |
+| Windows portable build | x64 packaged; renderer/settings/main/preload hashes match, two real PowerShell helpers + 28 definitions included; no local saves, keys or source |
+
+The persistent [soak report](verification/living-soak-2026-10-08.json) records seed and each phase.
+`npm run livingsoak` regenerates `.build/living-soak-report.json`; `LIVING_SOAK_SEED` selects a replay.
+`npm run sanitycheck` runs the focused regressions. General → Development checks runs a bounded
+read-only audit instead of changing/freezing the world. Logs/screenshots regenerate under `.build/`.
+
+Visual inspection covered reader-facing books/strap ordering, five actual couch activities,
+brace/lift/shift scoot frames, group listening, spectators, shared bag/settings and workshop handling.
+Frames show the procedural style; motion feel still merits the owner's live Mac session.
+
+![Five distinct couch seats](images/living-five-couch.png)
+
+![Lift during a physical scoot](images/living-scoot-lift.png)
+
+![Speaker and group listeners](images/living-group-listening.png)
+
+### Remaining issues and limits
+
+- Native Mac Swift compilation, permissions, focus hand-back/desktop return, Spaces and click-through
+  need the owner's Mac. Guards and Linux checks do not establish that the original report is fully
+  resolved. Real Windows input/helper/mixed-DPI checks also need hardware.
+- Convex contacts approximate concave gaps; extreme-speed throws may tunnel. Cross-owner loose items
+  use peer snapshots rather than one simultaneous solver. Arbitrary collision combinations remain
+  outside the guarantee of these tests.
+- Books keep their owner, Undo restores one object for this session, and main-display limits remain.
+  More expressive timing/contact materials are Pet Quality 2 research candidates. No next integration
+  milestone was started.
+
+## Initial Pet Quality changes (2026-10-06)
 
 - Sitting and standing blend through the existing joint/muscle controller. Resting legs move less
   often. The couch retains its pixel artwork but has wider cushions and five spaced seats.

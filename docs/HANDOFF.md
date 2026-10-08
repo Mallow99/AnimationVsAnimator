@@ -2,71 +2,61 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## In progress: Living Stickmen — selectable roster and shared controls
+## Latest update: Pet Quality / Living Stickmen — 2026-10-08
 
-The foundation commit is af56778. This follow-up adds stable five-character roster selection,
-1–5 count labels, one Settings window, target dropdowns and All figures supplies. Desktop, tray
-and Settings all open the same searchable inventory/activity panel; owned shelf/world items remain
-visible. Legacy solo settings migrate and removed characters keep their actual owned objects.
+The owner expanded the Pet Quality scope and authorized completion. The update continues open draft
+PR #3 on `codex/roadmap-continuation`, stacked on `codex/desktop-life`. No new Chrome/Finder feature
+was started. Stop before the next roadmap milestone. Research for Pet Quality Update 2 is a proposal,
+not authorization to implement it. Every working commit includes CHANGELOG.md and a chat changelog.
+The ordered request checklist is [LIVING-STICKMEN-PLAN.md](LIVING-STICKMEN-PLAN.md).
 
-Typecheck, ten sanity checks, actual Chromium and Linux Electron smoke checks passed. Electron
-used disposable data and fake windows; verified single-window target switching, distinct colors,
-All figures giving, memory files and native Linux focus/input. Screenshots are in .build. R3's
-expanded reactions and L1–L7 remain next; finish docs/LIVING-STICKMEN-PLAN.md before stopping.
-No native Mac/Windows acceptance was performed.
+- Foundation (`af56778`): drawing a new tool preserves earlier original projects; reload clocks advance
+  once for owned guns in hand/bag/world/passive transport/cursor use. Six-round reload mechanics remain.
+  Stock books have reader-facing pages, correct open/closed contours and depth ahead of the satchel;
+  custom book artwork stays custom. Returning books release stale reading targets and prefer their
+  original usable shelf. Cups, dumbbells, yo-yos, handhelds and the broader item audit remain included.
+- Roster/shared controls (`8bc46a8`): 1–5 stickmen count labels, selectable preset characters (including
+  Ruby alone), stable identity/config/save slots and one Settings window with named/All figures scope.
+  Bag/Supplies/Activities is shared, searchable and reachable from right-click Open bag, tray and
+  Settings. Bulk supplies create separately owned originals; full bags explain the limit. Existing
+  edited names/colors/personalities and old solo saves migrate. Removed characters retain possessions.
+- Physical/social life: brace/lift/small scoot/settle replaces seat slides; five fit the couch and can
+  overlap briefly during movement. Ordinary conversation joins available 3–5 figures with timed turns,
+  listeners and distinct preset replies. Busy readers/queued work are protected; quiet seated figures
+  can join. Duels keep one opponent and incidental figure attacks cannot recruit or hurt spectators.
+- Social/creative need, frustration and contentment have activity/rest causes and saved values. Existing
+  bonds plus cooperation influence partners/invitations; care influences reassurance; friendly rivalry
+  favors familiar game partners. Completed activities record shared history for all participants,
+  including Pong and friendly duels; interruption does not automatically damage affection. Optional
+  AI context and Mind nodes describe the new needs while all behavior remains usable offline.
+- TV/furniture menus expose Move beside the matching furniture and target the exact clicked original.
+  Autonomous TV arranging is more likely when the TV is far from a couch. Occupied/held/blocked objects
+  release their move claims. Departing figures put away shelved books and reconnect furniture-platform
+  notifications when rejoining, avoiding invisible slot reservations and stale collision platforms.
+- Physics: rigid contacts resolve once, share separation by mass/support and preserve velocity during
+  shape correction. Rigid linear/angular projection prevents deformation energy from launching leaning
+  furniture. Five-box stacks settle while impacts/dragging/carrying/throwing remain active.
+- Development checks in General run a bounded read-only ownership/coordinate/controller/group/claim/
+  bookshelf-slot audit. Hidden duplicate Settings catalogs were removed. Native focus guards from the
+  preceding update remain; the earlier desktop-return report still needs reproduction on the Mac.
 
-## In progress: Living Stickmen — foundation repaired
+Final cloud acceptance: typecheck/build; 140 regressions; full seed-7 sim; scheduled seed-21 soak
+(2,092.4 simulated seconds, 2,159 audits, 26 phases, zero reported issues); actual Chromium/Linux
+Electron controls and visual inspection; current Windows x64 portable package. Core five-figure
+mean/p95 1.327/1.805ms; loaded Chromium median/p95 16.7/33.4ms. Persistent phase report:
+docs/verification/living-soak-2026-10-08.json.
 
-The owner authorized the expanded update: roster presets, shared controls, physical/social life,
-stronger offline moods/relationships and prop physics. Follow docs/LIVING-STICKMEN-PLAN.md in order;
-stop before Out of the Box. Every working commit updates CHANGELOG.md and reports actual checks.
-Foundation repairs cover project deletion, idle/full-bag/passive reload clocks, returning hand
-poses, custom/reader-facing book art and rigid contact drift/deformation energy. The original
-five-box drift reproduction now stays settled while still responding to impacts. No native
-Mac/Windows acceptance is claimed. Roster, shared GUI and social stages are next.
+Acceptance details, commands and representative images: [PET-QUALITY.md](PET-QUALITY.md).
+Current owner controls and native hardware sequence: [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
 
-## Latest update: Pet Quality — 2026-10-06
+Cloud checks cover the platform-free simulation and real Chromium/Electron input with fake windows
+and disposable app data. They cannot establish Swift compilation, actual Mac focus hand-back, Spaces,
+permissions or click-through. Real Windows input, PowerShell helpers and mixed DPI also need hardware.
+Convex contacts approximate concave gaps and have extreme-speed tunneling limits; cross-owner loose
+items resolve against peer snapshots. Undo is one session-only object, books retain ownership, and
+main-display limits remain. A soak checks exercised paths, not every possible native/user action.
 
-The owner's latest instruction prioritizes pet polish over the roadmap order. Implementation is
-complete on `codex/roadmap-continuation`, continuing cleanup commit `269d561` in open draft PR #3,
-stacked on `codex/desktop-life`. Stop after this update; no new Chrome/Finder milestone was started.
-
-- Added useful cups, dumbbells and yo-yos with offline actions, natural repetitions/pauses and cleanup.
-  Personality affects their choices/reactions; quieter chatter and social timing protect settled and
-  queued activities. Trusted partners are favored after relevant talents.
-- Preserved the procedural look/presets. Seating transitions blend through existing muscles/bones;
-  resting legs are quieter and a wider pixel couch comfortably separates five figures. Handheld grips
-  are horizontal/two-handed and finish at game-over. Books open, turn pages with a hand, close, and
-  return upright to a low bookshelf with five saved real-book slots. Interrupted or cursor-held books
-  do not duplicate. Grabbing/tipping the shelf releases its contents.
-- Take out is passive; explicit Use starts weapons/cleaners. Owned weapons have Carry/Drop/Put away
-  and a visible mouse Reload. Cleaners have Stop using and ignore control traversal and release.
-  Reload mechanics remain six-round magazines; progress belongs to the original gun and survives
-  interrupted bursts, cursor use, storage, saves and peer gift/recovery.
-- Contact friction and supported-body damping settle furniture without pinning it. Artwork-based loose
-  item contacts include different owners through snapshots. Hits, throws, dragging and moving still
-  work. An elevated group member now descends and recovers before gathering on the floor.
-- Mac keyboard ownership clears/suppresses pending native refocus requests; Linux Electron verifies
-  the shell paths. Stock artwork upgrades while edited/deleted example files remain intact.
-
-Validation: typecheck/build; 72 existing + 30 roadmap + 18 quality checks; full simulations seeds 1/7;
-ten-minute five-figure seed-1 and two-figure seed-7 soaks with no trouble. The seed-7 elevated gathering
-stall was reproduced and fixed. Actual Chromium checks cover the new controls and render sequences;
-inspected couch/workshop/everyday/open/page/close/return artwork. Linux Electron/Xvfb checks preload,
-focus/input and existing-install upgrades. Five-figure core profile: mean 0.822ms / p95 1.313ms per
-120Hz update with ten loose items; Chromium frame median 16.7ms / p95 16.8ms here. Windows portable
-packaging succeeds with real helpers and new definitions, without user data/keys.
-
-Remaining: Swift compilation and real Mac desktop-return/Spaces/permissions/click-through were not
-verified here. Real Windows helpers/input/mixed DPI also need hardware. Convex prop contact has
-approximate concave gaps and extreme-speed tunneling limits; cross-owner contacts resolve from
-snapshots rather than simultaneous impulses. Undo remains one session-only object, books retain
-ownership, and the main-display limitation remains. No new integration work follows this pass.
-
-Next concrete step is owner hardware acceptance in [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
-Full item audit, repeatable verification and representative images: [PET-QUALITY.md](PET-QUALITY.md).
-The earlier “return to the original thing” report still needs reproduction on the Mac; the refocus
-race guard is a candidate repair, not proof that every native cause is resolved.
+Next concrete step: owner hardware acceptance, then review the separate Pet Quality 2 research.
 
 ## Previous update: interaction and rendering cleanup
 

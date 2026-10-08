@@ -11,6 +11,10 @@ export interface MoodState {
   boredom: number;   // rises when nothing happens
   annoyance: number; // at YOU. Spikes on pokes/throws, cools off in a minute or so.
   fear: number;      // spikes on big throws/crashes, fades fast
+  socialNeed:number; // rises while alone; shared activities satisfy it
+  inspiration:number; // urge to make or learn, satisfied by purposeful work
+  frustration:number; // recent setbacks, cools through rest and cooperation
+  contentment:number; // steadier satisfaction than an excited happiness burst
   trust: number;     // long-term: how he feels about you. Moves slowly, persists.
 }
 
@@ -42,7 +46,7 @@ export type Emotion = 'sleepy' | 'sad' | 'lonely' | 'angry' | 'annoyed' | 'scare
   | 'bored' | 'content' | 'proud' | 'embarrassed';
 
 export class Mood {
-  s: MoodState = { energy: 0.85, happiness: 0.6, boredom: 0.2, annoyance: 0, fear: 0, trust: 0.5 };
+  s: MoodState = { energy: 0.85, happiness: 0.6, boredom: 0.2, annoyance: 0, fear: 0, trust: 0.5, socialNeed:.2,inspiration:.35,frustration:0,contentment:.55 };
   asleep = false;
   /** A short burst of feeling (proud after nailing something, embarrassed after a faceplant), and how long it lasts. */
   flash: { kind: 'proud' | 'embarrassed'; left: number } | null = null;
@@ -57,16 +61,20 @@ export class Mood {
       s.boredom += dt / 150;      // ~2.5 minutes of nothing to get fully bored
     }
     if (this.flash && (this.flash.left -= dt) <= 0) this.flash = null;
+    s.socialNeed += this.asleep ? -dt/400 : dt/900;
+    s.inspiration += this.asleep ? -dt/1200 : dt/900;
+    s.frustration -= dt/(this.asleep?45:150);
+    s.contentment += (.55-s.contentment)*dt/600;
     s.annoyance -= dt / 45;
     s.fear -= dt / 6;
     // Happiness drifts toward a resting point that depends on how much he trusts you.
-    const rest = 0.5 + (s.trust - 0.5) * 0.4 - (s.boredom > 0.8 ? 0.15 : 0);
+    const rest = 0.5 + (s.trust - 0.5) * 0.4 - (s.boredom > 0.8 ? 0.15 : 0)+(.1*(s.contentment-.5))-s.frustration*.08;
     s.happiness += (rest - s.happiness) * (dt / 240);
     this.clampAll();
   }
 
   nudge(d: Partial<MoodState>) {
-    for (const k of Object.keys(d) as (keyof MoodState)[]) this.s[k] += d[k]!;
+    for (const k of Object.keys(d) as (keyof MoodState)[]) if(typeof d[k] === "number" && Number.isFinite(d[k]))this.s[k] += d[k]!;
     this.clampAll();
   }
 
@@ -86,7 +94,7 @@ export class Mood {
     const s = this.s, L = this.label;
     if (L === 'scared' || L === 'angry' || L === 'sleepy') return L;
     if (this.flash) return this.flash.kind;
-    if (L === 'sad') return s.boredom > 0.6 ? 'lonely' : 'sad';
+    if (L === 'sad') return s.socialNeed > .6 || s.boredom > 0.6 ? 'lonely' : 'sad';
     if (s.annoyance > 0.3) return 'annoyed';
     if (s.fear > 0.22) return 'nervous';
     if (L === 'bored') return 'bored';
@@ -121,7 +129,7 @@ export class Mood {
   load(data: unknown) {
     if (!data || typeof data !== 'object') return;
     const d = data as Partial<MoodState> & { savedAt?: number };
-    for (const k of Object.keys(this.s) as (keyof MoodState)[]) if (typeof d[k] === 'number') this.s[k] = d[k]!;
+    for (const k of Object.keys(this.s) as (keyof MoodState)[]) if (typeof d[k] === 'number' && Number.isFinite(d[k])) this.s[k] = d[k]!;
     const away = d.savedAt ? (Date.now() - d.savedAt) / 1000 : 0;
     if (away > 60) {
       this.s.annoyance = 0; this.s.fear = 0;

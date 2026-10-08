@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld('petShell', {
   setKey: (key: string) => ipcRenderer.send('brain:setKey', key),
   onTab: on('settings:tab'),
   onSelect: on('settings:select'),
+  reportSanity:(issues:unknown)=>ipcRenderer.send('pet:sanity',issues),
+  onSanity:on('pet:sanity'),
   openItemsFolder: () => ipcRenderer.send('items:openFolder'),
   reloadItems: () => ipcRenderer.send('items:reload'),
 });

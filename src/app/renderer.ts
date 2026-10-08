@@ -1,3 +1,4 @@
+import {checkSanity} from "../core/sanity";
 import { isWeapon } from '../core/combat/armament';
 // The overlay page: sets up the canvas, runs the frame loop, feeds mouse input to the stick figures,
 // and tells the desktop shell when clicks should pass through.
@@ -28,6 +29,7 @@ interface PetShell {
   getConfigs(): Promise<PetConfig[]>;
   onConfig(cb: (c: { id: number; config: PetConfig }) => void): void;
   sendStats(id: number, stats: unknown): void;
+  reportSanity(issues:string[]):void;
   sendCollections(id: number, data: unknown): void;
   onCommand(cb: (c: { id: number; cmd: string }) => void): void;
   onWindows(cb: (wins: WinRect[]) => void): void;
@@ -152,19 +154,20 @@ function applyConfigs(configs: PetConfig[]) {
     else figures[id].applyConfig(configs[id] ?? companionConfig(configs[0],id));
   }
   const next=ids.map(id=>figures[id]);
-  for (const p of pets) if (!next.includes(p)) {
-    const id=figures.indexOf(p); saveOne(id); habitats.returnHome(id);
+  for (const p of figures) if (!next.includes(p)) {
+    const id=figures.indexOf(p); habitats.returnHome(id);
     if (talkPet===p) closeTalk();
     if (toolBag.tools.held?.owner===p) toolBag.cancel();
     if(cursorWeapon.owner===p)equipCursor("none");
-    p.leaveWorld(); p.others=[];
+    p.leaveWorld(); p.others=[]; saveOne(id);
   }
   for(const p of figures)p.ownsProps=false;
   next[0].ownsProps=true;
   for(const [i,p]of next.entries()) {
     p.ctx.world.time=time;
     if(!previous.has(p)) {
-      p.char.standUp(); p.char.body.translate((innerWidth*(i+1))/(next.length+1)-p.char.x,0);
+      p.enterWorld();
+      p.char.standUp(); p.char.placeHome((innerWidth*(i+1))/(next.length+1));
     }
   }
   pets.splice(0,pets.length,...next);
@@ -187,7 +190,7 @@ const setWindowsAll = (wins: WinRect[]) => { lastWins = wins; for (const p of fi
 if (shell) {
   shell.getConfigs().then((cs) => { cs.forEach((c, i) => (configs[i] = c)); applyConfigs(configs); });
   shell.onConfig(({ id, config }) => { configs[id] = config; applyConfigs(configs); });
-  shell.onCommand(({id,cmd})=>{if(cmd==='openInventory:all'){toolBag.showAll();return;}if(cmd==='openInventory'){toolBag.showFor(pets.includes(figures[id])?figures[id]:pets[0]);return;}if(cmd==='returnHome'){habitats.returnHome(id);return;} (habitats.petFor(id)??figures[id])?.command(cmd);});
+  shell.onCommand(({id,cmd})=>{if(cmd==='sanity'){shell.reportSanity(checkSanity(figures,activePets()));return;}if(cmd==='openInventory:all'){toolBag.showAll();return;}if(cmd==='openInventory'){toolBag.showFor(pets.includes(figures[id])?figures[id]:pets[0]);return;}if(cmd==='returnHome'){habitats.returnHome(id);return;} (habitats.petFor(id)??figures[id])?.command(cmd);});
   shell.onLife?.(sample => {for(const p of activePets())p.life(sample);});
   shell.onDesktopState?.(state=>{desktopState=state;for(const p of [...pets,...habitats.activePets])p.desktopState=state;});
   shell.onCutout?.(cutout=>cutouts.add(cutout));
@@ -373,7 +376,7 @@ Object.assign(window, { cursorWeapon, equipCursor });
 let last = { x: 0, y: 0, t: performance.now() };
 let vel = { x: 0, y: 0 };
 const toolBag = new ToolBag(desktopPets, save, on => { toolsTyping = on; syncTyping(); }, () => !cursorWeapon.active);
-Object.assign(window, { toolBag });
+Object.assign(window, { toolBag, checkSanity:()=>checkSanity(figures,activePets()) });
 window.addEventListener('mousemove', (e) => {
   lastPointerAt = performance.now();
   const now = performance.now();

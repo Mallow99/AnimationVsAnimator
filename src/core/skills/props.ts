@@ -74,7 +74,7 @@ export class SitOnProp extends Skill {
     }
     const at = seat.seatFor(c.who)!;
     if (seat.sitters.size > 2) ch.seatStyle = 'front';
-    ch.seat = { x: ch.seat.x + (at.x - ch.seat.x) * 0.12, y: at.y };
+    ch.scootTo(at);
     // Someone wants to sit too: up he gets from lying along it, and leans back instead.
     if (ch.seatStyle === 'lie' && seat.sitters.get(c.who)?.lying === false) { ch.seatStyle = 'lounge'; c.say(pick(['oh, ok', 'fine, sit', '*scoots*']), 1.2); }
     // Sharing the couch: a bit of small talk now and then.

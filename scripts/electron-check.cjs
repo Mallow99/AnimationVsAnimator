@@ -148,6 +148,9 @@ app.whenReady().then(async () => {
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'memory.json'), 'utf8')).summary, 'smoke');
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'memory-2.json'), 'utf8')).summary, 'smoke two');
   await until(() => fs.existsSync(path.join(dir, 'pet-2.json')));
+  await settings.webContents.executeJavaScript('document.querySelector("#sanityCheck").click()');
+  await until(()=>settings.webContents.executeJavaScript('document.querySelector("#sanityResult").textContent.startsWith("Passed:")'));
+  console.log('PASS Electron live sanity check bridge and development UI');
   assert.deepEqual(issues, []);
   console.log('PASS Electron: overlay, fake helper, settings inventory, Othello/chat focus, configuration, two stick figures (one settings window with target selection, distinct color, All figures supplies, shared settings, talk box, memory file)');
   app.quit();

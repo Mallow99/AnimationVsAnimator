@@ -1,20 +1,17 @@
 // The settings window: live mood bars, look and movement presets plus sliders
-// for every number, and general options. Changes apply to Blurp instantly.
+// for every number, and general options. Changes apply to the selected characters instantly.
 
 import { PROVIDERS, RANGES, CHARACTER_PRESETS, activeFigureIds, companionConfig, DEFAULT_CONFIG, type PetConfig, type ProviderId } from '../core/config';
 import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
 import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
-import { thingCard, type ThingPreview } from './item-card';
 
 interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
 interface Weigh { name: string; score: number; why: string; bias?: number }
 interface Drawing { title: string; shape: { x: number; y: number }[][]; color: string; at: number }
 interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at: number; by: 'him' | 'ai' | 'you'; weight: number }
 interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
-interface PropsView { kinds: ThingPreview[]; placed: { i: number; id: string; name: string }[] }
-interface ItemsView { kinds: (ThingPreview & { use: string; wear?: 'head' | 'feet'; drawn: boolean })[]; list: { uid: number; id: string; name: string; where: 'belt' | 'hand' | 'worn' | 'world' | 'cursor'; slot: number; drawn: boolean }[] }
-interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView; items?: ItemsView; props?: PropsView }
+interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView }
 interface Stats {
   name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
   brain: { active: boolean; status: string; log: LogLine[] };
@@ -26,6 +23,7 @@ interface Shell {
   petId: number;
   getConfig(id?:number): Promise<PetConfig>;
   getConfigs():Promise<PetConfig[]>;
+  onSanity?(cb:(issues:string[])=>void):void;
   onSelect?(cb:(id:number)=>void):void;
   onConfig(cb: (c: { id: number; config: PetConfig }) => void): void;
   setConfig(patch: unknown,id?:number): void;
@@ -95,6 +93,8 @@ function renderRoster(){
 }
 source.getConfigs().then(cs=>{allConfigs=cs;render(allConfigs[target??targets()[0]]);});
 
+$('sanityCheck').onclick=()=>source.command('sanity');
+source.onSanity?.(issues=>{$('sanityResult').textContent=issues.length?issues.join(' · '):'Passed: ownership, coordinates, controllers and shared claims are consistent.';});
 // ── tabs ──
 function showTab(name: string) {
   for (const t of document.querySelectorAll<HTMLButtonElement>('nav button')) t.setAttribute('aria-selected', String(t.dataset.tab === name));
@@ -107,6 +107,7 @@ shell.onTab((tab) => { showTab(tab === 'control' ? 'chat' : tab); if (tab === 'c
 const MOOD_ROWS: [keyof MoodState, string][] = [
   ['happiness', 'Happiness'], ['energy', 'Energy'], ['boredom', 'Boredom'],
   ['annoyance', 'Annoyance'], ['fear', 'Fear'], ['trust', 'Trust in you'],
+  ['socialNeed','Wants company'],['inspiration','Wants to create'],['frustration','Frustration'],['contentment','Contentment'],
 ];
 // Each mood is a slider: it follows his real mood live, and you can drag it to set it.
 const fills: Record<string, [HTMLInputElement, HTMLElement]> = {};
@@ -473,40 +474,9 @@ shell.onCollections((c) => {
     return fig;
   }).reverse() : [emptyNote('No drawings yet.')]));
 });
-shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); if (c.items) renderItems(c.items); if (c.props) renderProps(c.props); });
+shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); });
 
 // ── Items tab ──
-const SLOTS = Array.from({length:16},(_,i)=>`slot ${i+1}`);
-function renderItems(v: ItemsView) {
-  const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `in his satchel (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'worn' ? 'wearing it' : it.where === 'world' ? 'lying around' : 'you have it';
-  $('itemList').replaceChildren(...(v.list.length ? v.list.map((it) => moveRow(it.name + (it.drawn ? ' (drawn)' : ''), 0, [
-    ...(it.where === 'belt' || it.where === 'hand' || it.where === 'worn' ? [['Take out', () => shell.command(`item:take:${it.uid}`)] as [string, () => void]] : []),
-    ...(it.where === 'cursor' || it.where === 'world' ? [['Give back', () => shell.command(`item:return:${it.uid}`)] as [string, () => void]] : []),
-    ['Trash', () => shell.command(`item:remove:${it.uid}`)],
-  ], where(it))) : [emptyNote('He has nothing. Give him something below.')]));
-  // His inventory: every kind of thing there is. Drop one in (it falls from the top of the screen and he
-  // goes to get it), or put it straight in his satchel.
-  $('itemKinds').replaceChildren(...v.kinds.filter((k) => !k.drawn).map((k) => thingCard(k, [
-    ['Drop it in', () => shell.command(`item:spawn:${k.id}`)],
-    [k.wear ? 'Wear' : 'Give him', () => shell.command(`item:give:${k.id}`)],
-  ])));
-}
-function renderProps(v: PropsView) {
-  $('propKinds').replaceChildren(...v.kinds.map((k) => thingCard(k, [['Drop it in', () => shell.command(`prop:spawn:${k.id}`)]])));
-  $('propPlaced').replaceChildren(...(v.placed.length
-    ? [...v.placed.map((p) => moveRow(p.name, 0, [
-        ...(p.id === 'tv' ? [
-          ['Watch TV', () => shell.command('do:watchtv')],
-          ['Video games', () => shell.command('do:videogame')],
-          ['Play Othello', () => shell.command('do:playgame')],
-          ['Change channel', () => shell.command(`prop:channel:${p.i}`)],
-        ] as [string, () => void][] : []),
-        ...(p.id === 'canvas' ? [['Paint', () => shell.command('do:paint')] as [string, () => void]] : []),
-        ['Trash', () => shell.command(`prop:remove:${p.i}`)]
-      ], 'on the desktop')),
-      moveRow('All of them', 0, [['Trash all furniture', () => shell.command('prop:clear')]], 'Undo restores the last object only.')]
-    : [emptyNote('Nothing out on the desktop yet.')]));
-}
 $('openItems').addEventListener('click', () => shell.openItemsFolder());
 $('openInventory').addEventListener('click',()=>source.command(target===null?'openInventory:all':'openInventory',target??targets()[0]));
 $('reloadItems').addEventListener('click', () => shell.reloadItems());

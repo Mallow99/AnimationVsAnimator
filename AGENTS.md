@@ -11,8 +11,8 @@ The user's latest instructions take priority over the historical roadmap.
 
 - Preserve the existing personality, procedural stick-figure look, and movement presets. Ask before
   substantial character/design changes. Small tool improvements and clear activity UI are welcome.
-- Two equal stick figures: a second `Pet` in the same overlay, with its own config file, settings window,
-  memory file and brain (see the handoff).
+- Up to five equal preset figures in one overlay, with stable individual config/save/memory files
+  and brains. One shared Settings window and inventory select a name or All figures (see the handoff).
   The owner wants them split into separate apps that talk to each other later; keep them one app for now.
   No visible health bars or permanent death: fights are decided by hidden health (a knockout), and in real
   fights limbs come off and go back on. Figures only interact through `src/core/peer.ts` (snapshots and

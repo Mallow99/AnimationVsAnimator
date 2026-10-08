@@ -62,3 +62,27 @@ export function personalityBiases(p: Personality): Record<string, number> {
 export function signatureTalent(p: Personality): import('./relationships').Talent {
   return p === 'competitive' ? 'fighting' : p === 'gentle' ? 'building' : p === 'adventurous' ? 'games' : 'drawing';
 }
+
+/** Short offline exchanges share a topic, while each preset has its own way of responding. */
+export function conversationLine(p:Personality="inventive",topic:number,reply:boolean):string {
+ const openings=['What should we make next?','Anyone fancy a little challenge?','This is a good spot to rest.'];
+ if(!reply)return openings[topic%openings.length];
+ const replies:Record<Personality,string[]>={
+  inventive:['A tiny bridge. I have a sketch.','We could build the course first.','I brought a book.'],
+  competitive:['Something we can practice on.','A fair rematch? I’m ready.','One breather, then another round.'],
+  gentle:['We can make it together.','I’ll cheer you on.','Stay a while. We have room.'],
+  mischievous:['A bridge with a secret shortcut.','Only if tricks are allowed.','I promise to sit still. Mostly.'],
+  adventurous:['A ramp! Then we try it out.','Count me in!','Let’s explore after our break.'],
+ };
+ return replies[p][topic%3];
+}
+export function everydayReply(p:Personality="inventive",kind:'taken'|'given'|'invited'):string {
+ const lines:Record<Personality,[string,string,string]>={
+ inventive:['Hey, I was working on that.','Ooh, an idea for this.','Let me finish this thought.'],
+ competitive:['Bring that back for practice.','Good. Time to practice.','After this round?'],
+ gentle:['Careful with that, please.','Thanks. I’ll look after it.','I’ll join when I’m ready.'],
+ mischievous:['Hey! Borrowing, are we?','I can do a trick with that.','Save me a spot!'],
+ adventurous:['Taking that on an adventure?','Let’s try it out!','Be right there after this.'],
+ };
+ return lines[p][kind==='taken'?0:kind==='given'?1:2];
+}
