@@ -3,6 +3,17 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-08 — Start Pet Quality 2 with bounded rendering and resource evidence
+
+- Recorded the owner's authorization and ordered implementation/acceptance checklist.
+- Pixel workspaces clip offscreen throws to the Retina-aware viewport, reuse the same canvas,
+  shrink after sustained smaller use and reuse outline masks. Procedural art/presets remain intact.
+- Added disposable whole-Electron RAM profiling with ordinary/furnished/Settings lifecycle cases.
+- Passed typecheck, focused canvas allocation regression and full actual Chromium controls/rendering;
+  visually inspected five seats. Furnished/after-cycle medians about 360/381 MiB PSS: no RAM reduction
+  claimed from variable short samples. Longer resource/native checks and the remaining quality work
+  stay on the active checklist.
+
 ## 2026-10-08 — Research Pet Quality Update 2
 
 - Added a source-backed proposal grounded in animation principles, offline decision continuity,

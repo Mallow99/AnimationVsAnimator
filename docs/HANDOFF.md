@@ -2,7 +2,23 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest update: Pet Quality / Living Stickmen — 2026-10-08
+## Active update: Pet Quality 2 — 2026-10-08
+
+The owner authorized implementation after the detailed change/assessment/RAM review. Follow
+[PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md), preserving offline behavior and shared controls.
+The first step bounds/reuses pixel canvases and promotes whole-process RAM profiling into
+`scripts/ram-profile.cjs` (`npm run ramprofile`; cloud launch needs DISPLAY/Xvfb and --no-sandbox).
+The fixture uses disposable saves, offline mode and software rendering. Run AVA_RAM_COUNT=1/2/5;
+AVA_RAM_RICH=1 adds nine furniture/twenty items; AVA_RAM_CHURN=1 exercises twelve Settings cycles.
+Reports go under .build. Prior RAM results are recorded in the checklist; no Mac RAM was measured.
+
+Validated resource step: typecheck, focused viewport/reuse/shrink regression, full actual Chromium
+input/rendering checks, and visual inspection of five couch seats. Updated RAM remains approximately
+360 MiB PSS furnished / 381 MiB after twelve Settings cycles; this is allocation variation, not an
+established improvement or a long-run leak guarantee. Contact/continuity/social/items work is next.
+Native Mac/Windows acceptance remains open; no new Chrome/Finder work is authorized in this pass.
+
+## Previous update: Pet Quality / Living Stickmen — 2026-10-08
 
 The owner expanded the Pet Quality scope and authorized completion. The update continues open draft
 PR #3 on `codex/roadmap-continuation`, stacked on `codex/desktop-life`. No new Chrome/Finder feature

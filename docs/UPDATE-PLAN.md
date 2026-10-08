@@ -1,6 +1,13 @@
 # Project roadmap
 
-## Current priority: Pet Quality / Living Stickmen (completed)
+## Current priority: Pet Quality Update 2 (authorized, in progress)
+
+The owner authorized the ordered implementation in [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md):
+resource evidence, physical contact, physical intent, continuity, social context, useful objects,
+then acceptance. Work stops before further Chrome/Finder integration. Hardware acceptance remains
+explicit and does not block independent cloud work while the owner is away.
+
+## Previous priority: Pet Quality / Living Stickmen (completed)
 
 The owner's expanded request overrides the integration roadmap. Core principle: **figures should feel
 alive without AI** through purposeful activity, physical transitions, personality and social continuity.
@@ -23,7 +30,7 @@ Pickup is passive; Use is explicit. Stable contact must retain manipulation and 
 See [PET-QUALITY.md](PET-QUALITY.md) for the item audit, evidence and limitations.
 
 The owner requested research for **Pet Quality Update 2** after finishing this update. That research
-is a separate recommendation, not a new implementation milestone. No integration work resumes now.
+has now been followed by explicit implementation authorization. No integration work resumes now.
 The ordered, source-backed proposal is [PET-QUALITY-2-RESEARCH.md](PET-QUALITY-2-RESEARCH.md).
 
 The existing five-update plan stays below for context. Workshop and Household are built on
