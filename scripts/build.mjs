@@ -12,7 +12,7 @@ if (what === 'lab') {
   mkdirSync('dist/lab', { recursive: true });
   const html = readFileSync('src/lab/lab.html', 'utf8').replace('/*__LAB_SCRIPT__*/', () => out.outputFiles[0].text.replace(/<\/script/g, '<\\/script'));
   writeFileSync('dist/lab/index.html', html);
-} else if (what === 'sim' || what === 'checks' || what === 'soak') {
+} else if (what === 'sim' || what === 'checks' || what === 'roadmap-checks' || what === 'quality-checks' || what === 'quality-profile' || what === 'living-checks' || what === 'living-soak' || what === 'pet-quality-2-checks' || what === 'soak') {
   await build({ ...common, entryPoints: [`scripts/${what}.ts`], outfile: `.build/${what}.mjs`, platform: 'node', format: 'esm' });
 } else {
   await Promise.all([
@@ -29,6 +29,7 @@ if (what === 'lab') {
   mkdirSync('dist/app', { recursive: true });
   cpSync('src/app/index.html', 'dist/app/index.html');
   cpSync('src/app/game.css', 'dist/app/game.css');
+  cpSync('src/app/tools.css', 'dist/app/tools.css');
   // Example item and prop files (and the how-to) for your items folder. Start clean, so an example
   // that was retired (the Othello table, the mallet) doesn't linger from an older build.
   rmSync('dist/items', { recursive: true, force: true });

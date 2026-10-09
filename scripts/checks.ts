@@ -29,11 +29,89 @@ import {WatchTV, PlayVideoGame} from '../src/core/skills/props';
 import {activitySeconds} from '../src/core/activity-pacing';
 import {FileHabitats} from '../src/app/file-habitats';
 import {DesktopBridge} from '../src/electron/desktop-bridge';
+import { OverlayTools } from '../src/core/overlay-tools';
 
 let passed = 0;
 async function test(name: string, fn: () => void | Promise<void>) { await fn(); passed++; console.log(`PASS ${name}`); }
 const bounds = { left: 0, right: 1400, top: 0, floor: 800 };
 const pet = () => new Pet(bounds, { ...structuredClone(DEFAULT_CONFIG), mind: 'chat', destructible: false });
+await test('bag transfers the same pistol to another figure without firing, duplicating or losing ammo', () => {
+  const a = pet(), b = new Pet(bounds, friendConfig(a.config), { props: a.props });
+  const tools = new OverlayTools(() => [a, b]);
+  assert(tools.pull(a, 'item', 'gun', { x: 100, y: 100 }));
+  const pistol = a.items.carried!; pistol.ammo = 2;
+  tools.move({ x: 600, y: 300 }, { x: 2000, y: 2000 });
+  a.update(1 / 60);
+  assert.equal(pistol.ammo, 2); assert.equal(a.projectiles.rounds.length, 0);
+  assert(tools.release({ x: 600, y: 300 }, { x: 0, y: 0 }, b));
+  assert(!a.items.list.includes(pistol)); assert.equal(b.items.list.filter(i => i === pistol).length, 1);
+  assert.equal(pistol.ammo, 2); assert.equal(pistol.cursorControlled, false); assert.equal(a.userWeaponControlled, false);
+  assert.equal(JSON.parse(a.save()).items.some((i: { id: string }) => i.id === 'gun'), false);
+  assert.equal(JSON.parse(b.save()).items.find((i: { id: string }) => i.id === 'gun').ammo, 2);
+});
+
+await test('trash removes a held item from its save and undo restores its original identity once', () => {
+  const p = pet(), tools = new OverlayTools(() => [p]);
+  const gun = p.items.give('gun', p.char)!; gun.ammo = 1;
+  assert(tools.beginItem(p, gun, { x: 100, y: 100 })); assert(tools.trashHeld());
+  assert(!p.items.list.includes(gun)); assert.equal(p.items.carried, null);
+  assert(!p.userWeaponControlled); assert(!JSON.parse(p.save()).items.some((i: { id: string }) => i.id === 'gun'));
+  assert(tools.undo({ x: 400, y: 300 })); assert(p.items.list.includes(gun)); assert.equal(gun.ammo, 1);
+  assert.equal(gun.where, 'world'); assert(!tools.undo({ x: 400, y: 300 }));
+});
+
+await test('trashing shared occupied furniture releases the activity and undo keeps its artwork and platform identity', async () => {
+  const a = pet(), b = new Pet(bounds, friendConfig(a.config), { props: a.props });
+  const tools = new OverlayTools(() => [a, b]);
+  const tv = a.props.spawn('tv', a.char.x + 90, bounds.floor - 100, a.char.scale)!;
+  tv.art = { shape: [[{ x: 0, y: 0 }, { x: 1, y: 1 }]], color: '#123456', title: 'keep this' };
+  a.command('do:watchtv'); await advance(a, 15);
+  assert(tv.watchers.has(a.ctx.who));
+  const ids = tv.platforms.map(pl => pl.id);
+  tv.grab(tv.center.x, tv.center.y);
+  assert(tools.trashHeld()); assert(!a.props.things.includes(tv)); assert.equal(b.props.things.includes(tv), false);
+  assert.equal(tv.watchers.size, 0); assert.equal(a.mind.skill?.name === 'watchtv', false);
+  assert(tools.undo({ x: 400, y: 300 })); assert.equal(a.props.things.filter(t => t === tv).length, 1);
+  assert.deepEqual(tv.platforms.map(pl => pl.id), ids); assert.equal(tv.art.title, 'keep this'); assert.equal(tv.held, null);
+  assert.equal(a.props.savePlaced().filter(t => t.id === 'tv').length, 1);
+});
+
+await test('undo pauses the lifespan of a drawn ball while it is in trash', () => {
+  const p = pet(), tools = new OverlayTools(() => [p]);
+  p.ctx.world.time = 30;
+  const ball = new Ball({ strokes: [], color: '#000000', born: 10, done: true, alive: true }, 100, 100, 20);
+  p.props.balls.push(ball); ball.grab(100, 100);
+  assert(tools.trashHeld()); assert.equal(p.props.balls.length, 0);
+  p.ctx.world.time = 500;
+  assert(tools.undo({ x: 300, y: 300 })); assert.equal(ball.doodle.born, 480);
+  assert.equal(ball.heldBy, null); assert.equal(ball.p.x, ball.p.px);
+});
+
+await test('bag refuses invalid definitions and a second cursor item; removed owners do not strand undo', () => {
+  const a = pet(), b = pet(); let current = [a, b];
+  const tools = new OverlayTools(() => current);
+  const count = a.items.list.length;
+  assert(!tools.pull(a, 'item', 'missing', { x: 100, y: 100 })); assert.equal(a.items.list.length, count);
+  assert(tools.pull(b, 'item', 'book', { x: 100, y: 100 }));
+  assert(!tools.pull(a, 'item', 'pen', { x: 100, y: 100 })); assert.equal(a.items.list.length, count);
+  const book = b.items.carried!; assert(tools.trashHeld()); current = [a];
+  assert(tools.undo({ x: 200, y: 200 })); assert(a.items.list.includes(book)); assert(!b.items.list.includes(book));
+});
+
+await test('bag props use the release velocity after the hand stops, and retrieved bridges release old anchors', () => {
+  const p = pet(), tools = new OverlayTools(() => [p]);
+  assert(tools.pull(p, 'prop', 'chair', { x: 200, y: 200 }));
+  const chair = p.props.placed[0];
+  tools.move({ x: 210, y: 210 }, { x: 1800, y: -1800 });
+  tools.release({ x: 210, y: 210 }, { x: 0, y: 0 });
+  assert(Math.abs(chair.points.reduce((sum, point) => sum + (point.x - point.px) * 120, 0) / chair.points.length) < 1);
+  const bridge = makeBridge({ strokes: [], color: '#000000', born: 0, done: true, alive: true }, 300, 300, 500, 300);
+  const win = { id: 1, x: 100, y: 300, w: 200, h: 300 };
+  bridge.attachWindow(0, win); p.props.add(bridge); bridge.grab(400, 300);
+  assert(tools.trashHeld()); assert(tools.undo({ x: 800, y: 300 }));
+  const x = bridge.points[0].x; bridge.followWindows([{ ...win, x: 400 }]);
+  assert.equal(bridge.points[0].x, x); assert.equal(bridge.stuck, false);
+});
 async function advance(p: Pet, seconds = 0.3) {
   for (let i = 0; i < seconds * 60; i++) { p.update(1 / 60); await new Promise<void>((done) => setImmediate(done)); }
 }
@@ -638,7 +716,7 @@ await test('five figures reserve distinct partners and save separate relationshi
   assert.equal(c.partnerId, d.ctx.who);
   for (const p of group) p.leaveWorld();
 });
-await test('pen-made pistol retains gun behavior through save/load and does not multiply replacements', () => {
+await test('two deliberate pen-made pistols preserve distinct projects and gun behavior through save/load', () => {
   const p = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
   p.paused = true;
   for (let i = 0; i < 360; i++) p.update(1 / 120);
@@ -660,9 +738,12 @@ await test('pen-made pistol retains gun behavior through save/load and does not 
     p.mind.reset(p.ctx);
     p.paused = true;
   }
-  assert.equal(p.items.list.filter((it) => it.def.id === 'ink-gun').length, 1);
+  const pistols = p.items.list.filter((it) => it.def.id === 'ink-gun');
+  assert.equal(pistols.length, 2);
+  assert.equal(new Set(pistols.map(it=>it.uid)).size, 2);
   const copy = new Pet(bounds, structuredClone(DEFAULT_CONFIG));
   copy.load(p.save());
+  assert.equal(copy.items.list.filter(it=>it.def.id === 'ink-gun').length, 2);
   const gun = copy.items.find('gun');
   assert(gun?.def.drawn);
   assert.equal(gun.def.id, 'ink-gun');
@@ -683,7 +764,9 @@ await test('pistol magazines survive bursts and reload before another round can 
   skill.start(p.ctx);
   for (let i = 0; i < 1200; i++) {
     skill.t += 1 / 120;
-    if (skill.update(p.ctx, 1 / 120)) break;
+    const done = skill.update(p.ctx, 1 / 120);
+    p.update(1 / 120);
+    if (done) break;
   }
   skill.stop(p.ctx);
   assert.equal(fired.length, 3);
@@ -1071,9 +1154,9 @@ await test('actual cursor pistols aim manually, consume their own ammo and reloa
   );
   control.press(false);
   control.reload();
-  for (let i = 0; i < 60; i++) control.update(1 / 60, [p]);
+  for (let i = 0; i < 60; i++) { p.update(1 / 60); control.update(1 / 60, [p]); }
   assert.equal(gun.ammo, 0);
-  for (let i = 0; i < 12; i++) control.update(1 / 60, [p]);
+  for (let i = 0; i < 12; i++) { p.update(1 / 60); control.update(1 / 60, [p]); }
   assert.equal(gun.ammo, 6);
   control.detach();
   assert(!p.userWeaponControlled && !gun.cursorControlled);

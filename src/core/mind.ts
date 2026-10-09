@@ -1,4 +1,9 @@
+import { GiveGift, giftCandidates, giftReady } from './skills/gift';
+import {everydayReply} from "./personality";
+import { DomesticItem,SwitchLamp } from './skills/domestic';
 import { ReadBook } from './skills/read-book';
+import { EverydayItem } from './skills/everyday-item';
+import { propActions } from './capabilities';
 import { restlessness, isSettledActivity } from './activity-pacing';
 // The offline mind ("Mode 0"): instinct, no AI.
 //
@@ -22,6 +27,12 @@ import {
   AskBack, KickBall, onDrawnBlock, WallJump, wallJumpTarget, type DrawPlace, AvoidCursor, ChaseCursor, FetchItem, PuppetMove, Reattach, SwordSwing, ClimbOnto, climbDownOption, DoodleSkill, dropFrom, GetDown, GrabCursor, MonkeyBars, Idle, presets, reachableAbove, Sequence, SitFor, Skill, Sleep, Wander, type Ctx,
 } from './skills';
 import { AskTogether, isAct, NapTogether, ShoulderBump, Together, WaveAt, type Act } from './skills/together';
+import { GroupActivity, groupPlan, validGroupPlan, availableForGroup, type GroupPlan, type GroupAct } from './skills/group';
+import { FriendlyMoment } from './skills/friendly-moment';
+import { PlayHandheld } from './skills/handheld';
+import { characterTemplate } from './character-template';
+import { arrangingSkill } from './skills/arrange';
+import { workshopSkill } from './skills/workshop';
 import { DrawTool } from './skills/draw-tool';
 import { ShootGun } from './skills/gun';
 import { DesktopInteraction } from './skills/desktop';
@@ -95,6 +106,7 @@ class PlanSkill extends Skill {
   constructor(private mind: Mind, private steps: PlanStep[]) { super(); }
   /** Shows as whatever step he's on ("hop", "move", ...). */
   get name() { return this.sub?.name ?? 'plan'; }
+  get active(): Skill | null { return this.sub instanceof PlanSkill ? this.sub.active : this.sub; }
 
   update(c: Ctx, dt: number): boolean {
     if (this.sub) {
@@ -202,12 +214,24 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'videogame', label: 'Play video games' }, { name: 'ride', label: 'Ride the scooter' },
   { name: 'read', label: 'Read a book' },
+  {name:'apologize',label:'Make up with a friend'},
+  {name:'gift',label:'Give a thoughtful gift'},
+  {name:'blanket',label:'Rest under a blanket'}, {name:'snack',label:'Have a snack'}, {name:'lamp',label:'Switch a lamp'}, {name:'catch',label:'Play catch with a friend'},
+  { name: 'sip', label: 'Have a drink' }, { name: 'exercise', label: 'Train with a dumbbell' }, { name: 'yoyo', label: 'Play with a yo-yo' },
   { name: 'paint', label: 'Paint on his canvas' }, { name: 'playgame', label: 'Play Othello with you on the TV' }, { name: 'duel', label: 'Spar with his friend' },
   { name: 'highfive', label: 'High five his friend' }, { name: 'fistbump', label: 'Fist bump his friend' }, { name: 'handshake', label: 'Shake hands with his friend' },
   { name: 'pattycake', label: 'Patty cake with his friend' }, { name: 'hug', label: 'Hug his friend' }, { name: 'bump', label: 'Bump into his friend (rude)' },
   { name: 'chat', label: 'Go talk to his friend' }, { name: 'waveat', label: 'Wave at his friend' }, { name: 'sitwith', label: 'Sit with his friend' }, { name: 'naptogether', label: 'Nap next to his friend' }, { name: 'jointv', label: 'Join his friend at the TV' },
   {name:'closetab',label:'Close connected Chrome tab'}, {name:'closewindow',label:'Close front window'},
   {name:'pluck',label:'Take selected page element'}, {name:'restorepage',label:'Restore the Chrome page'}, {name:'folder',label:'Enter a real folder'}, {name:'file',label:'Enter a real file'},
+  ...[['wave','Group wave (2–5)'],['chat','Group conversation (2–5)'],['couch','Couch huddle (2–5)'],['watch','Watch together (2–5)'],['duet','Mirrored duet (2)'],['triangle','Hands in (3)'],['mirror','Two-pair dance (4)'],['relay','Wave relay (5)']].map(([act,label]) => ({name:`group:${act}`,label})),
+  { name:'passtool',label:'Pass a spare tool to a friend' }, {name:'comparedrawings',label:'Compare drawings'}, {name:'checkfriend',label:'Check on a hurt friend'},
+  {name:'handheldduo',label:'Play handhelds with a friend'},
+  { name: 'handheld', label: 'Play the handheld game' },
+  { name: 'pong', label: 'Play Pong with a friend' },
+  { name: 'arrange', label: 'Move the TV beside the couch' }, { name: 'carrytogether', label: 'Carry the TV with a friend' }, { name: 'readingcorner', label: 'Arrange a reading corner' }, { name: 'workcorner', label: 'Arrange the work area' },
+  { name: 'deskwork', label: 'Draw a blueprint at the desk' }, { name: 'refine', label: 'Refine an ink project at the workbench' }, { name: 'sorttools', label: 'Sort loose tools onto the shelf' },
+  { name: 'drawprop:tv', label: 'Draw a working TV' }, { name: 'drawprop:couch', label: 'Draw a couch' }, { name: 'drawprop:chair', label: 'Draw a chair' }, { name: 'drawprop:desk', label: 'Draw a desk' }, { name: 'drawitem:katana', label: 'Draw a katana' },
   { name: 'drawtool', label: 'Draw a working tool' }, { name: 'drawgun', label: 'Draw a pistol' },
   { name: 'gun', label: 'Fire pistol at the cursor' },
   { name: 'shoot', label: 'Shoot arrows at the cursor' },
@@ -216,11 +240,14 @@ export const COMMANDS: { name: string; label: string }[] = [
 
 export class Mind {
   skill: Skill | null = null;
+  get activeSkill(): Skill | null { return this.skill instanceof PlanSkill ? this.skill.active ?? this.skill : this.skill ?? this.queued; }
   /** When he last started a duel with his friend (so they don't fight nonstop), and did something with him. */
   private duelAt = -60;
   private socialAt = -20;
+  private arrangeAt = -90;
   private last = '';
   private queued: Skill | null = null;
+  private suspended:{make:()=>Skill|null;expires:number;why:string}|null=null;
   private pokes: number[] = [];
   private lookAt: { x: number; y: number } | null = null;
   private lookUntil = 0;
@@ -259,9 +286,11 @@ export class Mind {
 
   /** Recent skill names, newest last (for debugging and, later, the LLM). */
   get recent() { return this.history; }
+  get hasQueued() { return this.queued !== null; }
 
   update(c: Ctx, dt: number) {
     c.mood.tick(dt);
+    if(this.suspended&&(c.world.time>=this.suspended.expires||!c.char.whole||c.char.hp<.25||c.mood.asleep))this.suspended=null;
     if (c.char.support !== this.lastSupport && c.char.mode === 'ground') {
       this.lastSupport = c.char.support;
       this.onWindowSince = c.char.support >= 0 ? c.world.time : -1;
@@ -275,6 +304,11 @@ export class Mind {
         const glow = AFTERGLOW[this.skill.name];
         if (glow) c.mood.nudge(glow);
         this.end(c);
+        const suspended=this.suspended;this.suspended=null;
+        if(suspended&&c.world.time<suspended.expires&&c.char.whole&&c.char.hp>=.25&&!c.mood.asleep&&!this.queued) {
+          const resumed=suspended.make();
+          if(resumed){this.queued=resumed;this.why=`returning to ${resumed.name}: ${suspended.why}`;this.afterThat=null;return;}
+        }
         const next = this.afterThat?.();
         this.afterThat = null;
         if (next) { this.queued = next.make(); this.why = next.why; return; }
@@ -297,18 +331,25 @@ export class Mind {
   /** Slow, sensible mood changes from what's going on around him. */
   private feelings(c: Ctx, dt: number) {
     const m = c.mood, w = c.world, ch = c.char;
+    const doing=this.activeSkill?.name??'';
+    const social=['group','together','ask','checkfriend','sitwith','jointv'].includes(doing);
+    const creative=['drawtool','doodle','read','paint','deskwork','refine','drawball','drawbox'].includes(doing);
+    const quiet=['blanket','snack','read','sitdown','sip','sleep','nap','watchtv'].includes(doing);
+    if(social)m.nudge({socialNeed:-dt/65,contentment:dt/250,frustration:-dt/100,affection:dt/400,stress:-dt/130});
+    if(creative)m.nudge({inspiration:-dt/120,contentment:dt/300,confidence:dt/700});
+    if(quiet)m.nudge({frustration:-dt/90,contentment:dt/350,stress:-dt/90});
     // How he walks says how he feels.
     if (w.time > this.chillUntil) { this.chill = chance(0.5); this.chillUntil = w.time + rand(90, 240); }
     const L = m.label, E = m.emotion;
     ch.gait = L === 'angry' ? 'stomp' : E === 'nervous' ? 'creep' : L === 'playful' || E === 'proud' ? 'skip' : L === 'sad' || L === 'sleepy' ? 'sulk'
       : L === 'bored' || ((E === 'content' || E === 'annoyed') && this.chill) ? 'pocket' : 'normal';
     // Body language standing still, from the finer emotion.
-    ch.idleStyle = E === 'annoyed' ? 'crossed' : E === 'proud' ? 'hips' : E === 'happy' ? 'behind' : E === 'nervous' || E === 'lonely' ? 'hug' : 'none';
-    ch.tapFoot = E === 'annoyed' || (E === 'bored' && this.chill);
+    ch.idleStyle = E === 'annoyed' || E==='frustrated' ? 'crossed' : E === 'proud' ? 'hips' : E === 'happy' ? 'behind' : E === 'nervous' || E === 'lonely' || E==='overwhelmed' ? 'hug' : characterTemplate(c.personality).idle;
+    ch.tapFoot = restlessness(c) > 0.45 && (E === 'annoyed' || (E === 'bored' && this.chill));
     this.mutter(c);
     this.noticeWhatYoureDoing(c);
     // Moving around tires him out (running more), on top of the slow drain over time.
-    if (ch.walking) m.s.energy -= dt / (ch.posture.speed > 1.2 ? 900 : 1800);
+    if (ch.walking) m.nudge({energy:-dt / (ch.posture.speed > 1.2 ? 900 : 1800)});
     // You coming back after a while: he's glad to see you.
     if (w.cursorMovedAt - this.lastCursorSeen > 120 && this.lastCursorSeen > 0 && !m.asleep) {
       m.nudge({ happiness: 0.08 * m.s.trust * 2, boredom: -0.25 });
@@ -322,7 +363,7 @@ export class Mind {
     // You've had one of his things for a while: he stops lazing around and asks for it back.
     const taken = c.items.carried;
     const lazing = !this.skill || ['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch'].includes(this.skill.name);
-    if (taken && w.time - this.takenAt > 20 && lazing && !this.queued && ch.ready && ch.useHand && m.label !== 'sad' && m.label !== 'scared' && !m.asleep) {
+    if (taken && !taken.cursorControlled && w.time - this.takenAt > 20 && lazing && !this.queued && ch.ready && ch.useHand && m.label !== 'sad' && m.label !== 'scared' && !m.asleep) {
       this.takenAt = w.time;
       this.interrupt(c, new AskBack(taken));
       this.why = `wants his ${taken.def.name.toLowerCase()} back`;
@@ -345,8 +386,8 @@ export class Mind {
       }
     }
     const away = w.time - w.cursorMovedAt;
-    if (away > 300) { m.s.boredom += dt / 300; m.s.happiness -= dt / 1200; } // ignored for 5+ min: lonely
-    else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.s.happiness += dt / 600; // company
+    if (away > 300) m.nudge({boredom:dt/300,happiness:-dt/1200}); // ignored for 5+ min: lonely
+    else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.nudge({happiness:dt/600}); // company
   }
 
   private appTalkAt = 20;
@@ -369,7 +410,7 @@ export class Mind {
   private mutter(c: Ctx) {
     const w = c.world, m = c.mood, ch = c.char;
     if (w.time < this.mutterAt || m.asleep || !ch.ready || (this.skill && !['idle', 'wander', 'sit', 'ledgesit'].includes(this.skill.name))) return;
-    this.mutterAt = w.time + rand(25, 60);
+    this.mutterAt = w.time + rand(45, 100) * (1.5 - restlessness(c));
     const lines: Partial<Record<string, string[]>> = {
       annoyed: ['hmph.', 'ugh.', '*sigh*', 'whatever.'],
       happy: ['♪', '♪ la la ♪', 'hm hm hmm ♪'],
@@ -394,7 +435,7 @@ export class Mind {
    */
   command(c: Ctx, name: string, why = 'you told him to', quiet = false): boolean {
     const ch = c.char, m = c.mood;
-    if (name === 'wake') { m.asleep = false; this.end(c); ch.standUp(); return true; }
+    if (name === 'wake') { m.asleep = false; this.reset(c); ch.standUp(); return true; }
     // Asked directly, he skips his own "not in the mood" and "you're busy in that window" filters.
     this.forced = true; this.cant = {};
     const s = this.makeSkill(c, name);
@@ -404,11 +445,21 @@ export class Mind {
       if (!quiet) c.say(reason, reason.length > 2 ? 2.2 : 1);
       return false;
     }
-    this.interrupt(c, s);
-    m.asleep = false;
-    this.why = why;
-    if (ch.mode === 'lie' || ch.mode === 'sit') ch.standUp();
+    this.startActivity(c, s, why);
     return true;
+  }
+
+  /** A user chose an exact object, rather than asking us to find one by kind. */
+  startActivity(c: Ctx, skill: Skill, why = 'you chose this activity') {
+    this.interrupt(c, skill);
+    c.mood.asleep = false;
+    this.why = why;
+    if (c.char.mode === 'lie' || c.char.mode === 'sit') c.char.standUp();
+  }
+
+  acceptGroup(c: Ctx, plan: GroupPlan, sender: string) {
+    if (!validGroupPlan(plan, sender, c.who) || !c.char.whole || c.mood.asleep || c.char.hp < 0.25 || c.mood.s.energy < 0.15 || !['ground','sit'].includes(c.char.mode) || (this.skill && !['idle','wander','sit','sitdown','ledgesit','explore','sigh','stretch'].includes(this.skill.name)) || this.queued) return false;
+    this.interrupt(c, new GroupActivity(structuredClone(plan)));if(c.char.mode==='sit')c.char.standUp();return true;
   }
 
   /** Carry out a plan from his AI brain. */
@@ -424,10 +475,25 @@ export class Mind {
 
   /** Build the skill for a command name (null if he can't do it right now). */
   makeSkill(c: Ctx, name: string): Skill | null {
+    if(name==='chat' && (c.peers?.()??[]).filter(availableForGroup).length>=2){const plan=groupPlan(c,'chat');if(plan)return new GroupActivity(plan);}
+    const arrange = arrangingSkill(c, name); if (arrange) return arrange;
+    if(name==='apologize')return new FriendlyMoment('apology');
+    if(name==='gift')return new GiveGift();
+    if(name==='passtool')return new GiveGift(false);
+    if(['comparedrawings','checkfriend'].includes(name)) return new FriendlyMoment(name==='passtool'?'pass':name==='comparedrawings'?'compare':'check');
+    if(name==='handheldduo'){const plan=groupPlan(c,'handheld');return plan?new GroupActivity(plan):null;}
+    if (name === 'handheld') return new PlayHandheld();
+    if (name === 'lamp') return new SwitchLamp(SwitchLamp.nearest(c));
+    if (name === 'blanket' || name === 'snack') return new DomesticItem(name === 'blanket' ? 'rest' : 'snack');
+    if (name === 'catch') { const plan=groupPlan(c,'catch');return plan?new GroupActivity(plan):null; }
+    if (name === 'pong') { const plan = groupPlan(c, 'pong'); return plan ? new GroupActivity(plan) : null; }
+    if (name.startsWith('group:')) { const plan = groupPlan(c, name.slice(6) as GroupAct); return plan ? new GroupActivity(plan) : null; }
+    const workshop = workshopSkill(c, name); if (workshop) return workshop;
     if (name === 'read') return new ReadBook();
+    if (['sip','exercise','yoyo'].includes(name)) return new EverydayItem(name === 'yoyo' ? 'play' : name as 'sip' | 'exercise', name as 'sip' | 'exercise' | 'yoyo');
     if(['closetab','closewindow','pluck','restorepage','folder','file'].includes(name))return new DesktopInteraction(name as import('../shared/desktop').DesktopAction);
-    if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun',true) : null;
-    if(name==='drawtool')return c.items.find('draw') && c.char.useHand ? new DrawTool('foam-sword',true) : null;
+    if(name==='drawgun')return c.items.find('draw') && c.char.useHand ? new DrawTool('gun') : null;
+    if(name==='drawtool')return c.items.find('draw') && c.char.useHand ? new DrawTool('foam-sword') : null;
     if (name === 'wake') { c.mood.asleep = false; return new Sequence('wake', [{ wait: 0.1 }]); }
     if (name === 'grabcursor' && !c.canGrabCursor) return null;
     if (name === 'loseArm' || name === 'loseLeg') {
@@ -450,7 +516,7 @@ export class Mind {
   }
 
   /** Forget the current plan (e.g. his body was rebuilt). */
-  reset(c: Ctx) { this.end(c); this.queued = null; }
+  reset(c: Ctx) { this.suspended=null;this.end(c); this.queued = null; this.afterThat = null; }
 
   private begin(c: Ctx, s: Skill) {
     c.look = 'default';
@@ -472,9 +538,16 @@ export class Mind {
 
   /** Drop whatever he's doing (gestures too) and (optionally) do this next. */
   private interrupt(c: Ctx, next?: Skill) {
+    this.suspended=null;
     this.end(c);
     c.char.cancelGesture();
     this.queued = next ?? null;
+  }
+  private react(c:Ctx,next?:Skill) {
+    if(!next)return;
+    const make=!this.queued?this.skill?.continuation(c):null;
+    const saved=this.suspended??(make?{make,expires:c.world.time+60,why:this.why}:null);
+    this.interrupt(c,next);this.suspended=saved;
   }
 
   // ───────────── choosing what to do ─────────────
@@ -483,7 +556,7 @@ export class Mind {
     // Annoyed isn't angry, but he's not in the mood for fun and games either.
     const grumpy = c.mood.emotion === 'annoyed', FUN = ['dance', 'chase', 'spar', 'hop', 'hang', 'bounce', 'backflip', 'frontflip', 'showoff', 'drawball', 'surf'];
     const excited = c.mood.emotion === 'excited';
-    const opts = this.options(c).map((o) => ({ ...o, score: o.score * (this.biases[o.name] ?? 1) * (grumpy && FUN.includes(o.name) ? 0.25 : excited && FUN.includes(o.name) ? 1.4 : 1) }));
+    const opts = this.options(c).map((o) => ({ ...o, score: o.score * (1 + Math.min(16,(c.foe?.()?.id ? c.relationship?.(c.foe!()!.id!)?.activities[o.name.replace('group:','')] : 0) ?? 0) * 0.015) * (this.biases[o.name] ?? 1) * (grumpy && FUN.includes(o.name) ? 0.25 : excited && FUN.includes(o.name) ? 1.4 : 1) }));
     // Square the scores so strong urges win more often; avoid repeating himself.
     let total = 0;
     const weights = opts.map((o) => {
@@ -546,6 +619,30 @@ export class Mind {
       { name: 'grabcursor', score: c.canGrabCursor && cursorActive && near && c.world.time - this.lastGrab > 60 && (L === 'playful' || L === 'bored' || L === 'angry') ? 0.7 : 0,
         why: L === 'angry' ? 'getting back at you' : 'feeling mischievous', make: () => { this.lastGrab = c.world.time; return new GrabCursor(); } },
     ];
+    for (const [name, use] of [['sip','sip'],['exercise','exercise'],['yoyo','play']] as const) {
+      const item = c.items.find(use);
+      if (item && item.where !== 'cursor') opts.push({name,score:name === 'sip' ? 0.2+(1-s.energy)*0.2 : name === 'exercise' ? 0.05+s.energy*0.18 : 0.1+s.boredom*0.2,why:name === 'sip' ? 'a quiet drink' : name === 'exercise' ? 'a short training set' : 'practicing a pocket trick',make:()=>new EverydayItem(use,name)});
+    }
+    if(c.items.find('rest')?.where!=='cursor' && c.items.find('rest'))opts.push({name:'blanket',score:.1+(1-s.energy)*.45+s.stress*.25+(c.personality==='gentle'?.12:0),why:'a quiet blanket break',make:()=>new DomesticItem('rest')});
+    if(c.items.find('snack')?.where!=='cursor' && c.items.find('snack'))opts.push({name:'snack',score:.12+s.frustration*.2,why:'taking a snack break',make:()=>new DomesticItem('snack')});
+    if(c.items.list.some(i=>i.def.id==='bouncy-ball'&&i.where!=='cursor') && c.world.time-this.socialAt>90 && (c.peers?.()??[]).some(availableForGroup))opts.push({name:'catch',score:.15+s.boredom*.25+(c.personality==='competitive'?.1:0),why:'playing catch with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'catch');return plan?new GroupActivity(plan):new Idle(3);}});
+    if(c.world.time-this.socialAt>120&&c.items.find('game')?.where!=='cursor'&&c.items.find('game')&&(c.peers?.()??[]).some(v=>availableForGroup(v)&&v.hasHandheld))opts.push({name:'handheldduo',score:.12+s.socialNeed*.2,why:'comparing pocket game runs with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'handheld');return plan?new GroupActivity(plan):new Idle(3);}});
+    if(c.items.find('game'))opts.push({name:'handheld',score:0.1+c.mood.s.boredom*0.15,why:'playing his pocket game',make:()=>new PlayHandheld()});
+    if(c.world.time-this.socialAt>90 && propsOf(c,'tv').length && (c.peers?.()??[]).some(v=>!v.busy&&!v.asleep))opts.push({name:'pong',score:0.08+c.mood.s.boredom*0.12,why:'a game with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'pong');return plan?new GroupActivity(plan):new Idle(3);}});
+    const tvToMove=propsOf(c,'tv').find(t=>!t.watchers.size&&!t.players.length),couchToUse=propsOf(c,'seat').find(t=>t.seatRoom>1);
+    if(tvToMove && couchToUse && Math.abs(tvToMove.center.x-couchToUse.center.x)>250*c.char.scale && c.world.time-this.arrangeAt>90)opts.push({name:'arrange',score:0.2+(c.personality==='gentle'?.2:0),why:'making a shared TV corner',make:()=>{this.arrangeAt=c.world.time;return arrangingSkill(c,'arrange')!;}});
+    if(c.world.time-this.socialAt>180&&s.affection>.35&&giftCandidates(c).length&&(c.peers?.()??[]).some(giftReady))opts.push({name:'gift',score:.08+s.affection*.12,why:'choosing a thoughtful gift for a friend',make:()=>{this.socialAt=c.world.time;return new GiveGift();}});
+    const hurtFriend=(c.peers?.()??[]).find(v=>(v.hp<0.5||['sad','lonely','frustrated','overwhelmed','nervous'].includes(v.mood))&&!v.asleep&&!v.group&&v.doing!=='duel');
+    if(c.world.time-this.socialAt>120&&s.annoyance<.35&&(c.peers?.()??[]).some(v=>availableForGroup(v)&&(c.relationship?.(v.id!)?.lastDisagreement??'')==='bump'))opts.push({name:'apologize',score:.2+s.affection*.15,why:'making up after a disagreement',make:()=>{this.socialAt=c.world.time;return new FriendlyMoment('apology');}});
+    if(hurtFriend && c.world.time-this.socialAt>30)opts.push({name:'checkfriend',score:0.5+Math.max(0,...(c.peers?.()??[]).filter(v=>v.hp<.5&&!v.asleep&&v.doing!=='duel').map(v=>(c.relationship?.(v.id!)?.care??0)*.4))+(c.personality==='gentle'?.15:0),why:'checking on a friend',make:()=>{this.socialAt=c.world.time;return new FriendlyMoment('check');}});
+    if ((c.peers?.() ?? []).filter(availableForGroup).length && c.world.time - this.socialAt > 60) opts.push({ name: 'group:wave', score: 0.1 + c.mood.s.boredom * 0.12, why: 'getting friends together', make: () => { this.socialAt = c.world.time; const plan = groupPlan(c, 'wave'); return plan ? new GroupActivity(plan) : new Idle(3); } });
+    if((c.peers?.()??[]).filter(availableForGroup).length>=2 && c.world.time-this.socialAt>70 && s.annoyance<.5)
+      opts.push({name:'group:chat',score:.35+s.socialNeed*.8,why:'including everyone in the conversation',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'chat');return plan?new GroupActivity(plan):new Idle(4);}});
+    for (const name of ['deskwork', 'refine', 'sorttools']) {
+      const s = workshopSkill(c, name);
+      const available = name === 'refine' ? (c.items.list.some(i => i.ink) || c.props?.placed.some(t=>t.ink&&!t.sitters.size)) && propsOf(c, 'work').some(t => propActions(t.def!).includes('refine')) : name === 'sorttools' ? propsOf(c, 'storage').length && c.items.list.some(i => i.where === 'world') : !!s;
+      if (s && available) opts.push({ name, score: 0.06 + c.mood.s.boredom * 0.1, why: 'working with his tools', make: () => workshopSkill(c, name)! });
+    }
     return opts;
   }
 
@@ -559,7 +656,7 @@ export class Mind {
     const swordTaken = c.items.list.some((it) => it.def.use === 'swing' && it.where === 'cursor') && !c.items.list.some((it) => it.def.use === 'swing' && it.where !== 'cursor');
     const opts: Option[] = [];
     if(canDraw && c.drawTools && fresh)opts.push({name:'drawtool',why:'making something useful with his pen',
-      score:0.18+s.boredom*0.4,make:()=>{this.lastDoodle=w.time;const tool=c.items.list.find(it=>!it.def.drawn && ['swing','smash','gun'].includes(it.def.use) && ['belt','hand'].includes(it.where));return new DrawTool(tool?.def.id ?? 'foam-sword',true);}});
+      score:0.18+s.boredom*0.4+s.inspiration*.35,make:()=>{this.lastDoodle=w.time;const tool=c.items.list.find(it=>!it.def.drawn && ['swing','smash','gun'].includes(it.def.use) && ['belt','hand'].includes(it.where));return new DrawTool(tool?.def.id ?? 'foam-sword');}});
     const draw = (name: string, shape: keyof typeof LIVE_SHAPES, becomes: Becomes, then: PlanStep[], why: string, score: number) =>
       opts.push({ name, why, score: canDraw && fresh ? score : 0, make: () => { this.lastDoodle = w.time; return new PlanSkill(this, [{ draw: LIVE_SHAPES[shape], title: shape, becomes }, ...then]); } });
     draw('drawball', 'ball', 'ball', [{ do: 'kick' }], 'wants something to kick around', fun * 0.8 + s.boredom * 0.1);
@@ -628,11 +725,11 @@ export class Mind {
     }
     // His things lying around (you dropped them, or he did): pick them up and put them back on his belt.
     const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
-    const lying = c.items.list.find((it) => it.where === 'world' && it.def.belt !== 'none' && it.at.y > feet - 60 * ch.scale && Math.abs(it.at.y - feet) < 120 * ch.scale);
+    const lying = c.items.list.find((it) => it.where === 'world' && !it.shelf && !it.working && it.def.belt !== 'none' && it.at.y > feet - 60 * ch.scale && Math.abs(it.at.y - feet) < 120 * ch.scale);
     if (lying && ch.useHand) opts.push({ name: 'pickup', why: `his ${lying.def.name.toLowerCase()} is on the floor`, score: L === 'sleepy' ? 0.3 : 1.6, make: () => new FetchItem(lying) });
     // You've had one of his things for a while.
     const taken = c.items.carried;
-    if (taken && w.time - this.takenAt > 15 && ch.useHand) {
+    if (taken && !taken.cursorControlled && w.time - this.takenAt > 15 && ch.useHand) {
       opts.push({ name: 'askback', why: `wants his ${taken.def.name.toLowerCase()} back`, score: L === 'sad' || L === 'scared' ? 0.3 : 2.2 + s.boredom * 0.5, make: () => { this.takenAt = w.time; return new AskBack(taken); } });
     }
     return opts;
@@ -730,7 +827,7 @@ export class Mind {
   /** His friend: square up for a spar (a play fight, or a real one, depending on the setting). */
   private friendOptions(c: Ctx): Option[] {
     const foe = c.foe?.(), ch = c.char, L = c.mood.label, E = c.mood.emotion, s = c.mood.s;
-    if (!foe) { if (this.forced) this.cant.duel = 'nobody to spar with (turn his friend on in Settings)'; return []; }
+    if (!foe) { if (this.forced) this.cant.duel = 'nobody to spar with (add another stick man in Settings)'; return []; }
     // (Up on a window he can still call out to him; fighting, he has to be down on the floor.)
     if (ch.legCount < 2 || !ch.useHand || ch.support >= 0 && !c.props?.thingOf(ch.support)) { if (this.forced) this.cant.duel = 'not from up here'; return ch.mode === 'ground' ? this.socialOptions(c, foe).filter((o) => o.name === 'waveat') : []; }
     if (foe.busy && !this.forced) return this.socialOptions(c, foe).filter((o) => o.name === 'waveat' || o.name === 'sitwith' || o.name === 'jointv' || o.name === 'naptogether');
@@ -754,7 +851,7 @@ export class Mind {
     // Same floor (or the same window top), both on their feet, and he isn't busy with something of his own.
     const together = !!fh && Math.abs(fh.y - hip.y) < 40 * ch.scale && ch.legCount === 2 && !!ch.useHand;
     const free = together && f.mode === 'ground' && !f.busy && !f.asleep && f.doing !== 'together' && f.doing !== 'duel' && f.doing !== 'ask';
-    const ready = this.forced || w.time - this.socialAt > 30;
+    const ready = this.forced || w.time - this.socialAt > 55 + 50 * (1 - restlessness(c));
     const happy = L === 'playful' || E === 'happy' || E === 'content' || E === 'excited';
     const opts: Option[] = [];
     const ask = (act: Act, score: number, why: string) => opts.push({ name: act, score: free && ready ? score : 0, why,
@@ -762,7 +859,7 @@ export class Mind {
     if (this.forced && !free) this.cant[L] = `${f.name} is busy`;
     // (They're friends: something together comes up every minute or two, more when he's bored or in a good mood.)
     const sociable = L !== 'angry' && L !== 'scared' && L !== 'sleepy' && bond > -0.3;
-    ask('chat', sociable ? 0.75 + s.boredom * 0.4 + bond * 0.3 : 0, `going over to talk to ${f.name}`);
+    ask('chat', sociable && (c.peers?.()??[]).filter(availableForGroup).length<2 ? 0.75 + s.socialNeed * 0.4 + bond * 0.3 : 0, `going over to talk to ${f.name}`);
     ask('highfive', (happy || L === 'bored') && bond > -0.1 ? 0.6 + bond * 0.3 : 0, `high five with ${f.name}`);
     ask('fistbump', sociable ? 0.45 + bond * 0.2 : 0, `fist bump with ${f.name}`);
     ask('handshake', L !== 'angry' && bond < 0.25 && bond > -0.5 ? 0.45 : happy ? 0.12 : 0, bond < 0.25 ? `making up with ${f.name}` : `shaking hands with ${f.name}`);
@@ -780,7 +877,7 @@ export class Mind {
     opts.push({ name: 'waveat', score: apart && !f.asleep && f.doing !== 'duel' && (ready || this.forced) && Math.abs(f.x - ch.x) < 800 && L !== 'angry' && bond > -0.4 ? 0.5 + s.boredom * 0.3 : 0,
       why: `calling out to ${f.name}`, make: () => { this.socialAt = w.time; return new WaveAt(); } });
     // He's sitting on the couch with room next to him: go sit with him.
-    const seatOf = f.mode === 'sit' && together ? (c.props?.placed ?? []).find((t) => t.def!.use === 'seat' && t.sitters.size === 1 && t.seatRoom > 1 && !t.sitters.has(c.who) && Math.abs(t.center.x - f.x) < 80 * ch.scale) : undefined;
+    const seatOf = f.mode === 'sit' && together ? (c.props?.placed ?? []).find((t) => t.def!.use === 'seat' && t.sitters.size > 0 && t.sitters.size < t.seatRoom && !t.sitters.has(c.who) && Math.abs(t.center.x - f.x) < 80 * ch.scale) : undefined;
     opts.push({ name: 'sitwith', score: seatOf && bond > -0.2 && L !== 'angry' ? 0.65 + bond * 0.3 + (1 - s.energy) * 0.3 : 0, why: `sitting with ${f.name}`,
       make: () => { this.socialAt = w.time; return new SitOnProp(seatOf!, rand(15, 30)); } });
     // He's at the TV: join him (watch with him, or play against him).
@@ -793,13 +890,14 @@ export class Mind {
   /** His friend asked to do something together: yes or no (mood, how he feels about him, whether he's busy). */
   private answerInvite(c: Ctx, act: string, name: string) {
     const L = c.mood.label, bond = c.feel.bond, ch = c.char;
-    const busy = this.skill && ['duel', 'playgame', 'reattach', 'sleep', 'nap', 'together', 'ask', 'videogame', 'paint'].includes(this.skill.name);
+    const busy = this.queued || this.skill && (isSettledActivity(this.skill.name) || ['sip','exercise','yoyo','duel', 'playgame', 'reattach', 'sleep', 'nap', 'together', 'ask', 'videogame', 'paint', 'group', 'refine', 'deskwork', 'handheld'].includes(this.skill.name));
     const able = ch.mode === 'ground' && ch.legCount === 2 && !!ch.useHand && !c.mood.asleep;
     let yes = !busy && able && isAct(act) && L !== 'angry' && L !== 'scared';
-    if (yes) yes = chance(act === 'hug' ? (bond > 0.3 || L === 'sad' ? 0.9 : 0.3) : bond < -0.3 ? 0.25 : 0.65 + bond * 0.35);
+    const relation=c.foe?.()?.id?c.relationship?.(c.foe!()!.id!):undefined;
+    if (yes) yes = chance(Math.min(.98,(act === 'hug' ? (bond > 0.3 || L === 'sad' ? 0.9 : 0.3)+(relation?.care??0)*.1 : bond < -0.3 ? 0.25 : 0.65 + bond * 0.35)+((relation?.cooperation??.5)-.5)*.2));
     c.tell?.({ type: 'reply', act, yes });
     if (!yes) {
-      if (able && !c.mood.asleep) c.say(L === 'angry' ? pick(['not now.', 'no.', 'leave me alone']) : busy ? pick(['busy!', 'later']) : pick(['nah', 'maybe later', 'eh']), 1.4);
+      if (able && !c.mood.asleep) c.say(L === 'angry' ? 'Not now, please.' : busy ? everydayReply(c.personality,'invited') : 'Maybe a little later.', 1.4);
       return;
     }
     this.why = `${name} wanted a ${act}`;
@@ -846,7 +944,7 @@ export class Mind {
     }
     if (ch.support >= 0) {
       const onFor = c.world.time - this.onWindowSince;
-      const want = 0.15 + Math.min(onFor / 60, 1) * 0.6 + (L === 'sleepy' ? 0.3 : 0);
+      const want = 0.15 + Math.min(onFor / 90, 3) * 0.7 + (L === 'sleepy' ? 0.3 : 0);
       const safe = c.lessons.safeDrop * ch.scale;
       const hops = ([-1, 1] as const).map((side) => ({ side, drop: dropFrom(c, side) })).filter((o) => o.drop < safe);
       const climbs = ([-1, 1] as const).map((side) => ({ side, o: climbDownOption(c, side) })).filter((x) => x.o && x.o.drop < safe);
@@ -923,9 +1021,9 @@ export class Mind {
       case 'invited': this.answerInvite(c, e.act, e.name); return;
       case 'replied': {
         if (!(this.skill instanceof AskTogether) || this.skill.act !== e.act) return;
-        if (e.yes) { this.interrupt(c, new Together(this.skill.act, true)); return; }
+        if (e.yes) { if(c.foe?.()?.id)c.recordActivity?.(c.foe!()!.id!,'cooperate',true);this.interrupt(c, new Together(this.skill.act, true)); return; }
         c.mood.nudge({ happiness: -0.04, annoyance: 0.03 });
-        c.feel.bond = Math.max(-1, c.feel.bond - 0.02);
+        c.mood.nudge({frustration:.04});
         this.interrupt(c);
         if (chance(0.6)) c.say(pick(['aw', 'fine.', 'rude', 'ok...']), 1.2);
         return;
@@ -948,16 +1046,16 @@ export class Mind {
       }
       case 'challenged': {
         // His friend wants to fight: he squares up too (same weapons), unless he's busy with something of his own.
-        const keep = ['playgame', 'reattach', 'sleep', 'duel'];
+        const keep = ['playgame', 'reattach', 'sleep', 'duel', 'group', 'refine', 'deskwork', 'handheld'];
         const upHigh = c.char.support >= 0 && !c.props?.thingOf(c.char.support); // (up on a window: he can't fight from there)
-        if (this.skill && keep.includes(this.skill.name) || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand || upHigh) return;
+        if (this.queued || this.skill && (keep.includes(this.skill.name) || isSettledActivity(this.activeSkill?.name)) || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand || upHigh) return;
         this.why = `${e.name} wants to fight`;
         this.interrupt(c, new Duel(e.armed));
         return;
       }
       case 'friendFighting': {
         // His friend's fighting your cursor: he joins in (unless he's busy with something of his own).
-        const busy = this.skill && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'chase'].includes(this.skill.name);
+        const busy = this.queued || this.skill && !['idle', 'wander', 'sit', 'explore', 'sigh', 'stretch', 'chase'].includes(this.skill.name);
         if (busy || m.asleep || !c.char.whole || c.char.legCount < 2 || !c.char.useHand) return;
         if (!c.world.cursor) return;
         this.why = 'backing up his friend';
@@ -972,9 +1070,9 @@ export class Mind {
         m.nudge({ annoyance: 0.1, boredom: -0.2, trust: -0.01 });
         this.why = `you took his ${e.name}`;
         c.memory.count('itemsTaken');
-        c.say(pick([`hey! my ${e.name}`, 'HEY', `that's my ${e.name}!`, 'rude.']), 1.6);
+        c.say(everydayReply(c.personality,'taken'), 1.6);
         this.takenAt = c.world.time;
-        if (ch.mode === 'ground' && !(this.skill instanceof Reattach)) this.interrupt(c, new Sequence('hey', [{ face: 'cursor' }, { gesture: 'shrug' }]));
+        if (ch.mode === 'ground' && !(this.skill instanceof Reattach)) this.react(c, new Sequence('hey', [{ face: 'cursor' }, { gesture: 'shrug' }]));
         return;
       }
       case 'itemDropped': {
@@ -1053,7 +1151,7 @@ export class Mind {
         // Lean into it, unless he's in the middle of something important.
         if ((ch.mode === 'ground' || ch.mode === 'sit') && !(this.skill instanceof Sequence && this.skill.name === 'enjoy')) {
           if (ch.mode === 'sit') ch.standUp();
-          this.interrupt(c, new Sequence('enjoy', [{ gesture: 'nuzzle', atCursor: true }]));
+          this.react(c, new Sequence('enjoy', [{ gesture: 'nuzzle', atCursor: true }]));
           this.why = 'you\'re petting him';
         }
         if (chance(0.4)) c.say((chance(0.3) ? c.memory.recall('petted') : null) ?? pick([':)', '♪', 'hehe', 'mmm']), 1.2);
@@ -1267,7 +1365,7 @@ export class Mind {
     }
     if (ch.mode === 'sit' && L !== 'angry' && chance(0.6)) { c.say('?', 1); return; } // can't be bothered to get up
     if (ch.mode === 'sit') ch.standUp();
-    this.interrupt(c, react ?? undefined);
+    this.react(c, react ?? undefined);
   }
 
   /** What he does once he's back on his feet after falling. */

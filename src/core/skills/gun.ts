@@ -9,7 +9,7 @@ export class ShootGun extends Skill {
   private wait = 0.4;
   private fired = 0;
   private recoilTime = 0;
-  private reloading = false;
+
   constructor(
     private target: () => Vec | null,
     private at: 'friend' | 'cursor',
@@ -54,7 +54,7 @@ export class ShootGun extends Skill {
       [gun.hand]: hand,
       [gun.hand === 'R' ? 'L' : 'R']: {
         x: hand.x - fx * 6 * sc,
-        y: hand.y + (this.reloading ? 18 : 4) * sc,
+        y: hand.y + (gun.reloadRemaining > 0 ? 18 : 4) * sc,
       },
       lean: (-recoil / sc) * 0.2,
     };
@@ -65,16 +65,13 @@ export class ShootGun extends Skill {
       windup: true,
       hitIn: Math.max(0, this.wait),
     };
+    if (gun.reloadRemaining > 0) return false;
     this.wait -= dt;
     if (this.wait > 0) return false;
     if (this.fired >= this.shots) return true;
-    if (this.reloading) {
-      gun.ammo = 6;
-      this.reloading = false;
-    }
     if (!gun.ammo) {
-      this.reloading = true;
-      this.wait = 1.15;
+      gun.beginReload();
+      this.wait = 0.12;
       c.say('reload', 1);
       c.sound?.('pickup', 0.5);
       return false;

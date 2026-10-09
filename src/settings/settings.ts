@@ -1,22 +1,19 @@
 // The settings window: live mood bars, look and movement presets plus sliders
-// for every number, and general options. Changes apply to Blurp instantly.
+// for every number, and general options. Changes apply to the selected characters instantly.
 
-import { PROVIDERS, RANGES, type PetConfig, type ProviderId } from '../core/config';
+import { PROVIDERS, RANGES, CHARACTER_PRESETS, activeFigureIds, companionConfig, DEFAULT_CONFIG, type PetConfig, type ProviderId } from '../core/config';
 import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
 import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
-import { thingCard, type ThingPreview } from './item-card';
 
 interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
 interface Weigh { name: string; score: number; why: string; bias?: number }
 interface Drawing { title: string; shape: { x: number; y: number }[][]; color: string; at: number }
 interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at: number; by: 'him' | 'ai' | 'you'; weight: number }
 interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
-interface PropsView { kinds: ThingPreview[]; placed: { i: number; id: string; name: string }[] }
-interface ItemsView { kinds: (ThingPreview & { use: string; wear?: 'head' | 'feet'; drawn: boolean })[]; list: { uid: number; id: string; name: string; where: 'belt' | 'hand' | 'worn' | 'world' | 'cursor'; slot: number; drawn: boolean }[] }
-interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView; items?: ItemsView; props?: PropsView }
+interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView }
 interface Stats {
-  name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
+  friendships?:{name:string;stage:string;trust:number;care:number;rivalry:number;favorite:string;lastGift:string;gifts:number}[];bagDecor?:string[]; name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
   brain: { active: boolean; status: string; log: LogLine[] };
   mind?: { weigh: Weigh[]; thinking: boolean };
 }
@@ -24,29 +21,80 @@ interface KeyStatus { provider: ProviderId; saved: boolean; hint: string }
 interface Shell {
   /** Which stick figure this window is for (0 = the first, 1 = the second). */
   petId: number;
-  getConfig(): Promise<PetConfig>;
+  getConfig(id?:number): Promise<PetConfig>;
+  getConfigs():Promise<PetConfig[]>;
+  onSanity?(cb:(issues:string[])=>void):void;
+  onSelect?(cb:(id:number)=>void):void;
   onConfig(cb: (c: { id: number; config: PetConfig }) => void): void;
-  setConfig(patch: unknown): void;
-  resetConfig(): void;
-  command(cmd: string): void;
-  onStats(cb: (s: Stats) => void): void;
+  setConfig(patch: unknown,id?:number): void;
+  resetConfig(id?:number): void;
+  command(cmd: string,id?:number): void;
+  onStats(cb: (s: Stats | {id:number;stats:Stats}) => void): void;
   keyStatus(provider: ProviderId): Promise<KeyStatus>;
   listModels(): Promise<{ ok: true; models: string[] } | { ok: false; error: string }>;
   onKeyStatus(cb: (k: KeyStatus) => void): void;
   setKey(key: string): void;
   onTab(cb: (tab: string) => void): void;
-  onCollections(cb: (c: Collections) => void): void;
+  onCollections(cb: (c: Collections | {id:number;data:Collections}) => void): void;
   openItemsFolder(): void;
   reloadItems(): void;
   desktopInfo?():Promise<{pairing:string;error:string;homes:{id:number;path:string}[];connected:boolean}>;
   openExtensionFolder?():void;
-  chooseHabitat?(kind?:'folder'|'file'):Promise<{ok:boolean;message:string}>;
+  chooseHabitat?(kind?:'folder'|'file',id?:number):Promise<{ok:boolean;message:string}>;
   onFileNote?(cb:(message:string)=>void):void;
 }
-const shell = (window as unknown as { petShell: Shell }).petShell;
+const source = (window as unknown as { petShell: Shell }).petShell;
+let target: number | null = source.petId ?? 0;
+let allConfigs:PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(DEFAULT_CONFIG,id));
+const targets = () => target === null ? activeFigureIds(allConfigs[0]) : [target];
+const statsCache=new Map<number,Stats>(), collectionsCache=new Map<number,Collections>();
+const statsListeners:((s:Stats)=>void)[]=[], collectionListeners:((c:Collections)=>void)[]=[];
+function publishStats() {
+ const states=targets().map(id=>statsCache.get(id)).filter((s):s is Stats=>!!s);if(!states.length)return;
+ const first=states[0];let state=first;
+ if(target===null){const mood={...first.mood};for(const k of Object.keys(mood) as (keyof MoodState)[])mood[k]=states.reduce((sum,s)=>sum+s.mood[k],0)/states.length;
+ state={...first,name:'All figures',mood,label:'group average',doing:`${states.length} stick men`,why:'Select a name for individual status',brain:{active:false,status:'Choose a character for a private chat.',log:[]}};}
+ for(const cb of statsListeners)cb(state);
+}
+function publishCollections(){const data=collectionsCache.get(target??targets()[0]);if(data)for(const cb of collectionListeners)cb(data);}
+source.onStats(message=>{const e='stats' in message?message:{id:source.petId??0,stats:message};statsCache.set(e.id,e.stats);if(target===null||e.id===target)publishStats();});
+source.onCollections(message=>{const e='data' in message?message:{id:source.petId??0,data:message};collectionsCache.set(e.id,e.data);if(e.id===(target??targets()[0]))publishCollections();});
+const shell = {...source,
+ get petId(){return target??targets()[0];},
+ getConfig:()=>source.getConfig(target??targets()[0]),
+ setConfig:(patch:unknown)=>{for(const id of targets())source.setConfig(patch,id);},
+ resetConfig:()=>{for(const id of targets())source.resetConfig(id);},
+ command:(cmd:string)=>{const ids=/^(?:prop:|cursorWeapon:|do:(?:group:|pong|catch|handheldduo|lamp|arrange|carrytogether|readingcorner|workcorner))/.test(cmd)?targets().slice(0,1):targets();for(const id of ids)source.command(cmd,id);},
+ chooseHabitat:(kind:'folder'|'file'='folder')=>source.chooseHabitat?.(kind,target??targets()[0]),
+ onStats:(cb:(s:Stats)=>void)=>statsListeners.push(cb),
+ onCollections:(cb:(c:Collections)=>void)=>collectionListeners.push(cb),
+};
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let cfg: PetConfig;
 
+function chooseTarget(value:string){target=value==='all'?null:Number(value);const c=allConfigs[target??targets()[0]];render(c);publishStats();publishCollections();source.command('sync',target??targets()[0]);}
+$<HTMLSelectElement>('figureTarget').onchange=()=>chooseTarget($<HTMLSelectElement>('figureTarget').value);
+source.onSelect?.(id=>chooseTarget(String(id)));
+function renderRoster(){
+ const active=activeFigureIds(allConfigs[0]),select=$<HTMLSelectElement>('figureTarget');
+ const options=[new Option('All figures on the desktop','all'),...allConfigs.map((c,id)=>new Option(c.name+(active.includes(id)?'':' (not on desktop)'),String(id)))];
+ const signature=options.map(o=>o.textContent).join('|');if(select.dataset.signature!==signature){select.replaceChildren(...options);select.dataset.signature=signature;}
+ select.value=target===null?'all':String(target);
+ const host=$('spawnRoster');
+ if(!host.querySelector('input'))for(const profile of CHARACTER_PRESETS){
+  const label=document.createElement('label');label.className='switch';
+  const text=document.createElement('span'),input=document.createElement('input');input.type='checkbox';input.dataset.figure=String(profile.id);
+  input.onchange=()=>{const ids=activeFigureIds(allConfigs[0]);const next=input.checked?[...ids,profile.id]:ids.filter(id=>id!==profile.id);if(!next.length){input.checked=true;return;}
+    source.setConfig({figureCount:next.length,spawnOrder:[...new Set([...next,0,1,2,3,4])],friend:{...allConfigs[0].friend,on:next.length>1}},0);};
+  label.append(text,input);host.append(label);
+ }
+ for(const input of host.querySelectorAll<HTMLInputElement>('input')){const id=Number(input.dataset.figure);input.checked=active.includes(id);input.previousElementSibling!.textContent=allConfigs[id].name+' · '+CHARACTER_PRESETS[id].personality;}
+ $<HTMLSelectElement>('figureCount').value=String(active.length);
+}
+source.getConfigs().then(cs=>{allConfigs=cs;render(allConfigs[target??targets()[0]]);});
+
+$('sanityCheck').onclick=()=>source.command('sanity');
+source.onSanity?.(issues=>{$('sanityResult').textContent=issues.length?issues.join(' · '):'Passed: ownership, coordinates, controllers and shared claims are consistent.';});
 // ── tabs ──
 function showTab(name: string) {
   for (const t of document.querySelectorAll<HTMLButtonElement>('nav button')) t.setAttribute('aria-selected', String(t.dataset.tab === name));
@@ -59,6 +107,7 @@ shell.onTab((tab) => { showTab(tab === 'control' ? 'chat' : tab); if (tab === 'c
 const MOOD_ROWS: [keyof MoodState, string][] = [
   ['happiness', 'Happiness'], ['energy', 'Energy'], ['boredom', 'Boredom'],
   ['annoyance', 'Annoyance'], ['fear', 'Fear'], ['trust', 'Trust in you'],
+  ['socialNeed','Wants company'],['inspiration','Wants to create'],['frustration','Frustration'],['contentment','Contentment'],['confidence','Confidence'],['affection','Affection'],['stress','Stress'],
 ];
 // Each mood is a slider: it follows his real mood live, and you can drag it to set it.
 const fills: Record<string, [HTMLInputElement, HTMLElement]> = {};
@@ -67,7 +116,7 @@ for (const [k, label] of MOOD_ROWS) {
   const row = document.createElement('label');
   row.className = 'bar';
   row.innerHTML = `<span class="name">${label}</span><input type="range" min="0" max="1" step="0.01" id="mood-${k}" /><span class="val">–</span>`;
-  $('bars').appendChild(row);
+  (['confidence','affection','stress'].includes(k)?$('socialBars'):$('bars')).appendChild(row);
   const input = row.querySelector('input')!;
   input.addEventListener('pointerdown', () => { dragging = k; });
   input.addEventListener('pointerup', () => { dragging = null; });
@@ -154,6 +203,7 @@ shell.onStats((s) => {
   $('moveInfo').textContent = (s.windowsStuck ? "He tried to move a window and it didn't budge. On a Mac: System Settings → Privacy & Security → Accessibility, and switch on the app he runs in (Terminal or Electron), then restart him. " : '')
     + (s.moveNote ? `Last word from the window helper: ${s.moveNote}` : '');
   $('winInfo').textContent = s.windows ? `He can see ${s.windows} window(s) and ${s.platforms} window top(s) to stand on.` : 'He can\'t see any windows yet. If this stays at zero, check the Terminal for lines starting with [windows].';
+  $('friendships').replaceChildren(...(target===null?[Object.assign(document.createElement('p'),{textContent:'Select a figure to see their friendships and satchel keepsakes.'})]:[...(s.friendships??[]).map(r=>Object.assign(document.createElement('p'),{textContent:`${r.name} · ${r.stage}. Trust ${Math.round(r.trust*100)}% · care ${Math.round(r.care*100)}% · friendly rivalry ${Math.round(r.rivalry*100)}%${r.favorite?' · favorite: '+r.favorite.replaceAll('-', ' '):''}${r.lastGift?' · last gift: '+r.lastGift.replaceAll('-', ' '):''}`})),Object.assign(document.createElement('p'),{textContent:s.bagDecor?.length?'Satchel keepsakes: '+s.bagDecor.join(', '):'Satchel keepsakes grow after shared moments (4, 12 and 30). Gifts are optional.'})]));
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
   if (s.brain) renderChat(s.brain.log, s.brain.status, s.brain.active);
   latest = s;
@@ -199,7 +249,8 @@ for (const row of PRESET_ROWS) {
 // ── sliders (built from the config's range table) ──
 const sliders: [HTMLInputElement, HTMLElement, string][] = [];
 for (const [key, r] of Object.entries(RANGES)) {
-  const host = key === 'hyperactivity' ? $('activitySliders') : key === 'scale' ? $('sizeSlider') : key === 'volume' ? $('volumeSlider') : key.startsWith('look.') ? $('lookSliders') : $('bodySliders');
+  if(key==='figureCount')continue;
+  const host = key === 'inkLifetime' ? $('workshopSliders') : key === 'hyperactivity' ? $('activitySliders') : key === 'scale' ? $('sizeSlider') : key === 'volume' ? $('volumeSlider') : key.startsWith('look.') ? $('lookSliders') : $('bodySliders');
   const wrap = document.createElement('label');
   wrap.className = 'slider';
   wrap.innerHTML = `<span class="top"><span class="row-label">${r.label}</span><span></span></span><input type="range" min="${r.min}" max="${r.max}" step="${r.step}" id="s-${key}" /><small>${r.hint}</small>`;
@@ -225,10 +276,10 @@ $<HTMLInputElement>('smacking').addEventListener('change', (e) => set({ smacking
 $<HTMLInputElement>('sound').addEventListener('change', (e) => set({ sound: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('sfx').addEventListener('change', (e) => set({ sfx: (e.target as HTMLInputElement).checked }));
 $<HTMLInputElement>('destructible').addEventListener('change', (e) => set({ destructible: (e.target as HTMLInputElement).checked }));
-$<HTMLInputElement>('friendOn').addEventListener('change', (e) => set({ friend: { on: (e.target as HTMLInputElement).checked } }));
-for(const id of ['debugCombat','drawTools','browserPlay','closeWindows','fileHomes'] as const)$<HTMLInputElement>(id).addEventListener('change',()=>set({[id]:$<HTMLInputElement>(id).checked}));
+
+for(const id of ['debugCombat','drawTools','browserPlay','closeWindows','fileHomes','showBag','showTrash','consoleRequired','dailyRhythm'] as const)$<HTMLInputElement>(id).addEventListener('change',()=>set({[id]:$<HTMLInputElement>(id).checked}));
 $<HTMLSelectElement>('figureCount').addEventListener('change',()=>set({figureCount:Number($<HTMLSelectElement>('figureCount').value)}));
-$<HTMLSelectElement>('personality').addEventListener('change',()=>set({personality:$<HTMLSelectElement>('personality').value}));
+
 for(const button of document.querySelectorAll<HTMLButtonElement>('[data-weapon]'))button.onclick=()=>shell.command(`cursorWeapon:${button.dataset.weapon}`);
 $<HTMLSelectElement>('fightMode').addEventListener('change', (e) => set({ fightMode: (e.target as HTMLSelectElement).value }));
 $('duelNow').addEventListener('click', () => shell.command('do:duel'));
@@ -291,21 +342,31 @@ function theme(color: string) {
 function render(c: PetConfig) {
   cfg = c;
   theme(c.look.color);
-  $('title').textContent = c.name;
-  document.title = `${c.name} — Settings`;
+  $('title').textContent = 'Stickmen';
+  document.title = 'Stickmen — Settings';
+  $('scopeNotice').textContent=target===null?'Changes apply to everyone on the desktop. Mood bars show the group average; mixed settings show the first character.':'Settings for '+c.name;
+  $<HTMLInputElement>('name').disabled=target===null;
+  $<HTMLInputElement>('talkText').disabled=target===null;
+  $('memSummary').closest<HTMLElement>('.group')!.inert=target===null;
+  $<HTMLTextAreaElement>('persona').readOnly=true;
   const name = $<HTMLInputElement>('name');
   if (document.activeElement !== name) name.value = c.name;
   $<HTMLInputElement>('color').value = c.look.color;
   $<HTMLInputElement>('smacking').checked = c.smacking;
   $<HTMLInputElement>('sound').checked = c.sound;
   $<HTMLInputElement>('destructible').checked = c.destructible;
-  $<HTMLInputElement>('friendOn').checked = c.friend.on;
+
   $<HTMLSelectElement>('fightMode').value = c.fightMode;
   $<HTMLSelectElement>('figureCount').value=String(c.figureCount);
-  $<HTMLSelectElement>('personality').value=c.personality;
+  $('personality').textContent='Preset: '+c.personality+' · '+(CHARACTER_PRESETS[target??targets()[0]]?.description??'');
+  renderRoster();
   for(const id of ['browserPlay','closeWindows','fileHomes'] as const)$<HTMLInputElement>(id).checked=c[id];
   $<HTMLInputElement>('debugCombat').checked=c.debugCombat;
   $<HTMLInputElement>('drawTools').checked=c.drawTools;
+  $<HTMLInputElement>('consoleRequired').checked=c.consoleRequired;
+  $<HTMLInputElement>('dailyRhythm').checked=c.dailyRhythm;
+  $<HTMLInputElement>('showBag').checked=c.showBag;
+  $<HTMLInputElement>('showTrash').checked=c.showTrash;
   $('duelNow').toggleAttribute('disabled', !c.friend.on);
   $<HTMLInputElement>('sfx').checked = c.sfx;
   $<HTMLInputElement>('windows').checked = c.windows;
@@ -339,7 +400,7 @@ function render(c: PetConfig) {
   for (const [btn, isOn] of presetButtons) btn.setAttribute('aria-pressed', String(isOn()));
 }
 shell.getConfig().then(render);
-shell.onConfig(({ id, config }) => { if (id === (shell.petId ?? 0)) render(config); });
+source.onConfig(({id,config})=>{allConfigs[id]=config;renderRoster();if(id===(target??targets()[0]))render(config);});
 
 // ── Mind tab: moves and drawings ──
 /** Name a made-up move before saving it (a little inline box; Electron has no prompt()). */
@@ -414,41 +475,11 @@ shell.onCollections((c) => {
     return fig;
   }).reverse() : [emptyNote('No drawings yet.')]));
 });
-shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); if (c.items) renderItems(c.items); if (c.props) renderProps(c.props); });
+shell.onCollections((c) => { if (c.memory) renderMemory(c.memory); });
 
 // ── Items tab ──
-const SLOTS = ['left hip', 'right hip', 'back', 'pocket'];
-function renderItems(v: ItemsView) {
-  const where = (it: ItemsView['list'][number]) => it.where === 'belt' ? `on his belt (${SLOTS[it.slot] ?? '?'})` : it.where === 'hand' ? 'in his hand' : it.where === 'worn' ? 'wearing it' : it.where === 'world' ? 'lying around' : 'you have it';
-  $('itemList').replaceChildren(...(v.list.length ? v.list.map((it) => moveRow(it.name + (it.drawn ? ' (drawn)' : ''), 0, [
-    ...(it.where === 'belt' || it.where === 'hand' || it.where === 'worn' ? [['Take', () => shell.command(`item:take:${it.uid}`)] as [string, () => void]] : []),
-    ...(it.where === 'cursor' || it.where === 'world' ? [['Give back', () => shell.command(`item:return:${it.uid}`)] as [string, () => void]] : []),
-    ['Put away', () => shell.command(`item:remove:${it.uid}`)],
-  ], where(it))) : [emptyNote('He has nothing. Give him something below.')]));
-  // His inventory: every kind of thing there is. Drop one in (it falls from the top of the screen and he
-  // goes to get it), or put it straight on his belt.
-  $('itemKinds').replaceChildren(...v.kinds.filter((k) => !k.drawn).map((k) => thingCard(k, [
-    ['Drop it in', () => shell.command(`item:spawn:${k.id}`)],
-    [k.wear ? 'Wear' : 'Give him', () => shell.command(`item:give:${k.id}`)],
-  ])));
-}
-function renderProps(v: PropsView) {
-  $('propKinds').replaceChildren(...v.kinds.map((k) => thingCard(k, [['Drop it in', () => shell.command(`prop:spawn:${k.id}`)]])));
-  $('propPlaced').replaceChildren(...(v.placed.length
-    ? [...v.placed.map((p) => moveRow(p.name, 0, [
-        ...(p.id === 'tv' ? [
-          ['Watch TV', () => shell.command('do:watchtv')],
-          ['Video games', () => shell.command('do:videogame')],
-          ['Play Othello', () => shell.command('do:playgame')],
-          ['Change channel', () => shell.command(`prop:channel:${p.i}`)],
-        ] as [string, () => void][] : []),
-        ...(p.id === 'canvas' ? [['Paint', () => shell.command('do:paint')] as [string, () => void]] : []),
-        ['Put away', () => shell.command(`prop:remove:${p.i}`)]
-      ], 'on the desktop')),
-      moveRow('All of them', 0, [['Put everything away', () => shell.command('prop:clear')]], '')]
-    : [emptyNote('Nothing out on the desktop yet.')]));
-}
 $('openItems').addEventListener('click', () => shell.openItemsFolder());
+$('openInventory').addEventListener('click',()=>source.command(target===null?'openInventory:all':'openInventory',target??targets()[0]));
 $('reloadItems').addEventListener('click', () => shell.reloadItems());
 
 // ── Mind tab: memories ──

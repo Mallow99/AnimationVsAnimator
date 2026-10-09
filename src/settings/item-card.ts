@@ -8,9 +8,9 @@ export interface ThingPreview {
 }
 
 /** Inventory cards show the actual definition, including the owner's custom artwork. */
-export function thingCard(kind: ThingPreview, actions: [string, () => void][]) {
+export function thingCard(kind: ThingPreview, actions: [string, () => void][], pixels = 64) {
   const card = document.createElement('article'); card.className = 'thing-card';
-  const art = document.createElement('canvas'); art.width = art.height = 64; art.setAttribute('aria-hidden', 'true');
+  const art = document.createElement('canvas'); art.width = art.height = pixels; art.setAttribute('aria-hidden', 'true');
   const g = art.getContext('2d')!;
   const sprite = kind.sprite;
   const points = (kind.shape ?? []).flatMap((s) => s.rect ? [[s.rect[0], s.rect[1]], [s.rect[0] + s.rect[2], s.rect[1] + s.rect[3]]] as [number, number][] : s.pts);
@@ -19,6 +19,7 @@ export function thingCard(kind: ThingPreview, actions: [string, () => void][]) {
   const x2 = sprite ? sprite.x + sprite.rows[0].length * sprite.pixel : Math.max(1, ...points.map((p) => p[0]));
   const y2 = sprite ? sprite.y + sprite.rows.length * sprite.pixel : Math.max(1, ...points.map((p) => p[1]));
   const fit = Math.min(54 / (x2 - x1), 54 / (y2 - y1), 2);
+  g.scale(pixels / 64, pixels / 64);
   g.translate(32, 32); g.scale(fit, fit); g.translate(-(x1 + x2) / 2, -(y1 + y2) / 2);
   if (sprite) drawSprite(g, sprite);
   else {

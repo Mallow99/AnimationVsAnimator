@@ -1,15 +1,15 @@
 // The desktop shell (macOS + Windows).
-//  - One transparent, frameless, always-on-top, click-through window over the main screen (Blurp lives here).
+//  - One transparent, frameless, always-on-top, click-through window over the main screen (the figures live here).
 //  - A menu-bar / tray icon with quick toggles.
 //  - A settings window for each stick figure, in its color.
-//  - Their settings: pet.json (Blurp) and pet-2.json (the second one), in the app's data folder, shared
+//  - Their settings: pet.json (first preset) and pet-2.json (the second one), in the app's data folder, shared
 //    with every window. A few settings are about the app, not one of them (climbing windows, the AI
 //    service, fights...): those are kept the same in both.
 
-import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray, dialog } from 'electron';
+import { app, powerMonitor, BrowserWindow, ipcMain, Menu, screen, shell, Tray, dialog } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_CONFIG, friendConfig, companionConfig, mergeConfig, PROVIDERS, type PetConfig, type ProviderId } from '../core/config';
+import { DEFAULT_CONFIG, friendConfig, companionConfig, activeFigureIds, mergeConfig, PROVIDERS, type PetConfig, type ProviderId } from '../core/config';
 import type { WinRect } from '../core/world';
 import { watchWindows, type UiReport, type WindowWatcher } from './windows';
 import * as llm from './llm';
@@ -42,7 +42,7 @@ const configPath = (id: number) => path.join(app.getPath('userData'), id ? `pet-
 const configs: PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(DEFAULT_CONFIG,id));
 let config = configs[0];
 /** Settings that are about the app (or both of them), kept the same in both stick figures. */
-const SHARED: (keyof PetConfig)[] = ['windows', 'moveWindows', 'screenAware', 'knockCursor', 'mischief', 'fightMode', 'friend', 'provider', 'model', 'sfx', 'volume', 'figureCount', 'debugCombat', 'closeWindows', 'browserPlay', 'fileHomes'];
+const SHARED: (keyof PetConfig)[] = ['windows', 'moveWindows', 'screenAware', 'knockCursor', 'mischief', 'fightMode', 'friend', 'provider', 'model', 'sfx', 'volume', 'figureCount', 'debugCombat', 'closeWindows', 'browserPlay', 'fileHomes', 'showBag', 'showTrash', 'inkLifetime', 'consoleRequired', 'dailyRhythm', 'spawnOrder'];
 let saveTimer: NodeJS.Timeout | undefined;
 const dirty = new Set<number>();
 
@@ -86,7 +86,7 @@ function setConfig(id: number, patch: unknown) {
   saveTimer = setTimeout(saveConfig, 300);
   for (const w of BrowserWindow.getAllWindows()) for (const i of changed) w.webContents.send('config:changed', { id: i, config: configs[i] });
   buildTrayMenu();
-  for (const [i, sw] of settingsWins) sw.setTitle(`${configs[i].name} — Settings`);
+  for (const [i, sw] of settingsWins) sw.setTitle(`Stickmen — Settings`);
   updateWatcher();
 }
 
@@ -309,19 +309,19 @@ function createOverlay() {
 
 function openSettings(id = 0, tab?: string) {
   if (!Number.isInteger(id) || id<0 || id>=configs.length) id=0;
-  const existing = settingsWins.get(id);
-  const goTo = () => { if (typeof tab === 'string') settingsWins.get(id)?.webContents.send('settings:tab', tab); };
+  const existing = settingsWins.get(0);
+  const goTo = () => {const sw=settingsWins.get(0);sw?.webContents.send('settings:select',id);if(typeof tab==='string')sw?.webContents.send('settings:tab',tab);};
   if (existing) { existing.show(); existing.focus(); goTo(); return; }
   const sw = new BrowserWindow({
     width: 500,
     height: 760,
     minWidth: 380,
     minHeight: 480,
-    title: `${configs[id].name} — Settings`,
+    title: `Stickmen — Settings`,
     show: false,
     webPreferences: { preload, contextIsolation: true, nodeIntegration: false },
   });
-  settingsWins.set(id, sw);
+  settingsWins.set(0, sw);
   sw.loadFile(path.join(__dirname, '../settings/index.html'), { query: { pet: String(id) } });
   sw.webContents.once('did-finish-load', goTo);
   // Links (like "Get a free key") open in your normal browser.
@@ -333,25 +333,22 @@ function openSettings(id = 0, tab?: string) {
     sw.show();
     if (process.platform === 'darwin') app.focus({ steal: true });
   });
-  sw.on('closed', () => { settingsWins.delete(id); });
+  sw.on('closed', () => { settingsWins.delete(0); });
 }
 
 // ───────────── menu-bar / tray icon ─────────────
 
 function buildTrayMenu() {
   if (!tray) return;
-  const both = Array.from({length:config.friend.on ? config.figureCount : 1},(_,id)=>id);
+  const both = activeFigureIds(config);
   tray.setToolTip(both.map((i) => configs[i].name).join(' & '));
   const all = (patch: Partial<PetConfig>) => { for (const i of both) setConfig(i, patch); };
   tray.setContextMenu(Menu.buildFromTemplate([
-    ...both.flatMap((i) => [
-      { label: configs[i].name, enabled: false },
-      { label: 'Settings…', click: () => openSettings(i) },
-      { label: `Talk to ${configs[i].name}…`, click: () => openSettings(i, 'chat') },
-      { label: 'Items…', click: () => openSettings(i, 'items') },
-      { type: 'separator' as const },
-    ]),
-    { label: 'Second stick figure', type: 'checkbox', checked: config.friend.on, click: () => setConfig(0, { friend: { on: !config.friend.on } }) },
+    {label:'Settings…',click:()=>openSettings(both[0])},
+    {label:'Inventory and supplies…',click:()=>win?.webContents.send('pet:command',{id:both[0],cmd:'openInventory:all'})},
+    {label:'Talk to…',submenu:both.map(i=>({label:configs[i].name,click:()=>openSettings(i,'chat')}))},
+    {label:'Stick men on the desktop',submenu:[1,2,3,4,5].map(n=>({label:n===1?'1 stick man':`${n} stick men`,type:'radio' as const,checked:both.length===n,click:()=>setConfig(0,{figureCount:n})}))},
+    {type:'separator'},
     { label: 'Smack mode', type: 'checkbox', checked: config.smacking, click: () => all({ smacking: !config.smacking }) },
     { label: 'Mischief mode', type: 'checkbox', checked: config.mischief, click: () => setConfig(0, { mischief: !config.mischief }) },
     { label: 'They can hit your cursor', type: 'checkbox', checked: config.knockCursor, click: () => setConfig(0, { knockCursor: !config.knockCursor }) },
@@ -382,10 +379,11 @@ ipcMain.on('config:set', (_e, id: unknown, patch: unknown) => setConfig(petIndex
 // Reset: back to defaults (keeping who they are: the second one keeps their own name and color).
 ipcMain.on('config:reset', (_e, id: unknown) => {
   const i = petIndex(id);
-  setConfig(i, i ? { ...DEFAULT_CONFIG, name: configs[i].name, personality:configs[i].personality, look: { ...DEFAULT_CONFIG.look, color: configs[i].look.color } } : DEFAULT_CONFIG);
+  setConfig(i, { ...DEFAULT_CONFIG, name: configs[i].name, personality:configs[i].personality, persona:configs[i].persona, figureCount:configs[0].figureCount, spawnOrder:configs[0].spawnOrder, friend:configs[0].friend, look: { ...DEFAULT_CONFIG.look, color: configs[i].look.color } });
 });
-ipcMain.on('pet:stats', (_e, id: unknown, stats: unknown) => settingsWins.get(petIndex(id))?.webContents.send('pet:stats', stats));
-ipcMain.on('pet:collections', (_e, id: unknown, data: unknown) => settingsWins.get(petIndex(id))?.webContents.send('pet:collections', data));
+ipcMain.on('pet:sanity',(_e,issues:unknown)=>{if(Array.isArray(issues))settingsWins.get(0)?.webContents.send('pet:sanity',issues.filter(x=>typeof x==='string').slice(0,30));});
+ipcMain.on('pet:stats', (_e, id: unknown, stats: unknown) => settingsWins.get(0)?.webContents.send('pet:stats', {id:petIndex(id),stats}));
+ipcMain.on('pet:collections', (_e, id: unknown, data: unknown) => settingsWins.get(0)?.webContents.send('pet:collections', {id:petIndex(id),data}));
 ipcMain.on('pet:command',(_e,id:unknown,cmd:string)=>{if(cmd==='returnHome')homes=homes.filter(h=>h.id!==petIndex(id));win?.webContents.send('pet:command',{id:petIndex(id),cmd});});
 ipcMain.on('settings:open', (_e, id: unknown, tab?: string) => openSettings(petIndex(id), typeof tab === 'string' ? tab : undefined));
 ipcMain.handle('memory:load', (_e, id: unknown) => { try { return fs.readFileSync(memoryPath(petIndex(id)), 'utf8'); } catch { return null; } });
@@ -395,6 +393,8 @@ ipcMain.on('items:openFolder', () => { readItemDefs(); shell.openPath(itemsDir()
 // The talk box on the desktop needs keyboard focus for a moment, then gives it back.
 ipcMain.on('pet:typing', (_e, on: boolean) => {
   if (!win) return;
+  if (win.isFocusable() === !!on) return; // Avoid recreating/toggling a native panel for duplicate focus messages.
+  watcher?.setKeyboard(!!on);
   if (on) {
     win.setFocusable(true);
     win.focus();
@@ -414,7 +414,7 @@ ipcMain.on('brain:setKey', (_e, key: string) => {
   for (const sw of settingsWins.values()) sw.webContents.send('brain:keyStatus', llm.keyStatus(config.provider));
 });
 // You pressed on him. On macOS that (wrongly) activates our app, so hand focus right back.
-ipcMain.on('pet:pressed', () => watcher?.refocus());
+ipcMain.on('pet:pressed', () => { if (!win?.isFocusable()) watcher?.refocus(); });
 // He grabbed your cursor (mischief mode) or knocked it flying. Overlay coordinates → screen coordinates.
 ipcMain.on('pet:moveCursor', (_e, x: number, y: number) => {
   if (!(config.mischief || config.knockCursor) || !watcher || !Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -489,6 +489,8 @@ ipcMain.handle(
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 app.whenReady().then(() => {
+  const life = () => win?.webContents.send('world:life', {hour:new Date().getHours(),idleSeconds:powerMonitor.getSystemIdleTime()});
+  setInterval(life,10000).unref();
   loadConfig();
   // He lives in the menu bar, not the Dock. Keep an Edit menu so copy/paste
   // shortcuts work in the settings window's text boxes.

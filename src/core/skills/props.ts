@@ -1,5 +1,6 @@
 import { ActivityClock, activitySeconds, restlessness } from '../activity-pacing';
 // Furniture activities, separated from combat and climbing.
+import { propActions, type PropAction } from '../capabilities';
 import { Skill, arrive, type Ctx } from './context';
 import type { Thing, PropDef } from '../props';
 import type { SeatStyle } from '../character';
@@ -10,7 +11,8 @@ import { seatedTalk } from './together';
 /** The props of a kind (seat, tv, ride, canvas) that are standing up on the floor, nearest first. */
 export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
   const ch = c.char;
-  return (c.props?.placed ?? []).filter((t) => t.def!.use === use && Math.abs(t.tilt) < 0.35 && !t.held)
+  const action: Partial<Record<PropDef['use'],PropAction>> = {seat:'sit',tv:'watch',ride:'ride',canvas:'paint',work:'drawhere',storage:'store'};
+  return (c.props?.placed ?? []).filter((t) => (action[use] ? propActions(t.def!).includes(action[use]!) : t.def!.use === use) && Math.abs(t.tilt) < 0.35 && !t.held)
     .sort((a, b) => Math.abs(a.center.x - ch.x) - Math.abs(b.center.x - ch.x));
 }
 
@@ -21,7 +23,7 @@ export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
 function seatStyle(c: Ctx, seat: Thing): SeatStyle {
   const L = c.mood.label, slump = L === 'sleepy' || L === 'sad' ? 2 : 1;
   const ways: [SeatStyle, number][] = seat.def!.id === 'couch'
-    ? [['up', 1], ['lounge', 1.2 * slump], ['front', 1], ['lie', 0.8 * slump]]
+    ? [['up', c.personality==='competitive'?3:1], ['lounge', (c.personality==='gentle'?2.2:1.2) * slump], ['front', c.personality==='mischievous'?2:1], ['lie', 0.8 * slump]]
     : [['up', 1.5], ['front', 1]];
   let r = Math.random() * ways.reduce((sum, [, w]) => sum + w, 0);
   for (const [style, w] of ways) if ((r -= w) <= 0) return style;
@@ -43,6 +45,7 @@ export class SitOnProp extends Skill {
     c.look = 'default';
     this.dur ??= activitySeconds(c, 'sitdown');
     this.style = seatStyle(c, this.seat);
+    if (this.seat.sitters.size > 1) this.style = 'front';
     // Lying along the couch needs it to himself.
     if (this.style === 'lie' && this.seat.sitters.size) this.style = 'lounge';
   }
@@ -70,7 +73,8 @@ export class SitOnProp extends Skill {
       return true;
     }
     const at = seat.seatFor(c.who)!;
-    ch.seat = { x: ch.seat.x + (at.x - ch.seat.x) * 0.12, y: at.y };
+    if (seat.sitters.size > 2) ch.seatStyle = 'front';
+    ch.scootTo(at);
     // Someone wants to sit too: up he gets from lying along it, and leans back instead.
     if (ch.seatStyle === 'lie' && seat.sitters.get(c.who)?.lying === false) { ch.seatStyle = 'lounge'; c.say(pick(['oh, ok', 'fine, sit', '*scoots*']), 1.2); }
     // Sharing the couch: a bit of small talk now and then.
@@ -100,6 +104,7 @@ abstract class AtTheTV extends Skill {
   protected settle(c: Ctx, dt: number): 'go' | 'settled' | 'gone' {
     const ch = c.char, tv = this.tv;
     if (!c.props?.things.includes(tv) || tv.held || Math.abs(tv.tilt) > 0.6) return 'gone';
+    if(this.name!=='watchtv'&&c.consoleRequired&&!tv.consoleConnected){if(this.t<.1)c.say('Let’s attach the console beside the TV first.',2);return 'gone';}
     c.look = 'target'; c.lookTarget = tv.center;
     if (this.sub) {
       this.sub.t += dt;

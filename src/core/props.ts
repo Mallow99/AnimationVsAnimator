@@ -1,4 +1,4 @@
-import { convexHull, paddedVertices, polygonDistance, overlapOffset } from './geometry';
+import { convexHull, paddedVertices, polygonDistance, overlapOffset, compoundOffset, sweepConvex } from './geometry';
 // His drawings coming to life, Animator vs. Animation style. A ball he drew turns into a
 // real ball (he kicks it around; you can grab and throw it). Boxes, ramps, ledges and bridges
 // turn into real things with weight: they fall, tip over, stack, and you can drag them around.
@@ -14,12 +14,19 @@ import { convexHull, paddedVertices, polygonDistance, overlapOffset } from './ge
 import { collide, collidePlatforms, integrate, makePoint, platY, solveSticks, type Bounds, type Platform, type Point, type Stick } from './physics';
 import { DOODLE_LIFE, type Doodle } from './doodles';
 import type { Vec } from './math';
+import lampDef from './props/lamp.json';
 import chairDef from './props/chair.json';
 import couchDef from './props/couch.json';
+import bookshelfDef from './props/bookshelf.json';
 import tvDef from './props/tv.json';
 import scooterDef from './props/scooter.json';
 import canvasDef from './props/canvas.json';
 import deskDef from './props/desk.json';
+import workbenchDef from './props/workbench.json';
+import storageDef from './props/storage.json';
+import { propActions, PROP_ACTIONS, type PropAction } from './capabilities';
+import { Pong, paintPong } from './pong';
+import { parseProject, type InkProject } from './crafting-state';
 import type { WinRect } from './world';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import { PixelLayer, DEFAULT_LOOK, type Ctx2D } from './render';
@@ -73,7 +80,7 @@ export class Ball {
         x: p.x + radius * Math.cos((i * Math.PI) / 8),
         y: p.y + radius * Math.sin((i * Math.PI) / 8),
       }));
-      const offset = overlapOffset(circle, solid.collisionHull);
+      const offset = solid.contactOffset(circle);
       if (!offset) continue;
       const len = Math.hypot(offset.x, offset.y),
         nx = offset.x / len,
@@ -103,9 +110,19 @@ export type ThingKind = 'box' | 'ledge' | 'ramp' | 'bridge' | 'prop';
 export interface PropDef {
   id: string; name: string; about: string;
   /** What he does with it: sit on it, watch it, ride it, or just stand on it. */
-  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'none';
+  use: 'seat' | 'tv' | 'ride' | 'canvas' | 'work' | 'storage' | 'light' | 'none';
   /** Its solid shape: points around its edge, clockwise on screen. Edges facing up are things to stand on. */
   outline: [number, number][];
+  /** Optional convex physical parts, keeping leg/handle gaps open. Legacy files use their hull. */
+  collision?: [number, number][][];
+  /** Relative material density; size still determines mass. */
+  density?: number;
+  actions?: PropAction[];
+  seats?: number;
+  drawable?: boolean;
+  refinable?: boolean;
+  movable?: boolean;
+  move?: 'carry' | 'drag' | 'push';
   /** Where his bottom goes when he sits on it. */
   seat?: [number, number];
   /** The TV screen: x, y, width, height. */
@@ -187,8 +204,17 @@ export function parsePropDef(raw: unknown): PropDef | null {
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 160) : '',
-    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' ? o.use : 'none',
-    outline, seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
+    use: o.use === 'seat' || o.use === 'tv' || o.use === 'ride' || o.use === 'canvas' || o.use === 'work' || o.use === 'storage' || o.use === 'light' ? o.use : 'none',
+    actions: Array.isArray(o.actions) ? o.actions.filter((s): s is PropAction => PROP_ACTIONS.includes(s)).slice(0,PROP_ACTIONS.length) : [],
+    seats: Math.round(num(o.seats, id === 'couch' ? 5 : 1, 1, 5)),
+    move: o.move === 'carry' || o.move === 'drag' || o.move === 'push' ? o.move : undefined,
+    drawable: o.drawable !== false, refinable: o.refinable !== false, movable: o.movable !== false,
+    outline, collision: Array.isArray(o.collision) ? o.collision.slice(0,12).flatMap(raw=>{
+      if(!Array.isArray(raw))return [];const points=raw.slice(0,12).map(pt).filter((p):p is [number,number]=>!!p);
+      const hull=convexHull(points.map(([x,y])=>({x,y})));
+      return hull.length>=3?[hull.map(p=>[p.x,p.y] as [number,number])]:[];
+    }) : undefined,
+    density: num(o.density,1,.1,10), seat: pt(o.seat) ?? undefined, screen: scr, bar: pt(o.bar) ?? undefined,
     wheels: Array.isArray(o.wheels) ? o.wheels.filter((i): i is number => Number.isInteger(i) && i >= 0 && i < outline.length) : undefined,
     wheel: num(o.wheel, 4, 1, 20), friction: num(o.friction, 0.6, 0, 1),
     sprite,
@@ -257,6 +283,9 @@ export class Thing {
   platforms: Platform[] = [];
   /** Made by you from his inventory (not a drawing: doesn't fade). */
   forever = false;
+  ink?: InkProject;
+  movingBy: string | null = null;
+  facing: 1 | -1 = 1;
   /** For props: its definition, and the drawing with its own colors. */
   def: PropDef | null = null;
   private localColored: { pts: { x: number; y: number }[]; color: string; width: number }[] = [];
@@ -264,9 +293,14 @@ export class Thing {
   friction = 0.6;
   /** A TV: switched on (he's watching). */
   on = false;
+  manualLight:boolean|null=null;
+  lightUsers=new Set<string>();
+  syncLight(){if(this.def?.use==='light')this.on=this.manualLight??this.lightUsers.size>0;}
   channel = 0;
   /** A TV with its console on: what's on screen instead of a show (his own game, or the board you two are playing). */
   arcade: Runner | null = null;
+  pong: Pong | null = null;
+  consoleConnected = false;
   /** Two players: the second one's game (split screen), and who's playing (player one first). */
   arcade2: Runner | null = null;
   players: string[] = [];
@@ -342,17 +376,23 @@ export class Thing {
     return this.visualContour.map((p) => this.toWorld(p.x, p.y));
   }
 
+  get collisionHulls(): Vec[][] {
+    return this.def?.collision?.length ? this.def.collision.map(part=>part.map(([x,y])=>this.toWorld(x,y))) : [this.collisionHull];
+  }
+  contactOffset(hull:Vec[]) {return compoundOffset([hull],this.collisionHulls);}
+
   /** Where he sits, if it's a seat. */
   get seatAt(): Vec | null { return this.def?.seat ? this.toWorld(this.def.seat[0], this.def.seat[1]) : null; }
 
   /**
-   * Who's sitting on it, and on which side (-1 left, 0 the middle, 1 right). A couch holds two side by side
+   * Who's sitting on it, and on which side (-1 left, 0 the middle, 1 right). A couch holds up to five side by side
    * (whoever was there first scoots over to make room); a chair holds one; someone lying along it takes it all.
    */
-  readonly sitters = new Map<string, { side: -1 | 0 | 1; lying: boolean }>();
+  storageKey = '';
+  readonly sitters = new Map<string, { side: number; lying: boolean }>();
   /** Who's watching (a TV): it stays on while anyone is. */
   readonly watchers = new Set<string>();
-  get seatRoom() { return this.def?.bounds && this.def.bounds[2] - this.def.bounds[0] > 90 ? 2 : 1; }
+  get seatRoom() { return this.def?.seats ?? 1; }
   /** Take a seat, coming from x. False if it's full. */
   claimSeat(who: string, fromX: number, lying = false): boolean {
     if (this.sitters.has(who)) return true;
@@ -360,24 +400,32 @@ export class Thing {
     if (others.length >= this.seatRoom || (lying && others.length)) return false;
     // Someone lying along the couch sits up to make room.
     for (const [k, o] of this.sitters) if (o.lying) this.sitters.set(k, { ...o, lying: false });
-    const mid = this.seatAt;
-    if (!others.length || !mid) { this.sitters.set(who, { side: 0, lying }); return true; }
-    // The second one sits on the side he came from; the first one scoots to the other side.
-    const side: -1 | 1 = fromX < mid.x ? -1 : 1;
-    for (const [k, o] of this.sitters) this.sitters.set(k, { ...o, side: (-side) as -1 | 1 });
-    this.sitters.set(who, { side, lying });
+    const old = [...this.sitters.entries()].sort((a, b) => a[1].side - b[1].side);
+    if (fromX < (this.seatAt?.x ?? 0)) old.unshift([who, { side: 0, lying }]);
+    else old.push([who, { side: 0, lying }]);
+    this.sitters.clear();
+    for (const [id, value] of old) this.sitters.set(id, value);
+    this.reseat();
     return true;
   }
-  leaveSeat(who: string) {
-    this.sitters.delete(who);
-    if (this.sitters.size === 1) for (const [k, o] of this.sitters) this.sitters.set(k, { ...o, side: 0 });
+  private reseat() {
+    const n = this.sitters.size;
+    let i = 0;
+    for (const [who, value] of this.sitters) this.sitters.set(who, { ...value, side: n < 2 ? 0 : (i++ / (n - 1) * 2 - 1) * (n > 2 ? 1.5 : 1) });
   }
+  leaveSeat(who: string) { this.sitters.delete(who); this.reseat(); }
   /** Where this one sits (his side of the couch). */
   seatFor(who: string): Vec | null {
     const s = this.def?.seat;
     if (!s) return null;
     const side = this.sitters.get(who)?.side ?? 0, w = this.def!.bounds ? this.def!.bounds[2] - this.def!.bounds[0] : 0;
-    return this.toWorld(s[0] + side * w * 0.2, s[1]);
+    return this.toWorld(s[0] + side * w * 0.215, s[1]);
+  }
+  /** Move the existing rigid body, preserving identity, art and claims. */
+  place(at: Vec, angle = this.tilt) {
+    const center = this.center, turn = angle - this.tilt, cs = Math.cos(turn), sn = Math.sin(turn);
+    for (const p of this.points) { const x = p.x - center.x, y = p.y - center.y; p.x = at.x + cs * x - sn * y; p.y = at.y + sn * x + cs * y; p.px = p.x; p.py = p.y; }
+    this.refresh();
   }
   /** How far it's tipped over (radians; 0 = upright). */
   get tilt() { const f = this.frame(); return Math.atan2(f.uy, f.ux); }
@@ -485,7 +533,11 @@ export class Thing {
   private matchShape() {
     if (!this.rigid || this.stuck) return;
     const f = this.fit(), r = this.rest!;
-    this.points.forEach((p, i) => { const w = f.toWorld(r[i].x, r[i].y); p.x = w.x; p.y = w.y; });
+    this.points.forEach((p, i) => {
+      const w = f.toWorld(r[i].x, r[i].y);
+      // Shape correction is a constraint, not an extra kick on the next Verlet step.
+      p.px += w.x - p.x; p.py += w.y - p.y; p.x = w.x; p.y = w.y;
+    });
   }
 
   /**
@@ -573,11 +625,41 @@ export class Thing {
           if (p.x + 1.5 > bounds.right) side = Math.min(side, bounds.right - (p.x + 1.5));
         }
         for (const [p, pl] of this.above) if (p.x >= pl.x1 && p.x <= pl.x2) up = Math.max(up, p.y - (platY(pl, p.x) - p.r));
-        if (up > 0 || side) for (const p of this.points) { p.y -= Math.max(0, up); p.x += side; if (up > 0 && p.py > p.y) p.py = p.y; }
+        if (up > 0 || side) for (const p of this.points) {
+          p.y -= Math.max(0, up); p.py -= Math.max(0, up); p.x += side; p.px += side;
+          if (up > 0) { p.grounded = true; if (p.py < p.y) p.py = p.y; }
+        }
       }
     }
     for (const [p] of this.above) if (p.grounded && p.py > p.y) p.py = p.y;
     this.refresh();
+  }
+
+  /** A supported body dissipates tiny residual contact motion; hits/drags wake it immediately. */
+  projectMotion() {
+    if (!this.rigid || this.stuck || this.held) return;
+    const c = this.center, pts = this.points;
+    const vx = pts.reduce((s,p)=>s+p.x-p.px,0)/pts.length,
+      vy = pts.reduce((s,p)=>s+p.y-p.py,0)/pts.length;
+    let inertia = 0, rotation = 0;
+    for (const p of pts) {
+      const x = p.x-c.x, y = p.y-c.y;
+      inertia += x*x+y*y; rotation += x*(p.y-p.py-vy)-y*(p.x-p.px-vx);
+    }
+    const omega = rotation/(inertia||1);
+    // Discard deformation velocity while retaining translation and angular momentum.
+    for (const p of pts) { p.px = p.x-vx+omega*(p.y-c.y); p.py = p.y-vy-omega*(p.x-c.x); }
+  }
+
+  /** A supported body dissipates tiny residual contact motion; hits/drags wake it immediately. */
+  settleContacts(dt: number) {
+    if (!this.rigid || this.held || this.stuck || this.movingBy || !this.points.some(p => p.grounded)) return;
+    const speed = Math.max(...this.points.map(p => Math.hypot(p.x-p.px,p.y-p.py)/dt));
+    if (speed > 35 || this.friction < 0.1) return;
+    const damp = Math.min(0.65, this.friction * dt * 35);
+    for (const p of this.points) {
+      p.px += (p.x-p.px)*damp; p.py += (p.y-p.py)*damp;
+    }
   }
 
   private drawProp(ctx: Ctx2D, alpha: number, now: number) {
@@ -585,7 +667,10 @@ export class Thing {
     // Flat, filled art (the newer style) paints its screen on top of the body; line art paints it underneath.
     const flat = def.shape.some((st) => st.fill);
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = alpha * (this.ink && this.ink.remaining >= 0 ? Math.max(0.15,Math.min(1,this.ink.remaining/15)) : 1);
+    if (propActions(def).includes('watch') && this.facing === -1) {
+      const center = this.center;ctx.translate(center.x,center.y);ctx.rotate(this.tilt);ctx.scale(-1,1);ctx.rotate(-this.tilt);ctx.translate(-center.x,-center.y);
+    }
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (def.sprite) {
       const at = this.toWorld(0, 0);
@@ -604,7 +689,12 @@ export class Thing {
       if (st.fill) { ctx.fillStyle = st.fill; ctx.fill(); }
       if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * this.scale; ctx.stroke(); }
     }
+    if(def.use==='light'&&this.on){
+      const a=this.toWorld(9,11),b=this.toWorld(33,11),d=this.toWorld(29,18),e=this.toWorld(13,18);
+      ctx.fillStyle='#ffe3a0';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(d.x,d.y);ctx.lineTo(e.x,e.y);ctx.closePath();ctx.fill();
+    }
     if (flat) this.drawScreen(ctx, now, true);
+    if (propActions(def).includes('watch')) { const p = this.toWorld(this.facing > 0 ? def.bounds![2] : def.bounds![0], 14);ctx.fillStyle='#e7d3a0';ctx.fillRect(p.x-2,p.y,4*this.scale,4*this.scale); }
     ctx.restore();
   }
 
@@ -627,11 +717,13 @@ export class Thing {
       const c = [this.toWorld(sx, sy), this.toWorld(sx + sw, sy), this.toWorld(sx + sw, sy + sh), this.toWorld(sx, sy + sh)];
       c.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath();
     }
-    ctx.fillStyle = def.use === 'canvas' ? '#fff8e8' : this.on ? '#1d2b4a' : '#22232c';
+    ctx.fillStyle = (propActions(def).includes('paint') || propActions(def).includes('drawhere')) ? '#fff8e8' : this.on ? '#1d2b4a' : '#22232c';
     ctx.fill();
-    if (this.on && def.use === 'tv') {
+    if (this.on && propActions(def).includes('watch')) {
       ctx.save(); ctx.clip();
-      if (this.board) this.drawBoard(ctx, this.board, sx, sy, sw, sh);
+      if (this.pong) {
+        const at = this.toWorld(sx,sy); ctx.save();ctx.translate(at.x,at.y);ctx.rotate(this.tilt);ctx.scale(this.scale,this.scale);paintPong(ctx,this.pong,0,0,sw,sh);ctx.restore();
+      } else if (this.board) this.drawBoard(ctx, this.board, sx, sy, sw, sh);
       else if (this.arcade && this.arcade2) {
         // Split screen: player one on top, player two below.
         this.drawArcade(ctx, this.arcade, sx, sy, sw, sh / 2, '#ffd23f');
@@ -640,7 +732,7 @@ export class Thing {
       else this.drawShow(ctx, sx, sy, sw, sh, now);
       ctx.restore();
     }
-    if (this.art && def.use === 'canvas') {
+    if (this.art && (propActions(def).includes('paint') || propActions(def).includes('drawhere'))) {
       ctx.save(); ctx.clip(); ctx.strokeStyle = this.art.color; ctx.lineWidth = 2 * this.scale;
       const size = Math.min(sw, sh) * 0.8;
       for (const stroke of this.art.shape) {
@@ -804,6 +896,7 @@ export class Thing {
 /** A prop from its definition, with its top-left corner at (x, y), at his size. Rigid (every point braced to every other). */
 export function makeProp(def: PropDef, x: number, y: number, scale: number) {
   const t = new Thing('prop', { strokes: [], color: '#2a2c44', born: 0, done: true, title: def.name });
+  t.storageKey = `shelf-${t.n}-${Math.random().toString(36).slice(2,10)}`;
   t.def = def; t.forever = true; t.scale = scale; t.friction = def.friction;
   for (const [px, py] of def.outline) t.point(x + px * scale, y + py * scale);
   for (const i of def.wheels ?? []) t.points[i].r = (def.wheel ?? 4) * scale;
@@ -862,9 +955,11 @@ export function rampSlopeId(n: number, up: 1 | -1) { return PROP_ID + n * 64 + (
 export const reserveThing = () => nextProp++;
 
 /** The props that come with him (in his inventory; none are out until you drop them in). */
-export const BUILTIN_PROPS: PropDef[] = [chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef].map((d) => parsePropDef(d)!);
+export const BUILTIN_PROPS: PropDef[] = [lampDef,chairDef, couchDef, tvDef, scooterDef, canvasDef, deskDef, workbenchDef, storageDef, bookshelfDef].map((d) => parsePropDef(d)!);
 
 export class Props {
+  private contactTick = 0;
+  private contacts = new Map<string,{nx:number;ny:number;anchor:number;seen:number}>();
   balls: Ball[] = [];
   things: Thing[] = [];
   /** Wet ink: a line he's drawing right now that's already solid enough to stand on (a ramp or bridge on its way). */
@@ -925,7 +1020,19 @@ export class Props {
     return t;
   }
   /** Which props are where (saved between runs). */
-  savePlaced() { return this.placed.map((t) => ({ id: t.def!.id, x: Math.round(t.center.x), ...(t.art ? { art: t.art } : {}) })); }
+  savePlaced() { return this.placed.map(t => ({ id: t.def!.id, storageKey: t.storageKey, x: t.center.x, y: t.center.y, tilt: t.tilt, facing: t.facing, manualLight:t.manualLight, consoleConnected: t.consoleConnected, scale: t.scale, ...(t.ink ? { ink: t.ink, def: t.def } : {}), ...(t.art ? { art: t.art } : {}) })); }
+  restore(p: { id: string; storageKey?: string; x: number; y?: number; tilt?: number; scale?: number; facing?: number; manualLight?: boolean|null; consoleConnected?: boolean; ink?: unknown; def?: unknown; art?: unknown }, floor: number, scale: number) {
+    if (p.def) { const def = parsePropDef({ ...p.def as object, type: 'prop' }); if (def) this.defs.set(def.id, def); }
+    const def = this.defs.get(p.id); if (!def) return null;
+    const sc = Number.isFinite(p.scale) ? Math.max(0.2, Math.min(4, p.scale!)) : scale;
+    const t = this.spawn(p.id, p.x, floor - Math.max(...def.outline.map(q => q[1])) * sc - 2, sc, p.art)!;
+    if (Number.isFinite(p.y) && Math.abs(p.y!) < 20000) t.place({ x: p.x, y: p.y! }, Number.isFinite(p.tilt) ? p.tilt! : 0);
+    if (typeof p.storageKey === 'string' && /^[a-z0-9-]{1,60}$/.test(p.storageKey)) t.storageKey = p.storageKey;
+    t.manualLight=typeof p.manualLight==='boolean'?p.manualLight:null;t.syncLight();
+    t.consoleConnected = p.consoleConnected === true;
+    t.facing = p.facing === -1 ? -1 : 1;
+    t.ink = parseProject(p.ink); return t;
+  }
 
   get platforms() { return [...this.things.flatMap((t) => t.platforms), ...this.wet.values()]; }
   /** Things he can get on top of (for "get on what he drew"). */
@@ -939,29 +1046,59 @@ export class Props {
    * Returns true if any platform moved (so his ground gets updated).
    */
   update(dt: number, now: number, bounds: Bounds, world: Platform[], wins?: WinRect[]) {
+    this.contactTick++;
+    for(const [key,c]of this.contacts)if(this.contactTick-c.seen>2)this.contacts.delete(key);
+    // Only fast translation needs a swept pass. Rotation continues through discrete contacts.
+    const fast=this.things.some(t=>!t.held&&!t.movingBy&&t.points.some(p=>Math.hypot(p.x-p.px,p.y-p.py)>3));
+    const starts=fast?new Map(this.things.filter(t=>t.rigid).map(t=>[t.n,{center:t.center,tilt:t.tilt,hulls:t.collisionHulls}])):null;
+    for (const t of this.things) if (t.pong && t.on) t.pong.step(dt);
     const before = this.things.length;
-    this.things = this.things.filter((t) => t.forever || now - t.doodle.born < DOODLE_LIFE);
-    this.balls = this.balls.filter((b) => now - b.doodle.born < DOODLE_LIFE);
+    for (const t of this.things) if (t.ink && t.ink.remaining >= 0 && !t.held && !t.movingBy && !t.sitters.size && !t.watchers.size && !t.players.length && !t.lightUsers.size && !t.load.size) t.ink.remaining = Math.max(0, t.ink.remaining - dt);
+    this.things = this.things.filter(t => t.ink ? t.ink.remaining !== 0 : t.forever || !!t.held || !!t.sitters.size || !!t.load.size || now - t.doodle.born < DOODLE_LIFE);
+    this.balls = this.balls.filter((b) => !!b.heldBy || now - b.doodle.born < DOODLE_LIFE);
     const moved = this.things.length !== before || this.things.length > 0;
     if (wins) for (const t of this.things) t.followWindows(wins);
     // Everything steps every time: there are only ever a few, and a thing resting on a window
     // has to notice when the window moves out from under it. All of them are solved together,
     // so things resting on things settle properly.
     // Window tops and the tops of other things are one-way surfaces: things land on them from above.
-    for (const t of this.things) t.begin(dt, [...world, ...this.things.filter((o) => o !== t).flatMap((o) => o.platforms)]);
+    // Rigid prop pairs use whole-art contacts below. Solving their point-based one-way tops as
+    // well deforms their frames and injects creeping tilt into stacks. Flexible bridges retain it.
+    for (const t of this.things) t.begin(dt, [...world, ...this.things.filter((o) => o !== t && (!t.rigid || !o.rigid)).flatMap((o) => o.platforms)]);
     for (let i = 0; i < 6; i++) {
       for (const t of this.things) t.pass(bounds);
       this.restOnEachOther();
     }
     for (const t of this.things) t.end(bounds);
-    for (let i=0;i<4;i++) {
+    if(starts)this.sweepSolids(starts);
+    for (let i=0;i<12;i++) {
       if (!this.separateSolids()) break;
       for (const t of this.things) t.end(bounds);
     }
+    for (const t of this.things) { t.projectMotion(); t.settleContacts(dt); }
     const all = [...world, ...this.platforms];
     for (const b of this.balls) b.step(dt, bounds, all, this.things);
     if (moved) this.changedPlatforms();
     return moved;
+  }
+
+  private sweepSolids(starts:Map<number,{center:Vec;tilt:number;hulls:Vec[][]}>) {
+    for(let i=0;i<this.things.length;i++)for(let j=i+1;j<this.things.length;j++) {
+      const a=this.things[i],b=this.things[j],sa=starts.get(a.n),sb=starts.get(b.n);
+      if(!sa||!sb||a.held||b.held||a.movingBy||b.movingBy||Math.abs(a.tilt-sa.tilt)>.15||Math.abs(b.tilt-sb.tilt)>.15)continue;
+      const ac=a.center,bc=b.center,delta={x:ac.x-sa.center.x-bc.x+sb.center.x,y:ac.y-sa.center.y-bc.y+sb.center.y};
+      if(Math.hypot(delta.x,delta.y)<=3)continue;
+      let first:ReturnType<typeof sweepConvex>=null;
+      for(const x of sa.hulls)for(const y of sb.hulls){const hit=sweepConvex(x,y,delta);if(hit&&(!first||hit.time<first.time))first=hit;}
+      if(!first)continue;
+      const wa=a.stuck?0:1,wb=b.stuck?0:1;if(!wa&&!wb)continue;
+      const closing=delta.x*first.normal.x+delta.y*first.normal.y;
+      for(const [t,w,sign]of [[a,wa,1],[b,wb,-1]] as const)for(const p of t.points){
+        const fraction=w/(wa+wb),dx=-delta.x*(1-first.time)*fraction*sign,dy=-delta.y*(1-first.time)*fraction*sign;
+        p.x+=dx;p.px+=dx;p.y+=dy;p.py+=dy;
+        if(closing<0){p.px+=first.normal.x*closing*fraction*sign;p.py+=first.normal.y*closing*fraction*sign;}
+      }
+    }
   }
 
   /** Resolve whole-body overlap, with no positional correction added as artificial velocity. */
@@ -972,16 +1109,24 @@ export class Props {
         const a = this.things[i],
           b = this.things[j];
         if (!a.rigid || !b.rigid) continue;
-        const wa = a.stuck || a.held ? 0 : 1 / a.points.length,
-          wb = b.stuck || b.held ? 0 : 1 / b.points.length;
-        if (!(wa + wb)) continue;
-        const offset = overlapOffset(a.collisionHull, b.collisionHull);
+        const offset = compoundOffset(a.collisionHulls, b.collisionHulls);
         if (!offset) continue;
         const length = Math.hypot(offset.x, offset.y);
-        if (length < 0.05) continue;
+        if (length < 0.001) continue;
         moved = true;
         const nx = offset.x / length,
           ny = offset.y / length;
+        const weight = (t: Thing) => {
+          const hull = t.collisionHull;
+          const area = (Math.max(...hull.map(p=>p.x))-Math.min(...hull.map(p=>p.x))) *
+            (Math.max(...hull.map(p=>p.y))-Math.min(...hull.map(p=>p.y)));
+          return 1 / Math.max(1, area / 1000 * (t.def?.density ?? 1) * (t.def?.move === 'push' ? 2 : 1));
+        };
+        // A supported lower body cannot be corrected down through its support. Resolve the upper
+        // body's penetration fully instead of splitting it then lifting the lower one into it again.
+        const wa = a.stuck || a.held || a.movingBy || ny > 0.5 && a.points.some(p=>p.grounded) ? 0 : weight(a),
+          wb = b.stuck || b.held || b.movingBy || ny < -0.5 && b.points.some(p=>p.grounded) ? 0 : weight(b);
+        if (!(wa + wb)) continue;
         const velocity = (t: Thing) => ({
           x:
             t.points.reduce((v, p) => v + (p.x - p.px) * 120, 0) /
@@ -993,6 +1138,22 @@ export class Props {
         const av = velocity(a),
           bv = velocity(b),
           closing = (av.x - bv.x) * nx + (av.y - bv.y) * ny;
+        const tangent = -(av.x-bv.x)*ny + (av.y-bv.y)*nx;
+        const friction = Math.sqrt(a.friction*b.friction);
+        const key=`${a.n}:${b.n}`,ac=a.center,bc=b.center,coordinate=-(ac.x-bc.x)*ny+(ac.y-bc.y)*nx;
+        let contact=this.contacts.get(key);
+        const controlled=!!(a.held||b.held||a.movingBy||b.movingBy);
+        if(!contact||contact.nx*nx+contact.ny*ny<.98||controlled) {
+          contact={nx,ny,anchor:coordinate,seen:this.contactTick};this.contacts.set(key,contact);
+        }
+        contact.seen=this.contactTick;
+        // A friction anchor resists tiny accumulated slip at rest. Its force is bounded by the
+        // contact load, so a push breaks static friction instead of secretly pinning the bodies.
+        const limit=(Math.max(0,-closing)+Math.abs(ny)*2000/120)*friction;
+        const desired=tangent+(controlled?0:(coordinate-contact.anchor)*120);
+        const drag=Math.max(-limit,Math.min(limit,desired));
+        if(Math.abs(desired)>limit)contact.anchor=coordinate;
+        if(this.contacts.size>256)this.contacts.delete(this.contacts.keys().next().value!);
         for (const [t, w, sign] of [
           [a, wa, 1],
           [b, wb, -1],
@@ -1011,6 +1172,10 @@ export class Props {
               p.px -= (nx * impulse) / 120;
               p.py -= (ny * impulse) / 120;
             }
+            // Equal/opposite tangential impulses remove contact slip, not intended free motion.
+            p.px -= ny * drag * fraction * sign / 120;
+            p.py += nx * drag * fraction * sign / 120;
+            if (ny * sign < -0.5) p.grounded = true;
           }
         }
       }
@@ -1029,8 +1194,8 @@ export class Props {
       for (let e = 0; e < o.length; e++) {
         const p = up.points[o[e]], q = up.points[o[(e + 1) % o.length]];
         if (q.x >= p.x - 1) continue; // bottom edges go right-to-left (the outline is clockwise)
-        for (const low of this.things) {
-          if (low === up || low.kind === 'bridge') continue;
+      for (const low of this.things) {
+          if (low === up || low.kind === 'bridge' || up.rigid && low.rigid) continue;
           for (const c of low.points) {
             if (c.x <= q.x + 0.5 || c.x >= p.x - 0.5) continue;
             const u = (c.x - q.x) / (p.x - q.x), y = q.y + (p.y - q.y) * u, dig = y - c.y;

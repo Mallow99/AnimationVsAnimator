@@ -1,0 +1,58 @@
+{
+  "id": "yo-yo",
+  "name": "Yo-yo",
+  "about": "A pocket toy. He lets it down on a string, catches it, and rests between tricks.",
+  "use": "play",
+  "length": 6,
+  "grip": 6,
+  "bounce": 0.2,
+  "shape": [
+    {
+      "pts": [
+        [
+          -5,
+          -5
+        ],
+        [
+          5,
+          -5
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          -5,
+          5
+        ]
+      ],
+      "fill": "#d49460",
+      "color": "#79513a",
+      "width": 1
+    },
+    {
+      "pts": [
+        [
+          -2,
+          -3
+        ],
+        [
+          2,
+          -3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          -2,
+          3
+        ]
+      ],
+      "fill": "#f2d28f",
+      "width": 0
+    }
+  ],
+  "belt": "pocket",
+  "hit": 0
+}

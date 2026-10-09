@@ -1,4 +1,6 @@
-import { convexHull, paddedVertices, polygonDistance, segmentDistance, overlapOffset } from './geometry';
+import { convexHull, paddedVertices, polygonDistance, segmentDistance, overlapOffset, sweepConvex } from './geometry';
+import blanketDef from './items/blanket.json';
+import snackDef from './items/snack-box.json';
 import type { Thing } from './props';
 // Items: things he carries on his belt and uses with his hands — his pen (he draws
 // with it), a wooden sword (he swings it). Each kind of item is described by a small
@@ -14,6 +16,13 @@ import { basis, clamp, cross3, dot3, norm3, scale3, sub3, add3, type V3, type Ve
 import { collide, collidePlatforms, integrate, makePoint, platY, solveSticks, type Bounds, type Platform, type Point, type Stick } from './physics';
 import type { Character } from './character';
 import penDef from './items/pen.json';
+import spongeDef from './items/sponge.json';
+import eraserDef from './items/eraser.json';
+import bucketDef from './items/paint-bucket.json';
+import handheldDef from './items/handheld.json';
+import flowersDef from './items/flowers.json';
+import consoleDef from './items/console.json';
+import type { Runner } from './tv-game';
 import swordDef from './items/wooden-sword.json';
 import ballDef from './items/bouncy-ball.json';
 import maceDef from './items/mace.json';
@@ -22,13 +31,19 @@ import katanaDef from './items/katana.json';
 import bowDef from './items/bow.json';
 import gunDef from './items/gun.json';
 import bookDef from './items/book.json';
+import cupDef from './items/cup.json';
+import dumbbellDef from './items/dumbbell.json';
+import yoyoDef from './items/yo-yo.json';
 import helmetDef from './items/helmet.json';
 import bootsDef from './items/boots.json';
 import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import type { DepthPart } from './render';
+import { satchelAt } from './satchel';
+import { bookShape } from './book-art';
+import { parseProject, type InkProject } from './crafting-state';
 
 /** What he does with it: draw (a pen), swing (a sword), smash (a mace, overhead), throw (a ball), shoot (a bow), none (just carries it). */
-export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'shoot' | 'gun' | 'none';
+export type ItemUse = 'draw' | 'swing' | 'smash' | 'throw' | 'shoot' | 'gun' | 'wipe' | 'erase' | 'color' | 'game' | 'connect' | 'sip' | 'exercise' | 'play' | 'rest' | 'snack' | 'none';
 export type BeltSpot = 'side' | 'back' | 'pocket' | 'none';
 /** A line through `pts`, or (with `fill`) a flat filled shape, optionally with an edge line. */
 export interface ItemStroke { pts: [number, number][]; color: string; width: number; fill?: string }
@@ -47,6 +62,9 @@ export interface ItemDef {
   cuts?: boolean;
   /** Made from one of his drawings (not a file). */
   drawn?: boolean;
+  blueprint?: string;
+  drawable?: boolean;
+  refinable?: boolean;
 }
 
 /** Check a definition (from a file you wrote, or from the AI). Returns null if it's unusable. */
@@ -79,11 +97,14 @@ export function parseItemDef(raw: unknown): ItemDef | null {
   return {
     id, name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 30) : id,
     about: typeof o.about === 'string' ? o.about.slice(0, 140) : '',
-    use: o.use === 'draw' || o.use === 'swing' || o.use === 'smash' || o.use === 'throw' || o.use === 'shoot' || o.use === 'gun' ? o.use : 'none',
+    use: o.use === 'draw' || o.use === 'swing' || o.use === 'smash' || o.use === 'throw' || o.use === 'shoot' || o.use === 'gun' || o.use === 'wipe' || o.use === 'erase' || o.use === 'color' || o.use === 'game' || o.use === 'connect' || o.use === 'sip' || o.use === 'exercise' || o.use === 'play' || o.use === 'rest' || o.use === 'snack' ? o.use : 'none',
     length, grip,
     belt: o.belt === 'side' || o.belt === 'back' || o.belt === 'pocket' ? o.belt : o.belt === 'none' ? 'none' : 'side',
     hit: num(o.hit, 0, 0, 3), bounce: num(o.bounce, 0.3, 0, 0.92), shape, sprite,
     wear: o.wear === 'head' || o.wear === 'feet' ? o.wear : undefined,
+    blueprint: typeof o.blueprint === 'string' && /^[a-z0-9-]{1,30}$/.test(o.blueprint) ? o.blueprint : undefined,
+    drawable: o.drawable !== false, refinable: o.refinable !== false,
+    drawn: o.drawn === true || undefined,
     cuts: o.cuts === true ? true : undefined,
   };
 }
@@ -107,20 +128,20 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [flowersDef,blanketDef,snackDef,penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef, cupDef, dumbbellDef, yoyoDef, spongeDef, eraserDef, bucketDef, handheldDef, consoleDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
-export const SLOT_NAMES = ['left hip', 'right hip', 'back', 'pocket'];
+export const SLOT_NAMES = Array.from({ length: 16 }, (_, i) => `satchel ${i + 1}`);
 const SLOTS = SLOT_NAMES.length;
 /** Which slots each kind of thing likes, best first. */
 const PREFER: Record<BeltSpot, number[]> = { side: [1, 0, 2], back: [2, 1, 0], pocket: [3, 0, 1], none: [] };
-export const preferredSlots = (d: ItemDef) => PREFER[d.belt];
+export const preferredSlots = (d: ItemDef) => [...new Set([...PREFER[d.belt], ...Array.from({ length: SLOTS }, (_, i) => i)])];
 
 let nextUid = 1;
 export interface ItemPose { at: V3; dir: V3; scale: number; mirror?: boolean }
 
 export class Item {
-  readonly uid = nextUid++;
+  readonly uid:number;
   where: 'belt' | 'hand' | 'worn' | 'world' | 'cursor' = 'world';
   poses: ItemPose[] = [];
   slot = -1;
@@ -142,8 +163,38 @@ export class Item {
   /** How fast its tip is moving (px/s), and which way (px/s), for hits. */
   /** Pistol magazine stays with the item across bursts and saves. */
   ammo = 6;
+  /** Reload belongs to this gun, so interrupted bursts can resume rather than restart it. */
+  reloadRemaining = 0;
+  beginReload() {
+    if (this.def.use !== 'gun' || this.ammo >= 6 || this.reloadRemaining > 0) return false;
+    this.reloadRemaining = 1.15;
+    return true;
+  }
+  tickReload(dt: number) {
+    if (this.reloadRemaining <= 0) return;
+    this.reloadRemaining = Math.max(0, this.reloadRemaining - dt);
+    if (!this.reloadRemaining) this.ammo = 6;
+  }
+  ink?: InkProject;
+  arcade: Runner | null = null;
+  gameBest=0;
+  giftWrap=0;giftUnwrap=0;
+  dock:number|null=null;dockPort:Vec|null=null;
   /** A user controller owns its pose while aiming/swinging. */
   cursorControlled = false;
+  working = false;
+  bookOpen = 0;
+  bookTarget = 0;
+  bookPage = 0;
+  bookmark = 0;
+  bookReading = false;
+  yoyoDrop = 0;
+  blanketSpread=0;snackOpen=0;snackAt:Vec|null=null;
+  shelf: { key: string; slot: number } | null = null;
+  tickBook(dt: number) {
+    this.bookOpen += clamp(this.bookTarget - this.bookOpen, -dt * 1.8, dt * 1.8);
+    if (this.animatedBook) this.sticks[0].len = this.physicalLength * this.scale;
+  }
   tipSpeed = 0;
   tipVel: Vec = { x: 0, y: 0 };
   private lastTip: V3 | null = null;
@@ -154,17 +205,22 @@ export class Item {
   thrownBy: 'him' | 'you' = 'him';
 
   constructor(
-    readonly def: ItemDef,
+    public def: ItemDef,
     at: Vec = { x: 0, y: 0 },
     public scale = 1,
+    uid?:number,
   ) {
+    this.uid=Number.isSafeInteger(uid)&&uid!>0&&uid!<1e9?uid!:nextUid++;nextUid=Math.max(nextUid,this.uid+1);
     this.a = makePoint(at.x, at.y, 2);
     this.b = makePoint(at.x, at.y + def.length * scale, 2);
     this.sticks = [{ a: this.a, b: this.b, len: def.length * scale }];
     this.at = { x: at.x, y: at.y, z: 0 };
   }
 
-  get tip(): V3 { return add3(this.at, scale3(this.dir, this.def.length * this.scale)); }
+  private gameStockDef:ItemDef|null=null;private gameStock=false;
+  get animatedHandheld(){if(this.gameStockDef!==this.def){this.gameStockDef=this.def;this.gameStock=this.def.id==='handheld'&&!this.def.sprite&&JSON.stringify(this.def.shape)===JSON.stringify(BUILTIN_ITEMS.find(d=>d.id==='handheld')!.shape);}return this.gameStock;}
+  private get physicalLength() { return this.animatedBook ? 12 + 12 * this.bookOpen : this.def.length; }
+  get tip(): V3 { return add3(this.at, scale3(this.dir, this.physicalLength * this.scale)); }
   get butt(): V3 { return add3(this.at, scale3(this.dir, -this.def.grip * this.scale)); }
 
   /** Start physics from where it is now, moving at (vx, vy). */
@@ -172,7 +228,7 @@ export class Item {
     const tip = this.tip;
     Object.assign(this.a, { x: this.at.x, y: this.at.y, z: this.at.z, px: this.at.x - vx * dt, py: this.at.y - vy * dt, pz: this.at.z });
     Object.assign(this.b, { x: tip.x, y: tip.y, z: tip.z, px: tip.x - vx * dt, py: tip.y - vy * dt, pz: tip.z });
-    this.sticks[0].len = this.def.length * this.scale;
+    this.sticks[0].len = this.physicalLength * this.scale;
   }
 
   step(dt: number, bounds: Bounds, platforms: Platform[], solids: Thing[] = []) {
@@ -191,10 +247,10 @@ export class Item {
 
   private hull(previous = false) {
     // Custom definitions can be reloaded while their existing item stays in the world.
-    if (this.contourDef !== this.def) {
+    if (this.contourDef !== this.def || this.animatedBook && this.contourOpen !== this.bookOpen) {
       const { sprite, shape } = this.def;
       this.contour = convexHull([
-        ...shape.flatMap((st) => paddedVertices(st.pts, st.width)),
+        ...(this.animatedBook ? bookShape(this.bookOpen) : shape).flatMap((st) => paddedVertices(st.pts, st.width)),
         ...(sprite
           ? paddedVertices([
               [sprite.x, sprite.y],
@@ -208,6 +264,7 @@ export class Item {
           : []),
       ]);
       this.contourDef = this.def;
+      this.contourOpen = this.bookOpen;
     }
     const a = previous ? { x: this.a.px, y: this.a.py } : this.a;
     const b = previous ? { x: this.b.px, y: this.b.py } : this.b;
@@ -218,6 +275,23 @@ export class Item {
       x: a.x + (ux * p.x - uy * p.y) * this.scale,
       y: a.y + (uy * p.x + ux * p.y) * this.scale,
     }));
+  }
+
+  get collisionHull() { return this.hull(); }
+
+  private contourOpen = -1;
+  private domesticDef:ItemDef|null=null;private domesticStock=false;
+  get animatedDomestic(){if(this.domesticDef!==this.def){this.domesticDef=this.def;const stock=BUILTIN_ITEMS.find(d=>d.id===this.def.id);this.domesticStock=!!stock&&['blanket','snack-box'].includes(stock.id)&&!this.def.sprite&&JSON.stringify(stock.shape)===JSON.stringify(this.def.shape);}return this.domesticStock;}
+  private bookDefCache: ItemDef | null = null;
+  private bookAnimatedCache = false;
+  /** Animate stock art only. Edited/custom covers keep their definition and collision geometry. */
+  get animatedBook() {
+    if (this.bookDefCache !== this.def) {
+      this.bookDefCache = this.def;
+      this.bookAnimatedCache = this.def.id === 'book' && !this.def.sprite &&
+        JSON.stringify(this.def.shape) === JSON.stringify(BUILTIN_ITEMS.find(d => d.id === 'book')!.shape);
+    }
+    return this.bookAnimatedCache;
   }
 
   private moveCollision(dx: number, dy: number, normal: Vec) {
@@ -234,7 +308,7 @@ export class Item {
         p.py += normal.y * into * (1 + this.def.bounce * 0.5);
       }
       if (normal.y < -0.5) {
-        p.px += (p.x - p.px) * 0.08;
+        p.px += (p.x - p.px) * (this.def.bounce > 0.6 ? 0.03 : 0.45);
         p.grounded = true;
       }
     }
@@ -242,9 +316,17 @@ export class Item {
 
   /** The entire visible item participates in floor/wall/furniture contact, not just its grip and tip. */
   private collideArt(bounds: Bounds, platforms: Platform[], solids: Thing[]) {
+    const delta={x:this.a.x-this.a.px,y:this.a.y-this.a.py};
+    if(Math.hypot(delta.x,delta.y)>3) {
+      const was=this.hull(true);let first:ReturnType<typeof sweepConvex>=null;
+      for(const solid of solids)if(solid.rigid&&!solid.held)for(const hull of solid.collisionHulls){
+        const hit=sweepConvex(was,hull,delta);if(hit&&(!first||hit.time<first.time))first=hit;
+      }
+      if(first)this.moveCollision(-delta.x*(1-first.time),-delta.y*(1-first.time),first.normal);
+    }
     for (const solid of solids) {
       if (!solid.rigid) continue;
-      const offset = overlapOffset(this.hull(), solid.collisionHull);
+      const offset = solid.contactOffset(this.hull());
       if (offset) {
         const len = Math.hypot(offset.x, offset.y);
         this.moveCollision(offset.x, offset.y, {
@@ -276,6 +358,29 @@ export class Item {
       this.moveCollision(bounds.left - left, 0, { x: 1, y: 0 });
     else if (right > bounds.right)
       this.moveCollision(bounds.right - right, 0, { x: -1, y: 0 });
+  }
+
+  /** Other owners remain snapshots: each owner resolves only its own loose items. */
+  separateHull(hull: Vec[]) {
+    const offset = overlapOffset(this.hull(), hull);
+    if (!offset) return;
+    const length = Math.hypot(offset.x, offset.y);
+    if (length < 0.01 || (offset.y / length > 0.5 && [this.a, this.b].some(p=>p.grounded))) return;
+    this.moveCollision(offset.x, offset.y, {x:offset.x/length,y:offset.y/length});
+  }
+
+  separateItem(other: Item) {
+    if (this.shelf || other.shelf) return;
+    const offset = overlapOffset(this.hull(), other.hull());
+    if (!offset) return;
+    const length = Math.hypot(offset.x,offset.y);
+    if (length < 0.01) return;
+    const normal = {x:offset.x/length,y:offset.y/length};
+    const blocked = (it: Item, ny: number) => ny > 0.5 && [it.a,it.b].some(p=>p.grounded);
+    const wa = blocked(this,normal.y) ? 0 : 1, wb = blocked(other,-normal.y) ? 0 : 1;
+    if (!(wa+wb)) return;
+    if (wa) this.moveCollision(offset.x*wa/(wa+wb),offset.y*wa/(wa+wb),normal);
+    if (wb) other.moveCollision(-offset.x*wb/(wa+wb),-offset.y*wb/(wa+wb),{x:-normal.x,y:-normal.y});
   }
 
   /** Forget how it was moving (after it jumps somewhere new, like from his belt to your cursor). */
@@ -325,8 +430,11 @@ export class Item {
             ) * pose.scale
           );
         }
+        const reading=this.animatedBook&&this.bookReading&&this.where==='hand';
+        if(reading||(this.animatedDomestic||this.animatedHandheld||this.giftWrap)&&this.working&&this.where==='hand')point.y*=Math.sign(pose.dir.x)||1;
+        const shape=presentationShape(this,reading);
         let distance = Infinity;
-        for (const stroke of this.def.shape) {
+        for (const stroke of shape) {
           const points = stroke.pts.map(([x, y]) => ({ x, y }));
           if (stroke.fill)
             distance = Math.min(distance, polygonDistance(point, points));
@@ -356,7 +464,7 @@ export class Item {
   get drawPadding() {
     const s = this.def.sprite;
     const spritePad = s ? Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.x + s.rows[0].length * s.pixel), Math.abs(s.y + s.rows.length * s.pixel)) : 0;
-    return Math.max(6, spritePad, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.max(Math.abs(p[1]), -p[0]) + s.width / 2))) * this.scale;
+    return Math.max(this.dockPort?Math.hypot(this.dockPort.x-this.at.x,this.dockPort.y-this.at.y):0,this.giftWrap?40:0,this.blanketSpread?38:0,this.snackOpen?30:0,6 + this.yoyoDrop, spritePad, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.max(Math.abs(p[1]), -p[0]) + s.width / 2))) * this.scale;
   }
 }
 
@@ -365,7 +473,9 @@ export class Items {
   defs = new Map<string, ItemDef>(BUILTIN_ITEMS.map((d) => [d.id, d]));
   list: Item[] = [];
   /** What's in each belt slot. */
-  belt: (Item | null)[] = [null, null, null, null];
+  belt: (Item | null)[] = Array(SLOTS).fill(null);
+  private rummage: { hand: 'L' | 'R'; left: number } | null = null;
+  get satchelOpen() { return this.rummage ? Math.sin(this.rummage.left / 0.45 * Math.PI) : 0; }
   /** The built-in things he's been given (so new ones that come with an update get handed to him once). */
   known = new Set<string>();
   /** Called when something moves between places (the Items tab updates). */
@@ -379,14 +489,14 @@ export class Items {
   }
 
   /** A new item of this kind: onto his belt if there's room, else dropped next to him. */
-  give(defId: string | ItemDef, ch: Character): Item | null {
+  give(defId: string | ItemDef, ch: Character, uid?:number): Item | null {
     const def = typeof defId === 'string' ? this.defs.get(defId) : defId;
     if (!def) return null;
     if (def.wear) {
       const owned = this.list.find((it) => it.def.id === def.id);
       if (owned) { if (owned.where !== 'worn') this.stow(owned); return owned; }
     }
-    const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale);
+    const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale,uid);
     this.list.push(it);
     if (!this.stow(it)) { it.where = 'world'; it.at = { x: ch.x + ch.facing * 20, y: ch.body.j.hip.y, z: 0 }; it.loosen(ch.facing * 60, -150); }
     this.onChange?.();
@@ -394,6 +504,7 @@ export class Items {
   }
 
   remove(it: Item) {
+    if (!this.list.includes(it)) return;
     this.unslot(it);
     this.list = this.list.filter((x) => x !== it);
     this.onChange?.();
@@ -401,16 +512,19 @@ export class Items {
 
   /** Put it in a belt slot (its favorite free one). False if the belt is full or it doesn't go on a belt. */
   stow(it: Item): boolean {
+    if (!this.list.includes(it)) return false;
+    it.dock=null;it.dockPort=null;
     if (it.def.wear) {
       const other = this.list.find((x) => x !== it && x.where === 'worn' && x.def.wear === it.def.wear);
       if (other) this.drop(other, 0, -60);
       this.unslot(it); it.where = 'worn'; it.aim = null; it.aimLocal = null;
       this.onChange?.(); return true;
     }
-    if (it.def.belt === 'none') return false;
     if (it.where === 'belt') return true;
+    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
     const slot = preferredSlots(it.def).find((s) => !this.belt[s]);
     if (slot === undefined) return false;
+    if (it.where === 'hand') this.rummage = { hand: it.hand, left: 0.45 };
     this.unslot(it);
     this.belt[slot] = it; it.slot = slot; it.where = 'belt'; it.aim = null; it.aimLocal = null;
     this.onChange?.();
@@ -419,8 +533,19 @@ export class Items {
 
   private unslot(it: Item) { if (it.slot >= 0 && this.belt[it.slot] === it) this.belt[it.slot] = null; it.slot = -1; }
 
+  attachConsole(it:Item,tv:Thing){
+    if(!this.list.includes(it)||it.def.use!=='connect'||!tv.def||tv.def.use!=='tv'||tv.held||Math.abs(tv.tilt)>.35)return false;
+    this.drop(it,0,0);it.dock=tv.n;this.followDock(it,tv);this.onChange?.();return true;
+  }
+  private followDock(it:Item,tv:Thing){
+    const b=tv.def!.bounds!;
+    it.at={...tv.toWorld(b[0]-27,b[3]-12),z:1};it.dir={x:Math.cos(tv.tilt),y:Math.sin(tv.tilt),z:0};it.scale=tv.scale;
+    it.dockPort=tv.toWorld(b[0]+4,b[3]-28);it.loosen();
+  }
+
   /** One combat tool owns the hands. Stow other held things, dropping only if storage is full. */
   wield(it: Item, hand: 'L' | 'R') {
+    if (!this.list.includes(it)) return;
     for (const other of this.list)
       if (other !== it && other.where === 'hand' && !this.stow(other))
         this.drop(other, 0, -40);
@@ -429,16 +554,21 @@ export class Items {
 
   /** Into his hand. */
   toHand(it: Item, hand: 'L' | 'R') {
+    if (!this.list.includes(it)) return;
     const other = this.inHand(hand);
     if (other && other !== it && !this.stow(other)) this.drop(other, 0, 0);
+    if (it.where === 'belt') this.rummage = { hand, left: 0.45 };
     this.unslot(it);
+    it.dock=null;it.dockPort=null;
     it.where = 'hand'; it.hand = hand; it.aim = null; it.aimLocal = null;
     this.onChange?.();
   }
 
   /** Let go of it: it falls from where it is with this speed. */
   drop(it: Item, vx: number, vy: number) {
+    if (!this.list.includes(it)) return;
     this.unslot(it);
+    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
     it.where = 'world'; it.cursorControlled = false; it.pull = null; it.aim = null; it.aimLocal = null;
     it.loosen(vx, vy);
     this.onChange?.();
@@ -446,8 +576,10 @@ export class Items {
 
   /** You take it: it dangles from your cursor. */
   toCursor(it: Item, at: Vec) {
+    if (!this.list.includes(it)) return;
     this.unslot(it);
-    it.where = 'cursor'; it.aim = null; it.aimLocal = null;
+    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
+    it.where = 'cursor'; it.cursorControlled = false; it.pull = null; it.aim = null; it.aimLocal = null;
     it.at = { x: at.x, y: at.y, z: 30 };
     it.dir = { x: 0, y: 1, z: 0 };
     this.lastCursor = null; this.cursorV = { x: 0, y: 0 };
@@ -486,35 +618,46 @@ export class Items {
     return it;
   }
 
-  /** Where a belt slot is right now, and which way an item hangs from it. */
-  slotPose(ch: Character, slot: number): { at: V3; dir: V3 } {
-    const j = ch.body.j, sc = ch.scale, B = basis(ch.yaw);
-    // The belt sits around his hips, square to his torso.
-    const up = norm3(sub3(j.neck, j.hip));
-    const left = norm3(sub3(B.left, scale3(up, dot3(B.left, up))));
-    const fwd = norm3(cross3(left, up));
-    const fixedFwd = dot3(fwd, B.fwd) < 0 ? scale3(fwd, -1) : fwd;
-    const r = 4.5 * sc;
-    const off = slot === 0 ? scale3(left, r) : slot === 1 ? scale3(left, -r) : slot === 3 ? scale3(fixedFwd, r * 0.6) : scale3(fixedFwd, -r);
-    const at = add3(j.hip, off);
-    if (slot === 3) return { at: add3(at, scale3(up, -3 * sc)), dir: norm3(scale3(up, -1)) }; // in his pocket
-    if (slot === 2) {
-      // Across his back: handle up behind his shoulder, blade down the back of his leg.
-      return { at: add3(at, scale3(up, 5 * sc)), dir: norm3(add3(scale3(up, -0.85), scale3(fixedFwd, -0.45))) };
-    }
-    // At a hip: hanging down, clipped to the belt, tipped back a little.
-    return { at, dir: norm3(add3(scale3(up, -1), scale3(fixedFwd, -0.25))) };
+  /** Legacy slot numbers remain in saves; all stored tools now live at the satchel opening. */
+  slotPose(ch: Character, _slot: number): { at: V3; dir: V3 } {
+    return { at: satchelAt(ch), dir: { x: 0, y: 1, z: 0 } };
   }
 
   /** Physics for the things lying around (and flying through the air): one fixed step. */
-  stepWorld(dt: number, bounds: Bounds, platforms: Platform[], solids: Thing[] = []) {
-    for (const it of this.list) if (it.where === 'world') it.step(dt, bounds, platforms, solids);
+  stepWorld(dt: number, bounds: Bounds, platforms: Platform[], solids: Thing[] = [], peerHulls: Vec[][] = []) {
+    for (const it of [...this.list]) if (it.where === 'world') {
+      if(it.def.use==='connect'){
+        const dock=solids.find(t=>t.n===it.dock&&t.def?.use==='tv');
+        const nearby=dock??(it.speed<140?solids.filter(t=>t.def?.use==='tv'&&!t.held&&!t.movingBy&&Math.abs(t.tilt)<.35&&Math.hypot(t.center.x-it.at.x,t.center.y-it.at.y)<100*t.scale).sort((a,b)=>Math.abs(a.center.x-it.at.x)-Math.abs(b.center.x-it.at.x))[0]:null);
+        if(nearby){it.dock=nearby.n;this.followDock(it,nearby);continue;}
+        it.dock=null;it.dockPort=null;
+      }
+      if (it.ink && it.ink.remaining >= 0) { it.ink.remaining = Math.max(0, it.ink.remaining - dt); if (!it.ink.remaining) { this.remove(it); continue; } }
+      const shelf = it.shelf && solids.find(t => t.storageKey === it.shelf!.key && t.def?.id === 'bookshelf');
+      if (shelf && !shelf.held && Math.abs(shelf.tilt) < 0.35 && !it.working) {
+        const at = shelf.toWorld(10 + it.shelf!.slot * 15, 35);
+        it.at = { ...at, z: 6 }; it.dir = { x: 1, y: 0, z: 0 }; it.loosen();
+      } else {
+        if (it.shelf && (!shelf || shelf.held || Math.abs(shelf.tilt) >= 0.35)) it.shelf = null;
+        it.step(dt, bounds, platforms, solids);
+      }
+    }
+    const loose = this.list.filter(it=>it.where === 'world' && !it.shelf && it.dock===null);
+    for (let pass=0;pass<3;pass++) {
+      for(let i=0;i<loose.length;i++) for(let j=i+1;j<loose.length;j++) loose[i].separateItem(loose[j]);
+      for(const it of loose) for(const hull of peerHulls) it.separateHull(hull);
+    }
   }
 
   /** Move every item to where it belongs this frame (loose ones move in `stepWorld`). */
   update(ch: Character, dt: number, bounds: Bounds, platforms: Platform[], cursor: Vec | null) {
+    if (this.rummage) { this.rummage.left -= dt; if (this.rummage.left <= 0) this.rummage = null; }
+    ch.satchelReach = this.rummage ? { hand: this.rummage.hand, at: satchelAt(ch), amount: this.satchelOpen } : null;
     const j = ch.body.j;
     for (const it of this.list) {
+      // One clock for every owned gun, including idle hands, full bags and passive transport.
+      it.tickReload(dt);
+      it.tickBook(dt);
       it.scale = ch.scale;
       if (it.where === 'worn') {
         it.poses = equipmentPoses(it, ch);
@@ -564,7 +707,7 @@ export class Items {
 
   // ── saving: what he owns and where (anything lying around or with you goes back on his belt) ──
   save() {
-    return this.list.filter((it) => !it.def.drawn || it.where !== 'world').map((it) => ({ id: it.def.id, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', ...(it.def.use==='gun'?{ammo:it.ammo}:{}), def: it.def.drawn ? it.def : undefined }));
+    return this.list.map(it => ({ id: it.def.id, bookmark: it.bookmark, gameBest:it.gameBest, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', ...(it.where === 'world' ? { world: { at: it.at, dir: it.dir } } : {}), ...(it.ink ? { ink: it.ink } : {}), ...(it.shelf ? { shelf: it.shelf } : {}), ...(it.def.use === 'gun' ? { ammo: it.ammo, reloadRemaining: it.reloadRemaining } : {}), def: it.def.drawn || !BUILTIN_ITEMS.some(d => d.id === it.def.id) ? it.def : undefined }));
   }
   /**
    * `known`: the built-ins he'd been given when this was saved. Missing (an older save) means
@@ -573,17 +716,27 @@ export class Items {
   load(data: unknown, ch: Character, known?: unknown) {
     if (!Array.isArray(data)) return;
     this.known = new Set(Array.isArray(known) ? known.filter((k): k is string => typeof k === 'string') : ['pen', 'sword']);
-    this.list = []; this.belt = [null, null, null, null];
-    for (const d of data.slice(0, 12)) {
+    this.list = []; this.belt = Array(SLOTS).fill(null);
+    for (const d of data.slice(0, 40)) {
       if (!d || typeof d !== 'object') continue;
-      const o = d as { id?: string; slot?: number; worn?: boolean; ammo?:number; def?: unknown };
+      const o = d as { id?: string; slot?: number; worn?: boolean; bookmark?:number; gameBest?:number; ammo?:number; reloadRemaining?: number; shelf?: { key?: string; slot?: number }; ink?:unknown; world?:{at?:V3;dir?:V3}; def?: unknown };
       const def = o.def ? parseItemDef(o.def) : this.defs.get(String(o.id));
       if (!def) continue;
-      if (o.def) def.drawn = true;
+      if (o.def && o.ink) def.drawn = true;
       const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale);
+      if(Number.isInteger(o.bookmark))it.bookmark=clamp(o.bookmark!,0,9999);
+      if(Number.isInteger(o.gameBest))it.gameBest=clamp(o.gameBest!,0,9999);
       if(def.use==='gun' && Number.isInteger(o.ammo))it.ammo=Math.max(0,Math.min(6,o.ammo!));
+      if (def.use === 'gun' && Number.isFinite(o.reloadRemaining)) it.reloadRemaining = clamp(o.reloadRemaining!, 0, 1.15);
       this.list.push(it);
-      if (def.wear && o.worn === false) {
+      it.ink = parseProject(o.ink);
+      if (def.id === 'book' && typeof o.shelf?.key === 'string' && /^[a-z0-9-]{1,60}$/.test(o.shelf.key) && Number.isInteger(o.shelf.slot))
+        it.shelf = { key: o.shelf.key, slot: clamp(o.shelf.slot!, 0, 4) };
+      if (o.world && Number.isFinite(o.world.at?.x) && Number.isFinite(o.world.at?.y)) {
+        it.where = 'world'; it.at = { x: clamp(o.world.at!.x, ch.bounds.left, ch.bounds.right), y: clamp(o.world.at!.y, ch.bounds.top, ch.bounds.floor), z: 0 };
+        if (Number.isFinite(o.world.dir?.x) && Number.isFinite(o.world.dir?.y)) it.dir = norm3({x: o.world.dir!.x, y: o.world.dir!.y, z: 0});
+        it.loosen();
+      } else if (def.wear && o.worn === false) {
         it.where = 'world'; it.at = { x: ch.x + ch.facing * 30 * ch.scale, y: ch.bounds.floor - 22 * ch.scale, z: 0 }; it.loosen();
       } else if (typeof o.slot === 'number' && o.slot >= 0 && o.slot < SLOTS && !this.belt[o.slot] && def.belt !== 'none') { this.belt[o.slot] = it; it.slot = o.slot; it.where = 'belt'; }
       else if (!this.stow(it)) { it.where = 'world'; it.at = { x: ch.x + 20, y: ch.body.j.hip.y, z: 0 }; it.loosen(); }
@@ -592,8 +745,40 @@ export class Items {
   }
 }
 
+function presentationShape(it:Item,reading=false):ItemStroke[]{
+  let shape=it.animatedBook?bookShape(it.bookOpen,it.bookPage,reading):it.animatedDomestic?domesticShape(it):it.def.shape;
+  if(it.animatedHandheld&&it.working&&it.where==='hand')shape=[
+    {pts:[[-2,-12],[25,-12],[23,3],[-4,3]],color:'#899585',fill:'#899585',width:0},
+    {pts:[[3,-10],[22,-10],[20,-3],[1,-3]],color:'#243b32',fill:'#243b32',width:0},
+    {pts:[[1,0],[7,0]],color:'#38473b',width:2},
+    {pts:[[18,0],[22,0]],color:'#ba6f73',width:2},
+    {pts:[[-4,3],[23,3],[23,5],[-4,5]],color:'#5e6e5e',fill:'#5e6e5e',width:0},
+  ];
+  if(it.giftWrap>0&&it.giftUnwrap<1){
+    const colors=[['#8a9eac','#d9b9a1'],['#b59877','#758f79'],['#9983ad','#d0bc77']][it.giftWrap-1]??['#8a9eac','#d9b9a1'],lift=it.giftUnwrap*24;
+    const box:ItemStroke[]=[{pts:[[-2,-10],[27,-10],[27,12],[-2,12]],color:colors[0],fill:colors[0],width:0},{pts:[[12,-10],[14,-10],[14,12],[12,12]],color:colors[1],fill:colors[1],width:0},{pts:[[-4,-13-lift],[29,-13-lift],[29,-7-lift],[-4,-7-lift]],color:colors[0],fill:colors[0],width:0},{pts:[[9,-13-lift],[13,-17-lift],[17,-13-lift]],color:colors[1],width:2}];
+    // Reveal the actual contents as the lid opens; packaging is temporary, never a second item.
+    shape=it.giftUnwrap<.5?box:[...box,...shape];
+  }
+  return shape;
+}
+
+/** Small stock-art poses, in the same pixelated item frame. */
+function domesticShape(it:Item):ItemStroke[]{
+  if(it.def.id==='blanket'){
+    const u=it.blanketSpread,w=32+16*u,h=15+22*u;
+    return [
+      {pts:[[-8,-4],[-8+w,-4],[-8+w,-4+h],[-8,-4+h]],color:'#858eb6',fill:'#858eb6',width:0},
+      {pts:[[-6,-2],[-10+w,-2],[-10+w,1],[-6,1]],color:'#adb8d6',fill:'#adb8d6',width:0},
+      {pts:[[-5,h-10],[w-13,h-10],[w-13,h-8],[-5,h-8]],color:'#626d99',fill:'#626d99',width:0},
+    ];
+  }
+  return it.def.shape.map((st,i)=>i===1?{...st,pts:st.pts.map(([x,y])=>[x,y-it.snackOpen*12] as [number,number])}:st);
+}
+
 /** Draw an item along its current direction. Smooth lines (the pixel layer can pixelate it). */
 export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, it: Item, alpha = 1, pose: ItemPose = it) {
+  if (it.ink && it.ink.remaining >= 0) alpha *= Math.max(0.15, Math.min(1, it.ink.remaining / 15));
   const sc = pose.scale, d = pose.dir;
   // "across" = sideways to the item on screen.
   let ax = -d.y, ay = d.x;
@@ -606,15 +791,39 @@ export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderin
     ctx.save(); ctx.translate(pose.at.x, pose.at.y); ctx.transform(d.x * sc * mirror, d.y * sc * mirror, ax * sc, ay * sc, 0, 0);
     drawSprite(ctx, it.def.sprite); ctx.restore();
   }
+  if (it.def.use === 'play' && it.yoyoDrop > 0) {
+    ctx.strokeStyle = '#eee6ce'; ctx.lineWidth = sc;
+    ctx.beginPath(); ctx.moveTo(pose.at.x, pose.at.y);
+    ctx.lineTo(pose.at.x, pose.at.y + it.yoyoDrop * sc); ctx.stroke();
+    pose = { ...pose, at: { ...pose.at, y: pose.at.y + it.yoyoDrop * sc } };
+  }
+  if(it.dockPort){ctx.strokeStyle='#454955';ctx.lineWidth=sc;ctx.beginPath();ctx.moveTo(pose.at.x+12*sc,pose.at.y);ctx.lineTo(it.dockPort.x,it.dockPort.y);ctx.stroke();}
   const m = pose.mirror ? -1 : 1;
-  for (const st of it.def.shape) {
+  const domestic=(it.animatedDomestic||it.animatedHandheld||it.giftWrap>0)&&it.working&&it.where==='hand';
+  const reading = it.animatedBook && it.bookReading && it.where === 'hand';
+  for (const st of presentationShape(it,reading)) {
     ctx.beginPath();
     st.pts.forEach(([along, across], i) => {
-      const x = pose.at.x + d.x * along * m * sc + ax * across * sc, y = pose.at.y + d.y * along * m * sc + ay * across * sc;
+      const acrossView = reading || domestic ? across * (Math.sign(d.x) || 1) : across;
+      const x = pose.at.x + d.x * along * m * sc + ax * acrossView * sc, y = pose.at.y + d.y * along * m * sc + ay * acrossView * sc;
       if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
     });
     if (st.fill) { ctx.closePath(); ctx.fillStyle = st.fill; ctx.fill(); }
     if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * sc; ctx.stroke(); }
+  }
+  if(it.snackAt&&it.animatedDomestic){ctx.fillStyle='#e8c18b';ctx.fillRect(it.snackAt.x-2*sc,it.snackAt.y-2*sc,4*sc,4*sc);}
+  if(it.arcade){
+    const game=it.arcade;
+    ctx.save();ctx.translate(pose.at.x,pose.at.y);
+    const upright=it.animatedHandheld&&it.working&&it.where==='hand'?(Math.sign(d.x)||1):1;
+    ctx.transform(d.x*sc,d.y*sc,ax*sc*upright,ay*sc*upright,0,0);
+    if(it.animatedHandheld&&it.working&&it.where==='hand')ctx.transform(1,0,-.16,.55,0,-5);
+    ctx.beginPath();ctx.rect(3,-8,16,13);ctx.clip();ctx.fillStyle='#203b2d';ctx.fillRect(3,-8,16,13);
+    ctx.fillStyle=game.time-game.crashedAt<.8?'#d8a28b':'#b5d47f';
+    ctx.fillRect(3+game.x*16,2-game.y*11,2,3);
+    for(const b of game.blocks)ctx.fillRect(3+b.x*16,3-b.h*13,2,b.h*13);
+    ctx.fillRect(3,3,16,1);ctx.restore();
+    if(it.animatedHandheld&&it.working&&game.time-game.lastPressAt<.12){ctx.fillStyle='#e2aaa8';ctx.fillRect(pose.at.x+d.x*20*sc,pose.at.y-2*sc,2*sc,2*sc);}
   }
   ctx.restore();
 }
@@ -642,7 +851,9 @@ export function itemParts(it: Item, ch?: Character): DepthPart[] {
   return poses.map((pose) => {
     const pad = it.drawPadding * pose.scale / it.scale;
     return {
-      z: (it.where === 'worn' ? pose.at.z : (it.butt.z + it.tip.z) / 2) + (it.where === 'hand' ? 0.5 : it.where === 'belt' ? -0.3 : 0),
+      z: (it.bookReading||it.animatedHandheld&&it.working||it.giftWrap>0) && it.where === 'hand' && ch
+        ? Math.max(ch.body.j.hip.z, ch.body.j.neck.z, pose.at.z) + 6
+        : (it.where === 'worn' ? pose.at.z : (it.butt.z + it.tip.z) / 2) + (it.where === 'hand' ? 0.5 : it.where === 'belt' ? -0.3 : 0),
       pts: [
         { x: pose.at.x - pad, y: pose.at.y - pad },
         { x: pose.at.x + pad, y: pose.at.y + pad },

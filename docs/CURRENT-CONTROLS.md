@@ -1,17 +1,159 @@
 # Current controls and Mac acceptance
 
-This milestone adds adaptive combat, actual cursor weapons, quiet activities, sleeping pickup,
-and full item/prop hitboxes. Future expansions are in [UPDATE-PLAN.md](UPDATE-PLAN.md).
+Pet Quality / Living Stickmen adds selectable preset characters, unified controls, physical scooting,
+group conversations, spectator-safe combat, stronger offline needs and discoverable furniture moving.
+Books, cups, dumbbells, yo-yos, blankets, snack boxes and existing tools use the shared inventory. See [PET-QUALITY.md](PET-QUALITY.md)
+for the item audit and cloud verification, and [UPDATE-PLAN.md](UPDATE-PLAN.md) for the stop point.
+
+## Roster and settings
+
+General → population chooses **1 stick man** through **5 stick men**. Select the preset characters
+who appear; the selected order determines the active roster. Cobalt is inventive, Amber competitive,
+Moss gentle, Violet mischievous and Ruby adventurous. One figure can be any preset, including Ruby.
+Edited names/colors and individual settings/items/relationships remain saved when a character leaves.
+Leaving puts away that character's shelved books, freeing the shared slots.
+
+**Settings** opens one window. Choose a name or **All figures** at the top. Appearance/movement and
+mood actions apply to the selected scope; population and app settings apply globally. Private chat and
+memory editing need a named target. Personality presets are built in rather than another app editor.
+Settings → Items opens the same inventory; custom-file tools stay under a collapsed section.
+General → Development checks → **Check live world** reports ownership, coordinates and shared claims.
+
+## Satchels, supplies and trash
+
+Right-click a figure → **Open bag**, click its wearable satchel, or tell it “open bag.”
+A brief hover hint points to this menu. The figure menu has one inventory entry instead of a separate
+Take row for every owned item. **Activities…** opens the activity list directly.
+
+Choose a name or **All figures**, and use Search to narrow the shared inventory.
+
+- **Bag** contains actual owned items, with bag/hand/worn/world/bookshelf/cursor states and pistol ammo.
+  Click a card to inspect it; this keeps the panel open. **Take out** puts the original item on your
+  cursor for passive carrying. **Use with cursor** explicitly enables weapon or cleaner controls. **Store in bag**, **Drop beside figure** and
+  **Trash** say what they do. Dragging a card remains available.
+- **Supplies** creates new tools and furniture. Select a card, then **Give to [figure]** or **Place on
+  desktop**. The target selector chooses recipients; **Give to all** creates a distinct item for each active figure.
+  A full bag explains which figure needs a slot or a placed tool.
+- **Activities** lists everyday, workshop, drawing, group, game, arranging and friend activities.
+  Unavailable entries explain the missing tools, furniture or free companions. **Stop current activity**
+  releases the current activity; **Wake up** is shown for a sleeping figure.
+- **How to use this** explains these controls inside the panel. The tabs, title and close control
+  remain visible while the choices scroll, and an open panel stays where you opened it.
+
+After taking an object out, drag or click to place it, or drop it onto a figure to store/pass it.
+The temporary controls in the top-right offer **Cancel** and, for weapons/cleaners, **Use with cursor**.
+Cleaners offer **Stop using** to carry safely again. Controls themselves do not wipe/color/erase ink.
+Escape/right-click/Cancel restores an existing item to its previous hand, worn state, bag slot or
+world/shelf location; Carry → Cancel returns a cursor weapon to its bag;
+unplaced new supplies are discarded. Figures cannot snatch a tool during user-controlled use.
+
+**Trash** is also available from an object's right-click menu and the shared bag. **Undo trash**
+in the bag restores the last original object even when the trash shortcut is hidden. Undo lasts for
+this session and preserves identity, art and ammo. Bulk furniture trash only allows the last object
+back. Furniture actions such as **Sit here** and **Make a blueprint here** use the object clicked.
+
+General → **Show supplies bag shortcut** and **Show trash can** enable optional pixel icons. Both
+start hidden. Drag either to reposition it; placement survives restart. Mouse use leaves the overlay
+non-focusable. **Keyboard** explicitly enables Tab/Enter/Space; Escape closes it and releases focus.
+
+## Workshop
+
+Pull a **Sponge**, choose **Use with cursor**, then move over raw pen strokes to wipe locally.
+**Eraser** and **Paint bucket** also require explicit **Use with cursor**; they remove ink objects or
+do their coloring step. **Stop using** restores passive carrying, and dropping/passing stops use. Put a desk, workbench or tool shelf on the desktop from
+the catalog. Use the figure's action menu or talk commands, with no settings window needed:
+
+- “Make a blueprint” traces a katana on desk paper and stores a copy in the satchel.
+- “Sort tools” picks up loose tools and places them on the shelf; placements save.
+- “Draw a katana / TV / couch / chair / desk” traces and brings a working ink object to life.
+- “Refine it” works at the bench: color, polish, then one durable original object.
+- Interrupted projects keep progress and resume after restart. General → Ink lifetime controls
+  loose ink expiry; zero disables it. Held/stored items and occupied props pause expiry.
+
+## Groups, arranging and game night
+
+Choose 2–5 preset figures in Settings. Actions work offline; free, awake, healthy figures can join,
+including quiet sitters. Readers, sleeping figures and queued/settled work keep their activity.
+Conversation with three or more available figures becomes a group conversation with separate turns;
+listeners look toward the current speaker. Ordinary one-on-one interactions remain available.
+
+- “Group wave”, “Group conversation”, “Couch huddle”, and “Watch together” work with 2–5 figures.
+- “Mirrored duet” needs two, “Hands in” three, “Two-pair dance” four, and “Wave relay” five.
+- Right-click movable furniture → **Move beside [matching furniture]**, or use the named Activity.
+  “Move the TV to the couch” actually moves and turns it toward the couch. “Carry it together” uses two
+  figures. “Make a reading corner” and “Make a work corner” arrange their corresponding furniture.
+- “Pass a tool”, “Compare drawings”, and “Check on your friend” create small peer moments.
+- “Play Pong” starts a two-figure match to five points. Others can watch the same TV; **Join**
+  lets you move a paddle with the mouse. **Keyboard** enables arrow keys; Escape/Leave releases
+  keyboard focus. **Rematch** starts another round. “Play a handheld” uses its own runner screen.
+
+General → Require a console attachment for TV games is off by default for compatibility. When
+enabled, use the owned console’s **Attach beside TV** action in Bag, or drop it nearby. Taking or
+storing it detaches it. This applies to Pong, Othello and the TV runner; handhelds remain independent. Daily rhythm is optional: real night/morning and system idle time influence
+sleep and welcome-back greetings. Drawing/building/game talents affect speed or skill; pair memories
+retain shared activities, cooperation, care, friendly rivalry, disagreements and effective fighting moves.
+Successful play and reassurance influence future partners/reactions; interruptions do not erase affection.
+Social/creative need, frustration and contentment appear in Mood and the Mind view. Duels stay between
+the agreed opponents, with other figures safe from incidental combat hits. Couch recentering uses
+small brace/lift/scoot/settle steps rather than a continuous slide.
+
+## Pet Quality checks on your Mac
+
+1. Start this branch with `npm ci` then `npm start`. Confirm the Swift helper starts/compiles.
+   Rapidly switch between pointer bag use, bag Keyboard, chat and Pong Keyboard. Close each control;
+   confirm focus returns to your original app without disappearing figures or switching Spaces.
+2. Take a pistol out: move it around before Use and confirm it stays passive. Explicitly Use it,
+   empty/reload with the mouse button, then Carry, Drop, pick up, Cancel and Put away. Interrupt a
+   figure's reload, let it resume and restart with a partially empty gun. Confirm one original gun.
+3. Take a sponge/eraser/bucket out and carry without using. Use, Stop using, drop, pass, trash/Undo
+   and Cancel; confirm drawings change only while explicitly using, away from the controls.
+4. Give a cup, dumbbell, yo-yo and handheld from Supplies. Run their named Activities and interrupt
+   each during a reach. Check natural handling, consistent limbs and no stranded hand/item state.
+5. Place a bookshelf and five books, one per figure. Store books on it through the bag. Read, fetch,
+   watch opening/page-turn/closing/return, interrupt, take a reading book and restart. Verify actual
+   saved books and separate slots. Drag/tip the bookcase and check contents become normal loose items.
+6. Try Ruby alone, then select a different 2–5 roster. Switch Settings targets and give a supply to All.
+   Remove/rejoin a figure with a shelved book, and confirm the original book/settings remain.
+   Seat all five on the couch, remove one sitter and watch physical scooting. Start a group conversation
+   and a duel with spectators; check turn-taking, listening and safe bystanders.
+   Seat all five on the couch. Let calm figures rest/read; talk, then explicitly change an activity.
+   Ambient invitations should wait. Invite a figure standing on a window to a floor gathering.
+7. Stack and lean furniture/items, leave them to settle, then drag, push, carry, strike and throw them.
+   Carry a sleeping figure gently and release close to the floor; try a hard impact separately.
+8. Leave two-to-five figures running during your normal workflow and return after idle. Restart and
+   verify owned items, ammo/reload state, furniture, books and relationships.
+
+Cloud Linux/Chromium/Electron checks do not establish native Mac focus/Spaces behavior. Windows
+portable packaging is verified; real PowerShell/input/mixed-DPI behavior still needs a Windows machine.
+
+## Workshop/Household checks on your Mac
+
+1. Start this branch with `npm ci` then `npm start`. Open a satchel and use supplies with the mouse;
+   verify no one disappears or switches Spaces. Toggle and relocate the two shortcuts.
+2. Inspect, pull, pass, store, cancel, trash and undo tools with both shortcuts hidden. Use Keyboard, Escape and a smaller display. Confirm
+   normal Chrome focus/click-through returns after explicit keyboard navigation.
+3. Wipe two nearby drawings locally. Draw/refine a katana, interrupt and restart mid-project;
+   complete it and restart again. Verify one durable katana, saved ammo, shelf positions and desk art.
+4. Seat all five figures on a couch. Run each count-specific activity; interrupt one participant
+   and verify everyone releases its claims/hands. Busy and sleeping figures should decline.
+5. Move the TV to the couch, grab/tip it mid-move and try occupied/blocked furniture. Restart to
+   confirm arrangements. Play a full Pong match with two players and a third spectator; try joining,
+   rematching, leaving and console gating. Try a handheld and returning after the computer is idle.
+
+Cloud Linux/Chromium tests do not establish Mac Spaces/focus, real native helpers or Windows behavior.
 
 ## Use a figure's actual weapon
 
-Take a weapon from its menu or Settings → Items → Take. Its original item follows your cursor;
+Choose **Use with cursor** in its bag, or take it out and choose **Use with cursor** in the temporary controls. Its original item follows your cursor;
 the small weapon bar shows the current tool and relevant controls.
 
 - Sword or mace: hold the left button and swipe quickly to swing.
 - Pistol: press at the grip position, hold and drag away from it to aim/fire. Release to reposition.
-  Its six-round magazine stays with the item. Press **R** to reload; the reload takes a moment.
+  Its six-round magazine stays with the item. Click **Reload** (or press **R** when the overlay has
+  keyboard focus); the reload takes about 1.15 seconds. Progress follows the gun through interruptions,
+  storage and restarts. Guns still reload; the repeated-reload failure has been fixed.
 - Bow: press at the grip position, hold and drag to aim/charge, then release to shoot an arcing arrow.
+- **Carry** switches the original weapon to passive transport; **Drop** leaves it on the desktop.
 - **Esc** or **Put away** returns a taken item to its owner. Right-click over a figure to hand it back,
   or away from the figures to drop it. A dropped item can be picked up again.
 
@@ -25,7 +167,41 @@ Open each figure's **Mind → Hyperactivity** meter. Lower values encourage sett
 make it more restless. Mood also affects duration. The default is 0.25 and settings are independent.
 Calm viewing can last around half an hour; games and reading can last several minutes.
 
-Use “Read a book” in the actions, or say “read a book.” TV activities require a placed TV.
+Use “Read a book” in Activities, or say “read a book.” Books open, turn pages, close, and return to a
+placed bookshelf after reading. **Supplies → Bookshelf → Place on desktop** creates the bookcase.
+Give real books from Supplies; an owned book's bag actions include **Store on bookshelf** when a
+usable shelf is placed. It has five slots. Right-click a shelved book to take/store/trash the original.
+Owners fetch their own shelved books; grabbing/tipping/removing the shelf releases them.
+A page bookmark belongs to each original book and saves between runs. The Bag shows its page.
+A brief poke/petting/spare-tool reaction can resume a safe activity with that same item. Stop, a new
+activity, departure, missing limbs, sleep or taking the required item cancels that continuation.
+Only one activity is retained, for at most a minute; active routines are not replayed across restart.
+
+Give a **Cup**, **Dumbbell** or **Yo-yo** from Supplies, then choose **Have a drink**, **Train with a
+dumbbell** or **Play with a yo-yo** in Activities. Offline phrases include “have a drink,” “lift weights”
+and “play with a yo-yo.” The figure finishes a sip/set/catch before storage, with pauses between actions.
+“Play a handheld” uses its actual pocket game. Missing supplies are explained in the activity list.
+TV activities require a placed TV.
+
+Give a **Blanket** or **Snack box** from Supplies, then choose **Rest under a blanket** or **Have a
+snack**. Blankets unfold on a seat or the floor, then fold and store; snack boxes open for a quiet
+break, then close and store. These use the original item and can be stopped/taken at any time.
+No hunger meter or replenishment chore is added.
+
+Place a **Lamp** from Supplies. A nearby reader or figure preparing a desk blueprint reaches for
+its switch; the last automatic user switches it off. Right-click the lamp for **Switch on/off** or
+**Use automatic light** after a manual choice. Manual on/off survives restart and takes precedence.
+The lamp can be dragged, moved, thrown, trashed and restored like other furniture.
+
+Give a **Bouncy ball** to one figure and choose **Play catch** with a free companion. They gather,
+look toward the actual ball, toss and receive it. One original remains owned by the starting figure.
+A missed/blocked pass or interruption leaves it on the desktop for normal pickup. Spectators are
+not combat targets. Offline phrases: “play catch”, “rest under a blanket”, “have a snack”, “switch
+the lamp”. Optional AI uses the same action vocabulary and requirements.
+
+Group conversations address listeners, pause between readable turns and refer to recent shared
+games/drawings/help. Started conversations can continue after a participant leaves if at least two
+remain; choreographed activities still stop when a required member leaves.
 Ordinary conversation can continue without ending the activity. Asking for a different action
 still changes it, and removing/holding/tipping occupied furniture releases or interrupts its use.
 
@@ -47,3 +223,33 @@ or a hit wakes it; sleep also ends naturally when rested.
    focus after returning a weapon, and verify existing native permissions/window behavior separately.
 
 Native Chrome/Finder acceptance instructions remain in [DESKTOP-INTERACTIONS.md](DESKTOP-INTERACTIONS.md).
+
+## Personalized motion, friendship and gifts (Update 2)
+
+Cobalt, Amber, Moss, Violet and Ruby have different procedural walking accents, sitting styles,
+typing/blip speech rhythms, conversation gestures and satchel colors/clips. Appearance and movement
+presets still apply. Only the exact old default names migrate; custom names and save slots remain.
+The legacy Blurp appearance bundle is retained. Future preset design uses [CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md).
+
+Mood → **Social feelings and friendships** is collapsed by default. Select a named figure to see
+confidence, affection, stress, friendship stage, trust, care, friendly rivalry, favorite shared activity,
+last gift and satchel keepsakes. All figures still supports shared mood controls. Familiarity and trust
+grow through completed activities; repetition has diminishing returns. Reassurance helps hurt, lonely,
+frustrated or overwhelmed friends, and **Make up with a friend** acknowledges an earlier disagreement.
+
+Give spare books, **Flowers**, games or other tools through Supplies, then choose **Give a thoughtful
+gift** in Activities. The giver chooses an original the recipient might like. A pen lets them draw one
+of three wrapping styles; flowers and gifts without a pen are offered directly. The recipient unwraps,
+inspects and stores it. Full, sleeping or occupied recipients refuse safely. **Pass a spare tool** uses
+the same ownership rules without wrapping; dragging onto a figure remains direct manual passing.
+Gifts are optional, and an interrupted activity does not deduct friendship points.
+
+**Play a handheld** now shows the actual runner angled toward its player, with thumb presses tied to
+real jumps. The original device retains its best score through storage, gifts and restart. **Play
+handhelds with a friend** requires two owned handhelds: each runs their own game, compares results
+and reacts for a short shared session. It needs no TV or console. All figures starts one eligible pair.
+Stop/taking a device ends both sessions cleanly. This is comparing runner games, not a cable-link game.
+
+Each satchel earns unique keepsake marks after 4, 12 and 30 completed shared moments, with duplicate
+marks skipped and at most three saved. Bags keep their ordinary controls; no separate sticker editor
+is needed. Taking an item remains passive until an explicit Use action. Gun reload controls remain.

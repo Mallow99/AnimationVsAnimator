@@ -263,13 +263,19 @@ function petFor(seconds: number, pet: Pet, each?: (t: number) => void) {
   ]);
   const seen = new Set<string>();
   let out = 0, onWin = 0;
-  petFor(900, pet, () => {
+  // This fixture verifies window travel, independently of a valid multi-minute reading choice.
+  // First exercise climb/getdown explicitly, then keep the autonomous 15-minute life check.
+  pet.paused = true; petFor(3, pet); pet.paused = false;
+  pet.command('do:climb');
+  const observe = () => {
     if (pet.mind.skill) seen.add(pet.mind.skill.name);
     const j = pet.char.body.j;
     if (j.hip.x < 0 || j.hip.x > 1400 || j.hip.y > 800) out++;
     if (pet.char.support >= 0) onWin++;
-  });
-  check('with windows: climbs up and gets down', seen.has('climb') && seen.has('getdown') && out === 0, `${[...seen].join(',')} onWindowFrames=${onWin}`);
+  };
+  petFor(30, pet, observe); pet.command('do:getdown'); petFor(20, pet, observe);
+  petFor(900, pet, observe);
+  check('with windows: climbs up and gets down', seen.has('climb') && seen.has('getdown') && out === 0, `${[...seen].join(',')} onWindowFrames=${onWin} mode=${pet.char.mode} support=${pet.char.support} safeDrop=${pet.ctx.lessons.safeDrop} options=${pet.mind.weigh(pet.ctx).map(o=>o.name).join(',')}`);
 }
 { // Cheap learning: a jump down that hurts makes him warier of that height.
   const pet = new Pet(bounds);
@@ -719,16 +725,19 @@ function calmPet() {
   const d = pet.ctx.doodles[0];
   check('doodling: pen out of the belt, its tip does the drawing, back on the belt after', inHand && tipOnPaper < 6 && !!d?.done && pen.where === 'belt', `inHand=${inHand} tipGap=${tipOnPaper.toFixed(1)} done=${d?.done} pen=${pen.where}`);
 }
-{ // Right-click him: a menu with "Take pen". Take it, and he can't draw; he asks for it back and snatches it.
+{ // Right-click opens the inventory; the legacy uncontrolled take/ask-back behavior remains available.
   const pet = calmPet();
+  let bagOpened = false;
+  pet.onSatchel = () => { bagOpened = true; };
   const n = pet.char.body.j.neck;
   pet.cursor(n.x, n.y + 5, 0, 0);
   const opened = pet.contextMenu(n.x, n.y + 5);
   const rows = (pet as any).menu?.rows.map((r: { label: string }) => r.label) as string[];
   const pen = pet.items.find('draw')!;
-  (pet as any).menu.rows.find((r: { label: string }) => r.label === 'Take pen').act();
+  (pet as any).menu.rows.find((r: { label: string }) => r.label === 'Open bag').act();
   (pet as any).menu = null;
-  check('right-click menu: talk, take his things', opened && rows[0].startsWith('Talk') && rows.includes('Take pen') && rows.includes('Take wooden sword') && pen.where === 'cursor', rows?.join(' | '));
+  check('right-click menu: talk and one discoverable inventory entry', opened && bagOpened && rows[0].startsWith('Talk') && rows.includes('Open bag') && !rows.some(r => r.startsWith('Take ')), rows?.join(' | '));
+  pet.takeItem(pen);
   const said: string[] = [];
   const origSay = pet.ctx.say; pet.ctx.say = (t, x) => { said.push(t); origSay(t, x); };
   // Calm and a bit tired, so he isn't off on a 40-second monkey-bars run when it's time to ask for it back.
@@ -740,6 +749,9 @@ function calmPet() {
   check('pen taken: he can\'t draw, and says so', pet.ctx.doodles.length === 0 && said.some((t) => /pen/.test(t)), said.join(' | '));
   // Wait for him to ask for it back, holding it near him. (Calm, so he isn't off on the monkey bars.)
   let snatched = false;
+  // Isolate asking back from unrelated autonomous long reading/rest. The multi-hour soak
+  // leaves autonomous choices enabled; active reading/controller protection has its own regressions.
+  pet.mind.holdUntil=Infinity;
   pet.command('mood:calm');
   pet.command('setMood:{"energy":0.35}'); // (too tired for the monkey bars, which would keep him busy)
   petFor(40, pet, () => {

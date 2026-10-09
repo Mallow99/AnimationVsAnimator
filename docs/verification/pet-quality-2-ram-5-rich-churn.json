@@ -1,0 +1,122 @@
+{
+  "count": 5,
+  "rich": true,
+  "platform": "linux",
+  "electron": "44.5.1",
+  "display": "Xvfb 1440x900 software rendering",
+  "units": "MiB",
+  "samples": [
+    {
+      "label": "busy",
+      "pss": {
+        "median": 377.564453125,
+        "min": 370.212890625,
+        "max": 388.341796875
+      },
+      "rss": {
+        "median": 703.20703125,
+        "min": 695.85546875,
+        "max": 713.984375
+      },
+      "private": {
+        "median": 245.6171875,
+        "min": 238.265625,
+        "max": 256.39453125
+      },
+      "swap": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "processCount": 7,
+      "scene": {
+        "figures": 5,
+        "props": 9,
+        "items": 20,
+        "skills": [
+          "read",
+          null,
+          "exercise",
+          null,
+          "handheld"
+        ],
+        "sanity": []
+      }
+    },
+    {
+      "label": "after-12-settings-cycles",
+      "pss": {
+        "median": 384.365234375,
+        "min": 378.404296875,
+        "max": 391.478515625
+      },
+      "rss": {
+        "median": 717.29296875,
+        "min": 711.33203125,
+        "max": 724.40625
+      },
+      "private": {
+        "median": 252.12890625,
+        "min": 246.16796875,
+        "max": 259.2421875
+      },
+      "swap": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "processCount": 7,
+      "scene": {
+        "figures": 5,
+        "props": 9,
+        "items": 20,
+        "skills": [
+          "read",
+          null,
+          null,
+          null,
+          "handheld"
+        ],
+        "sanity": []
+      }
+    },
+    {
+      "label": "after-12-settings-cycles-rested",
+      "pss": {
+        "median": 390.599609375,
+        "min": 383.154296875,
+        "max": 403.794921875
+      },
+      "rss": {
+        "median": 719.47265625,
+        "min": 712.02734375,
+        "max": 732.66796875
+      },
+      "private": {
+        "median": 257.51953125,
+        "min": 250.07421875,
+        "max": 270.71484375
+      },
+      "swap": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "processCount": 7,
+      "scene": {
+        "figures": 5,
+        "props": 9,
+        "items": 21,
+        "skills": [
+          "read",
+          "pickup",
+          "read",
+          "read",
+          null
+        ],
+        "sanity": []
+      }
+    }
+  ],
+  "verificationContext": "Linux/Xvfb offline software-rendered Update 2; not Mac RAM or leak proof"
+}

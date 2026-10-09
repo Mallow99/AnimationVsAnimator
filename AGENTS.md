@@ -3,10 +3,16 @@
 Read `CLAUDE.md` for the original vision, then `docs/HANDOFF.md` for the latest work and limits.
 The user's latest instructions take priority over the historical roadmap.
 
+- Core principle: figures should feel alive even without AI. Prefer purposeful offline behavior,
+  physical transitions, consistent handling and social continuity; inspect motion visually.
+- The active ordered checklist is `docs/PET-QUALITY-2-PLAN.md`. Keep it current, cover every owner
+  request, and stop before the next Chrome/Finder milestone. Each working commit updates CHANGELOG.md
+  with concrete changes, verification and remaining issues, and gets a changelog in the chat.
+
 - Preserve the existing personality, procedural stick-figure look, and movement presets. Ask before
   substantial character/design changes. Small tool improvements and clear activity UI are welcome.
-- Two equal stick figures: a second `Pet` in the same overlay, with its own config file, settings window,
-  memory file and brain (see the handoff).
+- Up to five equal preset figures in one overlay, with stable individual config/save/memory files
+  and brains. One shared Settings window and inventory select a name or All figures (see the handoff).
   The owner wants them split into separate apps that talk to each other later; keep them one app for now.
   No visible health bars or permanent death: fights are decided by hidden health (a knockout), and in real
   fights limbs come off and go back on. Figures only interact through `src/core/peer.ts` (snapshots and

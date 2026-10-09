@@ -9,6 +9,7 @@
 // Their hands go where the other one's actually are (from his snapshot), so it lines up even if one of
 // them is a bit off.
 import { Skill, arrive, type Ctx } from './context';
+import { disagreement } from '../relationships';
 import type { FighterView } from '../peer';
 import { chance, clamp, lerp, pick, smooth } from '../math';
 import type { Vec } from '../math';
@@ -29,7 +30,7 @@ const ASK: Record<Act, string[]> = {
 /** Small talk: what the one who came over says, and what the other answers. */
 export const TALK: [string, string[]][] = [
   ['nice day', ['is it?', 'sure', 'every day is a day']], ['I\'m bored', ['same', 'wanna fight?', 'go draw something']],
-  ['seen my pen?', ['nope', 'it\'s on your belt', 'what pen']], ['what\'s the cursor doing', ['moving', 'plotting', 'no idea']],
+  ['seen my pen?', ['nope', 'it\'s in your satchel', 'what pen']], ['what\'s the cursor doing', ['moving', 'plotting', 'no idea']],
   ['you hungry?', ['we don\'t eat', 'always', '...for what']], ['nice sword', ['thanks', 'it\'s foam', 'want it?']],
   ['I can do a backflip', ['prove it', 'me too', 'sure you can']], ['tag, you\'re it', ['no', 'not now', 'ugh fine']],
 ];
@@ -205,6 +206,7 @@ export class Together extends Skill {
   }
 
   stop(c: Ctx) {
+    const id=c.foe?.()?.id;if(id)c.recordActivity?.(id,this.act,this.done);
     c.char.handsAt = null; c.char.faceLock = null;
     if (!this.done) { this.done = true; c.tell?.({ type: 'cancel' }); }
   }
@@ -235,6 +237,7 @@ export class ShoulderBump extends Skill {
         this.bumped = true;
         const dir = Math.sign(f.x - ch.x) || ch.facing;
         c.tell?.({ type: 'bump', vx: dir * 300 });
+        const r=f.id?c.relationship?.(f.id):null;if(r)disagreement(r,'bump');
         c.sound?.('thud', 0.6);
         c.say(pick(['move.', '*bump*', 'outta my way', 'oops. not sorry']), 1.4);
         c.feel.bond = clamp(c.feel.bond - 0.04, -1, 1);

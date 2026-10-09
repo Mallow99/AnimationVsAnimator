@@ -1,0 +1,44 @@
+{
+  "count": 1,
+  "rich": false,
+  "platform": "linux",
+  "electron": "44.5.1",
+  "display": "Xvfb 1440x900 software rendering",
+  "units": "MiB",
+  "samples": [
+    {
+      "label": "ordinary",
+      "pss": {
+        "median": 292.6533203125,
+        "min": 288.1689453125,
+        "max": 304.791015625
+      },
+      "rss": {
+        "median": 620.94140625,
+        "min": 616.45703125,
+        "max": 629.19140625
+      },
+      "private": {
+        "median": 163.6640625,
+        "min": 159.1796875,
+        "max": 174.68359375
+      },
+      "swap": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "processCount": 7,
+      "scene": {
+        "figures": 1,
+        "props": 0,
+        "items": 3,
+        "skills": [
+          "read"
+        ],
+        "sanity": []
+      }
+    }
+  ],
+  "verificationContext": "Linux/Xvfb offline software-rendered Update 2; not Mac RAM or leak proof"
+}

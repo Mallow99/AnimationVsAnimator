@@ -1,0 +1,176 @@
+{
+  "type": "prop",
+  "id": "workbench",
+  "name": "Workbench",
+  "about": "Color and polish ink tools or furniture into durable objects. Projects resume here.",
+  "use": "work",
+  "outline": [
+    [
+      0,
+      0
+    ],
+    [
+      80,
+      0
+    ],
+    [
+      80,
+      44
+    ],
+    [
+      0,
+      44
+    ]
+  ],
+  "shape": [
+    {
+      "rect": [
+        4,
+        6,
+        6,
+        38
+      ],
+      "fill": "#4b6051",
+      "radius": 1
+    },
+    {
+      "rect": [
+        50,
+        6,
+        26,
+        38
+      ],
+      "fill": "#687e61",
+      "radius": 2
+    },
+    {
+      "rect": [
+        53,
+        10,
+        20,
+        13
+      ],
+      "fill": "#a08670",
+      "radius": 2
+    },
+    {
+      "rect": [
+        53,
+        26,
+        20,
+        14
+      ],
+      "fill": "#a08670",
+      "radius": 2
+    },
+    {
+      "rect": [
+        60,
+        15,
+        6,
+        3
+      ],
+      "fill": "#5f4c3b",
+      "radius": 1
+    },
+    {
+      "rect": [
+        60,
+        31,
+        6,
+        3
+      ],
+      "fill": "#5f4c3b",
+      "radius": 1
+    },
+    {
+      "rect": [
+        0,
+        0,
+        80,
+        7
+      ],
+      "fill": "#a08670",
+      "radius": 2
+    },
+    {
+      "rect": [
+        2,
+        6,
+        76,
+        2
+      ],
+      "fill": "#6e5a48",
+      "radius": 1
+    }
+  ],
+  "screen": [
+    12,
+    -10,
+    33,
+    18
+  ],
+  "actions": [
+    "refine",
+    "drawhere",
+    "store",
+    "move"
+  ],
+  "move": "drag",
+  "collision": [
+    [
+      [
+        0,
+        0
+      ],
+      [
+        80,
+        0
+      ],
+      [
+        80,
+        8
+      ],
+      [
+        0,
+        8
+      ]
+    ],
+    [
+      [
+        4,
+        8
+      ],
+      [
+        10,
+        8
+      ],
+      [
+        10,
+        44
+      ],
+      [
+        4,
+        44
+      ]
+    ],
+    [
+      [
+        50,
+        8
+      ],
+      [
+        76,
+        8
+      ],
+      [
+        76,
+        44
+      ],
+      [
+        50,
+        44
+      ]
+    ]
+  ]
+}

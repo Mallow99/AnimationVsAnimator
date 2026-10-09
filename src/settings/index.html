@@ -100,13 +100,17 @@
     .radio.off { opacity: .55; }
     .btn { font: 600 13px/1 var(--ui); color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 4px; padding: 9px 12px; cursor: pointer; }
     .btn.ghost { color: var(--ink); background: none; border: 1px solid var(--line); }
+    #spawnRoster {border:1px solid var(--line);margin:12px 0;padding:8px;}
+    #figureTarget {width:100%;}
     .btns { display: flex; flex-wrap: wrap; gap: 8px; }
     button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   </style>
 </head>
 <body>
   <header>
-    <div class="who"><h1 id="title">Blurp</h1><span class="mood-chip" id="label">…</span></div>
+    <div class="who"><h1 id="title">Stick men</h1><span class="mood-chip" id="label">…</span></div>
+    <label class="row-label" for="figureTarget">Control</label><select id="figureTarget" aria-label="Settings target"></select>
+    <p class="note" id="scopeNotice"></p>
     <p class="doing" id="doing">Waiting for him to report in…</p>
     <nav role="tablist">
       <button role="tab" data-tab="chat" aria-selected="false">Chat</button>
@@ -123,6 +127,7 @@
       <div class="group">
         <h2>How he feels</h2>
         <div class="card" id="bars"></div>
+        <details><summary>Social feelings and friendships</summary><div class="card" id="socialBars"></div><div id="friendships" class="note"></div></details>
         <p class="note">Each bar moves on its own as things happen to him. Drag a bar to set it yourself.</p>
         <div class="chips" id="moodPresets"></div>
       </div>
@@ -210,27 +215,15 @@
     </section>
 
     <section data-panel="items" hidden>
-      <div class="group">
-        <h2>With him</h2>
-        <div class="card"><div id="itemList" class="list"></div></div>
-        <p class="note">His tools and worn gear. Right-click him to take something, then drag it or drop it back onto him. <b>Put away</b> returns it to the inventory below. Helmet and boots are optional; he starts with just his pen.</p>
+      <div class="group"><h2>Inventory and supplies</h2>
+        <p class="note">One inventory for every character. Choose a name or All figures in the bag. Give supplies to everyone, inspect actual owned items, or start an activity.</p>
+        <button class="btn" id="openInventory">Open inventory and supplies</button>
       </div>
-      <div class="group">
-        <h2>Inventory</h2>
-        <div class="card"><div class="list" id="itemKinds"></div></div>
-        <p class="note">Everything he could have. <b>Drop it in</b> drops it from the top of the screen near him and he goes to get it; <b>Give him</b> puts it on his belt; <b>Wear</b> equips his helmet or boots. Your own items (below) show up here too.</p>
-      </div>
-      <div class="group">
-        <h2>Props</h2>
-        <div class="card"><div class="list" id="propKinds"></div></div>
-        <div class="card"><div class="list" id="propPlaced"></div></div>
-        <p class="note">Drag furniture to arrange his desktop. He can sit, watch TV, play video games, ride and paint. Pick <b>Play Othello</b> on the TV and he'll grab a controller and invite you; the game has its own movable window, and <b>Talk to him</b> opens chat while the match continues.</p>
-      </div>
-      <div class="group">
-        <h2>Make your own</h2>
-        <div class="btns"><button class="btn ghost" id="openItems" type="button">Open items folder</button><button class="btn ghost" id="reloadItems" type="button">Reload items</button></div>
-        <p class="note">Every item is a small .json file. Copy one of the examples in the folder (pen.json, wooden-sword.json, mace.json...), change the name, the length, the colors and the shape, save it, then click Reload items. The step-by-step guide is MAKING-THINGS.md in the folder (and in the project's docs folder).</p>
-      </div>
+      <details class="group"><summary>Custom definitions</summary>
+        <p class="note">Reload your custom item/furniture files or open their folder.</p>
+        <button class="btn ghost" id="reloadItems">Reload definitions</button>
+        <button class="btn ghost" id="openItems">Open items folder</button>
+      </details>
     </section>
 
     <section data-panel="look" hidden>
@@ -259,13 +252,18 @@
       <div class="group">
         <h2>The group</h2>
         <div class="card">
-          <label class="switch"><span><span class="row-label">Companions</span><br /><small class="note">Another one just like him, with their own settings window (in their color), their own name, look, mind, memories and AI brain. Talk to either one; they share the furniture, spar with each other, and back each other up against your cursor. Open their settings from the tray icon or their right-click menu.</small></span><input type="checkbox" id="friendOn" /></label>
-          <label class="row-label" for="figureCount">Figures on the desktop</label>
-          <select id="figureCount"><option value="2">Blurp and Leonard</option><option value="3">Three figures</option><option value="4">Four figures</option><option value="5">Five figures</option></select>
-          <small class="note">Each has their own settings in the tray. Keep their current size, or adjust Size below if the desktop feels crowded.</small>
-          <label class="row-label" for="personality">His offline personality</label>
-          <select id="personality"><option value="inventive">Inventive</option><option value="competitive">Competitive</option><option value="gentle">Gentle</option><option value="mischievous">Mischievous</option><option value="adventurous">Adventurous</option></select>
+          <label class="row-label" for="figureCount">On the desktop</label>
+          <select id="figureCount"><option value="1">1 stick man</option><option value="2">2 stick men</option><option value="3">3 stick men</option><option value="4">4 stick men</option><option value="5">5 stick men</option></select>
+          <fieldset id="spawnRoster"><legend>Choose who appears</legend></fieldset>
+          <p class="note">Each character keeps their items and relationships when removed and added again. Pick one in Control to adjust them, or All figures to apply the same setting to everyone on the desktop.</p>
+          <p id="personality" class="note"></p>
           <label class="switch"><span>Make tools with his pen</span><input type="checkbox" id="drawTools" /></label>
+          <label class="switch"><span>Show supplies bag shortcut <small>(drag to reposition)</small></span><input type="checkbox" id="showBag" /></label>
+          <label class="switch"><span>Show trash can <small>(drag to reposition)</small></span><input type="checkbox" id="showTrash" /></label>
+          <label class="switch"><span>Require a console attachment for TV games</span><input type="checkbox" id="consoleRequired" /></label>
+          <label class="switch"><span>Follow the local day/night rhythm</span><input type="checkbox" id="dailyRhythm" /></label>
+          <div id="workshopSliders"></div>
+          <details><summary>Development checks</summary><button class="btn ghost small" id="sanityCheck" type="button">Check live world</button><p id="sanityResult" role="status" class="note">Checks ownership, coordinates, controllers and shared claims.</p></details>
           <label class="switch"><span>Developer: show break pressure during fights</span><input type="checkbox" id="debugCombat" /></label>
           <label class="row-label" for="fightMode">Fights</label>
           <select id="fightMode">

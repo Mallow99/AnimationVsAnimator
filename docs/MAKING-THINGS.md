@@ -18,7 +18,7 @@ The quickest way to start: **copy an example file, give it a new name, and chang
 
 ## 1. Items (things he carries)
 
-An item hangs on his belt, he takes it out to use it, and you can take it from him.
+An item lives in his wearable satchel. He reaches in to use it, and you can pull it from his hand or satchel.
 
 ```json
 {
@@ -45,7 +45,7 @@ An item hangs on his belt, he takes it out to use it, and you can take it from h
 | `use`   | what he does with it (see below). |
 | `length`| pixels from his hand to the far end (at his normal size). |
 | `grip`  | pixels of handle sticking out behind his hand. |
-| `belt`  | where he keeps it: `side` (a hip), `back`, `pocket` (small things, hidden), or `none` (he can't put it away). |
+| `belt`  | legacy preferred slot: `side`, `back`, `pocket`, or `none`. These values still load, but tools now store in the satchel; worn equipment stays attached. |
 | `hit`   | how hard it hits: `0` harmless, `1` a wooden sword, `2` a big hit. Anything that hits can knock your cursor flying. |
 | `bounce`| how bouncy it is when it lands: `0` a thud, `0.9` a super ball. Leave it out for `0.3`. |
 | `cuts`  | `true` for a real blade (like `katana.json`): in a real fight it can take a limb off or run someone through. |
@@ -58,6 +58,8 @@ An item hangs on his belt, he takes it out to use it, and you can take it from h
 | `draw`  | draws with it (like his pen). Without a `draw` item, he can't draw at all. |
 | `swing` | swings it like a sword: practice slashes, and at your cursor when he's mad. |
 | `smash` | brings it down overhead like a hammer: on your cursor, or on the window he's standing on. |
+| `rest` | fetches a blanket, rests, folds and stores the original. |
+| `snack` | opens a reusable snack box, takes a quiet snack, closes and stores it. |
 | `throw` | throws it at your cursor, or bounces it off the floor and catches it. Give it a `bounce`. |
 | `shoot` | shoots arrows with it like a bow (see `bow.json`): at your cursor, and in fights from a distance. Draw it with its middle at 0 along, `grip` as long as `length` (so it's centered in his hand), the limbs bowing forward; copy `bow.json` and change the colors. |
 | `none`  | just carries it around. |
@@ -183,7 +185,26 @@ knee, `along` is across the leg) and mirrored when he turns left. Take/drop/give
 Only one item can occupy each equipment location; a replacement drops the previous one. This is
 cosmetic clothing, with no armor or health system.
 
-Games are played on the TV (its console is part of the TV): his own runner game, and Othello with you.
+TVs play his runner, Othello with you, and companion Pong. Handhelds run the runner. General → Require a console for Pong is off by default; enable it to require a loose console near the TV.
+
+### Workshop and furniture capabilities
+
+New items include `sponge` (wipe raw pen strokes under the cursor), `eraser` (remove ink objects),
+`paint-bucket` (color an ink project), `handheld` (runner game), and `console` (connect near a TV).
+Their `use` values are `wipe`, `erase`, `color`, `game`, and `connect`.
+
+Props infer their actions from `use` and may also advertise `actions`: `sit`, `watch`, `ride`,
+`paint`, `drawhere`, `refine`, `store`, `move`, and `switch`. Use `work` with a `screen` paper rectangle for a
+traced blueprint desk; add the `refine` action for a workbench. Use `storage` for a tool shelf.
+`seats` sets capacity (1–5). `move` may be `carry`, `drag`, or `push`; `movable: false` disables moving.
+`drawable: false` disables blueprint drawing; `refinable: false` keeps a definition as ink.
+A new advertised behavior still needs a corresponding skill; these capabilities select existing skills.
+
+“Draw a chair” traces its actual definition and creates ink furniture with the same outline and uses.
+“Draw a katana” creates an ink weapon. “Refine it” colors and polishes the same object at a workbench.
+General → Ink lifetime sets the loose ink lifespan; zero disables expiry. Held/stored items and occupied
+furniture pause their lifetime. Ink progress, embedded art, ammo, ownership and loose placements save
+with the figure. Custom definitions and existing inventories remain readable.
 
 ## 3. Making your own version of him
 
@@ -216,3 +237,32 @@ preserved when bundled examples improve.
 - What he *does* with each `use` is a "skill" in `src/core/skills.ts` (`SwordSwing`,
   `ThrowItem`, `SitOnProp`, `WatchTV`, `RideScooter`...). A brand-new kind of `use` needs a new
   skill, which is code, not just a file.
+
+
+### Contact contours and reading lamps
+
+`collision` optionally supplies up to 12 convex polygons, each with 3–12 corners `[x,y]` in the
+same coordinates as the art. For example, a tabletop and two separate legs let a small item rest
+between the legs. Each piece is normalized to a convex hull; invalid pieces are ignored.
+Without valid pieces, the existing visible-art convex hull remains the fallback. `outline` still
+defines the rigid body, floor support and platforms, so this is not full concave/rotating physics.
+
+`density` (0.1–10; default 1) changes relative contact weight, together with area and movement type.
+It is not kilograms. Persistent friction contacts resist resting slip but deliberate manipulation
+and impacts can break contact. Swept translation tests cover 3000 px/s against a thin solid; extreme
+rotation and loose-item-to-loose-item sweeps remain outside that guarantee.
+
+`use: "light"` advertises a lamp's `switch` action. The stock lamp shows a lit shade and uses a
+switch at `[18,35]`; custom lamps should keep that switch within reach. Automatic reader/work
+claims are transient. A manual on/off choice is saved; “Use automatic light” clears that override.
+Blanket/snack animations transform stock artwork only; edited artwork stays as supplied.
+
+## Pet Quality 2 character and item details
+
+Preset motion, voices, gift preferences and satchel palettes use
+[CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md). Gifts wrap and transfer an existing item; they do
+not create a duplicate gift-box item. Flowers are a pocket item with `use: "none"` and no combat hit.
+Handhelds retain a bounded best score and render a real runner during play. Reader-facing stock art
+is recognized without replacing a custom handheld shape. Consoles are actual detachable TV
+attachments; Bag exposes attaching, taking and storing the same original. Save data includes book
+bookmarks, device scores and friendships; transient wrapping is cleared on cancellation/restart.

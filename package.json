@@ -15,7 +15,14 @@
     "package:win": "node scripts/build.mjs && node scripts/package-win.mjs",
     "browsercheck": "node scripts/build.mjs && node scripts/browser-check.mjs",
     "soak": "node scripts/build.mjs soak && node .build/soak.mjs",
-    "chromecheck": "node scripts/chrome-check.mjs"
+    "chromecheck": "node scripts/chrome-check.mjs",
+    "roadmapcheck": "node scripts/build.mjs roadmap-checks && node .build/roadmap-checks.mjs",
+    "qualitycheck": "node scripts/build.mjs quality-checks && node .build/quality-checks.mjs",
+    "qualityprofile": "node scripts/build.mjs quality-profile && node .build/quality-profile.mjs",
+    "sanitycheck": "node scripts/build.mjs living-checks && node .build/living-checks.mjs",
+    "livingsoak": "node scripts/build.mjs living-soak && node .build/living-soak.mjs",
+    "ramprofile": "node scripts/build.mjs && electron scripts/ram-profile.cjs",
+    "quality2check": "node scripts/build.mjs pet-quality-2-checks && node .build/pet-quality-2-checks.mjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
