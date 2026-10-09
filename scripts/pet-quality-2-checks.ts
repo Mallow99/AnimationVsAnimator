@@ -1,3 +1,9 @@
+import { CHARACTER_TEMPLATES } from '../src/core/character-template';
+import { mergeConfig } from '../src/core/config';
+import { friendshipStage, sharedMoment } from '../src/core/relationships';
+import { ShoulderBump } from '../src/core/skills/together';
+import { PlayHandheld } from '../src/core/skills/handheld';
+import { FriendlyMoment } from '../src/core/skills/friendly-moment';
 import assert from 'node:assert/strict';
 import { PixelLayer, DEFAULT_LOOK } from '../src/core/render';
 import { Props, makeBox, BUILTIN_PROPS, parsePropDef } from '../src/core/props';
@@ -558,4 +564,86 @@ test('switch-off intent survives interrupting the reader that was lighting the l
   assert.equal(lamp.manualLight,false);assert(!lamp.on);
   assert.deepEqual(checkSanity([p]),[]);
 });
+test('five reusable personality templates layer different motion, sitting and voices on unchanged presets',()=>{
+  const all=pets(5);assert.equal(new Set(Object.values(CHARACTER_TEMPLATES).map(t=>t.voice.rate)).size,5);
+  assert.equal(new Set(Object.values(CHARACTER_TEMPLATES).map(t=>t.bag.clip)).size,5);
+  for(const p of all){const body={...p.config.body},dims={...p.char.d};p.char.sit();run([p],2);assert.deepEqual(p.config.body,body);assert.deepEqual(p.char.d,dims);assert.deepEqual(checkSanity([p]),[]);}
+  assert.equal(new Set(all.map(p=>JSON.stringify(p.char.motion.sit))).size,5);
+});
+test('default renames migrate only the old names and preserve custom names and save slots',()=>{
+  assert.equal(mergeConfig(DEFAULT_CONFIG,{name:'Blurp'}).name,'Cobalt');
+  assert.equal(mergeConfig(DEFAULT_CONFIG,{name:'Leanord'}).name,'Amber');
+  const c=mergeConfig(DEFAULT_CONFIG,{name:'My friend',friend:{name:'JT'},spawnOrder:[4,1,0]});
+  assert.equal(c.name,'My friend');assert.equal(c.friend.name,'JT');assert.deepEqual(c.spawnOrder.slice(0,3),[4,1,0]);
+});
+test('friendship dimensions, favorite activities and earned keepsakes persist without unbounded history',()=>{
+  const [a,b]=pets(2);for(let i=0;i<35;i++)a.ctx.recordActivity!(b.ctx.who,'catch',true);
+  const r=a.ctx.relationship!(b.ctx.who);assert.equal(r.favoriteShared,'catch');assert.equal(r.recent.length,8);assert.equal(friendshipStage(r),'friends');for(let i=0;i<100;i++)a.ctx.recordActivity!(b.ctx.who,'catch',true);assert.equal(friendshipStage(r),'close friends');assert(a.stickers.length>=2&&a.stickers.length<=3);
+  const [copy]=pets();copy.load(a.save());assert.deepEqual(copy.stickers,a.stickers);assert.deepEqual(copy.ctx.relationship!(b.ctx.who),r);
+  const old=parseRelationship({bond:.4});assert(old&&old.trust===.5&&old.familiarity===0);
+  const before=r.bond;for(let i=0;i<100;i++)sharedMoment(r,'catch',false);assert.equal(r.bond,before);
+});
+test('contextual moods blend, clamp, settle and restore old saves without missing dials',()=>{
+  const [p]=pets();p.mood.nudge({stress:.9,affection:.6,confidence:9});assert.equal(p.mood.emotion,'overwhelmed');assert.equal(p.mood.s.confidence,1);
+  assert(offlineReply(p.ctx,'how do you feel').say.includes('quiet'));p.mood.tick(120);assert(p.mood.s.stress<.9);const [q]=pets();q.mood.load({happiness:.6,energy:.8});assert(Number.isFinite(q.mood.s.affection));
+  q.mood.nudge({affection:.7,contentment:.3});assert.equal(q.mood.emotion,'supported');
+});
+test('a wrapped thoughtful gift chooses a liked original, transfers identity and progress, then inspects and stores',()=>{
+  const all=pets(2),[a,b]=all;for(const p of all){p.mind.reset(p.ctx);for(const it of [...p.items.list])p.items.remove(it);p.paused=false;}
+  a.items.give('pen',a.char);a.items.give('book',a.char);const liked=a.items.give('dumbbell',a.char)!;liked.bookmark=9;
+  a.command('do:gift');let wrapped=false,inspected=false;
+  for(let i=0;i<15/dt;i++){for(const p of all)p.update(dt);wrapped ||= liked.giftWrap>0;inspected ||= b.mind.activeSkill?.name==='receivegift';}
+  assert(wrapped&&inspected);assert(!a.items.list.includes(liked));const received=b.items.list.find(i=>i.uid===liked.uid);assert(received&&received.def.id==='dumbbell');assert.equal(received.bookmark,9);assert.equal(received.where,'belt');assert(!received.working&&!received.giftWrap);assert.equal(b.ctx.relationship!(a.ctx.who).giftsReceived,1);assert.equal(a.ctx.relationship!(b.ctx.who).giftsGiven,1);assert.deepEqual(checkSanity(all),[]);
+});
+test('gifts respect full bags, sleep, cancellation and removal without losing or duplicating the original',()=>{
+  const all=pets(2),[a,b]=all;for(const p of all){p.mind.reset(p.ctx);for(const it of [...p.items.list])p.items.remove(it);}
+  const book=a.items.give('book',a.char)!;for(let i=0;i<16;i++)b.items.give('cup',b.char);
+  assert(activitiesFor(a).find(v=>v.command==='gift')?.needs);a.paused=false;a.command('do:gift');run(all,5);assert(a.items.list.includes(book));assert(!b.items.list.some(i=>i.uid===book.uid));
+  for(const it of [...b.items.list])b.items.remove(it);b.mood.asleep=true;a.command('do:gift');run(all,4);assert(b.mood.asleep&&a.items.list.includes(book));
+  b.mood.asleep=false;a.items.give('pen',a.char);a.command('do:gift');run(all,1);a.command('do:wake');run(all,5);assert(a.items.list.includes(book));assert(!b.items.list.some(i=>i.uid===book.uid));assert.deepEqual(checkSanity(all),[]);
+});
+test('direct peer delivery preserves an in-progress reload, deduplicates receipts and refuses forged identity',()=>{
+  const [a,b]=pets(2);const gun=a.items.give('gun',a.char)!;gun.ammo=0;gun.beginReload();gun.tickReload(.45);
+  const msg={type:'toolGift' as const,token:'reload-transfer',uid:gun.uid,def:gun.def,ammo:gun.ammo,reloadRemaining:gun.reloadRemaining};
+  let accepted=false;a.ctx.deliverGift!(b.ctx.who,msg,yes=>{accepted=yes;if(yes)a.items.remove(gun);});assert(accepted);
+  const given=b.items.list.find(i=>i.uid===gun.uid)!;assert.equal(given.ammo,0);assert(Math.abs(given.reloadRemaining-.7)<1e-9);b.receive(msg,a);assert.equal(b.items.list.filter(i=>i.uid===gun.uid).length,1);
+  b.receive({...msg,token:'forged',uid:999999},a);assert(!b.items.list.some(i=>i.uid===999999));assert.deepEqual(checkSanity([a,b]),[]);
+});
+test('reassurance and making up affect feelings without erasing the longer relationship',()=>{
+  const all=pets(2),[a,b]=all;b.mood.nudge({stress:.8,frustration:.7});a.paused=false;a.command('do:checkfriend');run(all,8);assert(b.mood.s.stress<.7&&b.mood.s.frustration<.6);
+  b.receive({type:'bump',vx:0},a);const r=b.ctx.relationship!(a.ctx.who),trust=r.trust;assert(r.disagreements>0);b.receive({type:'moment',kind:'apology'},a);assert(r.trust>trust&&r.disagreements>0&&r.lastDisagreement==='');
+});
+test('handheld play has real jumps, saved device scores and reader-facing selectable art in both facings',()=>{
+  const [p]=pets();const it=p.items.give('handheld',p.char)!;p.paused=false;p.command('do:handheld');run([p],15);
+  assert(it.arcade&&it.arcade.presses>0&&it.gameBest>0);assert(it.working&&it.where==='hand');assert.equal(p.char.mode,'sit');
+  for(const f of [-1,1]){it.at={x:500,y:500,z:0};it.dir={x:f,y:0,z:0};assert(it.distTo(500+f*12*it.scale,500-7*it.scale)<1);assert(it.distTo(500+f*12*it.scale,500+15*it.scale)>5);}
+  p.mind.reset(p.ctx);assert.equal(it.arcade,null);const [q]=pets();q.load(p.save());assert.equal(q.items.list.find(i=>i.def.id==='handheld')!.gameBest,it.gameBest);assert.deepEqual(checkSanity([p]),[]);
+});
+test('two handheld players finish a real shared session with their originals, no TV and safe spectators',()=>{
+  const all=pets(5);for(const p of all)p.paused=false;const items=all.slice(0,2).map(p=>p.items.give('handheld',p.char)!);
+  all[0].command('do:handheldduo');let played=false,jumped=false;
+  for(let i=0;i<50/dt;i++){for(const p of all)p.update(dt);played ||= all.slice(0,2).every(p=>p.view().group?.phase==='do');jumped ||= all.slice(0,2).every(p=>(p.view().group?.game?.presses??0)>0);}
+  assert(played&&jumped);for(const [i,it]of items.entries()){assert(all[i].items.list.includes(it)&&it.where==='belt'&&!it.arcade&&!it.working);assert(all[i].ctx.relationship!(all[1-i].ctx.who).activities.handheld===1);}
+  assert(all.every(p=>p.char.hp===1));assert.deepEqual(checkSanity(all),[]);
+});
+test('handheld shared Stop/take releases both sessions and cannot replace a missing device',()=>{
+  const all=pets(2);for(const p of all){p.items.give('handheld',p.char);p.paused=false;}
+  all[0].command('do:handheldduo');run(all,9);assert(all[0].view().group);const it=all[1].items.find('game')!;all[1].takeItem(it);run(all,4);assert(all.every(p=>!p.view().group&&!p.char.handsAt));assert.equal(it.where,'cursor');assert(all[1].items.list.filter(i=>i.def.id==='handheld').length===1);assert(activitiesFor(all[0]).find(v=>v.command==='handheldduo')?.needs);
+});
+test('a console docks beside the TV, follows movement and detaches on take/store/removal',()=>{
+  const [p]=pets(),tv=p.props.spawn('tv',650,740,1)!,console=p.items.give('console',p.char)!;run([p],3);
+  assert(p.items.attachConsole(console,tv));run([p],1);assert(tv.consoleConnected&&console.dock===tv.n);const relative=console.at.x-tv.center.x;
+  const [restored]=pets();restored.load(p.save());run([restored],3);assert(restored.items.list.find(i=>i.def.id==='console')?.dock!==null,'saved TV attachment did not reconnect');
+  tv.place({x:850,y:tv.center.y},0);run([p],1);assert(Math.abs(console.at.x-tv.center.x-relative)<1);p.takeItem(console);run([p],1);assert.equal(console.dock,null);assert(!tv.consoleConnected);p.giveBack(console);assert.equal(console.where,'belt');
+  p.items.attachConsole(console,tv);p.props.remove(tv);run([p],1);assert.equal(console.dock,null);assert.equal(console.where,'world');assert.deepEqual(checkSanity([p]),[]);
+});
+test('optional console requirements agree across TV activities while handhelds remain independent',()=>{
+  const [p]=pets();p.applyConfig({...p.config,consoleRequired:true});p.props.spawn('tv',650,740,1);run([p],2);
+  for(const name of ['videogame','playgame','pong'])assert(activitiesFor(p).find(v=>v.command===name)?.needs);
+  p.items.give('handheld',p.char);assert(!activitiesFor(p).find(v=>v.command==='handheld')?.needs);
+  for(const [text,command]of [['play handhelds with a friend','handheldduo'],['give a gift','gift'],['apologize to your friend','apologize']])assert(offlineReply(p.ctx,text).plan.some(step=>'do' in step&&step.do===command));
+});
+test('activity and unattended mood updates stay bounded at empty energy and full boredom',()=>{const [p]=pets();p.paused=false;p.mind.holdUntil=Infinity;p.mood.s.energy=0;p.mood.s.boredom=1;p.ctx.world.cursorMovedAt=-400;p.char.walkTo(p.char.x+100);run([p],2);assert.deepEqual(checkSanity([p]),[]);});
+test('all personality styles rise from floor sitting before walking without tripping',()=>{const all=pets(5);for(const p of all){p.paused=false;p.command('do:sit');}run(all,4);for(const [i,p]of all.entries()){p.mind.reset(p.ctx);p.paused=true;p.char.walkTo(p.char.x+80);}let fell=false;for(let j=0;j<360;j++){for(const p of all)p.update(dt);fell ||= all.some(p=>['ragdoll','getup','lie'].includes(p.char.mode));}assert(!fell,all.map(p=>p.config.name+':'+p.char.mode).join(','));});
+test('intentional bump records both sides; an apology repairs once and disappears from activities',()=>{const [a,b]=pets(2);b.char.placeHome(a.char.x+5);a.selectPeer(b.ctx.who);const bump=new ShoulderBump();bump.start(a.ctx);bump.update(a.ctx);bump.stop(a.ctx);assert(a.ctx.relationship!(b.ctx.who).lastDisagreement==='bump');assert(b.ctx.relationship!(a.ctx.who).lastDisagreement==='bump');b.char.hp=1;b.paused=false;run([a,b],6);b.mind.reset(b.ctx);a.mind.reset(a.ctx);a.paused=false;a.command('do:apologize');run([a,b],8);assert.equal(a.ctx.relationship!(b.ctx.who).lastDisagreement,'');assert.equal(b.ctx.relationship!(a.ctx.who).lastDisagreement,'');assert(activitiesFor(a).find(v=>v.command==='apologize')?.needs);const trust=b.ctx.relationship!(a.ctx.who).trust;b.receive({type:'moment',kind:'apology'},a);assert.equal(b.ctx.relationship!(a.ctx.who).trust,trust);});
 console.log(`${passed} Pet Quality 2 checks passed`);

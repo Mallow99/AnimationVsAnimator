@@ -1,4 +1,4 @@
-// Everything about Blurp you can change from the settings window, in one
+// Everything about a figure you can change from the settings window, in one
 // object that's saved to disk as pet.json. Also: the allowed range for each
 // number (the settings sliders are built from this table) and a safe merge.
 
@@ -90,7 +90,7 @@ export interface PetConfig {
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
-  name: 'Blurp',
+  name: 'Cobalt',
   personality: 'inventive', figureCount: 2, spawnOrder: [0,1,2,3,4], debugCombat: false,
   closeWindows: false, fileHomes:false, browserPlay: false, drawTools: true, inkLifetime: 300, consoleRequired: false, dailyRhythm: true,
   showBag: false, showTrash: false,
@@ -116,7 +116,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   volume: 0.6,
   biases: {},
   mindLook: 'head',
-  friend: { on: true, name: 'Leonard', color: '#f7931e' },
+  friend: { on: true, name: 'Amber', color: '#f7931e' },
   fightMode: 'play',
 };
 
@@ -208,6 +208,9 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   if (out.mindLook !== 'head' && out.mindLook !== 'circuit') out.mindLook = base.mindLook;
   if (!/^#[0-9a-f]{6}$/i.test(out.look.color)) out.look.color = base.look.color;
   if (!out.name.trim()) out.name = base.name;
+  if(out.name==='Blurp')out.name='Cobalt';
+  if(['Leonard','Leanord'].includes(out.name))out.name='Amber';
+  if(['Leonard','Leanord'].includes(out.friend.name))out.friend.name='Amber';
   if (!Object.hasOwn(PROVIDERS, out.provider)) out.provider = base.provider;
   // A bad model name, or one left over from before he had a choice of services: use the service's default.
   if (!/^[a-z0-9._:/-]+$/i.test(out.model) || /^claude-/.test(out.model)) out.model = PROVIDERS[out.provider].model;
@@ -232,8 +235,8 @@ export function companionConfig(main: PetConfig, id: number): PetConfig {
 
 /** Preset identity is distinct from user-edited appearance/settings and stays at a stable save id. */
 export const CHARACTER_PRESETS = [
-  {id:0,name:'Blurp',personality:'inventive',description:'Curious maker. Reads, sketches and shares ideas; thoughtful pauses.'},
-  {id:1,name:'Leonard',personality:'competitive',description:'Focused trainer. Enjoys fair sparring, practice and friendly rivalries.'},
+  {id:0,name:'Cobalt',personality:'inventive',description:'Curious maker. Reads, sketches and shares ideas; thoughtful pauses.'},
+  {id:1,name:'Amber',personality:'competitive',description:'Focused trainer. Enjoys fair sparring, practice and friendly rivalries.'},
   {id:2,name:'Moss',personality:'gentle',description:'Patient companion. Quiet drinks, shared rests and checking on friends.'},
   {id:3,name:'Violet',personality:'mischievous',description:'Playful inventor. Pocket tricks, affectionate teasing and making things.'},
   {id:4,name:'Ruby',personality:'adventurous',description:'Enthusiastic explorer. Parkour, games and bringing friends along.'},

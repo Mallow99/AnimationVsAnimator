@@ -2,28 +2,33 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Active update: Pet Quality 2 — 2026-10-08
+## Active update: Pet Quality 2 — personalization checkpoint, 2026-10-09
 
-The owner authorized implementation after the detailed change/assessment/RAM review. Follow
-[PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md), preserving offline behavior and shared controls.
-The first step bounds/reuses pixel canvases and promotes whole-process RAM profiling into
-`scripts/ram-profile.cjs` (`npm run ramprofile`; cloud launch needs DISPLAY/Xvfb and --no-sandbox).
-The fixture uses disposable saves, offline mode and software rendering. Run AVA_RAM_COUNT=1/2/5;
-AVA_RAM_RICH=1 adds nine furniture/twenty items; AVA_RAM_CHURN=1 exercises twelve Settings cycles.
-Reports go under .build. Prior RAM results are recorded in the checklist; no Mac RAM was measured.
+The owner authorized completion, including personalized motion/names, richer friendships/gifts,
+handheld peer play and developing satchel details. Follow [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md),
+then stop before Chrome/Finder work. Resource checkpoint `143850c` and contact/continuity/domestic
+checkpoint `2b92188` are committed; this checkpoint adds the expansion. See
+[CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md) and [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
 
-Validated resource step: typecheck, focused viewport/reuse/shrink regression, full actual Chromium
-input/rendering checks, and visual inspection of five couch seats. Updated RAM remains approximately
-360 MiB PSS furnished / 381 MiB after twelve Settings cycles; this is allocation variation, not an
-established improvement or a long-run leak guarantee. Contact/continuity/social/items work is next.
-Native Mac/Windows acceptance remains open; no new Chrome/Finder work is authorized in this pass.
+Cobalt/Amber defaults migrate exact old names only. Five profiles layer walking, seating, bubble/blip
+speech and satchel accents over existing presets. Friendship history, confidence/affection/stress,
+thoughtful original-object gifts/three wrapping styles/flowers, inspection and earned stickers save.
+Handhelds display actual runs and saved device best scores; two owners compare games without a TV.
+An actual console attaches beside a TV and detaches on take/store. Apologies resolve a pending
+incident once rather than repeatedly awarding trust. Passive pickup and gun reload mechanics remain.
+
+Typecheck, the 140 prior regressions, full seed-7 sim and 35 focused Update 2 checks pass. Actual
+Chromium interaction and motion fixtures plus Linux Electron upgrade/preload/input/focus/settings
+checks pass. Three two-hour core soaks and expanded seed-31 (7,200 seconds, 7,215 audits, 34 phases)
+passed. Final expanded seed-32 includes the last apology repair and is running; final evidence,
+resource profile and PR metadata will be committed in the delivery step. Native Mac/Windows checks
+remain open. Do not treat this checkpoint as completed hardware acceptance.
 
 ## Previous update: Pet Quality / Living Stickmen — 2026-10-08
 
 The owner expanded the Pet Quality scope and authorized completion. The update continues open draft
 PR #3 on `codex/roadmap-continuation`, stacked on `codex/desktop-life`. No new Chrome/Finder feature
-was started. Stop before the next roadmap milestone. Research for Pet Quality Update 2 is a proposal,
-not authorization to implement it. Every working commit includes CHANGELOG.md and a chat changelog.
+was started. Stop before the next roadmap milestone. This is the historical first quality update; later owner instructions explicitly authorized Update 2. Every working commit includes CHANGELOG.md and a chat changelog.
 The ordered request checklist is [LIVING-STICKMEN-PLAN.md](LIVING-STICKMEN-PLAN.md).
 
 - Foundation (`af56778`): drawing a new tool preserves earlier original projects; reload clocks advance
@@ -72,10 +77,10 @@ Convex contacts approximate concave gaps and have extreme-speed tunneling limits
 items resolve against peer snapshots. Undo is one session-only object, books retain ownership, and
 main-display limits remain. A soak checks exercised paths, not every possible native/user action.
 
-Next concrete step: owner hardware acceptance, then review the separate Pet Quality 2 research.
+Historical next step: owner hardware acceptance. The owner subsequently authorized Update 2.
 Research only: [PET-QUALITY-2-RESEARCH.md](PET-QUALITY-2-RESEARCH.md) ranks attention/motion,
 activity continuity, social timing, physical affordances and useful everyday objects, with primary
-sources and acceptance criteria. No Update 2 implementation has started.
+sources and acceptance criteria. The research preceded the Update 2 implementation described above.
 
 ## Previous update: interaction and rendering cleanup
 

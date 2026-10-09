@@ -18,8 +18,10 @@ const ACTIONS: [RegExp, string][] = [
   [/\b(?:exercise|work out|workout|lift weights|dumbbell|train with)\b/, 'exercise'],
   [/\b(?:yo-yo|yoyo)\b/, 'yoyo'],
   [/\b(?:pass|share|give).*tool\b/,'passtool'],
+  [/\b(?:apologize|apologise|make up with|say sorry to)\b/, 'apologize'],
   [/\bcompare.*drawing\b/,'comparedrawings'],
   [/\b(?:check on|help).*friend\b/,'checkfriend'],
+  [/\b(?:handhelds?|pocket games?|gameboys?|game boys?)\b.*\b(?:together|friend|friends)\b|\bhandheldduo\b/, 'handheldduo'],
   [/\b(?:handheld|game boy|gameboy|pocket console)\b/, 'handheld'],
   [/\bpong\b/, 'pong'],
   [/\b(?:carry(?: it)? together|carry.*with.*friend|help.*carry)\b/, 'carrytogether'],
@@ -68,6 +70,9 @@ const ACTIONS: [RegExp, string][] = [
   [/\bpatty[ -]?cake\b/, 'pattycake'],
   [/\b(?:handshake|shake hands)\b/, 'handshake'],
   [/\bhug\b/, 'hug'],
+  [/\b(?:give|make|bring|wrap)(?: a| your| them a| him a| her a)? (?:gift|present)\b/, 'gift'],
+  [/\b(?:handhelds?|pocket games?|gameboys?|game boys?)\b.*\b(?:together|friend|friends)\b|\bhandheldduo\b/, 'handheldduo'],
+  [/\b(?:handhelds?|pocket games?|gameboys?|game boys?)\b/, 'handheld'],
   [/\b(?:talk to|chat with)\b/, 'chat'],
   [/\b(?:sit with|sit together)\b/, 'sitwith'],
   [/\b(?:nap together|sleep together)\b/, 'naptogether'],
@@ -134,6 +139,7 @@ const moodLine = (c: Ctx) => {
     content: 'pretty good',
     proud: 'did you see that?',
     embarrassed: "don't ask",
+    supported:'good. glad my friends are here.',frustrated:'that didn’t work. I need a breather.',overwhelmed:'a bit much right now. quiet sounds nice.',
   }[c.mood.emotion];
 };
 export function offlineReply(c: Ctx, text: string): OfflineReply {

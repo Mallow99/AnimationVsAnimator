@@ -256,3 +256,13 @@ rotation and loose-item-to-loose-item sweeps remain outside that guarantee.
 switch at `[18,35]`; custom lamps should keep that switch within reach. Automatic reader/work
 claims are transient. A manual on/off choice is saved; “Use automatic light” clears that override.
 Blanket/snack animations transform stock artwork only; edited artwork stays as supplied.
+
+## Pet Quality 2 character and item details
+
+Preset motion, voices, gift preferences and satchel palettes use
+[CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md). Gifts wrap and transfer an existing item; they do
+not create a duplicate gift-box item. Flowers are a pocket item with `use: "none"` and no combat hit.
+Handhelds retain a bounded best score and render a real runner during play. Reader-facing stock art
+is recognized without replacing a custom handheld shape. Consoles are actual detachable TV
+attachments; Bag exposes attaching, taking and storing the same original. Save data includes book
+bookmarks, device scores and friendships; transient wrapping is cleared on cancellation/restart.

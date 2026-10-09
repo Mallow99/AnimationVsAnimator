@@ -20,6 +20,7 @@ import spongeDef from './items/sponge.json';
 import eraserDef from './items/eraser.json';
 import bucketDef from './items/paint-bucket.json';
 import handheldDef from './items/handheld.json';
+import flowersDef from './items/flowers.json';
 import consoleDef from './items/console.json';
 import type { Runner } from './tv-game';
 import swordDef from './items/wooden-sword.json';
@@ -127,7 +128,7 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [blanketDef,snackDef,penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef, cupDef, dumbbellDef, yoyoDef, spongeDef, eraserDef, bucketDef, handheldDef, consoleDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [flowersDef,blanketDef,snackDef,penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef, cupDef, dumbbellDef, yoyoDef, spongeDef, eraserDef, bucketDef, handheldDef, consoleDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
 export const SLOT_NAMES = Array.from({ length: 16 }, (_, i) => `satchel ${i + 1}`);
@@ -140,7 +141,7 @@ let nextUid = 1;
 export interface ItemPose { at: V3; dir: V3; scale: number; mirror?: boolean }
 
 export class Item {
-  readonly uid = nextUid++;
+  readonly uid:number;
   where: 'belt' | 'hand' | 'worn' | 'world' | 'cursor' = 'world';
   poses: ItemPose[] = [];
   slot = -1;
@@ -176,6 +177,9 @@ export class Item {
   }
   ink?: InkProject;
   arcade: Runner | null = null;
+  gameBest=0;
+  giftWrap=0;giftUnwrap=0;
+  dock:number|null=null;dockPort:Vec|null=null;
   /** A user controller owns its pose while aiming/swinging. */
   cursorControlled = false;
   working = false;
@@ -204,13 +208,17 @@ export class Item {
     public def: ItemDef,
     at: Vec = { x: 0, y: 0 },
     public scale = 1,
+    uid?:number,
   ) {
+    this.uid=Number.isSafeInteger(uid)&&uid!>0&&uid!<1e9?uid!:nextUid++;nextUid=Math.max(nextUid,this.uid+1);
     this.a = makePoint(at.x, at.y, 2);
     this.b = makePoint(at.x, at.y + def.length * scale, 2);
     this.sticks = [{ a: this.a, b: this.b, len: def.length * scale }];
     this.at = { x: at.x, y: at.y, z: 0 };
   }
 
+  private gameStockDef:ItemDef|null=null;private gameStock=false;
+  get animatedHandheld(){if(this.gameStockDef!==this.def){this.gameStockDef=this.def;this.gameStock=this.def.id==='handheld'&&!this.def.sprite&&JSON.stringify(this.def.shape)===JSON.stringify(BUILTIN_ITEMS.find(d=>d.id==='handheld')!.shape);}return this.gameStock;}
   private get physicalLength() { return this.animatedBook ? 12 + 12 * this.bookOpen : this.def.length; }
   get tip(): V3 { return add3(this.at, scale3(this.dir, this.physicalLength * this.scale)); }
   get butt(): V3 { return add3(this.at, scale3(this.dir, -this.def.grip * this.scale)); }
@@ -423,8 +431,8 @@ export class Item {
           );
         }
         const reading=this.animatedBook&&this.bookReading&&this.where==='hand';
-        if(reading||this.animatedDomestic&&this.working&&this.where==='hand')point.y*=Math.sign(pose.dir.x)||1;
-        const shape=this.animatedBook?bookShape(this.bookOpen,this.bookPage,reading):this.animatedDomestic?domesticShape(this):this.def.shape;
+        if(reading||(this.animatedDomestic||this.animatedHandheld||this.giftWrap)&&this.working&&this.where==='hand')point.y*=Math.sign(pose.dir.x)||1;
+        const shape=presentationShape(this,reading);
         let distance = Infinity;
         for (const stroke of shape) {
           const points = stroke.pts.map(([x, y]) => ({ x, y }));
@@ -456,7 +464,7 @@ export class Item {
   get drawPadding() {
     const s = this.def.sprite;
     const spritePad = s ? Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.x + s.rows[0].length * s.pixel), Math.abs(s.y + s.rows.length * s.pixel)) : 0;
-    return Math.max(this.blanketSpread?38:0,this.snackOpen?30:0,6 + this.yoyoDrop, spritePad, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.max(Math.abs(p[1]), -p[0]) + s.width / 2))) * this.scale;
+    return Math.max(this.dockPort?Math.hypot(this.dockPort.x-this.at.x,this.dockPort.y-this.at.y):0,this.giftWrap?40:0,this.blanketSpread?38:0,this.snackOpen?30:0,6 + this.yoyoDrop, spritePad, ...this.def.shape.flatMap((s) => s.pts.map((p) => Math.max(Math.abs(p[1]), -p[0]) + s.width / 2))) * this.scale;
   }
 }
 
@@ -481,14 +489,14 @@ export class Items {
   }
 
   /** A new item of this kind: onto his belt if there's room, else dropped next to him. */
-  give(defId: string | ItemDef, ch: Character): Item | null {
+  give(defId: string | ItemDef, ch: Character, uid?:number): Item | null {
     const def = typeof defId === 'string' ? this.defs.get(defId) : defId;
     if (!def) return null;
     if (def.wear) {
       const owned = this.list.find((it) => it.def.id === def.id);
       if (owned) { if (owned.where !== 'worn') this.stow(owned); return owned; }
     }
-    const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale);
+    const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale,uid);
     this.list.push(it);
     if (!this.stow(it)) { it.where = 'world'; it.at = { x: ch.x + ch.facing * 20, y: ch.body.j.hip.y, z: 0 }; it.loosen(ch.facing * 60, -150); }
     this.onChange?.();
@@ -505,6 +513,7 @@ export class Items {
   /** Put it in a belt slot (its favorite free one). False if the belt is full or it doesn't go on a belt. */
   stow(it: Item): boolean {
     if (!this.list.includes(it)) return false;
+    it.dock=null;it.dockPort=null;
     if (it.def.wear) {
       const other = this.list.find((x) => x !== it && x.where === 'worn' && x.def.wear === it.def.wear);
       if (other) this.drop(other, 0, -60);
@@ -512,7 +521,7 @@ export class Items {
       this.onChange?.(); return true;
     }
     if (it.where === 'belt') return true;
-    it.bookTarget = 0; it.shelf = null;
+    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
     const slot = preferredSlots(it.def).find((s) => !this.belt[s]);
     if (slot === undefined) return false;
     if (it.where === 'hand') this.rummage = { hand: it.hand, left: 0.45 };
@@ -523,6 +532,16 @@ export class Items {
   }
 
   private unslot(it: Item) { if (it.slot >= 0 && this.belt[it.slot] === it) this.belt[it.slot] = null; it.slot = -1; }
+
+  attachConsole(it:Item,tv:Thing){
+    if(!this.list.includes(it)||it.def.use!=='connect'||!tv.def||tv.def.use!=='tv'||tv.held||Math.abs(tv.tilt)>.35)return false;
+    this.drop(it,0,0);it.dock=tv.n;this.followDock(it,tv);this.onChange?.();return true;
+  }
+  private followDock(it:Item,tv:Thing){
+    const b=tv.def!.bounds!;
+    it.at={...tv.toWorld(b[0]-27,b[3]-12),z:1};it.dir={x:Math.cos(tv.tilt),y:Math.sin(tv.tilt),z:0};it.scale=tv.scale;
+    it.dockPort=tv.toWorld(b[0]+4,b[3]-28);it.loosen();
+  }
 
   /** One combat tool owns the hands. Stow other held things, dropping only if storage is full. */
   wield(it: Item, hand: 'L' | 'R') {
@@ -540,6 +559,7 @@ export class Items {
     if (other && other !== it && !this.stow(other)) this.drop(other, 0, 0);
     if (it.where === 'belt') this.rummage = { hand, left: 0.45 };
     this.unslot(it);
+    it.dock=null;it.dockPort=null;
     it.where = 'hand'; it.hand = hand; it.aim = null; it.aimLocal = null;
     this.onChange?.();
   }
@@ -548,7 +568,7 @@ export class Items {
   drop(it: Item, vx: number, vy: number) {
     if (!this.list.includes(it)) return;
     this.unslot(it);
-    it.bookTarget = 0; it.shelf = null;
+    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
     it.where = 'world'; it.cursorControlled = false; it.pull = null; it.aim = null; it.aimLocal = null;
     it.loosen(vx, vy);
     this.onChange?.();
@@ -558,7 +578,7 @@ export class Items {
   toCursor(it: Item, at: Vec) {
     if (!this.list.includes(it)) return;
     this.unslot(it);
-    it.bookTarget = 0; it.shelf = null;
+    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
     it.where = 'cursor'; it.cursorControlled = false; it.pull = null; it.aim = null; it.aimLocal = null;
     it.at = { x: at.x, y: at.y, z: 30 };
     it.dir = { x: 0, y: 1, z: 0 };
@@ -606,6 +626,12 @@ export class Items {
   /** Physics for the things lying around (and flying through the air): one fixed step. */
   stepWorld(dt: number, bounds: Bounds, platforms: Platform[], solids: Thing[] = [], peerHulls: Vec[][] = []) {
     for (const it of [...this.list]) if (it.where === 'world') {
+      if(it.def.use==='connect'){
+        const dock=solids.find(t=>t.n===it.dock&&t.def?.use==='tv');
+        const nearby=dock??(it.speed<140?solids.filter(t=>t.def?.use==='tv'&&!t.held&&!t.movingBy&&Math.abs(t.tilt)<.35&&Math.hypot(t.center.x-it.at.x,t.center.y-it.at.y)<100*t.scale).sort((a,b)=>Math.abs(a.center.x-it.at.x)-Math.abs(b.center.x-it.at.x))[0]:null);
+        if(nearby){it.dock=nearby.n;this.followDock(it,nearby);continue;}
+        it.dock=null;it.dockPort=null;
+      }
       if (it.ink && it.ink.remaining >= 0) { it.ink.remaining = Math.max(0, it.ink.remaining - dt); if (!it.ink.remaining) { this.remove(it); continue; } }
       const shelf = it.shelf && solids.find(t => t.storageKey === it.shelf!.key && t.def?.id === 'bookshelf');
       if (shelf && !shelf.held && Math.abs(shelf.tilt) < 0.35 && !it.working) {
@@ -616,7 +642,7 @@ export class Items {
         it.step(dt, bounds, platforms, solids);
       }
     }
-    const loose = this.list.filter(it=>it.where === 'world' && !it.shelf);
+    const loose = this.list.filter(it=>it.where === 'world' && !it.shelf && it.dock===null);
     for (let pass=0;pass<3;pass++) {
       for(let i=0;i<loose.length;i++) for(let j=i+1;j<loose.length;j++) loose[i].separateItem(loose[j]);
       for(const it of loose) for(const hull of peerHulls) it.separateHull(hull);
@@ -681,7 +707,7 @@ export class Items {
 
   // ── saving: what he owns and where (anything lying around or with you goes back on his belt) ──
   save() {
-    return this.list.map(it => ({ id: it.def.id, bookmark: it.bookmark, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', ...(it.where === 'world' ? { world: { at: it.at, dir: it.dir } } : {}), ...(it.ink ? { ink: it.ink } : {}), ...(it.shelf ? { shelf: it.shelf } : {}), ...(it.def.use === 'gun' ? { ammo: it.ammo, reloadRemaining: it.reloadRemaining } : {}), def: it.def.drawn || !BUILTIN_ITEMS.some(d => d.id === it.def.id) ? it.def : undefined }));
+    return this.list.map(it => ({ id: it.def.id, bookmark: it.bookmark, gameBest:it.gameBest, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', ...(it.where === 'world' ? { world: { at: it.at, dir: it.dir } } : {}), ...(it.ink ? { ink: it.ink } : {}), ...(it.shelf ? { shelf: it.shelf } : {}), ...(it.def.use === 'gun' ? { ammo: it.ammo, reloadRemaining: it.reloadRemaining } : {}), def: it.def.drawn || !BUILTIN_ITEMS.some(d => d.id === it.def.id) ? it.def : undefined }));
   }
   /**
    * `known`: the built-ins he'd been given when this was saved. Missing (an older save) means
@@ -693,12 +719,13 @@ export class Items {
     this.list = []; this.belt = Array(SLOTS).fill(null);
     for (const d of data.slice(0, 40)) {
       if (!d || typeof d !== 'object') continue;
-      const o = d as { id?: string; slot?: number; worn?: boolean; bookmark?:number; ammo?:number; reloadRemaining?: number; shelf?: { key?: string; slot?: number }; ink?:unknown; world?:{at?:V3;dir?:V3}; def?: unknown };
+      const o = d as { id?: string; slot?: number; worn?: boolean; bookmark?:number; gameBest?:number; ammo?:number; reloadRemaining?: number; shelf?: { key?: string; slot?: number }; ink?:unknown; world?:{at?:V3;dir?:V3}; def?: unknown };
       const def = o.def ? parseItemDef(o.def) : this.defs.get(String(o.id));
       if (!def) continue;
       if (o.def && o.ink) def.drawn = true;
       const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale);
       if(Number.isInteger(o.bookmark))it.bookmark=clamp(o.bookmark!,0,9999);
+      if(Number.isInteger(o.gameBest))it.gameBest=clamp(o.gameBest!,0,9999);
       if(def.use==='gun' && Number.isInteger(o.ammo))it.ammo=Math.max(0,Math.min(6,o.ammo!));
       if (def.use === 'gun' && Number.isFinite(o.reloadRemaining)) it.reloadRemaining = clamp(o.reloadRemaining!, 0, 1.15);
       this.list.push(it);
@@ -716,6 +743,24 @@ export class Items {
     }
     this.giveStarter(ch);
   }
+}
+
+function presentationShape(it:Item,reading=false):ItemStroke[]{
+  let shape=it.animatedBook?bookShape(it.bookOpen,it.bookPage,reading):it.animatedDomestic?domesticShape(it):it.def.shape;
+  if(it.animatedHandheld&&it.working&&it.where==='hand')shape=[
+    {pts:[[-2,-12],[25,-12],[23,3],[-4,3]],color:'#899585',fill:'#899585',width:0},
+    {pts:[[3,-10],[22,-10],[20,-3],[1,-3]],color:'#243b32',fill:'#243b32',width:0},
+    {pts:[[1,0],[7,0]],color:'#38473b',width:2},
+    {pts:[[18,0],[22,0]],color:'#ba6f73',width:2},
+    {pts:[[-4,3],[23,3],[23,5],[-4,5]],color:'#5e6e5e',fill:'#5e6e5e',width:0},
+  ];
+  if(it.giftWrap>0&&it.giftUnwrap<1){
+    const colors=[['#8a9eac','#d9b9a1'],['#b59877','#758f79'],['#9983ad','#d0bc77']][it.giftWrap-1]??['#8a9eac','#d9b9a1'],lift=it.giftUnwrap*24;
+    const box:ItemStroke[]=[{pts:[[-2,-10],[27,-10],[27,12],[-2,12]],color:colors[0],fill:colors[0],width:0},{pts:[[12,-10],[14,-10],[14,12],[12,12]],color:colors[1],fill:colors[1],width:0},{pts:[[-4,-13-lift],[29,-13-lift],[29,-7-lift],[-4,-7-lift]],color:colors[0],fill:colors[0],width:0},{pts:[[9,-13-lift],[13,-17-lift],[17,-13-lift]],color:colors[1],width:2}];
+    // Reveal the actual contents as the lid opens; packaging is temporary, never a second item.
+    shape=it.giftUnwrap<.5?box:[...box,...shape];
+  }
+  return shape;
 }
 
 /** Small stock-art poses, in the same pixelated item frame. */
@@ -752,10 +797,11 @@ export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderin
     ctx.lineTo(pose.at.x, pose.at.y + it.yoyoDrop * sc); ctx.stroke();
     pose = { ...pose, at: { ...pose.at, y: pose.at.y + it.yoyoDrop * sc } };
   }
+  if(it.dockPort){ctx.strokeStyle='#454955';ctx.lineWidth=sc;ctx.beginPath();ctx.moveTo(pose.at.x+12*sc,pose.at.y);ctx.lineTo(it.dockPort.x,it.dockPort.y);ctx.stroke();}
   const m = pose.mirror ? -1 : 1;
-  const domestic=it.animatedDomestic&&it.working&&it.where==='hand';
+  const domestic=(it.animatedDomestic||it.animatedHandheld||it.giftWrap>0)&&it.working&&it.where==='hand';
   const reading = it.animatedBook && it.bookReading && it.where === 'hand';
-  for (const st of it.animatedBook ? bookShape(it.bookOpen, it.bookPage, reading) : it.animatedDomestic ? domesticShape(it) : it.def.shape) {
+  for (const st of presentationShape(it,reading)) {
     ctx.beginPath();
     st.pts.forEach(([along, across], i) => {
       const acrossView = reading || domestic ? across * (Math.sign(d.x) || 1) : across;
@@ -767,11 +813,17 @@ export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderin
   }
   if(it.snackAt&&it.animatedDomestic){ctx.fillStyle='#e8c18b';ctx.fillRect(it.snackAt.x-2*sc,it.snackAt.y-2*sc,4*sc,4*sc);}
   if(it.arcade){
-    ctx.save();ctx.translate(pose.at.x,pose.at.y);ctx.transform(d.x*sc,d.y*sc,ax*sc,ay*sc,0,0);
-    ctx.fillStyle='#203b2d';ctx.fillRect(3,-8,16,13);ctx.fillStyle='#b5d47f';
-    ctx.fillRect(6,2-it.arcade.y*11,2,3);
-    for(const b of it.arcade.blocks)ctx.fillRect(3+b.x*16,3-b.h*13,2,b.h*13);
-    ctx.restore();
+    const game=it.arcade;
+    ctx.save();ctx.translate(pose.at.x,pose.at.y);
+    const upright=it.animatedHandheld&&it.working&&it.where==='hand'?(Math.sign(d.x)||1):1;
+    ctx.transform(d.x*sc,d.y*sc,ax*sc*upright,ay*sc*upright,0,0);
+    if(it.animatedHandheld&&it.working&&it.where==='hand')ctx.transform(1,0,-.16,.55,0,-5);
+    ctx.beginPath();ctx.rect(3,-8,16,13);ctx.clip();ctx.fillStyle='#203b2d';ctx.fillRect(3,-8,16,13);
+    ctx.fillStyle=game.time-game.crashedAt<.8?'#d8a28b':'#b5d47f';
+    ctx.fillRect(3+game.x*16,2-game.y*11,2,3);
+    for(const b of game.blocks)ctx.fillRect(3+b.x*16,3-b.h*13,2,b.h*13);
+    ctx.fillRect(3,3,16,1);ctx.restore();
+    if(it.animatedHandheld&&it.working&&game.time-game.lastPressAt<.12){ctx.fillStyle='#e2aaa8';ctx.fillRect(pose.at.x+d.x*20*sc,pose.at.y-2*sc,2*sc,2*sc);}
   }
   ctx.restore();
 }
@@ -799,7 +851,7 @@ export function itemParts(it: Item, ch?: Character): DepthPart[] {
   return poses.map((pose) => {
     const pad = it.drawPadding * pose.scale / it.scale;
     return {
-      z: it.bookReading && it.where === 'hand' && ch
+      z: (it.bookReading||it.animatedHandheld&&it.working||it.giftWrap>0) && it.where === 'hand' && ch
         ? Math.max(ch.body.j.hip.z, ch.body.j.neck.z, pose.at.z) + 6
         : (it.where === 'worn' ? pose.at.z : (it.butt.z + it.tip.z) / 2) + (it.where === 'hand' ? 0.5 : it.where === 'belt' ? -0.3 : 0),
       pts: [

@@ -3,6 +3,31 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-09 — Pet Quality 2: personalized figures, friendships, gifts and pocket games
+
+- Added reusable five-personality motion/voice/satchel templates over the existing body presets,
+  distinct sitting/walking/conversation accents, Cobalt/Amber default-name migration and saved
+  keepsake stickers at shared-activity milestones; custom names and stable roster slots remain.
+- Added bounded friendship trust/familiarity/respect/generosity, stages/preferences/history,
+  confidence/affection/stress and contextual reassurance. Intentional bumps record both sides;
+  apologies resolve a pending incident once and preserve the longer relationship history.
+- Added flowers, considerate original-item gift selection, three pen-drawn wrapping styles,
+  unwrapping/inspection/storage, receipt/refusal/cancel protection and preserved identity/progress.
+- Reworked handheld handling/perspective around its real runner, actual thumb presses, saved best
+  scores and short two-owner shared sessions. Consoles are detachable TV attachments with explicit
+  Bag controls; optional gating agrees across TV games and does not affect handhelds.
+- Kept shared GUI organization, aligned gift/pass requirements, skipped closed-bag catalog rebuilding,
+  and extended live sanity checks to moods, saved progress and attachment state. Fixed mood boundary
+  drift found by the soak. Added current controls and a future-character template guide.
+- Verified typecheck, the 140 existing regressions, full simulation and 35 focused Update 2 checks;
+  actual Chromium interactions/three wrappers/game/attachment/motion frames and Linux Electron
+  upgrade/settings/input/focus checks pass. Expanded seed-31 two-hour soak passed 34 phases and
+  7,215 audits; final seed-32 replays the last apology repair before delivery. Windows x64 packaging
+  completed. Final evidence/resource/profile/handoff and PR update follow in the delivery commit.
+- Current Linux medians: one ordinary figure 293 MiB PSS; five furnished 378, after twelve Settings
+  cycles 384 and after another minute 391. Hardware focus/Spaces/permissions and physics rotation/
+  extreme-speed limits remain. Handheld sharing compares runner games; it is not a cable-link game.
+
 ## 2026-10-08 — Pet Quality 2: contact, handling, continuity and domestic life
 
 - Added bounded compound furniture contours, persistent resting friction, density-weighted contact

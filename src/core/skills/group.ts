@@ -1,3 +1,5 @@
+import { PlayHandheld } from './handheld';
+import { characterTemplate } from '../character-template';
 import { conversationLine } from '../personality';
 import { Skill, arrive, type Ctx } from './context';
 import type { PeerMsg, FighterView } from '../peer';
@@ -20,6 +22,7 @@ export const GROUP_ACTS = [
   'carry',
   'pong',
   'catch',
+  'handheld',
 ] as const;
 export type GroupAct = (typeof GROUP_ACTS)[number];
 export interface GroupPlan {
@@ -39,6 +42,7 @@ export interface GroupView {
   act: GroupAct;
   members: string[];
   phase: 'meet' | 'ready' | 'do';
+  game?:{score:number;best:number;presses:number;crashed:boolean};
   ball?: { uid: number; at: Vec; holder: string | null; throws: number; catches: number };
 }
 const required: Partial<Record<GroupAct, number>> = {
@@ -48,7 +52,7 @@ const required: Partial<Record<GroupAct, number>> = {
   relay: 5,
   carry: 2,
   pong: 2,
-  catch: 2,
+  catch: 2,handheld:2,
 };
 export const availableForGroup = (v: FighterView) =>
   !!v.id &&
@@ -78,7 +82,7 @@ export function groupPlan(
     );
   };
   const peers = (c.peers?.() ?? [])
-    .filter(availableForGroup)
+    .filter(v=>availableForGroup(v)&&(act!=='handheld'||v.hasHandheld))
     .sort(
       (a, b) =>
         Number(b.talent === talent) - Number(a.talent === talent) ||
@@ -104,6 +108,7 @@ export function groupPlan(
     c.say('We need a free spot.', 1.5);
     return null;
   }
+  if(act==='handheld'&&!c.items.list.some(i=>i.def.use==='game'&&i.where!=='cursor')){c.say('I need my own handheld.',1.6);return null;}
   const ball =
     act === 'catch'
       ? c.items.list.find((i) => i.def.id === 'bouncy-ball' && i.where !== 'cursor')
@@ -112,7 +117,7 @@ export function groupPlan(
     c.say('I need my ball.', 1.5);
     return null;
   }
-  const gap = (act === 'catch' ? 160 : 34) * c.char.scale,
+  const gap = (act === 'catch' ? 160 : act==='handheld'?105:34) * c.char.scale,
     half = ((n - 1) * gap) / 2;
   const x = Math.max(
     c.world.bounds.left + half + 25,
@@ -148,8 +153,7 @@ export function groupPlan(
         speaker: id,
         listener: to,
         text,
-        seconds:
-          3.1 + Math.min(1.8, text.length / 35) + 0.35 + (personality === 'gentle' ? 0.3 : 0),
+        seconds:Math.max(3.8,2.8+text.length/characterTemplate(personality).voice.rate+(text.match(/[,.!?]/g)?.length??0)*characterTemplate(personality).voice.pause),
       });
       speaker = listener;
       listener =
@@ -225,6 +229,8 @@ export class GroupActivity extends Skill {
   private ballTime = 0;
   private throws = 0;
   private catches = 0;
+  private handheld=new PlayHandheld(true);
+  private gameComment=10;
   constructor(readonly plan: GroupPlan) {
     super();
   }
@@ -234,6 +240,7 @@ export class GroupActivity extends Skill {
       act: this.plan.act,
       members: [...this.plan.members],
       phase: this.phase,
+      ...(this.handheld.item?.arcade?{game:{score:this.handheld.item.arcade.score,best:Math.max(this.handheld.item.arcade.best,this.handheld.item.arcade.score),presses:this.handheld.item.arcade.presses,crashed:this.handheld.item.arcade.crashedAt>=0&&this.handheld.item.arcade.time-this.handheld.item.arcade.crashedAt<.8}}:{}),
       ...(this.ball
         ? {
             ball: {
@@ -348,7 +355,7 @@ export class GroupActivity extends Skill {
       this.descent.stop(c);
       this.descent = null;
     }
-    if (ch.mode !== 'ground' && !(p.act === 'couch' && ch.mode === 'sit')) return true;
+    if (ch.mode !== 'ground' && !(['couch','handheld'].includes(p.act) && ch.mode === 'sit')) return true;
     let x = p.x + (i - (p.members.length - 1) / 2) * p.gap;
     if (p.act === 'couch') {
       if (!target!.claimSeat(c.who, ch.x)) return true;
@@ -378,6 +385,7 @@ export class GroupActivity extends Skill {
       const got = this.ballTool.fetch(c, dt);
       if (got !== 'ready') return got === 'none' || this.t > 40;
     }
+    if(p.act==='handheld'&&this.phase!=='do'){const prepared=this.handheld.prepare(c,dt);if(prepared!=='ready')return prepared==='none'||this.t>40;}
     if (this.phase !== 'do') {
       if (this.t > 40) return true;
       if (this.phase === 'meet' && !arrive(c, x, 8)) return false;
@@ -408,6 +416,13 @@ export class GroupActivity extends Skill {
       c.mood.nudge({ happiness: 0.04, boredom: -0.1 });
     }
     c.lookTarget = target?.center ?? { x: p.x, y: neck.y };
+    if(p.act==='handheld'){
+      ch.facing=i===0?1:-1;this.handheld.t=this.t;
+      if(this.handheld.update(c,dt))return true;
+      const mine=this.handheld.item!.arcade!,other=peers[0]!.group?.game;
+      if(u>this.gameComment&&other){this.gameComment=u+10;c.say(other.crashed?(c.personality==='competitive'?'Keep going. You’ve got this.':'Try again. I’ll wait for your next run.'):other.best>Math.max(mine.best,mine.score)?'Nice run! I’m catching up.':'This is a good round.',1.8);}
+      if(u>35){this.finished=true;c.say(i===0?'Good round. Same time later?':'Let’s compare our best runs.',1.8);return true;}return false;
+    }
     if (p.act === 'catch') return this.playCatch(c, dt, u, peers as FighterView[]);
     if (p.act === 'carry') {
       if (target!.sitters.size || target!.watchers.size || target!.players.length) return true;
@@ -523,7 +538,7 @@ export class GroupActivity extends Skill {
         const topic = Math.floor(turn / p.members.length);
         c.say(
           current?.text ?? conversationLine(c.personality, topic, speaker !== 0),
-          (current?.seconds ?? 3.8) - 0.4,
+          Math.max(1.3,(current?.seconds??3.8)-.35-(current?.text?.length??30)/characterTemplate(c.personality).voice.rate-(current?.text?.match(/[,.!?]/g)?.length??0)*characterTemplate(c.personality).voice.pause),
         );
         c.mood.nudge({ socialNeed: -0.08, contentment: 0.02 });
       }
@@ -531,7 +546,7 @@ export class GroupActivity extends Skill {
       const acknowledge = person !== c.who && addressed === c.who && elapsed > 0.5 && elapsed < 0.9;
       ch.handsAt =
         speaker === i && elapsed < 1.3
-          ? { R: { x: neck.x + ch.facing * 12 * sc, y: neck.y + 16 * sc } }
+          ? { R: { x: neck.x + ch.facing * (characterTemplate(c.personality).voice.gesture==='scratch'?5:c.personality==='adventurous'?18:12) * sc, y: neck.y + (characterTemplate(c.personality).voice.gesture==='scratch'?1:c.personality==='gentle'?22:16) * sc } }
           : acknowledge
             ? { L: { x: neck.x - ch.facing * 7 * sc, y: neck.y + 22 * sc } }
             : null;
@@ -612,6 +627,7 @@ export class GroupActivity extends Skill {
     return u > 35;
   }
   stop(c: Ctx) {
+    if(this.plan.act==='handheld')this.handheld.stop(c);
     this.fetchBall?.stop(c);
     if (this.ball&&c.items.list.includes(this.ball)) {
       this.ball.working = false;

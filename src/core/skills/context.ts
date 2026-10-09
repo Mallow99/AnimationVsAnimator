@@ -47,6 +47,8 @@ export interface Ctx {
   talent?: import('../relationships').Talent;
   relationship?: (id:string)=>import('../relationships').Relationship;
   recordActivity?: (id:string,act:string,success:boolean)=>void;
+  recordGift?: (id:string,item:string,appreciation:number,received:boolean)=>void;
+  deliverGift?: (id:string,message:Extract<PeerMsg,{type:'toolGift'}>,reply:(accepted:boolean,appreciation:number)=>void)=>(()=>void);
   inkLifetime?: number;
   consoleRequired?: boolean;
   tellTo?: (id: string, m: PeerMsg) => void;

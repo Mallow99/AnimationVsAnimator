@@ -8,7 +8,7 @@ for the item audit and cloud verification, and [UPDATE-PLAN.md](UPDATE-PLAN.md) 
 ## Roster and settings
 
 General → population chooses **1 stick man** through **5 stick men**. Select the preset characters
-who appear; the selected order determines the active roster. Blurp is inventive, Leonard competitive,
+who appear; the selected order determines the active roster. Cobalt is inventive, Amber competitive,
 Moss gentle, Violet mischievous and Ruby adventurous. One figure can be any preset, including Ruby.
 Edited names/colors and individual settings/items/relationships remain saved when a character leaves.
 Leaving puts away that character's shelved books, freeing the shared slots.
@@ -87,8 +87,9 @@ listeners look toward the current speaker. Ordinary one-on-one interactions rema
   lets you move a paddle with the mouse. **Keyboard** enables arrow keys; Escape/Leave releases
   keyboard focus. **Rematch** starts another round. “Play a handheld” uses its own runner screen.
 
-General → Require a console for Pong is off by default for compatibility. When enabled, put a
-console near the TV. Daily rhythm is optional: real night/morning and system idle time influence
+General → Require a console attachment for TV games is off by default for compatibility. When
+enabled, use the owned console’s **Attach beside TV** action in Bag, or drop it nearby. Taking or
+storing it detaches it. This applies to Pong, Othello and the TV runner; handhelds remain independent. Daily rhythm is optional: real night/morning and system idle time influence
 sleep and welcome-back greetings. Drawing/building/game talents affect speed or skill; pair memories
 retain shared activities, cooperation, care, friendly rivalry, disagreements and effective fighting moves.
 Successful play and reassurance influence future partners/reactions; interruptions do not erase affection.
@@ -222,3 +223,33 @@ or a hit wakes it; sleep also ends naturally when rested.
    focus after returning a weapon, and verify existing native permissions/window behavior separately.
 
 Native Chrome/Finder acceptance instructions remain in [DESKTOP-INTERACTIONS.md](DESKTOP-INTERACTIONS.md).
+
+## Personalized motion, friendship and gifts (Update 2)
+
+Cobalt, Amber, Moss, Violet and Ruby have different procedural walking accents, sitting styles,
+typing/blip speech rhythms, conversation gestures and satchel colors/clips. Appearance and movement
+presets still apply. Only the exact old default names migrate; custom names and save slots remain.
+The legacy Blurp appearance bundle is retained. Future preset design uses [CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md).
+
+Mood → **Social feelings and friendships** is collapsed by default. Select a named figure to see
+confidence, affection, stress, friendship stage, trust, care, friendly rivalry, favorite shared activity,
+last gift and satchel keepsakes. All figures still supports shared mood controls. Familiarity and trust
+grow through completed activities; repetition has diminishing returns. Reassurance helps hurt, lonely,
+frustrated or overwhelmed friends, and **Make up with a friend** acknowledges an earlier disagreement.
+
+Give spare books, **Flowers**, games or other tools through Supplies, then choose **Give a thoughtful
+gift** in Activities. The giver chooses an original the recipient might like. A pen lets them draw one
+of three wrapping styles; flowers and gifts without a pen are offered directly. The recipient unwraps,
+inspects and stores it. Full, sleeping or occupied recipients refuse safely. **Pass a spare tool** uses
+the same ownership rules without wrapping; dragging onto a figure remains direct manual passing.
+Gifts are optional, and an interrupted activity does not deduct friendship points.
+
+**Play a handheld** now shows the actual runner angled toward its player, with thumb presses tied to
+real jumps. The original device retains its best score through storage, gifts and restart. **Play
+handhelds with a friend** requires two owned handhelds: each runs their own game, compares results
+and reacts for a short shared session. It needs no TV or console. All figures starts one eligible pair.
+Stop/taking a device ends both sessions cleanly. This is comparing runner games, not a cable-link game.
+
+Each satchel earns unique keepsake marks after 4, 12 and 30 completed shared moments, with duplicate
+marks skipped and at most three saved. Bags keep their ordinary controls; no separate sticker editor
+is needed. Taking an item remains passive until an explicit Use action. Gun reload controls remain.

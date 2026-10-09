@@ -3,7 +3,7 @@ import { isWeapon } from '../core/combat/armament';
 // The overlay page: sets up the canvas, runs the frame loop, feeds mouse input to the stick figures,
 // and tells the desktop shell when clicks should pass through.
 //
-// There can be two stick figures (Blurp, and the second one: Leonard by default). They're equals:
+// Up to five preset stick figures share this overlay. They are equals:
 // each has its own settings (its own settings window, in its own color), its own save, memory and AI
 // brain, its own talk box. They share the furniture, the windows and your cursor. `pets[0]` runs and
 // saves the furniture; the second one is on whenever the first one's settings say so.
@@ -62,7 +62,7 @@ function bounds(): Bounds {
   return { left: 0, right: window.innerWidth, top: 0, floor: window.innerHeight };
 }
 
-/** The stick figures: index = their id (0 = Blurp, 1 = the second one). */
+/** Stable figure pool: index is the save identity, independent of active roster order. */
 const pets: Pet[] = [];
 /** Stable save/config ids remain in the pool even when a character leaves the desktop. */
 const figures: Pet[] = [];

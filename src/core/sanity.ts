@@ -8,11 +8,14 @@ export function checkSanity(figures:readonly Pet[],active:readonly Pet[]=figures
   for(const point of p.char.body.points)if(![point.x,point.y,point.z,point.px,point.py].every(Number.isFinite)){report(`${name}: invalid body coordinates`);break;}
   const b=p.ctx.world.bounds,hip=p.char.body.j.hip;
   if(hip.x<b.left-2000||hip.x>b.right+2000||hip.y<b.top-2000||hip.y>b.floor+2000)report(`${name}: outside recoverable desktop bounds`);
+  if(Object.values(p.mood.s).some(v=>!Number.isFinite(v)||v<0||v>1))report(`${name}: invalid mood value`);
   for(const i of p.items.list){
    if(uids.has(i.uid))report(`${i.def.name}: duplicate ownership (${uids.get(i.uid)}, ${name})`);else uids.set(i.uid,name);
    if(i.where==='belt' && (i.slot<0||p.items.belt[i.slot]!==i))report(`${name}: ${i.def.name} has a stale bag slot`);
    if(i.where!=='belt' && p.items.belt.includes(i))report(`${name}: ${i.def.name} occupies a bag slot while ${i.where}`);
-   if(![i.at.x,i.at.y,i.ammo,i.reloadRemaining].every(Number.isFinite))report(`${name}: ${i.def.name} has invalid item state`);
+   if(![i.at.x,i.at.y,i.ammo,i.reloadRemaining,i.bookmark,i.gameBest,i.giftWrap].every(Number.isFinite))report(`${name}: ${i.def.name} has invalid item state`);
+   if(i.bookmark<0||i.gameBest<0||i.gameBest>9999||i.giftWrap<0||i.giftWrap>3)report(`${name}: invalid saved item progress`);
+   if(i.dock!==null&&(i.where!=='world'||i.def.use!=='connect'))report(`${name}: invalid console attachment`);
    if(i.shelf&&active.includes(p)){
     const key=`${i.shelf.key}:${i.shelf.slot}`,slots=shelves.get(p.props)??new Set<string>();
     if(slots.has(key))report(`${name}: duplicate bookshelf slot`);

@@ -1,3 +1,4 @@
+import { giftCandidates, giftReady } from '../core/skills/gift';
 import type { Pet } from '../core/pet';
 import { propActions, type PropAction } from '../core/capabilities';
 import { availableForGroup } from '../core/skills/group';
@@ -42,17 +43,21 @@ export function activitiesFor(p: Pet): ActivityChoice[] {
     add('Together', label, `group:${act}`, hint, needs);
   }
   const tv = !capability('watch') ? 'Place a TV from Supplies.' : undefined;
+  const tvGame=tv??(p.config.consoleRequired&&!props.some(t=>t.def?.use==='tv'&&t.consoleConnected)?'Attach a console beside the TV from Bag.':undefined);
   add('Games','Play catch','catch','Two friends pass one actual ball; a missed catch leaves it on the desktop.', !p.items.list.some(i=>i.def.id==='bouncy-ball'&&i.where!=='cursor')?'Give this figure a bouncy ball from Supplies.':friends<1?'Needs two free, awake figures on the floor.':!['ground','sit'].includes(p.char.mode)?'Bring this figure down to the floor.':undefined);
-  add('Games', 'Play Pong', 'pong', 'Two players, spectators and a paddle you can join.', tv ?? (friends < 1 ? 'Needs two free, awake figures on the floor.' : !['ground', 'sit'].includes(p.char.mode) ? 'Bring this figure down to the floor.' : p.config.consoleRequired && !props.some(t => t.def?.use === 'tv' && t.consoleConnected) ? 'Place a console beside the TV.' : undefined));
-  add('Games', 'Play Othello with me', 'playgame', 'Play a board game on the TV.', tv);
-  add('Games', 'Play video games', 'videogame', 'Play the runner game on the TV.', tv);
+  add('Games', 'Play Pong', 'pong', 'Two players, spectators and a paddle you can join.', tv ?? (friends < 1 ? 'Needs two free, awake figures on the floor.' : !['ground', 'sit'].includes(p.char.mode) ? 'Bring this figure down to the floor.' : p.config.consoleRequired && !props.some(t => t.def?.use === 'tv' && t.consoleConnected) ? 'Attach a console beside the TV from Bag.' : undefined));
+  add('Games', 'Play Othello with me', 'playgame', 'Play a board game on the TV.', tvGame);
+  add('Games', 'Play video games', 'videogame', 'Play the runner game on the TV.', tvGame);
+  add('Games','Play handhelds with a friend','handheldduo','Each uses their own pocket game; compare runs, react and finish together.',!owns('game')?'Give this figure a handheld from Supplies.':!(p.ctx.peers?.()??[]).some(v=>availableForGroup(v)&&v.hasHandheld)?'Needs a free friend with their own handheld.':undefined);
   add('Games', 'Play a handheld', 'handheld', 'Play the runner on a handheld screen.', !owns('game') ? 'Give this figure a handheld from Supplies.' : undefined);
   add('Arrange furniture', 'Move TV beside couch', 'arrange', 'Move and turn the TV toward the seats.', !has('tv') || !has('couch') ? 'Place a TV and couch from Supplies.' : undefined);
   add('Arrange furniture', 'Carry TV together', 'carrytogether', 'Two figures carry the TV to the couch.', !has('tv') || !has('couch') ? 'Place a TV and couch from Supplies.' : friends < 1 ? 'Needs two free, awake figures on the floor.' : undefined);
   add('Arrange furniture', 'Make a reading corner', 'readingcorner', 'Move a chair beside a bookshelf or tool shelf.', !has('chair') || !(has('storage') || has('bookshelf')) ? 'Place a chair and bookshelf or tool shelf from Supplies.' : undefined);
   add('Arrange furniture', 'Make a work corner', 'workcorner', 'Move the workbench beside the desk.', !has('workbench') || !has('desk') ? 'Place a workbench and desk from Supplies.' : undefined);
-  add('Friends', 'Pass a spare tool', 'passtool', 'Give a spare tool to a companion.', friends < 1 ? 'Needs a free companion.' : !p.items.onHim.some(i => !i.def.wear && i.where !== 'hand' && (i.def.use !== 'draw' || p.items.onHim.filter(q => q.def.use === 'draw').length > 1)) ? 'Give this figure a spare tool from Supplies.' : undefined);
+  add('Friends','Give a thoughtful gift','gift','Choose an owned gift they might like; draw wrapping with a pen, or offer it directly.',!giftCandidates(p.ctx).length?'Give this figure a spare gift (books, flowers, games or tools) from Supplies.':!(p.ctx.peers?.()??[]).some(giftReady)?'Needs a free, awake friend with room in their bag.':undefined);
+  add('Friends', 'Pass a spare tool', 'passtool', 'Give a spare tool to a companion.', !giftCandidates(p.ctx,false).length ? 'Give this figure a spare tool from Supplies.' : !(p.ctx.peers?.()??[]).some(giftReady) ? 'Needs a free, awake friend with room in their bag.' : undefined);
   add('Friends', 'Compare drawings', 'comparedrawings', 'Ask a companion for feedback.', friends < 1 ? 'Needs a free companion.' : undefined);
-  add('Friends', 'Check on a friend', 'checkfriend', 'Check on a hurt or fallen companion.', !(p.ctx.peers?.() ?? []).some(v => !v.asleep && !v.group && (v.hp < 0.5 || ['ragdoll', 'getup'].includes(v.mode))) ? 'No hurt or fallen friend needs help right now.' : undefined);
+  add('Friends','Make up with a friend','apologize','Acknowledge an earlier disagreement; trust rebuilds through later shared activities.',!(p.ctx.peers?.()??[]).some(v=>availableForGroup(v)&&!!p.ctx.relationship?.(v.id!)?.lastDisagreement)?'No free friend has an earlier disagreement to resolve.':undefined);
+  add('Friends', 'Check on a friend', 'checkfriend', 'Offer company to a hurt, lonely or overwhelmed companion.', !(p.ctx.peers?.() ?? []).some(v => !v.asleep && !v.group && (v.hp < 0.5 || ['ragdoll', 'getup'].includes(v.mode)||['sad','lonely','frustrated','overwhelmed','nervous'].includes(v.mood))) ? 'No awake friend needs reassurance right now.' : undefined);
   return choices;
 }

@@ -1,8 +1,8 @@
 // The desktop shell (macOS + Windows).
-//  - One transparent, frameless, always-on-top, click-through window over the main screen (Blurp lives here).
+//  - One transparent, frameless, always-on-top, click-through window over the main screen (the figures live here).
 //  - A menu-bar / tray icon with quick toggles.
 //  - A settings window for each stick figure, in its color.
-//  - Their settings: pet.json (Blurp) and pet-2.json (the second one), in the app's data folder, shared
+//  - Their settings: pet.json (first preset) and pet-2.json (the second one), in the app's data folder, shared
 //    with every window. A few settings are about the app, not one of them (climbing windows, the AI
 //    service, fights...): those are kept the same in both.
 

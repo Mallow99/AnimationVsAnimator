@@ -8,6 +8,7 @@ import {CursorWeapon} from '../src/core/combat/cursor-weapon';
 import {checkSanity} from '../src/core/sanity';
 import {activitiesFor} from '../src/app/activities';
 import {makeBox} from '../src/core/props';
+import {disagreement} from '../src/core/relationships';
 
 let state=Number(process.env.LIVING_SOAK_SEED??21)>>>0;
 Math.random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};
@@ -25,7 +26,7 @@ function run(seconds:number,observe=()=>{},frameDt=dt){
 }
 function record(feature:string,at:number,result:string){coverage.push({feature,seconds:Number((elapsed-at).toFixed(2)),result});console.log(`PASS ${feature}: ${result}`);}
 function room(props:[string,number][]=[]){
- for(const p of pets){p.paused=true;p.mind.reset(p.ctx);p.mind.holdUntil=Infinity;p.mood.asleep=false;p.char.standUp();p.char.hp=1;}
+ for(const p of pets){p.paused=true;p.mind.reset(p.ctx);p.mind.holdUntil=Infinity;p.mood.asleep=false;p.mood.s.energy=.8;p.char.standUp();p.char.hp=1;}
  for(const t of [...pets[0].props.things])pets[0].props.remove(t);
  for(const [i,p]of active.entries())p.char.placeHome(180+i*75);
  for(const [id,x]of props){const def=pets[0].props.defs.get(id)!;pets[0].props.spawn(id,x,bounds.floor-(def.bounds![3]-def.bounds![1])/2-2,1);}
@@ -35,7 +36,7 @@ function commands(feature:string,requests:[number,string][],seconds=65){
  const at=elapsed,seen=new Map<number,Set<string>>();for(const [id,cmd]of requests){seen.set(id,new Set());pets[id].command(`do:${cmd}`);}
  run(seconds,()=>{for(const [id]of requests){const name=pets[id].mind.activeSkill?.name;if(name)seen.get(id)!.add(name);}});
  for(const [id,cmd]of requests){
-  const expected=cmd.startsWith('group:')||['pong','catch','carrytogether'].includes(cmd)?'group':cmd.startsWith('drawitem:')||cmd==='drawgun'?'drawtool':cmd.startsWith('drawprop:')?'drawfurniture':['readingcorner','workcorner'].includes(cmd)?'arrange':['passtool','comparedrawings','checkfriend'].includes(cmd)?'moment':cmd;
+  const expected=cmd.startsWith('group:')||['pong','catch','carrytogether','handheldduo'].includes(cmd)?'group':cmd.startsWith('drawitem:')||cmd==='drawgun'?'drawtool':cmd.startsWith('drawprop:')?'drawfurniture':['readingcorner','workcorner'].includes(cmd)?'arrange':['passtool','comparedrawings','checkfriend','apologize'].includes(cmd)?'moment':cmd;
   assert(seen.get(id)!.has(expected),`${feature}: ${cmd} never started its requested skill (${[...seen.get(id)!]})`);
  }
  for(const p of pets)p.mind.reset(p.ctx);run(2);audit();record(feature,at,'started, observed, completed or explicitly stopped; claims and ownership clean');
@@ -81,6 +82,11 @@ room([['couch',650],['tv',1150]]);commands('cooperative carry',[[0,'carrytogethe
 room([['bookshelf',950],['chair',600]]);commands('reading corner',[[0,'readingcorner']],40);
 room([['desk',950],['workbench',600]]);commands('work corner',[[0,'workcorner']],40);
 room();commands('peer gift and drawing comparison',[[0,'passtool'],[2,'comparedrawings']],40);
+room();for(const it of [...pets[1].items.list])pets[1].items.remove(it);pets[0].items.give('flowers',pets[0].char);commands('wrapped thoughtful gift and acceptance',[[0,'gift']],25);assert(pets[1].ctx.relationship!(pets[0].ctx.who).giftsReceived>0);
+room();commands('two actual handheld runners without a TV',[[2,'handheldduo']],55);assert(pets[2].ctx.relationship!(pets[3].ctx.who).activities.handheld || pets[2].ctx.relationship!(pets[4].ctx.who).activities.handheld || pets[2].ctx.relationship!(pets[0].ctx.who).activities.handheld);
+room([['tv',950]]);at=elapsed;const consoleOwner=pets[0],consoleItem=consoleOwner.items.give('console',consoleOwner.char)!,tv=consoleOwner.props.placed.find(t=>t.def?.id==='tv')!;assert(consoleOwner.items.attachConsole(consoleItem,tv));run(3);assert.equal(consoleItem.dock,tv.n);const dockedAt={...consoleItem.at};tv.place({x:tv.center.x+70,y:tv.center.y},tv.tilt);run(1);assert(consoleItem.at.x>dockedAt.x+50);consoleOwner.takeItem(consoleItem);run(1);assert.equal(consoleItem.dock,null);consoleOwner.giveBack(consoleItem);audit();record('actual console attachment, TV move and detach',at,'same owned console follows the TV; taking it detaches it');
+room();pets[1].mood.s.stress=.9;pets[1].mood.s.frustration=.8;commands('emotional reassurance',[[0,'checkfriend']],25);
+room();pets[1].receive({type:'bump',vx:0},pets[0]);disagreement(pets[0].ctx.relationship!(pets[1].ctx.who),'bump');pets[0].selectPeer(pets[1].ctx.who);run(4);commands('repair after intentional disagreement',[[0,'apologize']],20);assert.equal(pets[0].ctx.relationship!(pets[1].ctx.who).lastDisagreement,'');assert.equal(pets[1].ctx.relationship!(pets[0].ctx.who).lastDisagreement,'');
 room();pets[1].char.hp=.4;commands('reassurance',[[0,'checkfriend']],25);
 room();pets[0].selectPeer(pets[1].ctx.who);pets[1].selectPeer(pets[0].ctx.who);commands('duel with three spectators',[[0,'duel']],30);
 assert(pets.slice(2).every(p=>p.char.hp===1),'a spectator took combat damage');

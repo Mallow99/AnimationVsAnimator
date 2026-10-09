@@ -9,6 +9,7 @@
 // Their hands go where the other one's actually are (from his snapshot), so it lines up even if one of
 // them is a bit off.
 import { Skill, arrive, type Ctx } from './context';
+import { disagreement } from '../relationships';
 import type { FighterView } from '../peer';
 import { chance, clamp, lerp, pick, smooth } from '../math';
 import type { Vec } from '../math';
@@ -236,6 +237,7 @@ export class ShoulderBump extends Skill {
         this.bumped = true;
         const dir = Math.sign(f.x - ch.x) || ch.facing;
         c.tell?.({ type: 'bump', vx: dir * 300 });
+        const r=f.id?c.relationship?.(f.id):null;if(r)disagreement(r,'bump');
         c.sound?.('thud', 0.6);
         c.say(pick(['move.', '*bump*', 'outta my way', 'oops. not sorry']), 1.4);
         c.feel.bond = clamp(c.feel.bond - 0.04, -1, 1);

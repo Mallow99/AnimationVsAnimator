@@ -20,10 +20,10 @@ app.on('web-contents-created', (_e, web) => {
 // Upgrade an existing install, while keeping an edited example and a deleted example.
 const examplesDir=path.join(dir,'items');fs.mkdirSync(examplesDir);
 const history=require('../assets/builtin-history.json');
-for(const name of ['book','couch'])fs.writeFileSync(path.join(examplesDir,name+'.json'),JSON.stringify(history[name+'.json'].at(-1)));
+for(const name of ['book','couch','console'])fs.writeFileSync(path.join(examplesDir,name+'.json'),JSON.stringify(history[name+'.json'].at(-1)));
 const editedSponge={...require('../src/core/items/sponge.json'),name:'My sponge'};
 fs.writeFileSync(path.join(examplesDir,'sponge.json'),JSON.stringify(editedSponge));
-fs.writeFileSync(path.join(examplesDir,'.copied.json'),JSON.stringify(['book.json','couch.json','sponge.json','cup.json']));
+fs.writeFileSync(path.join(examplesDir,'.copied.json'),JSON.stringify(['book.json','couch.json','sponge.json','cup.json','console.json']));
 require('../dist/electron/main.js');
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 async function until(fn) { for (let i = 0; i < 160; i++) { if (await fn()) return; await pause(50); } throw new Error('Electron readiness timed out'); }
@@ -32,10 +32,10 @@ app.whenReady().then(async () => {
   await until(() => { overlay = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/app/index.html')); return !!overlay && !overlay.webContents.isLoading(); });
   await until(() => overlay.webContents.executeJavaScript('!!window.pet'));
   await until(()=>fs.existsSync(path.join(examplesDir,'bookshelf.json')));
-  for(const [name,kind]of [['book','items'],['couch','props']])assert.deepEqual(JSON.parse(fs.readFileSync(path.join(examplesDir,name+'.json'),'utf8')),require('../src/core/'+kind+'/'+name+'.json'));
+  for(const [name,kind]of [['book','items'],['couch','props'],['console','items']])assert.deepEqual(JSON.parse(fs.readFileSync(path.join(examplesDir,name+'.json'),'utf8')),require('../src/core/'+kind+'/'+name+'.json'));
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(examplesDir,'sponge.json'),'utf8')),editedSponge);
   assert(!fs.existsSync(path.join(examplesDir,'cup.json')),'an owner-deleted example returned');
-  console.log('PASS Electron upgrade: stock book/couch updated, custom sponge kept, deleted example kept deleted, new bookshelf supplied');
+  console.log('PASS Electron upgrade: stock book/couch/console updated, custom sponge kept, deleted example kept deleted, new bookshelf supplied');
 
   await until(() => overlay.webContents.executeJavaScript('window.pet.ctx.world.windows.length === 1'));
   await overlay.webContents.executeJavaScript('window.petShell.openSettings()');
@@ -138,7 +138,7 @@ app.whenReady().then(async () => {
   assert(await overlay.webContents.executeJavaScript('window.pets.every(p=>p.items.list.some(i=>i.def.id==="cup"))'));
   await overlay.webContents.executeJavaScript('window.pets[1].onTalk()');
   await until(() => overlay.isFocusable());
-  assert.match(await overlay.webContents.executeJavaScript('document.querySelector("#talkText").placeholder'), /Leonard/);
+  assert.match(await overlay.webContents.executeJavaScript('document.querySelector("#talkText").placeholder'), /Amber/);
   await overlay.webContents.executeJavaScript(`(() => { const input = document.querySelector('#talkText'); input.value = 'hello'; document.querySelector('#talk').requestSubmit(); })()`);
   await until(() => overlay.webContents.executeJavaScript('window.pets[1].brain.log.some(l => l.who === "him")'));
   await overlay.webContents.executeJavaScript('document.querySelector("#talkClose").click()');
@@ -151,6 +151,14 @@ app.whenReady().then(async () => {
   await settings.webContents.executeJavaScript('document.querySelector("#sanityCheck").click()');
   await until(()=>settings.webContents.executeJavaScript('document.querySelector("#sanityResult").textContent.startsWith("Passed:")'));
   console.log('PASS Electron live sanity check bridge and development UI');
+  await settings.webContents.executeJavaScript('(() => {const select=document.querySelector("#figureTarget");select.value="1";select.dispatchEvent(new Event("change"));window.petShell.command("sync");})()');
+  await until(()=>settings.webContents.executeJavaScript('document.querySelector("#socialBars").children.length===3 && document.querySelector("#friendships").textContent.includes("Cobalt")'));
+  assert(await settings.webContents.executeJavaScript('document.querySelector("#socialBars").closest("details").open===false'));
+  assert(await overlay.webContents.executeJavaScript('window.pet.items.defs.has("flowers")'));
+  await settings.webContents.executeJavaScript('document.querySelector("[data-tab=mood]").click();document.querySelector("#socialBars").closest("details").open=true');
+  fs.writeFileSync(path.join(__dirname, '../.build/pq2-friendship-settings.png'), (await settings.webContents.capturePage()).toPNG());
+  console.log('PASS Electron personalization: three social dials and named friendships in collapsed details, default name migration, new flowers and stock-console upgrade');
+
   assert.deepEqual(issues, []);
   console.log('PASS Electron: overlay, fake helper, settings inventory, Othello/chat focus, configuration, two stick figures (one settings window with target selection, distinct color, All figures supplies, shared settings, talk box, memory file)');
   app.quit();

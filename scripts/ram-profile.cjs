@@ -5,7 +5,7 @@ const count=Number(process.env.AVA_RAM_COUNT||2),rich=process.env.AVA_RAM_RICH==
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ava-ram-'));
 app.setPath('userData',dir);app.disableHardwareAcceleration();
 process.env.PET_FAKE_WINDOWS='[]';
-fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify({figureCount:count,spawnOrder:[0,1,2,3,4],friend:{on:count>1,name:'Leonard',color:'#f7931e'},windows:false,dailyRhythm:false,mind:'offline'}));
+fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify({figureCount:count,spawnOrder:[0,1,2,3,4],friend:{on:count>1,name:'Amber',color:'#f7931e'},windows:false,dailyRhythm:false,mind:'offline'}));
 require('../dist/electron/main.js');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<200;i++){if(await fn())return;await pause(50);}throw Error('Timed out');}

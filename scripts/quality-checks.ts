@@ -152,8 +152,13 @@ test('group members descend from window platforms before gathering on the floor'
 });
 test('peer gifts and weapon recovery transfer the remaining reload with exclusive ownership',()=>{
   const [a,b]=fixture(2),gun=a.items.give('gun',a.char)!;gun.ammo=0;gun.beginReload();gun.tickReload(0.45);
+  const deliver=a.ctx.deliverGift!,capture:{value?:{ammo:number;reloadRemaining?:number}}={};
+  a.ctx.deliverGift=(id,message,reply)=>{capture.value={ammo:message.ammo,reloadRemaining:message.reloadRemaining};return deliver(id,message,reply);};
   const pass=new FriendlyMoment('pass');pass.start(a.ctx);assert(tick(a,pass,12));pass.stop(a.ctx);
-  assert(!a.items.list.includes(gun));const given=b.items.find('gun')!;assert.equal(given.ammo,0);assert(given.reloadRemaining>0&&given.reloadRemaining<1.15);
+  assert(!a.items.list.includes(gun));const given=b.items.find('gun')!;assert(capture.value);assert.equal(given.ammo,capture.value.ammo);assert.equal(given.reloadRemaining,capture.value.reloadRemaining);
+  // The deliberate fetch/reach may finish the first reload before the handoff. Start a fresh one
+  // to exercise weapon recovery while the original's reload is genuinely still in progress.
+  given.ammo=0;given.beginReload();given.tickReload(.45);assert(given.reloadRemaining>0&&given.reloadRemaining<1.15);
   const remaining=given.reloadRemaining;b.items.drop(given,0,0);given.at={x:a.char.x,y:bounds.floor-16,z:0};given.loosen();
   const claimed=a.ctx.claimWeapon!(b.view().looseWeapons![0]);assert(claimed);assert.equal(claimed.reloadRemaining,remaining);assert.equal(claimed.ammo,0);assert(!b.items.list.includes(given));
   for(let i=0;i<150;i++)a.update(dt);assert.equal(claimed.ammo,6);

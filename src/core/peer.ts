@@ -16,12 +16,15 @@ export interface FighterView {
   id?: string;
   looseItemHulls?: Vec[][];
   shelvedBooks?: {key:string;slot:number}[];
-  consoleLocations?: {x:number;y:number}[];
+  consoleLocations?: {x:number;y:number;dock?:number|null}[];
   talent?: import('./relationships').Talent;
   group?: import('./skills/group').GroupView;
   partner?: string | null;
   name: string;
   personality?:import('./config').Personality;
+  freeBagSlots?:number;
+  hasHandheld?:boolean;
+  ownedItemIds?:number[];
   color: string;
   /** Doing something of his own that he wouldn't drop for a fight (a game, sleeping...). */
   busy: boolean;
@@ -65,8 +68,9 @@ export interface FighterView {
 export interface WeaponInfo { id: string; hit: number; cuts: boolean }
 
 export type PeerMsg =
-  | {type:'moment';kind:'compare'|'check'}
-  | {type:'toolGift';token:string;def:import('./items').ItemDef;ammo:number;reloadRemaining?:number;bookmark?:number;ink?:import('./crafting-state').InkProject}
+  | {type:'moment';kind:'compare'|'check'|'apology'}
+  | {type:'toolGift';token:string;uid:number;def:import('./items').ItemDef;ammo:number;reloadRemaining?:number;bookmark?:number;gameBest?:number;wrap?:number;ink?:import('./crafting-state').InkProject}
+  | {type:'giftReceipt';token:string;accepted:boolean;appreciation?:number}
 
   | { type: 'groupInvite'; plan: import('./skills/group').GroupPlan }
   | { type: 'groupGo'; session: string; epoch: number }

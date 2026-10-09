@@ -1,5 +1,8 @@
 # Pet Quality Update 2 — research, 2026-10-08
 
+Historical proposal: the owner subsequently authorized implementation and the personalization
+expansion. Current status is in [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md).
+
 The original Pet Quality / Living Stickmen update is complete in `7a9e0a0`, following foundation
 `af56778` and shared-roster `8bc46a8`. This document proposes the next quality pass. It adds no runtime
 features and does not resume Chrome/Finder work. The priorities below are recommendations, not a new

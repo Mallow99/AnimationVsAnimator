@@ -13,7 +13,7 @@ interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at
 interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
 interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView }
 interface Stats {
-  name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
+  friendships?:{name:string;stage:string;trust:number;care:number;rivalry:number;favorite:string;lastGift:string;gifts:number}[];bagDecor?:string[]; name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
   brain: { active: boolean; status: string; log: LogLine[] };
   mind?: { weigh: Weigh[]; thinking: boolean };
 }
@@ -64,7 +64,7 @@ const shell = {...source,
  getConfig:()=>source.getConfig(target??targets()[0]),
  setConfig:(patch:unknown)=>{for(const id of targets())source.setConfig(patch,id);},
  resetConfig:()=>{for(const id of targets())source.resetConfig(id);},
- command:(cmd:string)=>{const ids=/^(?:prop:|cursorWeapon:|do:(?:group:|pong|catch|lamp|arrange|carrytogether|readingcorner|workcorner))/.test(cmd)?targets().slice(0,1):targets();for(const id of ids)source.command(cmd,id);},
+ command:(cmd:string)=>{const ids=/^(?:prop:|cursorWeapon:|do:(?:group:|pong|catch|handheldduo|lamp|arrange|carrytogether|readingcorner|workcorner))/.test(cmd)?targets().slice(0,1):targets();for(const id of ids)source.command(cmd,id);},
  chooseHabitat:(kind:'folder'|'file'='folder')=>source.chooseHabitat?.(kind,target??targets()[0]),
  onStats:(cb:(s:Stats)=>void)=>statsListeners.push(cb),
  onCollections:(cb:(c:Collections)=>void)=>collectionListeners.push(cb),
@@ -107,7 +107,7 @@ shell.onTab((tab) => { showTab(tab === 'control' ? 'chat' : tab); if (tab === 'c
 const MOOD_ROWS: [keyof MoodState, string][] = [
   ['happiness', 'Happiness'], ['energy', 'Energy'], ['boredom', 'Boredom'],
   ['annoyance', 'Annoyance'], ['fear', 'Fear'], ['trust', 'Trust in you'],
-  ['socialNeed','Wants company'],['inspiration','Wants to create'],['frustration','Frustration'],['contentment','Contentment'],
+  ['socialNeed','Wants company'],['inspiration','Wants to create'],['frustration','Frustration'],['contentment','Contentment'],['confidence','Confidence'],['affection','Affection'],['stress','Stress'],
 ];
 // Each mood is a slider: it follows his real mood live, and you can drag it to set it.
 const fills: Record<string, [HTMLInputElement, HTMLElement]> = {};
@@ -116,7 +116,7 @@ for (const [k, label] of MOOD_ROWS) {
   const row = document.createElement('label');
   row.className = 'bar';
   row.innerHTML = `<span class="name">${label}</span><input type="range" min="0" max="1" step="0.01" id="mood-${k}" /><span class="val">–</span>`;
-  $('bars').appendChild(row);
+  (['confidence','affection','stress'].includes(k)?$('socialBars'):$('bars')).appendChild(row);
   const input = row.querySelector('input')!;
   input.addEventListener('pointerdown', () => { dragging = k; });
   input.addEventListener('pointerup', () => { dragging = null; });
@@ -203,6 +203,7 @@ shell.onStats((s) => {
   $('moveInfo').textContent = (s.windowsStuck ? "He tried to move a window and it didn't budge. On a Mac: System Settings → Privacy & Security → Accessibility, and switch on the app he runs in (Terminal or Electron), then restart him. " : '')
     + (s.moveNote ? `Last word from the window helper: ${s.moveNote}` : '');
   $('winInfo').textContent = s.windows ? `He can see ${s.windows} window(s) and ${s.platforms} window top(s) to stand on.` : 'He can\'t see any windows yet. If this stays at zero, check the Terminal for lines starting with [windows].';
+  $('friendships').replaceChildren(...(target===null?[Object.assign(document.createElement('p'),{textContent:'Select a figure to see their friendships and satchel keepsakes.'})]:[...(s.friendships??[]).map(r=>Object.assign(document.createElement('p'),{textContent:`${r.name} · ${r.stage}. Trust ${Math.round(r.trust*100)}% · care ${Math.round(r.care*100)}% · friendly rivalry ${Math.round(r.rivalry*100)}%${r.favorite?' · favorite: '+r.favorite.replaceAll('-', ' '):''}${r.lastGift?' · last gift: '+r.lastGift.replaceAll('-', ' '):''}`})),Object.assign(document.createElement('p'),{textContent:s.bagDecor?.length?'Satchel keepsakes: '+s.bagDecor.join(', '):'Satchel keepsakes grow after shared moments (4, 12 and 30). Gifts are optional.'})]));
   $('recent').textContent = s.recent.length ? s.recent.slice().reverse().join(' ← ') : '—';
   if (s.brain) renderChat(s.brain.log, s.brain.status, s.brain.active);
   latest = s;

@@ -56,7 +56,7 @@ export interface MadeMove { name: string; frames: Keyframe[] }
 
 /** Longest made-up move: this many poses, this many seconds. Longest plan: this many steps. */
 const MAX_FRAMES = 16, MAX_MOVE_SECONDS = 10, MAX_STEPS = 8;
-const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust','socialNeed','inspiration','frustration','contentment'];
+const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust','socialNeed','inspiration','frustration','contentment','confidence','affection','stress'];
 
 const num = (v: unknown) => (typeof v === 'number' || typeof v === 'string') && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
 
@@ -270,7 +270,7 @@ export class Brain {
   /** Set by the app when an AI provider is available (desktop only). */
   ask: AskFn | null = null;
   mode: MindMode = 'offline';
-  name = 'Blurp';
+  name = 'Cobalt';
   persona = '';
   /** May the AI make up its own moves (move his body directly)? */
   puppet = true;
@@ -484,12 +484,12 @@ export class Brain {
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
       'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling), "perch" (hop up and sit on something in their window, like a chat message).',
       'DRAWING YOUR WAY: "ramp" draws a ramp up onto a window and walks up it; "bridge" draws a bridge across a gap to a window; "drawramp" draws one to jump off. Your drawings are solid and have weight.',
-      'QUIET ACTIVITIES: read (get a book and settle into it), watchtv and videogame last minutes depending on hyperactivity and mood. Ordinary chat can continue without leaving a settled activity.\nPROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV, alone), "playgame" (invite the person to Othello on the TV), "ride" (the scooter). Only if they\'re out. "duel": spar with your friend (the other stick figure), if they\'re around.',
+      'QUIET ACTIVITIES: read (get a book and settle into it), watchtv and videogame last minutes depending on hyperactivity and mood. Ordinary chat can continue without leaving a settled activity.\nPROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV, alone), "playgame" (invite the person to Othello on the TV), "ride" (the scooter). Only if they\'re out. handheld plays your own actual pocket runner; handheldduo invites a free friend with their own handheld. gift chooses an owned gift for a free friend, wraps it if you have a pen and presents it; never generates a free item. "duel": spar with your friend (the other stick figure), if they\'re around.',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
       ...(bodyGuide ? BODY_GUIDE : []),
       ...(drawGuide ? DRAW_GUIDE : []),
       '',
-      'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust, socialNeed (wanting company), inspiration (wanting to make/learn), frustration, contentment. {} if nothing changed.',
+      'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust, socialNeed (wanting company), inspiration (wanting to make/learn), frustration, contentment, confidence, affection (warmth toward friends), stress. {} if nothing changed.',
       '',
       'MEMORY: "remember" is a list of up to 3 short notes to keep for the long term, written by you, in your own voice (first person). Only things worth remembering for days: facts about the person (their name, what they like, what they told you), promises, big events, strong opinions. Not every little thing; usually it\'s empty.',
       "Use what you remember naturally (bring it up, hold grudges, be glad), but don't recite it.",
@@ -550,7 +550,7 @@ export class Brain {
     return [
       '[state]',
       `time: ${d.toLocaleDateString('en-US', { weekday: 'long' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
-      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)}, social need ${f(s.socialNeed)}, inspiration ${f(s.inspiration)}, frustration ${f(s.frustration)}, contentment ${f(s.contentment)})`,
+      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)}, social need ${f(s.socialNeed)}, inspiration ${f(s.inspiration)}, frustration ${f(s.frustration)}, contentment ${f(s.contentment)}, confidence ${f(s.confidence)}, affection ${f(s.affection)}, stress ${f(s.stress)})`,
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,

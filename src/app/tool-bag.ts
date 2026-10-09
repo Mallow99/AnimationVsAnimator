@@ -409,6 +409,7 @@ export class ToolBag {
     this.transportHint.textContent = held ? `${held.kind === "item" ? held.object.def.name : held.kind === "thing" ? held.object.def?.name ?? "Object" : "Ball"} · Drop on the desktop${held.kind === "item" ? " or a figure" : ""}.` : "";
     this.panelUndo.hidden = !this.tools.trashedName;
     this.panelUndo.textContent = `Undo trash: ${this.tools.trashedName ?? ""}`;
+    if(!this.opened){this.layout();return;}
     for (const tab of this.tabs.querySelectorAll("button")) tab.setAttribute("aria-pressed", String(tab.dataset.view === this.view));
     const actions = this.view === "activities" ? this.targets().map(p=>activitiesFor(p)) : [];
     const signature = JSON.stringify([
@@ -416,7 +417,7 @@ export class ToolBag {
       this.selected,
       pets.map((p) => [p.ctx.who, p.config.name]),
       this.owned
-        ? this.targets().map(p=>[p.ctx.who,p.items.list.map((i) => [i.uid, i.where, i.ammo, i.shelf, i.bookmark, i.ink?.progress])])
+        ? this.targets().map(p=>[p.ctx.who,p.items.list.map((i) => [i.uid, i.where, i.ammo, i.shelf, i.bookmark, i.gameBest,i.dock,i.ink?.progress])])
         : [
             owner && [...owner.items.defs.values()],
             owner && [...owner.props.defs.values()],
@@ -464,8 +465,9 @@ export class ToolBag {
         const actual=this.itemOwner(id)!;
         const item = actual.items.list.find(i => String(i.uid) === id)!;
         const state = document.createElement("small");
-        state.textContent = (this.selected==="all"?actual.config.name+" · ":"") + (item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : item.where === "cursor" ? "With cursor" : item.shelf ? "On bookshelf" : item.where === "world" ? "On desktop" : "In bag");
+        state.textContent = (this.selected==="all"?actual.config.name+" · ":"") + (item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : item.where === "cursor" ? "With cursor" : item.dock!==null ? "Attached to TV" : item.shelf ? "On bookshelf" : item.where === "world" ? "On desktop" : "In bag");
         if(item.bookmark>0)state.textContent += ` · Page ${item.bookmark+1}`;
+        if(item.gameBest>0)state.textContent += ` · Best run ${item.gameBest}`;
         if (item.def.use === "gun") state.textContent += ` · ${item.ammo}/6 rounds`;
         button.append(state);
       }
@@ -500,7 +502,7 @@ export class ToolBag {
         const ready=choices.filter(({activities})=>activities.some(a=>a.command===activity.command&&!a.needs));
         const hint = document.createElement("small"); hint.textContent = ready.length ? activity.hint+(ready.length<choices.length?` · ${ready.length}/${choices.length} ready`:"") : activity.needs ?? activity.hint;
         button.disabled = !ready.length; button.append(title, hint);
-        button.onclick = () => { const ready=this.targets().filter(p=>activitiesFor(p).some(a=>a.command===activity.command&&!a.needs));const shared=/^(group:|pong|catch|lamp|arrange|carrytogether|readingcorner|workcorner)/.test(activity.command);
+        button.onclick = () => { const ready=this.targets().filter(p=>activitiesFor(p).some(a=>a.command===activity.command&&!a.needs));const shared=/^(group:|pong|catch|handheldduo|lamp|arrange|carrytogether|readingcorner|workcorner)/.test(activity.command);
           for(const p of shared?ready.slice(0,1):ready)p.command(`do:${activity.command}`);
           this.changed(); this.toggle(false); };
         this.choices.append(button);
@@ -551,6 +553,10 @@ export class ToolBag {
         });
       }
       if (isWeapon(item.def)) action("Use with cursor", "use", () => { if (!this.canPull()) { this.status.textContent = "Return the tool you are using first."; return; } owner.useItem(item); this.toggle(false); this.changed(); });
+      if(item.def.use==='connect'){
+        const tv=owner.props.placed.filter(t=>t.def?.use==='tv'&&!t.held&&Math.abs(t.tilt)<.35).sort((a,b)=>Math.abs(a.center.x-owner.char.x)-Math.abs(b.center.x-owner.char.x))[0];
+        if(tv)action('Attach beside TV','dock',()=>{owner.mind.reset(owner.ctx);owner.items.attachConsole(item,tv);this.changed();this.refresh();});
+      }
       if (item.where !== "belt" && !item.def.wear) action("Store in bag", "store", () => { owner.mind.reset(owner.ctx); owner.giveBack(item); this.changed(); this.refresh(); });
       action("Drop beside figure", "drop", () => { owner.mind.reset(owner.ctx); item.at = { x: owner.char.x + 45 * owner.char.scale, y: owner.char.body.j.hip.y, z: 0 }; owner.items.drop(item, 0, 0); this.changed(); this.refresh(); });
       action("Trash", "trash", () => this.trashObject(owner, item));

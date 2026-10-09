@@ -1,3 +1,4 @@
+import { GiveGift, giftCandidates, giftReady } from './skills/gift';
 import {everydayReply} from "./personality";
 import { DomesticItem,SwitchLamp } from './skills/domestic';
 import { ReadBook } from './skills/read-book';
@@ -29,6 +30,7 @@ import { AskTogether, isAct, NapTogether, ShoulderBump, Together, WaveAt, type A
 import { GroupActivity, groupPlan, validGroupPlan, availableForGroup, type GroupPlan, type GroupAct } from './skills/group';
 import { FriendlyMoment } from './skills/friendly-moment';
 import { PlayHandheld } from './skills/handheld';
+import { characterTemplate } from './character-template';
 import { arrangingSkill } from './skills/arrange';
 import { workshopSkill } from './skills/workshop';
 import { DrawTool } from './skills/draw-tool';
@@ -212,6 +214,8 @@ export const COMMANDS: { name: string; label: string }[] = [
   { name: 'perch', label: 'Sit on something in your window' },
   { name: 'sitdown', label: 'Sit on a chair or couch' }, { name: 'watchtv', label: 'Watch TV' }, { name: 'videogame', label: 'Play video games' }, { name: 'ride', label: 'Ride the scooter' },
   { name: 'read', label: 'Read a book' },
+  {name:'apologize',label:'Make up with a friend'},
+  {name:'gift',label:'Give a thoughtful gift'},
   {name:'blanket',label:'Rest under a blanket'}, {name:'snack',label:'Have a snack'}, {name:'lamp',label:'Switch a lamp'}, {name:'catch',label:'Play catch with a friend'},
   { name: 'sip', label: 'Have a drink' }, { name: 'exercise', label: 'Train with a dumbbell' }, { name: 'yoyo', label: 'Play with a yo-yo' },
   { name: 'paint', label: 'Paint on his canvas' }, { name: 'playgame', label: 'Play Othello with you on the TV' }, { name: 'duel', label: 'Spar with his friend' },
@@ -222,6 +226,7 @@ export const COMMANDS: { name: string; label: string }[] = [
   {name:'pluck',label:'Take selected page element'}, {name:'restorepage',label:'Restore the Chrome page'}, {name:'folder',label:'Enter a real folder'}, {name:'file',label:'Enter a real file'},
   ...[['wave','Group wave (2–5)'],['chat','Group conversation (2–5)'],['couch','Couch huddle (2–5)'],['watch','Watch together (2–5)'],['duet','Mirrored duet (2)'],['triangle','Hands in (3)'],['mirror','Two-pair dance (4)'],['relay','Wave relay (5)']].map(([act,label]) => ({name:`group:${act}`,label})),
   { name:'passtool',label:'Pass a spare tool to a friend' }, {name:'comparedrawings',label:'Compare drawings'}, {name:'checkfriend',label:'Check on a hurt friend'},
+  {name:'handheldduo',label:'Play handhelds with a friend'},
   { name: 'handheld', label: 'Play the handheld game' },
   { name: 'pong', label: 'Play Pong with a friend' },
   { name: 'arrange', label: 'Move the TV beside the couch' }, { name: 'carrytogether', label: 'Carry the TV with a friend' }, { name: 'readingcorner', label: 'Arrange a reading corner' }, { name: 'workcorner', label: 'Arrange the work area' },
@@ -330,21 +335,21 @@ export class Mind {
     const social=['group','together','ask','checkfriend','sitwith','jointv'].includes(doing);
     const creative=['drawtool','doodle','read','paint','deskwork','refine','drawball','drawbox'].includes(doing);
     const quiet=['blanket','snack','read','sitdown','sip','sleep','nap','watchtv'].includes(doing);
-    if(social)m.nudge({socialNeed:-dt/65,contentment:dt/250,frustration:-dt/100});
-    if(creative)m.nudge({inspiration:-dt/120,contentment:dt/300});
-    if(quiet)m.nudge({frustration:-dt/90,contentment:dt/350});
+    if(social)m.nudge({socialNeed:-dt/65,contentment:dt/250,frustration:-dt/100,affection:dt/400,stress:-dt/130});
+    if(creative)m.nudge({inspiration:-dt/120,contentment:dt/300,confidence:dt/700});
+    if(quiet)m.nudge({frustration:-dt/90,contentment:dt/350,stress:-dt/90});
     // How he walks says how he feels.
     if (w.time > this.chillUntil) { this.chill = chance(0.5); this.chillUntil = w.time + rand(90, 240); }
     const L = m.label, E = m.emotion;
     ch.gait = L === 'angry' ? 'stomp' : E === 'nervous' ? 'creep' : L === 'playful' || E === 'proud' ? 'skip' : L === 'sad' || L === 'sleepy' ? 'sulk'
       : L === 'bored' || ((E === 'content' || E === 'annoyed') && this.chill) ? 'pocket' : 'normal';
     // Body language standing still, from the finer emotion.
-    ch.idleStyle = E === 'annoyed' ? 'crossed' : E === 'proud' ? 'hips' : E === 'happy' ? 'behind' : E === 'nervous' || E === 'lonely' ? 'hug' : 'none';
+    ch.idleStyle = E === 'annoyed' || E==='frustrated' ? 'crossed' : E === 'proud' ? 'hips' : E === 'happy' ? 'behind' : E === 'nervous' || E === 'lonely' || E==='overwhelmed' ? 'hug' : characterTemplate(c.personality).idle;
     ch.tapFoot = restlessness(c) > 0.45 && (E === 'annoyed' || (E === 'bored' && this.chill));
     this.mutter(c);
     this.noticeWhatYoureDoing(c);
     // Moving around tires him out (running more), on top of the slow drain over time.
-    if (ch.walking) m.s.energy -= dt / (ch.posture.speed > 1.2 ? 900 : 1800);
+    if (ch.walking) m.nudge({energy:-dt / (ch.posture.speed > 1.2 ? 900 : 1800)});
     // You coming back after a while: he's glad to see you.
     if (w.cursorMovedAt - this.lastCursorSeen > 120 && this.lastCursorSeen > 0 && !m.asleep) {
       m.nudge({ happiness: 0.08 * m.s.trust * 2, boredom: -0.25 });
@@ -381,8 +386,8 @@ export class Mind {
       }
     }
     const away = w.time - w.cursorMovedAt;
-    if (away > 300) { m.s.boredom += dt / 300; m.s.happiness -= dt / 1200; } // ignored for 5+ min: lonely
-    else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.s.happiness += dt / 600; // company
+    if (away > 300) m.nudge({boredom:dt/300,happiness:-dt/1200}); // ignored for 5+ min: lonely
+    else if (away < 3 && m.s.annoyance < 0.3 && w.cursor && Math.abs(w.cursor.x - ch.x) < 300) m.nudge({happiness:dt/600}); // company
   }
 
   private appTalkAt = 20;
@@ -472,7 +477,11 @@ export class Mind {
   makeSkill(c: Ctx, name: string): Skill | null {
     if(name==='chat' && (c.peers?.()??[]).filter(availableForGroup).length>=2){const plan=groupPlan(c,'chat');if(plan)return new GroupActivity(plan);}
     const arrange = arrangingSkill(c, name); if (arrange) return arrange;
-    if(['passtool','comparedrawings','checkfriend'].includes(name)) return new FriendlyMoment(name==='passtool'?'pass':name==='comparedrawings'?'compare':'check');
+    if(name==='apologize')return new FriendlyMoment('apology');
+    if(name==='gift')return new GiveGift();
+    if(name==='passtool')return new GiveGift(false);
+    if(['comparedrawings','checkfriend'].includes(name)) return new FriendlyMoment(name==='passtool'?'pass':name==='comparedrawings'?'compare':'check');
+    if(name==='handheldduo'){const plan=groupPlan(c,'handheld');return plan?new GroupActivity(plan):null;}
     if (name === 'handheld') return new PlayHandheld();
     if (name === 'lamp') return new SwitchLamp(SwitchLamp.nearest(c));
     if (name === 'blanket' || name === 'snack') return new DomesticItem(name === 'blanket' ? 'rest' : 'snack');
@@ -614,14 +623,17 @@ export class Mind {
       const item = c.items.find(use);
       if (item && item.where !== 'cursor') opts.push({name,score:name === 'sip' ? 0.2+(1-s.energy)*0.2 : name === 'exercise' ? 0.05+s.energy*0.18 : 0.1+s.boredom*0.2,why:name === 'sip' ? 'a quiet drink' : name === 'exercise' ? 'a short training set' : 'practicing a pocket trick',make:()=>new EverydayItem(use,name)});
     }
-    if(c.items.find('rest')?.where!=='cursor' && c.items.find('rest'))opts.push({name:'blanket',score:.1+(1-s.energy)*.45+(c.personality==='gentle'?.12:0),why:'a quiet blanket break',make:()=>new DomesticItem('rest')});
+    if(c.items.find('rest')?.where!=='cursor' && c.items.find('rest'))opts.push({name:'blanket',score:.1+(1-s.energy)*.45+s.stress*.25+(c.personality==='gentle'?.12:0),why:'a quiet blanket break',make:()=>new DomesticItem('rest')});
     if(c.items.find('snack')?.where!=='cursor' && c.items.find('snack'))opts.push({name:'snack',score:.12+s.frustration*.2,why:'taking a snack break',make:()=>new DomesticItem('snack')});
     if(c.items.list.some(i=>i.def.id==='bouncy-ball'&&i.where!=='cursor') && c.world.time-this.socialAt>90 && (c.peers?.()??[]).some(availableForGroup))opts.push({name:'catch',score:.15+s.boredom*.25+(c.personality==='competitive'?.1:0),why:'playing catch with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'catch');return plan?new GroupActivity(plan):new Idle(3);}});
+    if(c.world.time-this.socialAt>120&&c.items.find('game')?.where!=='cursor'&&c.items.find('game')&&(c.peers?.()??[]).some(v=>availableForGroup(v)&&v.hasHandheld))opts.push({name:'handheldduo',score:.12+s.socialNeed*.2,why:'comparing pocket game runs with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'handheld');return plan?new GroupActivity(plan):new Idle(3);}});
     if(c.items.find('game'))opts.push({name:'handheld',score:0.1+c.mood.s.boredom*0.15,why:'playing his pocket game',make:()=>new PlayHandheld()});
     if(c.world.time-this.socialAt>90 && propsOf(c,'tv').length && (c.peers?.()??[]).some(v=>!v.busy&&!v.asleep))opts.push({name:'pong',score:0.08+c.mood.s.boredom*0.12,why:'a game with a friend',make:()=>{this.socialAt=c.world.time;const plan=groupPlan(c,'pong');return plan?new GroupActivity(plan):new Idle(3);}});
     const tvToMove=propsOf(c,'tv').find(t=>!t.watchers.size&&!t.players.length),couchToUse=propsOf(c,'seat').find(t=>t.seatRoom>1);
     if(tvToMove && couchToUse && Math.abs(tvToMove.center.x-couchToUse.center.x)>250*c.char.scale && c.world.time-this.arrangeAt>90)opts.push({name:'arrange',score:0.2+(c.personality==='gentle'?.2:0),why:'making a shared TV corner',make:()=>{this.arrangeAt=c.world.time;return arrangingSkill(c,'arrange')!;}});
-    const hurtFriend=(c.peers?.()??[]).find(v=>v.hp<0.5&&!v.asleep&&v.doing!=='duel');
+    if(c.world.time-this.socialAt>180&&s.affection>.35&&giftCandidates(c).length&&(c.peers?.()??[]).some(giftReady))opts.push({name:'gift',score:.08+s.affection*.12,why:'choosing a thoughtful gift for a friend',make:()=>{this.socialAt=c.world.time;return new GiveGift();}});
+    const hurtFriend=(c.peers?.()??[]).find(v=>(v.hp<0.5||['sad','lonely','frustrated','overwhelmed','nervous'].includes(v.mood))&&!v.asleep&&!v.group&&v.doing!=='duel');
+    if(c.world.time-this.socialAt>120&&s.annoyance<.35&&(c.peers?.()??[]).some(v=>availableForGroup(v)&&(c.relationship?.(v.id!)?.lastDisagreement??'')==='bump'))opts.push({name:'apologize',score:.2+s.affection*.15,why:'making up after a disagreement',make:()=>{this.socialAt=c.world.time;return new FriendlyMoment('apology');}});
     if(hurtFriend && c.world.time-this.socialAt>30)opts.push({name:'checkfriend',score:0.5+Math.max(0,...(c.peers?.()??[]).filter(v=>v.hp<.5&&!v.asleep&&v.doing!=='duel').map(v=>(c.relationship?.(v.id!)?.care??0)*.4))+(c.personality==='gentle'?.15:0),why:'checking on a friend',make:()=>{this.socialAt=c.world.time;return new FriendlyMoment('check');}});
     if ((c.peers?.() ?? []).filter(availableForGroup).length && c.world.time - this.socialAt > 60) opts.push({ name: 'group:wave', score: 0.1 + c.mood.s.boredom * 0.12, why: 'getting friends together', make: () => { this.socialAt = c.world.time; const plan = groupPlan(c, 'wave'); return plan ? new GroupActivity(plan) : new Idle(3); } });
     if((c.peers?.()??[]).filter(availableForGroup).length>=2 && c.world.time-this.socialAt>70 && s.annoyance<.5)

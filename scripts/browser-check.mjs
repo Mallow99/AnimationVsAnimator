@@ -608,6 +608,61 @@ try {
   assert(await evaluate('window.toolBag.dragging && !window.toolBag.tools.using && !window.cursorWeapon.active && !window.pet.items.carried?.working'));
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});assert(!await evaluate('window.toolBag.dragging'));
   console.log('PASS Update 2 browser: real snack/catch buttons, passive blanket transport/cancel, lamp/blanket/snack and catch motion frames, safe spectators and live audit');
+  // Personalization: actual UI commands with separate originals and no TV prerequisite.
+  await evaluate(`(() => {
+    window.toolBag.cancel();window.toolBag.close();window.cursorWeapon.detach();
+    const personalities=['inventive','competitive','gentle','mischievous','adventurous'],names=['Cobalt','Amber','Moss','Violet','Ruby'],colors=['#4450d6','#f7931e','#48a879','#ad72d3','#e46d67'];
+    for(const [i,p]of window.pets.entries()){p.mind.reset(p.ctx);p.paused=true;p.mind.holdUntil=Infinity;p.char.standUp();p.char.hp=1;p.mood.asleep=false;p.mood.s.energy=.8;for(const it of [...p.items.list])p.items.remove(it);p.applyConfig({...p.config,name:names[i],personality:personalities[i],windows:false,look:{...p.config.look,color:colors[i]},body:{...p.config.body,pixel:2}});p.setWindows([]);p.char.placeHome([220,810,430,980,1130][i]);p.items.give('pen',p.char);}
+    for(const t of [...window.pet.props.things])window.pet.props.remove(t);
+    for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);
+    window.pet.selectPeer(window.pets[2].ctx.who);
+  })()`);
+  for(let variant=1;variant<=3;variant++){
+    await evaluate(`window.giftOriginal=window.pet.items.give('book',window.pet.char);window.toolBag.showFor(window.pet,'activities');`);
+    await click('.bag-activity[data-action=gift]');
+    assert(!await evaluate('window.toolBag.isOpen'));
+    await evaluate(`for(let j=0;j<1800&&!(window.giftOriginal.giftWrap>0&&window.giftOriginal.where==='hand');j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);
+    assert.equal(await evaluate('window.giftOriginal.giftWrap'),variant);
+    await scene('pq2-gift-wrap-'+variant);
+    await evaluate(`for(let j=0;j<1800&&window.pets[2].mind.activeSkill?.name!=='receivegift';j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}for(let j=0;j<180;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);
+    assert(await evaluate('window.pets[2].items.list.some(i=>i.uid===window.giftOriginal.uid) && !window.pet.items.list.includes(window.giftOriginal)'),JSON.stringify(await evaluate('window.pets.map(p=>({name:p.config.name,doing:p.mind.activeSkill?.name,why:p.mind.why,partner:p.partnerId,items:p.items.list.map(i=>[i.uid,i.def.id,i.where])}))')));
+    await scene('pq2-gift-unwrapping-'+variant);
+    await evaluate(`for(let j=0;j<1500;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}for(const p of window.pets)p.mind.reset(p.ctx);`);
+    assert(await evaluate('window.pets[2].items.list.find(i=>i.uid===window.giftOriginal.uid).where==="belt"'));
+  }
+  await evaluate(`(() => {
+    for(const [i,p]of window.pets.entries()){p.mind.reset(p.ctx);p.char.standUp();p.char.placeHome(220+i*140);p.mood.s.energy=.8;}
+    for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.mind.reset(p.ctx);
+    window.pets[1].items.give('handheld',window.pets[1].char);window.pets[2].items.give('handheld',window.pets[2].char);
+    window.toolBag.showAll('activities');
+  })()`);
+  assert(!await evaluate('document.querySelector(".bag-activity[data-action=handheldduo]").disabled'));
+  await click('.bag-activity[data-action=handheldduo]');
+  await evaluate(`for(let j=0;j<2400&&window.pets[1].view().group?.phase!=='do';j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}for(let j=0;j<700;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);
+  assert.equal(await evaluate('window.pets.filter(p=>p.view().group?.act==="handheld").length'),2,JSON.stringify(await evaluate('window.pets.map(p=>({name:p.config.name,mode:p.char.mode,doing:p.mind.activeSkill?.name,why:p.mind.why,group:p.view().group,items:p.items.list.map(i=>[i.uid,i.def.id,i.where]),energy:p.mood.s.energy}))')));
+  assert(await evaluate('window.pets.slice(1,3).every(p=>p.items.find("game")?.arcade?.presses>0)'));
+  await scene('pq2-handheld-friends');
+  for(const [phase,ticks]of [['jump',24],['land',35],['react',130]]){await evaluate(`for(let j=0;j<${ticks};j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);await scene('pq2-handheld-'+phase);}
+  await evaluate('window.toolBag.showAll("activities")');await click('.bag-choices > button:first-child');
+  await evaluate('for(let j=0;j<360;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  assert(await evaluate('window.pets.every(p=>!p.view().group&&!p.char.handsAt)'));
+  await evaluate(`window.consoleOriginal=window.pet.items.give('console',window.pet.char);window.consoleTV=window.pet.props.spawn('tv',960,innerHeight-72,1);for(let j=0;j<360;j++)for(const p of window.pets)p.update(1/120);window.toolBag.showFor(window.pet);`);
+  await click(`.bag-choice[data-kind=owned][data-id="${await evaluate('String(window.consoleOriginal.uid)')}"]`);await click('#bagDetails [data-action=dock]');
+  assert(await evaluate('window.consoleOriginal.dock===window.consoleTV.n'));
+  await evaluate('window.toolBag.close();window.consoleTV.place({x:window.consoleTV.center.x+60,y:window.consoleTV.center.y},0);for(let j=0;j<120;j++)for(const p of window.pets)p.update(1/120);');await scene('pq2-console-attachment');
+  await evaluate('window.toolBag.showFor(window.pet)');await click(`.bag-choice[data-kind=owned][data-id="${await evaluate('String(window.consoleOriginal.uid)')}"]`);await click('#bagDetails [data-action=place]');
+  assert(await evaluate('window.consoleOriginal.dock===null && window.consoleOriginal.where==="cursor" && !window.toolBag.tools.using'));
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+  await evaluate(`(() => {
+    window.toolBag.close();for(const t of [...window.pet.props.things])window.pet.props.remove(t);
+    for(const [i,p]of window.pets.entries()){p.mind.reset(p.ctx);p.char.standUp();p.char.placeHome(220+i*150);p.mood.s.energy=.8;p.mood.s.happiness=.6;p.mood.s.boredom=.2;for(let k=0;k<12;k++)p.ctx.recordActivity?.(window.pets[(i+1)%5].ctx.who,'chat',true);p.paused=false;p.command('do:sit');}
+    for(let j=0;j<400;j++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.paused=true;
+  })()`);await scene('pq2-personal-sitting');
+  for(const [phase,ticks]of [['feet',45],['settle',90]]){await evaluate(`for(let j=0;j<${ticks};j++)for(const p of window.pets)p.update(1/120);`);await scene('pq2-personal-sitting-'+phase);}
+  await evaluate(`for(const [i,p]of window.pets.entries()){p.mind.reset(p.ctx);p.char.standUp();p.char.placeHome(150+i*190);p.char.facing=1;p.char.yaw=0;p.paused=true;}for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);for(const p of window.pets){p.mind.reset(p.ctx);p.char.walkTo(p.char.x+100);p.say('A little walk, then we can play.',2);}for(let j=0;j<45;j++)for(const p of window.pets)p.update(1/120);`);await scene('pq2-personal-walking');
+  for(const [phase,ticks]of [['stride',20],['step',24]]){await evaluate(`for(let j=0;j<${ticks};j++)for(const p of window.pets)p.update(1/120);`);await scene('pq2-personal-walking-'+phase);assert(await evaluate('window.pets.every(p=>p.char.mode==="ground")'));}
+  assert.deepEqual(await evaluate('window.checkSanity()'),[]);
+  console.log('PASS personalization browser: three gift wrappers/inspection with original identity, All handheld command chooses two eligible owners, real games and Stop, visible console attach/take, five distinct sitting/walking/voice/satchel frames');
   // Both facings for every bundle and every stance/walk/color/thickness/pixel preset variant.
   await evaluate('window.pq2PresetBase=structuredClone(window.pet.config)');
   for(const preset of visualPresets)for(const facing of [-1,1]){

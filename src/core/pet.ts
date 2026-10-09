@@ -1,3 +1,4 @@
+import { GiveGift, ReceiveGift, giftReady } from './skills/gift';
 import {SwitchLamp} from './skills/domestic';
 import {MoveFurniture} from "./skills/arrange";
 import { isWeapon, type LooseWeapon } from './combat/armament';
@@ -20,7 +21,8 @@ import { propActions } from './capabilities';
 import { parseProject } from './crafting-state';
 import { LifeRhythm, type LifeSample } from './life-rhythm';
 import { signatureTalent } from './personality';
-import { parseRelationship, relationship, type Relationship } from './relationships';
+import { parseRelationship, relationship, sharedMoment, recordGift, disagreement, friendshipStage, type Relationship } from './relationships';
+import { characterTemplate, giftPreference, type Sticker } from './character-template';
 import { GroupActivity } from './skills/group';
 import { satchelAt, satchelParts } from './satchel';
 import { drawItem, itemParts, itemFromDrawing, parseItemDef, Items, type Item, type ItemDef } from './items';
@@ -103,6 +105,8 @@ export class Pet implements Peer {
   private soloFeeling = { bond: 0.4 };
   readonly projectiles = new Projectiles();
   private gifts = new Set<string>();
+  private giftReplies=new Map<string,{id:string;reply:(accepted:boolean,appreciation:number)=>void}>();
+  stickers: Sticker[] = [];
   readonly rhythm = new LifeRhythm();
   life(sample: LifeSample) { if(this.config.dailyRhythm)this.rhythm.receive(this.ctx,sample); }
   /** A stable partner for an exchange, selected again only while free. */
@@ -145,6 +149,13 @@ export class Pet implements Peer {
       this.relationships.set(id, value);
     }
     return value;
+  }
+  friendshipSummary(){return this.others.slice(0,4).map(o=>{const v=o.view(),r=this.relation(v.id!);return {name:v.name,stage:friendshipStage(r),trust:r.trust,care:r.care,rivalry:r.rivalry,favorite:r.favoriteShared,lastGift:r.lastGift,gifts:r.giftsReceived};});}
+  private earnSticker(){
+    const moments=[...this.relationships.values()].reduce((sum,r)=>sum+Object.values(r.activities).reduce((a,b)=>a+b,0),0);
+    const marks:Sticker[]=[characterTemplate(this.config.personality).bag.sticker,'heart','star'];
+    const target=moments>=30?3:moments>=12?2:moments>=4?1:0;
+    for(const mark of marks.slice(0,target))if(!this.stickers.includes(mark)&&this.stickers.length<3)this.stickers.push(mark);
   }
   private relation(id:string) {
     let r=this.relationships.get(id);if(!r){r=relationship(this.soloFeeling.bond);this.relationships.set(id,r);}return r;
@@ -313,10 +324,13 @@ export class Pet implements Peer {
       get consoleRequired() { return pet.config.consoleRequired; },
       get talent() { return signatureTalent(pet.config.personality); },
       relationship: id => pet.relation(id),
-      recordActivity: (id,act,success) => { const r=pet.relation(id);if(success){r.activities[act]=Math.min(1000,(r.activities[act]??0)+1);r.bond=Math.min(1,r.bond+0.015);r.cooperation=Math.min(1,r.cooperation+.025);r.lastShared=act;r.recent.push(act);if(r.recent.length>8)r.recent.shift();
-        if(act==='check'||act==='hug')r.care=Math.min(1,r.care+.05);
-        if(['duel','pong','videogame'].includes(act))r.rivalry=Math.min(1,r.rivalry+.025);
-        pet.mood.nudge({socialNeed:-.04,contentment:.03});}else{r.lastDisagreement=act;pet.mood.nudge({frustration:.025});} },
+      recordActivity: (id,act,success) => {
+        sharedMoment(pet.relation(id),act,success);
+        if(success){pet.mood.nudge({socialNeed:-.04,contentment:.03,confidence:.012,affection:.018,stress:-.025});pet.earnSticker();}
+        else pet.mood.nudge({frustration:.025,stress:.015});
+      },
+      recordGift: (id,item,appreciation,received)=>{recordGift(pet.relation(id),item,appreciation,received);pet.mood.nudge({affection:received?.12:.04,contentment:.04,confidence:.015,stress:-.035});pet.earnSticker();},
+      deliverGift:(id,message,reply)=>{pet.giftReplies.set(message.token,{id,reply});pet.others.find(o=>o.view().id===id)?.receive(message,pet);return ()=>pet.giftReplies.delete(message.token);},
       tellTo: (id, m) => { pet.others.find(o => o.view().id === id)?.receive(m, pet); },
       selectPeer: (id) => pet.selectPeer(id),
       get hyperactivity() {return pet.config.hyperactivity;},
@@ -353,7 +367,7 @@ export class Pet implements Peer {
     if(this.config.dailyRhythm)this.rhythm.step(this.ctx,dt); // after a stall (laptop asleep), don't try to catch up forever
     this.ctx.world.time += dt;
     this.game.update(this.ctx.world.time);
-    if(this.ownsProps){const consoles=[...this.items.list.filter(i=>i.def.use==='connect'&&i.where==='world').map(i=>i.at),...this.others.flatMap(o=>o.view().consoleLocations??[])];for(const t of this.props.placed)if(propActions(t.def!).includes('watch'))t.consoleConnected=consoles.some(at=>Math.abs(at.x-t.center.x)<100*t.scale&&Math.abs(at.y-t.center.y)<100*t.scale);}
+    if(this.ownsProps){const consoles=[...this.items.list.filter(i=>i.def.use==='connect'&&i.where==='world').map(i=>i.dock),...this.others.flatMap(o=>o.view().consoleLocations?.map(at=>at.dock)??[])];for(const t of this.props.placed)if(propActions(t.def!).includes('watch'))t.consoleConnected=consoles.includes(t.n);}
 
     this.ctx.canGrabCursor = this.config.mischief && !!this.onMoveCursor;
     if (this.freeze > 0) { this.freeze -= dt; dt = 0; }
@@ -435,14 +449,17 @@ export class Pet implements Peer {
   say(text: string, secs?: number) {
     if (text.length > 70 && secs === undefined) { this.speak(text); return; }
     // Time to type it out, then time to read it.
-    this.bubble = { text, t: 0, shown: 0, ttl: text.length / TYPE_SPEED + (secs ?? Math.min(1.5 + text.length * 0.05, 4.5)) };
+    this.bubble = { text, t: 0, shown: 0, ttl: (text.length / characterTemplate(this.config.personality).voice.rate + (text.match(/[,.!?]/g)?.length??0)*characterTemplate(this.config.personality).voice.pause) + (secs ?? Math.min(1.5 + text.length * 0.05, 4.5)) };
   }
 
   /** Type the bubble out letter by letter, blipping like an indie game character. */
   private typeOut(b: { text: string; t: number; shown: number }, dt: number) {
     b.t += dt;
     const before = Math.floor(b.shown);
-    b.shown = Math.min(b.text.length, b.t * TYPE_SPEED);
+    const voice=characterTemplate(this.config.personality).voice;
+    let budget=b.t, shown=0;
+    for(const letter of b.text){budget-=1/voice.rate+(/[,.!?]/.test(letter)?voice.pause:0);if(budget<0)break;shown++;}
+    b.shown=shown;
     const now = Math.floor(b.shown);
     if (!this.onBlip || !this.config.sound || now === before) return;
     for (let i = before; i < now; i++) {
@@ -450,7 +467,7 @@ export class Pet implements Peer {
       // His voice follows his mood: higher when happy, lower and flatter when sad or cross.
       const s = this.mood.s;
       const base = 420 + s.happiness * 260 + s.energy * 80 - s.annoyance * 120 - (this.mood.asleep ? 120 : 0);
-      this.onBlip(base * (0.92 + Math.random() * 0.16));
+      this.onBlip(base * voice.pitch * (0.96 + Math.random() * 0.08));
     }
   }
 
@@ -526,7 +543,7 @@ export class Pet implements Peer {
     const restore = this.squashFor(this.char.squash);
     // His belt and what's on him are drawn as part of him, in depth order with his limbs.
     const extras: DepthPart[] = [
-      ...satchelParts(this.char, this.items.satchelOpen),
+      ...satchelParts(this.char, this.items.satchelOpen, characterTemplate(this.config.personality).bag, this.stickers),
       ...this.items.onHim.filter((it) => it.where !== 'belt').flatMap((it) => itemParts(it, this.char)),
       ...(this.char.gamepad && this.char.mode === 'sit' ? [controllerPart(this.char)] : []),
     ];
@@ -609,6 +626,8 @@ export class Pet implements Peer {
       this.mind.reset(this.ctx);
     }
     this.char.style = { ...cfg.body };
+    const template=characterTemplate(cfg.personality);
+    this.char.motion={walk:{...template.walk},sit:{...template.sit}};
     this.char.destructible = cfg.destructible;
     if (this.ctx) this.ctx.inkColor = shade(cfg.look.color, -0.35);
     this.char.setHeadSize(cfg.look.headSize);
@@ -1444,9 +1463,9 @@ export class Pet implements Peer {
       ...(this.mind.activeSkill instanceof GroupActivity ? { group: this.mind.activeSkill.view } : {}),
       looseItemHulls: this.items.list.filter(i=>i.where === 'world' && !i.shelf).map(i=>i.collisionHull),
       shelvedBooks: this.items.list.filter(i=>i.where === "world" && i.shelf).map(i=>({...i.shelf!})),
-      consoleLocations: this.items.list.filter(i=>i.def.use==='connect'&&i.where==='world').map(i=>({x:i.at.x,y:i.at.y})),
+      consoleLocations: this.items.list.filter(i=>i.def.use==='connect'&&i.where==='world').map(i=>({x:i.at.x,y:i.at.y,dock:i.dock})),
       talent: signatureTalent(this.config.personality),
-      id: this.ctx.who, partner: this.partnerId, name: this.config.name, personality:this.config.personality, color: this.config.look.color,
+      id: this.ctx.who, partner: this.partnerId, name: this.config.name, personality:this.config.personality,freeBagSlots:this.items.belt.filter(i=>!i).length,hasHandheld:this.items.list.some(i=>i.def.use==='game'&&i.where!=='cursor'),ownedItemIds:this.items.list.map(i=>i.uid), color: this.config.look.color,
       busy: this.mind.hasQueued || !!doing && !['idle', 'wander', 'sit', 'sitdown', 'ledgesit', 'explore', 'sigh', 'stretch', 'duel', 'spar'].includes(doing), doing,
       x: ch.x, facing: ch.facing as 1 | -1, mode: ch.mode, legCount: ch.legCount, whole: ch.whole, scale: ch.scale,
       joints, headR: ch.d.headR,
@@ -1456,7 +1475,7 @@ export class Pet implements Peer {
       looseWeapons: this.looseWeapons(),
       armed: this.items.list.some((it) => it.def.use === 'swing' && (it.where === 'hand' || it.where === 'belt')),
       social: this.mind.activeSkill instanceof Together ? { act: this.mind.activeSkill.act, phase: this.mind.activeSkill.phase } : null,
-      asleep: this.mood.asleep, energy:this.mood.s.energy, mood: this.mood.label,
+      asleep: this.mood.asleep, energy:this.mood.s.energy, mood: this.mood.emotion,
     };
   }
 
@@ -1467,13 +1486,27 @@ export class Pet implements Peer {
     const ch = this.char, w = this.ctx.world, fv = from.view();
     if(m.type==='moment') {
       if(!fv.id || !this.others.some(o=>o.view().id===fv.id))return;
-      this.ctx.say(m.kind==='check'?(this.config.personality === 'competitive' ? 'Just catching my breath.' : this.config.personality === 'gentle' ? 'Thanks for checking.' : 'I’m okay. Thanks.'):this.ctx.talent==='drawing'?'Try a lighter line here.':'Nice drawing!',1.5);this.ctx.recordActivity?.(fv.id,m.kind,true);return;
+      if(this.mood.asleep||this.mind.activeSkill?.name==='duel')return;
+      if(m.kind==='check')this.mood.nudge({stress:-.18,frustration:-.15,affection:.1,confidence:.04});
+      if(m.kind==='apology'){const r=this.relation(fv.id);if(!r.lastDisagreement)return;r.trust=Math.min(1,r.trust+.025);r.lastDisagreement='';this.mood.nudge({stress:-.1,affection:.06});}
+      this.ctx.say(m.kind==='apology'?'Okay. Let’s try again.':m.kind==='check'?(this.config.personality === 'competitive' ? 'Just catching my breath.' : this.config.personality === 'gentle' ? 'Thanks for checking.' : 'I’m okay. Thanks.'):this.ctx.talent==='drawing'?'Try a lighter line here.':'Nice drawing!',1.5);this.ctx.recordActivity?.(fv.id,m.kind,true);return;
+    }
+    if(m.type==='giftReceipt') {
+      const pending=this.giftReplies.get(m.token);if(pending&&pending.id===fv.id){this.giftReplies.delete(m.token);pending.reply(m.accepted,Number.isFinite(m.appreciation)?Math.max(0,Math.min(1,m.appreciation!)):.45);}return;
     }
     if(m.type==='toolGift') {
-      if(!fv.id||!this.others.some(o=>o.view().id===fv.id)||typeof m.token!=='string'||m.token.length>120||this.gifts.has(m.token))return;
-      const def=parseItemDef(m.def);if(!def)return;
+      if(!fv.id||!this.others.some(o=>o.view().id===fv.id)||typeof m.token!=='string'||m.token.length>120)return;
+      const def=parseItemDef(m.def),appreciation=def?giftPreference(this.config.personality,def.id):.45;
+      const receipt=(accepted:boolean)=>from.receive({type:'giftReceipt',token:m.token,accepted,appreciation},this);
+      if(this.gifts.has(m.token)){receipt(true);return;}
+      if(!def||def.wear||!giftReady(this.view())||(!Number.isSafeInteger(m.uid)||m.uid<=0||m.uid>=1e9||!fv.ownedItemIds?.includes(m.uid)||this.items.list.some(i=>i.uid===m.uid)||this.others.filter(o=>o.view().id!==fv.id).some(o=>o.view().ownedItemIds?.includes(m.uid)))){receipt(false);return;}
+      const item=this.items.give(def,this.char,m.uid);if(!item){receipt(false);return;}
       this.gifts.add(m.token);if(this.gifts.size>100)this.gifts.delete(this.gifts.values().next().value!);
-      const item=this.items.give(def,this.char);if(item){item.ammo=Number.isFinite(m.ammo)?Math.max(0,Math.min(6,m.ammo)):6;item.reloadRemaining=Number.isFinite(m.reloadRemaining)?Math.max(0,Math.min(1.15,m.reloadRemaining!)):0;item.bookmark=Number.isFinite(m.bookmark)?Math.max(0,Math.min(9999,Math.floor(m.bookmark!))):0;item.ink=parseProject(m.ink);this.ctx.say('Thanks!',1.3);}return;
+      item.ammo=Number.isFinite(m.ammo)?Math.max(0,Math.min(6,m.ammo)):6;item.reloadRemaining=Number.isFinite(m.reloadRemaining)?Math.max(0,Math.min(1.15,m.reloadRemaining!)):0;
+      item.bookmark=Number.isFinite(m.bookmark)?Math.max(0,Math.min(9999,Math.floor(m.bookmark!))):0;item.gameBest=Number.isFinite(m.gameBest)?Math.max(0,Math.min(9999,Math.floor(m.gameBest!))):0;
+      item.ink=parseProject(m.ink);item.giftWrap=Number.isInteger(m.wrap)?Math.max(0,Math.min(3,m.wrap!)):0;
+      receipt(true);this.ctx.recordGift?.(fv.id,def.id,appreciation,true);this.ctx.say('You brought something for me?',1.6);
+      this.mind.startActivity(this.ctx,new ReceiveGift(item,appreciation),'a gift from '+fv.name);return;
     }
     if (m.type === 'groupInvite') {
       if (!fv.id || !this.others.some(o => o.view().id === fv.id)) return;
@@ -1559,6 +1592,7 @@ export class Pet implements Peer {
         // Shouldered on purpose: a stumble, and he takes it personally.
         if (ch.mode === 'ground') ch.knock(m.vx, 0, false, 0.3);
         this.sound('thud', 0.5);
+        if(fv.id)disagreement(this.relation(fv.id),'bump');this.mood.nudge({stress:.08,frustration:.08,affection:-.04});
         this.emit({ type: 'bumped', name: fv.name });
         return;
       }
@@ -1989,7 +2023,7 @@ export class Pet implements Peer {
   /** A snapshot of his inner state (shown as live bars in settings). */
   stats() {
     return {
-      name: this.config.name, personality:this.config.personality,
+      name: this.config.name, personality:this.config.personality,friendships:this.friendshipSummary(),bagDecor:[...this.stickers],
       mood: { ...this.mood.s },
       label: this.mood.emotion,
       asleep: this.mood.asleep,
@@ -2170,13 +2204,14 @@ export class Pet implements Peer {
 
   // ── saving between runs ──
   save() {
-    return JSON.stringify({ v: 1, mood: this.mood.save(), bond: Math.round(this.ctx.feel.bond * 100) / 100, bonds: Object.fromEntries(this.relationships), lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], ...(this.ownsProps ? { props: this.props.savePlaced() } : {}) });
+    return JSON.stringify({ v: 1, mood: this.mood.save(), bond: Math.round(this.ctx.feel.bond * 100) / 100, bonds: Object.fromEntries(this.relationships), stickers:this.stickers, lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], ...(this.ownsProps ? { props: this.props.savePlaced() } : {}) });
   }
   load(json: string | null) {
     if (!json) return;
     try {
       const d = JSON.parse(json);
       this.mood.load(d.mood);
+      if(Array.isArray(d.stickers))this.stickers=[...new Set(d.stickers.filter((v:unknown)=>typeof v==='string'&&['pencil','star','leaf','heart','bolt'].includes(v)))].slice(0,3) as Sticker[];
       if(d.bonds && typeof d.bonds==='object')for(const [id,value] of Object.entries(d.bonds).slice(0,8)) {
         const parsed = parseRelationship(value); if (parsed) this.relationships.set(id, parsed);
       }
