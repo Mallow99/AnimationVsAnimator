@@ -1,11 +1,16 @@
 # Project roadmap
 
-## Current priority: Pet Quality Update 2 (authorized, in progress)
+## Current priority: Pet Quality Update 2 (implementation complete)
 
-The owner authorized the ordered implementation in [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md):
-resource evidence, physical contact, physical intent, continuity, social context, useful objects,
-then acceptance. Work stops before further Chrome/Finder integration. Hardware acceptance remains
-explicit and does not block independent cloud work while the owner is away.
+Completed the ordered pass in [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md): resources, physical
+contact/intent, continuity, group social context, useful domestic objects, personalized motion/names,
+richer friendships/moods/gifts, handheld peer play, TV console attachments and developing satchels.
+[PET-QUALITY-2.md](PET-QUALITY-2.md) gives the exact changes, sanity assessment, 175 checks, final
+feature soak, actual browser/Electron and visual evidence, measured RAM/performance and limits.
+
+Stop before further Chrome/Finder integration. Next action is owner Mac/Windows acceptance of the
+current build, especially focus/desktop return/Spaces and native helpers. No next milestone begins
+without a new owner instruction. Shared controls, passive pickup and normal gun reloading remain.
 
 ## Previous priority: Pet Quality / Living Stickmen (completed)
 

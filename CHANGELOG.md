@@ -3,6 +3,27 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-09 — Pet Quality 2: final sanity, visual evidence and delivery
+
+- Completed the ordered checklist and recorded the exact change list, fulfillment assessment,
+  reusable character guide, controls, roadmap stop and final handoff in PET-QUALITY-2.md and related docs.
+- Replaced the TV cabinet's decorative console with a plain drawer so the actual detachable console
+  is clear. Verified stock TV upgrades while preserving custom/deleted examples.
+- Passed typecheck/build, 175 regressions and full simulation; actual Chromium interactions plus
+  Linux Electron upgrade/preload/input/settings/focusability checks; visually inspected procedural
+  item/motion frames and all preset variants/both facings. Committed representative captures.
+- Final seed-32 feature/unattended soak: 7,200 simulated seconds, 7,215 live audits, 34 phases, no
+  reported issues. Earlier expanded seed-31 and core seeds 7/17/21 also passed two hours each;
+  persistent reports identify their stages. One-time apology behavior is included in the final run.
+- Recorded current RAM: one ordinary 293 MiB PSS, five furnished 344–378, Settings open 425;
+  twelve Settings cycles 384 and another minute 391. Isolated five-figure core mean/p95 1.168/2.351 ms;
+  loaded Chromium frame median/p95 16.7/33.4 ms. No Mac measurement or leak guarantee.
+- Rebuilt and inspected the 368.5 MiB Windows x64 portable package: matching current bundle/TV art
+  hashes, real PowerShell helper, 32 definitions and no source maps/saves/provider keys.
+- Remaining: native Mac focus/desktop return/Spaces/Swift/permissions/click-through and Windows
+  helpers/input/mixed DPI; documented rotation/extreme-speed/snapshot physics, crowded simultaneous
+  bubbles, one handheld runner and session-only suspended activities. Stop before the next milestone.
+
 ## 2026-10-09 — Pet Quality 2: personalized figures, friendships, gifts and pocket games
 
 - Added reusable five-personality motion/voice/satchel templates over the existing body presets,

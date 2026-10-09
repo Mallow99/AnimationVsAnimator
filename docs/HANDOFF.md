@@ -2,27 +2,47 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Active update: Pet Quality 2 — personalization checkpoint, 2026-10-09
+## Latest update: Pet Quality 2 complete — 2026-10-09
 
-The owner authorized completion, including personalized motion/names, richer friendships/gifts,
-handheld peer play and developing satchel details. Follow [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md),
-then stop before Chrome/Finder work. Resource checkpoint `143850c` and contact/continuity/domestic
-checkpoint `2b92188` are committed; this checkpoint adds the expansion. See
-[CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md) and [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
+The owner authorized completion and the personalization expansion. Implementation is complete on
+`codex/roadmap-continuation`, continuing open draft PR #3, stacked on `codex/desktop-life`. Stop
+before the next Chrome/Finder milestone. Do not resume it without a new owner instruction.
 
-Cobalt/Amber defaults migrate exact old names only. Five profiles layer walking, seating, bubble/blip
-speech and satchel accents over existing presets. Friendship history, confidence/affection/stress,
-thoughtful original-object gifts/three wrapping styles/flowers, inspection and earned stickers save.
-Handhelds display actual runs and saved device best scores; two owners compare games without a TV.
-An actual console attaches beside a TV and detaches on take/store. Apologies resolve a pending
-incident once rather than repeatedly awarding trust. Passive pickup and gun reload mechanics remain.
+Working checkpoints: `143850c` resources; `2b92188` contact, physical handling, book bookmarks,
+one brief safe activity continuation, directed group turns, lamp/blanket/snack/catch; `df5d138`
+personalized walking/sitting/speech/satchels, Cobalt/Amber default migration, richer saved friendship
+and moods, thoughtful original gifts/three wrappers/flowers, meaningful handhelds/shared runner
+sessions and detachable actual TV consoles. The final delivery clarifies the TV cabinet drawer,
+records evidence and closes the checklist. Custom names, stock-custom/deleted examples, body presets,
+owned originals and gun reload mechanics remain; taking items stays passive until explicit Use.
 
-Typecheck, the 140 prior regressions, full seed-7 sim and 35 focused Update 2 checks pass. Actual
-Chromium interaction and motion fixtures plus Linux Electron upgrade/preload/input/focus/settings
-checks pass. Three two-hour core soaks and expanded seed-31 (7,200 seconds, 7,215 audits, 34 phases)
-passed. Final expanded seed-32 includes the last apology repair and is running; final evidence,
-resource profile and PR metadata will be committed in the delivery step. Native Mac/Windows checks
-remain open. Do not treat this checkpoint as completed hardware acceptance.
+Exact change/assessment/resource/limit record: [PET-QUALITY-2.md](PET-QUALITY-2.md).
+Completed checklist: [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md).
+Future preset basis: [CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md).
+Current controls and hardware sequence: [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
+
+Cloud acceptance: typecheck/build, 175 regression checks (72 general, 30 roadmap, 18 original quality,
+20 living and 35 Update 2), full seed-7 sim, actual Chromium/Linux Electron pointer/keyboard/preload/
+configuration/upgrades/focusability checks and visual motion inspection. Three two-hour core soaks
+and two two-hour expanded soaks passed; final seed-32: 7,200 simulated seconds, 7,215 live audits,
+34 phases and zero reported issues. Reports under `docs/verification` label the earlier candidates.
+Windows x64 portable package rebuilt: 368.5 MiB, current bundle hashes, 32 definitions, real
+PowerShell helper, no source maps/saves/provider keys; it has not run on Windows hardware.
+
+Isolated Linux core mean/p95: two figures 0.237/0.532 ms; five 1.168/2.351 ms per combined 120 Hz
+update. Loaded Chromium frame median/p95 16.7/33.4 ms. Linux whole-process RAM medians: one ordinary
+figure 293 MiB PSS; five furnished 344–378; Settings open 425; twelve Settings cycles 384, another
+minute 391. Seven closed/eight Settings-open processes, zero swap. These are software-rendered Xvfb
+measurements, not Mac estimates, a proven reduction or a leak guarantee.
+
+Remaining: actual Mac Swift compilation, focus/foreground desktop return, Spaces, permissions and
+click-through; Windows helpers/input/mixed DPI; main-display limitation, rotation/extreme-speed
+physics limits and snapshot cross-owner contacts. Dense simultaneous bubbles can crowd. Handheld
+sharing compares the one runner game, sticker marks are preset, and brief suspended activities are
+session-only. Native window integration was inspected/tested through fake helpers; no new integration
+was added and no Mac foreground-return fix can be declared accepted without the owner's machine.
+
+Next concrete step: owner hardware acceptance of this build using CURRENT-CONTROLS.md. Stop there.
 
 ## Previous update: Pet Quality / Living Stickmen — 2026-10-08
 
