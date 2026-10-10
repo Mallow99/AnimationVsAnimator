@@ -7,6 +7,8 @@ contact/intent, continuity, group social context, useful domestic objects, perso
 richer friendships/moods/gifts, handheld peer play, TV console attachments and developing satchels.
 [PET-QUALITY-2.md](PET-QUALITY-2.md) gives the exact changes, sanity assessment, 175 checks, final
 feature soak, actual browser/Electron and visual evidence, measured RAM/performance and limits.
+The 2026-10-10 feedback correction removes permanent personality standing poses and expands
+neutral-standing visual/reaction-to-rest checks. Walking, sitting and speech personalization remain.
 
 Stop before further Chrome/Finder integration. Next action is owner Mac/Windows acceptance of the
 current build, especially focus/desktop return/Spaces and native helpers. No next milestone begins

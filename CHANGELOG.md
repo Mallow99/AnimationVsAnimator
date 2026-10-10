@@ -3,6 +3,24 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-10 — Restore relaxed standing after owner feedback
+
+- Removed permanent hands-on-hips/hands-behind-back personality defaults and their forced turn
+  toward the viewer. Neutral standing respects the chosen stance again; individual walking, sitting,
+  speech and satchels remain, with expressive poses driven by mood/activity context.
+- Added a reaction-to-rest regression for all five personalities in both facings, and actual
+  Chromium neutral-standing captures for the roster and every appearance/movement preset.
+  Peaceful browser item/group fixtures now reset moods after the separate duel scene, preventing
+  carried-over combat reactions from derailing their setup.
+- Replayed the seed-1 scrolling-ledge simulation failure. Its fixed delay sampled a sit only
+  0.167 seconds into the transition (or previously passed after standing up). The fixture now waits
+  for a real settled sit and checks the same ledge and seated state after the scroll; displacement
+  remains checked, with the full 50 pixels followed. No scrolling/controller behavior was changed.
+- Passed typecheck/build, 176 regression checks, full seed-1 simulation and actual Chromium
+  interactions/visual inspection. Rebuilt the Windows x64 portable package. Before/after captures,
+  template guidance, roadmap and handoff record the correction. Mac/Windows native feel/focus/input
+  acceptance remains pending; the prior two-hour quality soaks were not rerun for this small pose fix.
+
 ## 2026-10-09 — Pet Quality 2: final sanity, visual evidence and delivery
 
 - Completed the ordered checklist and recorded the exact change list, fulfillment assessment,

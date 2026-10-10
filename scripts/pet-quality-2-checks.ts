@@ -570,6 +570,31 @@ test('five reusable personality templates layer different motion, sitting and vo
   for(const p of all){const body={...p.config.body},dims={...p.char.d};p.char.sit();run([p],2);assert.deepEqual(p.config.body,body);assert.deepEqual(p.char.d,dims);assert.deepEqual(checkSanity([p]),[]);}
   assert.equal(new Set(all.map(p=>JSON.stringify(p.char.motion.sit))).size,5);
 });
+test('every personality returns to relaxed standing after a brief proud reaction, in both facings', () => {
+  const all = pets(5);
+  for (const p of all) p.others = [];
+  for (const facing of [-1, 1] as const) {
+    for (const p of all) {
+      p.paused = false;
+      p.mood.load({ happiness: .6, energy: .85, boredom: .2, annoyance: 0, fear: 0,
+        socialNeed: .2, frustration: 0, contentment: .55, affection: .25, stress: 0 });
+      p.char.facing = facing;
+      p.ctx.look = 'none';
+      p.mood.feel('proud', .5);
+    }
+    run(all, .25);
+    for (const p of all) assert.equal(p.char.idleStyle, 'hips', p.config.name);
+    run(all, 3);
+    for (const p of all) {
+      assert.equal(p.mood.emotion, 'content', p.config.name);
+      assert.equal(p.char.idleStyle, 'none', `${p.config.name} keeps posing after the reaction`);
+      assert(Math.abs(Math.sin(p.char.yaw)) < .01, `${p.config.name} keeps turning toward the viewer`);
+      assert.equal(p.char.facing, facing);
+      assert.equal(p.char.mode, 'ground');
+      assert.deepEqual(checkSanity([p]), []);
+    }
+  }
+});
 test('default renames migrate only the old names and preserve custom names and save slots',()=>{
   assert.equal(mergeConfig(DEFAULT_CONFIG,{name:'Blurp'}).name,'Cobalt');
   assert.equal(mergeConfig(DEFAULT_CONFIG,{name:'Leanord'}).name,'Amber');

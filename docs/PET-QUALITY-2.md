@@ -4,6 +4,16 @@ Completed cloud implementation on `codex/roadmap-continuation`, continuing PR #3
 before the next Chrome/Finder milestone. The goal remains figures that feel alive without AI.
 Native Mac/Windows acceptance is still separate.
 
+Owner-feedback correction (2026-10-10): neutral standing uses the selected stance again. The
+personality templates no longer hold hands on hips/behind the back or turn figures toward the viewer
+all the time. Individual walking, sitting, speech and satchels remain. A new regression checks all
+five return to relaxed standing after a proud reaction in both facings; actual browser fixtures now
+include neutral standing for all five and every appearance/movement preset alongside reading.
+The correction passed typecheck/build, all 176 regressions and full seed-1 simulation. The scrolling
+fixture now measures a settled seated figure and checks it remains on the same ledge; the controller
+was unchanged. Prior Electron, RAM and two-hour soak evidence below remains dated to the original
+delivery. The Windows portable package was rebuilt; native hardware acceptance remains pending.
+
 ## What changed
 
 1. **Contact and physical intent.** Resting friction remembers contacts; separation respects density
@@ -25,7 +35,7 @@ Native Mac/Windows acceptance is still separate.
    after someone leaves when at least two remain. Other choreographed groups require their members.
    Existing five-person couch scoots and exclusive duels/spectator protection remain.
 5. **Personalized figures.** Cobalt, Amber, Moss, Violet and Ruby have individual walk accents,
-   resting/sitting styles, speech typing rates/blip pitches/punctuation pauses, conversation gestures
+   sitting styles, speech typing rates/blip pitches/punctuation pauses, conversation gestures
    and satchel colors/clips. Mood still shapes body language and existing movement presets still work.
    Exact old defaults Blurp/Leonard/Leanord migrate; custom names and stable roster/save identities
    remain. The legacy Blurp appearance bundle remains. [CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md)
@@ -151,6 +161,9 @@ After these checks, stop. Further Chrome/Finder milestones require a new owner i
 
 These are captures of actual Chromium procedural rendering, not generated mockups. Full motion
 sequences remain reproducible with `npm run browsercheck`.
+
+![Relaxed standing after the correction](verification/pq2-standing-after-right.png)
+[Earlier permanent standing poses](verification/pq2-standing-before-right.png).
 
 ![Blanket, reading lamp and snack](verification/pq2-domestic.png)
 ![Gift inspection and opening](verification/pq2-gift-unwrapping-2.png)

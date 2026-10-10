@@ -577,10 +577,11 @@ try {
   })()`);
   await scene('living-duel-spectators');assert(await evaluate('window.pets.slice(2).every(p=>p.char.hp===1 && p.mind.activeSkill?.name!=="duel")'));
   console.log('PASS Living Stickmen browser: rendered five couch seats, brace/lift/shift scoot phases, group listening and spectator-safe combat; live sanity audit clean');
+  // Independent peaceful scene: don't carry the preceding duel's moods into item/group fixtures.
   // Update 2: stock supplies, actual Activities buttons and physical motion phases.
   await evaluate(`(() => {
     window.toolBag.cancel();window.cursorWeapon.detach();
-    for(const p of window.pets){p.mind.reset(p.ctx);for(const item of [...p.items.list])p.items.remove(item);p.command('respawn');p.mind.reset(p.ctx);p.paused=true;p.char.standUp();p.mind.holdUntil=Infinity;p.items.give('book',p.char);p.items.give('bouncy-ball',p.char);}
+    for(const p of window.pets){p.mind.reset(p.ctx);for(const item of [...p.items.list])p.items.remove(item);p.command('respawn');p.command('resetMood');p.mood.flash=null;p.paused=true;p.char.standUp();p.mind.holdUntil=Infinity;p.items.give('book',p.char);p.items.give('bouncy-ball',p.char);}
     for(const t of [...window.pet.props.things])window.pet.props.remove(t);
     for(const [i,p]of window.pets.entries()){p.char.placeHome([350,850,650,1030,1240][i]);p.char.hp=1;p.mood.s.energy=.8;p.mood.asleep=false;for(const id of ['blanket','snack-box'])p.items.give(id,p.char);}
     window.pet.props.spawn('couch',390,innerHeight-57,1);window.pet.props.spawn('lamp',660,innerHeight-31,1);
@@ -596,7 +597,7 @@ try {
   for(const [phase,ticks]of [['pause',200],['snack-reach',120],['snack-lower',240]]){
     await evaluate(`for(let j=0;j<${ticks};j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);await scene('pq2-domestic-'+phase);
   }
-  await evaluate(`(() => {for(const p of window.pets){p.mind.reset(p.ctx);p.char.standUp();p.char.placeHome(210+window.pets.indexOf(p)*180);p.mood.s.energy=.8;p.mood.asleep=false;p.paused=false;}for(const t of [...window.pet.props.things])window.pet.props.remove(t);for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);if(!window.pet.items.list.some(i=>i.def.id==='bouncy-ball'))window.pet.items.give('bouncy-ball',window.pet.char);window.toolBag.showFor(window.pet,'activities');})()`);
+  await evaluate(`(() => {for(const p of window.pets){p.command('resetMood');p.mood.flash=null;p.mind.holdUntil=Infinity;p.char.standUp();p.char.placeHome(210+window.pets.indexOf(p)*180);p.mood.s.energy=.8;p.mood.asleep=false;p.paused=false;}for(const t of [...window.pet.props.things])window.pet.props.remove(t);for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);if(!window.pet.items.list.some(i=>i.def.id==='bouncy-ball'))window.pet.items.give('bouncy-ball',window.pet.char);window.toolBag.showFor(window.pet,'activities');})()`);
   assert(!await evaluate('document.querySelector(".bag-activity[data-action=catch]").disabled'),JSON.stringify(await evaluate('window.pets.map(p=>({view:p.view(),why:p.mind.why}))')));
   await click('.bag-activity[data-action=catch]');assert(!await evaluate('window.toolBag.isOpen'));
   await evaluate('for(let j=0;j<1800&&window.pet.view().group?.phase!=="do";j++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.paused=true;');
@@ -663,6 +664,18 @@ try {
   for(const [phase,ticks]of [['stride',20],['step',24]]){await evaluate(`for(let j=0;j<${ticks};j++)for(const p of window.pets)p.update(1/120);`);await scene('pq2-personal-walking-'+phase);assert(await evaluate('window.pets.every(p=>p.char.mode==="ground")'));}
   assert.deepEqual(await evaluate('window.checkSanity()'),[]);
   console.log('PASS personalization browser: three gift wrappers/inspection with original identity, All handheld command chooses two eligible owners, real games and Stop, visible console attach/take, five distinct sitting/walking/voice/satchel frames');
+  // Standing must relax again after the activity rather than hold a personality pose forever.
+  await evaluate(`(() => {
+    for(const p of window.pets){p.mind.reset(p.ctx);p.mind.holdUntil=Infinity;p.ctx.look='none';p.char.standUp();p.char.stop();p.mood.asleep=false;p.mood.flash=null;p.mood.load({happiness:.6,energy:.85,boredom:.2,annoyance:0,fear:0,socialNeed:.2,frustration:0,contentment:.55,affection:.25,stress:0});}
+    for(const t of [...window.pet.props.things])window.pet.props.remove(t);
+    for(const [i,p]of window.pets.entries())p.char.placeHome(170+i*215);
+  })()`);
+  for(const facing of [-1,1]){
+    await evaluate(`for(const p of window.pets){p.char.look=null;p.char.facing=${facing};}for(let j=0;j<600;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);
+    assert(await evaluate(`window.pets.every(p=>p.mood.emotion==="content" && p.char.mode==="ground" && p.char.idleStyle==="none" && Math.abs(Math.sin(p.char.yaw))<.01 && p.char.facing===${facing})`), JSON.stringify(await evaluate('window.pets.map(p=>({name:p.config.name,emotion:p.mood.emotion,mode:p.char.mode,idle:p.char.idleStyle,yaw:p.char.yaw,facing:p.char.facing,walking:p.char.walking}))')));
+    await scene('pq2-standing-after-'+(facing<0?'left':'right'));
+  }
+  console.log('PASS relaxed standing: five personalities, both facings, no forced viewer-facing pose');
   // Both facings for every bundle and every stance/walk/color/thickness/pixel preset variant.
   await evaluate('window.pq2PresetBase=structuredClone(window.pet.config)');
   for(const preset of visualPresets)for(const facing of [-1,1]){
@@ -671,9 +684,12 @@ try {
       const p=window.pet,v=${JSON.stringify(preset)},base=structuredClone(window.pq2PresetBase);
       p.applyConfig({...base,look:{...base.look,...v.look},body:{...base.body,...v.body},windows:false,dailyRhythm:false,destructible:false});
       window.pets.splice(0,window.pets.length,p);p.others=[];p.paused=true;p.mind.holdUntil=Infinity;for(const i of [...p.items.list])p.items.remove(i);p.command('respawn');p.char.placeHome(520);
-      for(let j=0;j<600;j++)p.update(1/120);p.char.facing=${facing};p.char.yaw=${facing<0?'Math.PI':'0'};
-      p.items.give('book',p.char);p.paused=false;p.command('do:read');for(let j=0;j<500;j++)p.update(1/120);p.paused=true;
+      p.ctx.look='none';p.mood.flash=null;p.mood.load({happiness:.6,energy:.85,boredom:.2,annoyance:0,fear:0,socialNeed:.2,frustration:0,contentment:.55,affection:.25,stress:0});p.paused=false;
+      for(let j=0;j<600;j++)p.update(1/120);p.paused=true;p.char.facing=${facing};p.char.yaw=${facing<0?'Math.PI':'0'};
     })()`);
+    assert(await evaluate('window.pet.char.mode==="ground" && window.pet.char.idleStyle==="none" && window.pet.char.present<.01'));
+    await scene('pq2-standing-preset-'+preset.name.toLowerCase()+'-'+(facing<0?'left':'right'));
+    await evaluate(`window.pet.items.give('book',window.pet.char);window.pet.paused=false;window.pet.command('do:read');for(let j=0;j<500;j++)window.pet.update(1/120);window.pet.paused=true;`);
     await scene('pq2-preset-'+preset.name.toLowerCase()+'-'+(facing<0?'left':'right'));
     assert.deepEqual(await evaluate('window.checkSanity()'),[]);
   }

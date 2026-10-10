@@ -24,7 +24,9 @@ roster and save identities do not change. The legacy Blurp appearance bundle rem
   shared gamepads and scooting override resting hands when necessary.
 - `voice`: character typing rate, blip pitch multiplier, punctuation pause and conversation gesture.
   This is procedural bubble/blip speech, not recorded voices. Group turns account for reading time.
-- `idle`: neutral resting hands; mood can override this with crossed arms, comfort or confidence.
+- `idle`: keep `none` for neutral standing so the selected stance and relaxed arms remain visible.
+  Mood/activity reactions can briefly use expressive poses; personality is not a permanent
+  hands-on-hips or hands-behind-back pose or a forced turn toward the viewer.
 - `bag`: body/flap/clip colors and signature sticker. Shared satchel geometry and pixel sizing remain.
 - `gifts`: ordered preferred item ids. These guide spare-original selection and appreciation; owning
   a favorite is optional and giving gifts is not required to maintain a friendship.

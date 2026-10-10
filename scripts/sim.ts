@@ -1046,13 +1046,18 @@ function calmPet() {
   pet.setScreen({ app: 'Messages', title: 'Sam', win: 5, trusted: true, els: msg(700) });
   pet.paused = false;
   pet.mind.command(pet.ctx, 'perch');
-  let sat = false;
-  petFor(25, pet, () => { if (pet.char.onLedge && pet.char.support >= 2_000_000_000) sat = true; });
+  // Measure from a settled sitting pose. A fixed delay could sample a new sit halfway down,
+  // or pass after he had already stood up, mixing posture changes with the scroll displacement.
+  for (let i = 0; i < 25 / DT && !(pet.char.onLedge && pet.char.support >= 2_000_000_000); i++) pet.update(DT);
+  const sat = pet.char.mode === 'sit' && pet.char.onLedge && pet.char.support >= 2_000_000_000;
+  pet.paused = true;
+  petFor(3, pet);
+  const support = pet.char.support;
   const before = pet.char.body.j.hip.y;
   pet.setScreen({ app: 'Messages', title: 'Sam', win: 5, trusted: true, els: msg(650) }); // you scrolled
   petFor(1, pet);
   const rode = before - pet.char.body.j.hip.y;
-  check('sits on a chat message in your window, rides along when it scrolls', sat && rode > 35, `sat=${sat} rose=${rode.toFixed(0)} support=${pet.char.support} skill=${pet.mind.skill?.name}`);
+  check('sits on a chat message in your window, rides along when it scrolls', sat && pet.char.mode === 'sit' && pet.char.onLedge && pet.char.support === support && rode > 35, `sat=${sat} rose=${rode.toFixed(0)} support=${pet.char.support} skill=${pet.mind.skill?.name}`);
 }
 { // Switching apps: now and then he says something about what you're up to.
   const pet = calmPet();

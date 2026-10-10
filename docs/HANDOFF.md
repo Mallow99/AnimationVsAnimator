@@ -2,6 +2,22 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest correction: relaxed standing — 2026-10-10
+
+The owner disliked the new standing poses. All five personality templates now default to `idle: none`;
+neutral standing uses the chosen stance rather than permanent hips/behind-back hands and a turn
+toward the viewer. Personalized walking, sitting, speech and satchels remain; mood/activity reactions
+still express feelings. Keep personality in context instead of turning resting figures into poses.
+
+Verified typecheck/build, all 176 regressions (36 Update 2), full seed-1 simulation and actual Chromium
+input plus neutral-standing/reading fixtures for all presets and both facings; inspected before/after
+frames under `docs/verification/pq2-standing-*.png`. The seed-1 replay exposed a simulation fixture
+sampling only 0.167 seconds into a sit. It now measures a settled seated figure and asserts the same
+ledge/state after moving 50 pixels; the scrolling controller was unchanged. Windows x64 package
+rebuild and bundle inspection passed. Peaceful browser fixtures reset moods after the separate duel
+scene. Native hardware acceptance remains pending. Earlier Electron/RAM/two-hour soak evidence below
+belongs to the prior delivery, not new measurements for this correction. Stop before integration work.
+
 ## Latest update: Pet Quality 2 complete — 2026-10-09
 
 The owner authorized completion and the personalization expansion. Implementation is complete on

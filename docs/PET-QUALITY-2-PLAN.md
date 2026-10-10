@@ -38,6 +38,8 @@ presets, offline operation, separate peer messages, actual item ownership and sh
    - [x] Treat the console as an optional TV attachment; remove robotic connection chatter.
    - [x] Distinct satchel colors/clips and bounded earned stickers; saved and understandable progress.
    - [x] Extend lifecycle/soak/browser/visual acceptance to this expansion before final delivery.
+   - [x] Owner standing feedback: restore relaxed neutral stance, keep personality in context,
+     and add reaction-to-rest regression plus standing visual fixtures for both facings/presets.
 
 
 8. **Acceptance and delivery**
