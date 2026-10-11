@@ -9,6 +9,7 @@ import {checkSanity} from '../src/core/sanity';
 import {activitiesFor} from '../src/app/activities';
 import {makeBox} from '../src/core/props';
 import {disagreement} from '../src/core/relationships';
+import {FileHabitats} from '../src/app/file-habitats';
 
 let state=Number(process.env.LIVING_SOAK_SEED??21)>>>0;
 Math.random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};
@@ -108,6 +109,26 @@ room();at=elapsed;const ruby=pets[4],originals=[...ruby.items.list];ruby.leaveWo
 const sleeper=pets[2];sleeper.mood.asleep=true;sleeper.char.sleeping=true;sleeper.char.lieDown();run(3);
 const neck=sleeper.char.body.j.neck;sleeper.char.grab('neck',neck.x,neck.y);sleeper.char.moveHold(neck.x,neck.y-20,0,0);run(2);assert(sleeper.mood.asleep);sleeper.char.release();run(3);sleeper.mood.asleep=false;
 record('roster removal/rejoin and sleeping pickup',at,'same Ruby and belongings; gentle carry preserves sleep');
+// File/folder visits use the originals and release/reconnect the desktop across repeated closures.
+room();at=elapsed;
+const habitats=new FileHabitats(()=>{});
+const visitItems=pets.map(p=>p.items.list.slice());
+for(let round=0;round<6;round++) {
+ for(const [id,p]of pets.entries())assert(habitats.enter(id,p,'/test/soak-folder'));
+ const frame={id:1,path:'/test/soak-folder',kind:'folder' as const,x:200+round*10,y:50,width:1200,height:620};
+ habitats.refresh([frame]);active=habitats.activePets;
+ for(const p of active){p.paused=true;p.mind.holdUntil=Infinity;}
+ run(12);habitats.refresh([{...frame,x:frame.x+40,y:frame.y+10}]);run(3);
+ assert.deepEqual(checkSanity([...pets,...habitats.allPets],active),[]);
+ habitats.refresh([]);active=[];run(2);
+ assert.equal(habitats.save().length,5);habitats.refresh([frame]);active=habitats.activePets;run(3);
+ for(const [id,p]of pets.entries()) {
+  habitats.returnHome(id);
+  assert(visitItems[id].every(i=>p.items.list.includes(i)),`visit ${round} lost an original`);
+ }
+ active=pets;peers();run(3);
+}
+record('five-figure file visit lifecycle',at,'six visits/closures/moves/returns, original items retained, shared claims and coordinates clean');
 // Settled stack, impacts and mixed-mass leaning remain live rather than pinned.
 room();at=elapsed;
 const boxes=Array.from({length:5},(_,i)=>{const t=makeBox({strokes:[],color:'#555',born:elapsed,done:true},1200,750-i*48,1310,798-i*48);t.forever=true;pets[0].props.add(t);return t;});

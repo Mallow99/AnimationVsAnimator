@@ -16,6 +16,13 @@ for(const w of finder.windows()) {
   }catch(e){}
 }
 JSON.stringify(out);`;
+function parseWindows(output: string) {
+  const parsed = JSON.parse(output);
+  return (Array.isArray(parsed) ? parsed : [parsed]).filter((w: FileWindow) =>
+    w && typeof w.path === 'string' && w.path.length < 4096 &&
+    [w.id,w.x,w.y,w.width,w.height].every(Number.isFinite) &&
+    w.width > 100 && w.height > 100).slice(0,40);
+}
 export function watchFileWindows(
   update: (windows: FileWindow[]) => void,
   note: (text: string) => void,
@@ -26,6 +33,14 @@ export function watchFileWindows(
     lastError = '';
   const read = () => {
     if (stopped || busy) return;
+    // Like PET_FAKE_WINDOWS, this is an explicit test adapter, never a native-verification claim.
+    if (process.env.PET_FAKE_FILES !== undefined) {
+      try { update(parseWindows(process.env.PET_FAKE_FILES)); }
+      catch { update([]); }
+      const message = 'Simulated file windows for verification; native detection is not being tested.';
+      if (lastError !== message) { note(message); lastError = message; }
+      return;
+    }
     const args =
       process.platform === 'darwin'
         ? ['-l', 'JavaScript', '-e', finderScript]
@@ -62,21 +77,15 @@ export function watchFileWindows(
           return;
         }
         try {
-          const parsed = JSON.parse(output);
-          const windows = (Array.isArray(parsed) ? parsed : [parsed])
-            .filter(
-              (w: FileWindow) =>
-                w &&
-                typeof w.path === 'string' &&
-                w.path.length < 4096 &&
-                [w.id, w.x, w.y, w.width, w.height].every(Number.isFinite) &&
-                w.width > 100 &&
-                w.height > 100,
-            )
-            .slice(0, 40);
+          const windows = parseWindows(output);
           update(windows);
+          if (lastError) note('');
           lastError = '';
         } catch {
+          if (lastError !== 'Folder window information could not be read. Try again or return the figure to desktop.') {
+            lastError = 'Folder window information could not be read. Try again or return the figure to desktop.';
+            note(lastError);
+          }
           update([]);
         }
       },

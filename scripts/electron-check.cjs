@@ -160,6 +160,58 @@ app.whenReady().then(async () => {
   fs.writeFileSync(path.join(__dirname, '../.build/pq2-friendship-settings.png'), (await settings.webContents.capturePage()).toPNG());
   console.log('PASS Electron personalization: three social dials and named friendships in collapsed details, default name migration, new flowers and stock-console upgrade');
 
+  // Existing file visits: real preload/status/controls, with deliberately simulated native reports.
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({fileHomes:true},0)');
+  await until(() => overlay.webContents.executeJavaScript('window.pet.config.fileHomes'));
+  assert.equal((await settings.webContents.executeJavaScript('window.petShell.chooseHabitat("file",0)')).ok, false, 'Linux offered an unsupported file dialog');
+  await overlay.webContents.executeJavaScript(`(() => {
+    const p=window.figurePool[0]; p.paused=false;p.command('stop');p.mind.holdUntil=Infinity;
+    const book=p.items.give('book',p.char);book.bookmark=27;
+    window.visitOriginals=p.items.list.slice();
+  })()`);
+  overlay.webContents.send('desktop:habitat',{id:0,path:'/test/real-folder',kind:'folder'});
+  await until(() => overlay.webContents.executeJavaScript('window.habitats.isAway(0)'));
+  const frame={id:1,path:'/test/real-folder',kind:'folder',x:100,y:350,width:350,height:300};
+  process.env.PET_FAKE_FILES=JSON.stringify([frame]);
+  overlay.webContents.send('world:files',[frame]);
+  await until(() => overlay.webContents.executeJavaScript('window.habitats.activePets.length===1'));
+  assert(await overlay.webContents.executeJavaScript('window.visitOriginals.every(i=>window.habitats.petFor(0).items.list.includes(i)) && window.figurePool[0].items.list.length===0'));
+  await overlay.webContents.executeJavaScript('window.habitats.petFor(0).onSatchel()');
+  await until(() => overlay.webContents.executeJavaScript('window.toolBag.isOpen'));
+  assert(await overlay.webContents.executeJavaScript('document.querySelector("#bagOwner").value===window.habitats.petFor(0).ctx.who'));
+  await overlay.webContents.executeJavaScript('window.toolBag.close();window.habitats.petFor(0).onTalk()');
+  await until(() => overlay.isFocusable());
+  await overlay.webContents.executeJavaScript('document.querySelector("#talkClose").click()');
+  await until(() => !overlay.isFocusable());
+  await settings.webContents.executeJavaScript('(() => {const select=document.querySelector("#figureTarget");select.value="0";select.dispatchEvent(new Event("change"));document.querySelector("[data-tab=him]").click();})()');
+  await until(() => settings.webContents.executeJavaScript('document.querySelector("#fileLocations").textContent.includes("Window detected")'));
+  assert(await settings.webContents.executeJavaScript('document.querySelector("#chooseFile").disabled && document.querySelector("#chooseHabitat").disabled'));
+  await settings.webContents.executeJavaScript('document.querySelector("#fileSupport").scrollIntoView({block:"center"})');
+  await pause(500);
+  fs.writeFileSync(path.join(__dirname,'../.build/file-visits-settings-cloud.png'),(await settings.webContents.capturePage()).toPNG());
+  // Closing a native window hides the visitor but leaves a clear return-and-open action.
+  process.env.PET_FAKE_FILES='[]';
+  overlay.webContents.send('world:files',[]);
+  await until(() => settings.webContents.executeJavaScript('document.querySelector("#fileLocations").textContent.includes("Waiting for its window")'));
+  assert.equal(await settings.webContents.executeJavaScript('document.querySelector("#openInventory").textContent'),'Return and open bag');
+  await settings.webContents.executeJavaScript('document.querySelector("#openInventory").click()');
+  await until(() => overlay.webContents.executeJavaScript('!window.habitats.isAway(0) && window.toolBag.isOpen'));
+  assert(await overlay.webContents.executeJavaScript('window.visitOriginals.every(i=>window.figurePool[0].items.list.includes(i))'));
+  assert.deepEqual(await overlay.webContents.executeJavaScript('window.checkSanity()'),[]);
+  // A visit survives a renderer restart, and disabling visits clears the saved association immediately.
+  overlay.webContents.send('desktop:habitat',{id:0,path:'/test/real-folder',kind:'folder'});
+  await until(() => overlay.webContents.executeJavaScript('window.habitats.isAway(0)'));
+  await overlay.webContents.executeJavaScript('window.habitats.petFor(0).memory.add("file restart kept", "event", "him")');
+  await pause(1200);
+  overlay.reload();
+  await until(() => !overlay.webContents.isLoading() && overlay.webContents.executeJavaScript('!!window.habitats?.isAway(0)'));
+  assert(await overlay.webContents.executeJavaScript('window.habitats.petFor(0).items.list.some(i=>i.def.id==="book" && i.bookmark===27)'));
+  assert(await overlay.webContents.executeJavaScript('window.habitats.petFor(0).memory.notes.some(n=>n.text==="file restart kept")'));
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({fileHomes:false},0)');
+  await until(() => overlay.webContents.executeJavaScript('!window.habitats.isAway(0) && JSON.parse(localStorage.getItem("file-homes")).length===0'));
+  assert.deepEqual(await overlay.webContents.executeJavaScript('window.checkSanity()'),[]);
+  console.log('PASS Electron file visits: original inventory, visiting bag/chat callbacks, named status, waiting/recall, restart memory/progress, unsupported-platform guard, immediate disable save (fake native windows)');
+
   assert.deepEqual(issues, []);
   console.log('PASS Electron: overlay, fake helper, settings inventory, Othello/chat focus, configuration, two stick figures (one settings window with target selection, distinct color, All figures supplies, shared settings, talk box, memory file)');
   app.quit();

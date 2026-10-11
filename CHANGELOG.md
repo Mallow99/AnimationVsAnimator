@@ -3,6 +3,30 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-11 — Repair file/folder ownership, return and controls
+
+- Replaced inventory recreation during visits/returns with original-object transfer; custom artwork,
+  bookmarks, game progress, ink, ammunition and reload clocks follow the same tools. Released stale
+  furniture claims and restored desktop subscriptions. Wired visitor bag/chat/save controls and
+  custom-definition reloads; the live audit includes visiting inventories.
+- Retained still-open document identities across another app's focus, followed current window
+  geometry, and cleared closed/replaced/inaccessible documents. Moving a file window shifts body
+  anchors and loose-item physics together without double movement or erasing velocity. Five initial
+  same-folder visitors spawn apart.
+- Added a separate File and folder visits card: named paths/kinds, detected/waiting status, helper
+  messages and stable action feedback. All requires a name before choosing and can return all visitors.
+  Hidden figures offer Return and open bag. Unsupported/undetected files and inactive targets refuse
+  entry. Restarts respect the roster; turning visits off/removing visitors saves the return immediately.
+- Added six regressions, five-figure file lifecycle soak coverage and actual Electron named/All,
+  restart, bag/chat, pointer-return and platform-refusal checks. Explicit fake-file reports make cloud
+  verification reproducible and visibly labeled. Updated controls, roadmap, handoff and visual evidence.
+- Passed typecheck/build, 182 regressions, full seed-1 sim, actual Chromium/Electron checks and visual
+  inspection. Seed-32 soak passed 2,566.4 simulated seconds, 2,635 audits and 35 phases with zero issues.
+  Windows x64 portable package rebuilt and inspected. No new RAM measurement.
+- Remaining: real Mac/Windows file detection, permissions, Spaces/focus/occlusion acceptance;
+  Mac document-app limitations, unfinished icon entry and session-only visit furniture. This repairs
+  the existing prototype and does not begin the next integration milestone.
+
 ## 2026-10-10 — Restore relaxed standing after owner feedback
 
 - Removed permanent hands-on-hips/hands-behind-back personality defaults and their forced turn

@@ -14,6 +14,12 @@ Stop before further Chrome/Finder integration. Next action is owner Mac/Windows 
 current build, especially focus/desktop return/Spaces and native helpers. No next milestone begins
 without a new owner instruction. Shared controls, passive pickup and normal gun reloading remain.
 
+The owner's 2026-10-11 file feedback authorizes a repair pass on the existing visit prototype:
+original inventory transfer, custom definitions/input callbacks, document identity across focus,
+current window geometry, roster-aware save/return, named/All status and unsupported-file guards.
+See the latest handoff and CURRENT-CONTROLS. This does not resume the next integration milestone;
+real-hardware acceptance, finished icon entry and persistent visit-room furniture remain outstanding.
+
 ## Previous priority: Pet Quality / Living Stickmen (completed)
 
 The owner's expanded request overrides the integration roadmap. Core principle: **figures should feel

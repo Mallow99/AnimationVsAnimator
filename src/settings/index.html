@@ -80,6 +80,7 @@
     .list .row { flex-wrap: wrap; padding: 5px 0; }
     .list .row span { min-width: 120px; }
     textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn:disabled { opacity: 0.45; cursor: default; }
     .btn.small { padding: 5px 8px; font-size: 12px; }
     .notes .row { align-items: flex-start; }
     .notes .kind { flex: 0 0 auto !important; font: 600 10px/1.8 var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent); min-width: 62px; }
@@ -291,15 +292,20 @@
           <label class="switch"><span><span class="row-label">Smack mode</span><br /><small class="note">Swipe the cursor through him fast to smack him. Off so it doesn't happen by accident.</small></span><input type="checkbox" id="smacking" /></label>
         </div>
       </div>
-      <div class="group"><h2>Chrome and your files</h2><div class="card">
+      <div class="group"><h2>Chrome and windows</h2><div class="card">
         <label class="switch"><span><span class="row-label">Play with connected Chrome pages</span><br><small class="note">The extension grants one page at a time. They can close that tab, take a selected element onto the desktop, and restore it. Page fragments stay on your computer.</small></span><input type="checkbox" id="browserPlay"></label>
         <div class="btns"><button class="btn ghost small" id="extensionFolder">Open Chrome extension folder</button><button class="btn ghost small" id="pairChrome">Copy Chrome pairing link</button></div>
         <small class="note">In Chrome, open chrome://extensions, enable Developer mode, then Load unpacked and choose that folder. Open the extension, paste the pairing link, and connect the page.</small>
         <small class="note" id="chromeInfo"></small>
         <label class="switch"><span><span class="row-label">Allow requested window closing</span><br><small class="note">When you ask, they press the front window's normal close button. The app may still ask you to save. On Mac this needs Accessibility.</small></span><input type="checkbox" id="closeWindows"></label>
-        <label class="switch"><span><span class="row-label">Visit real files and folders</span><br><small class="note">A visiting figure appears inside the matching Finder / Explorer window and hides when it closes. Finder may request Automation permission. Mac files work when their app reports the document path; this needs a Mac test. Your files are not modified.</small></span><input type="checkbox" id="fileHomes"></label>
-        <div class="btns"><button class="btn ghost small" id="chooseHabitat">Enter a folder…</button><button class="btn ghost small" id="chooseFile">Enter a file…</button><button class="btn ghost small" id="returnHome">Return to desktop</button></div>
-        <small class="note" id="fileInfo"></small>
+      </div></div>
+      <div class="group"><h2>File and folder visits</h2><div class="card">
+        <label class="switch"><span><span class="row-label">Allow file and folder visits</span><br><small class="note">Visits appear inside the matching native window and hide when it closes. Turning this off returns all visitors to the desktop. Your files are not modified.</small></span><input type="checkbox" id="fileHomes"></label>
+        <p class="note" id="fileSupport">Select a named figure above to choose where they visit.</p>
+        <div class="btns"><button class="btn ghost small" id="chooseHabitat" disabled>Visit a folder…</button><button class="btn ghost small" id="chooseFile" disabled>Visit an open file…</button><button class="btn ghost small" id="returnHome" disabled>Return to desktop</button></div>
+        <p class="note" id="fileLocations" style="white-space:pre-line;overflow-wrap:anywhere" aria-live="polite"></p>
+        <p class="note" id="fileWarning" role="status"></p>
+        <p class="note" id="fileInfo" role="status"></p>
       </div></div>
       <div class="group"><h2>Your cursor weapons</h2><div class="card">
         <p class="note">Hold the mouse button and swing. The pistol aims at the nearest figure. This mode catches desktop clicks; use Put away to return to normal.</p>

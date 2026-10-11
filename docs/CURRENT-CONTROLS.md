@@ -56,6 +56,31 @@ General → **Show supplies bag shortcut** and **Show trash can** enable optiona
 start hidden. Drag either to reposition it; placement survives restart. Mouse use leaves the overlay
 non-focusable. **Keyboard** explicitly enables Tab/Enter/Space; Escape closes it and releases focus.
 
+## File and folder visits
+
+General → **File and folder visits** controls the existing native-window prototype. Select a name
+at the top before **Visit a folder…** or **Visit an open file…**. All figures cannot silently send only
+the first figure away. Folder visits use Finder on Mac or Explorer on Windows. Document visits require
+Mac and an already detected open document; unsupported platforms/apps keep the figure on the desktop.
+Enable visits, open the file in its app, then choose it. Finder may request Automation permission;
+the native window helper needs Accessibility on Mac. No file contents are changed.
+
+The panel lists each selected visitor's exact path, **Window detected** or **Waiting for its window**,
+and permission/helper messages separately from action feedback. A closed window hides its visitors;
+it does not delete them. **Return to desktop** recalls a named figure; **Return all visitors** recalls
+everyone listed under All figures. Turning visits off also returns everyone and immediately clears the
+saved associations. Returns preserve original tools, bookmarks, games, ink, magazines and memories.
+
+A visible visitor's right-click/satchel/chat controls work. When their window is absent, Items offers
+**Return and open bag** (or **Return hidden visitors and open bags** under All figures), so transported
+items stay visible and usable. Population changes return departing visitors; restart restores only
+characters in the selected roster. These are fixes to the existing feature, not a new integration.
+
+Native Finder/Explorer/document matching, permissions, Spaces and focus still require real hardware.
+The crawl-through-icon animation is unfinished; visits are overlay transfers. Desktop furniture stays
+on the desktop. Furniture drawn/placed inside a visit remains session-only and is not retained after
+return or restart; do not use this prototype as persistent room storage. See [DESKTOP-INTERACTIONS.md](DESKTOP-INTERACTIONS.md).
+
 ## Workshop
 
 Pull a **Sponge**, choose **Use with cursor**, then move over raw pen strokes to wipe locally.

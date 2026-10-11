@@ -18,7 +18,8 @@ import { writeAtomic } from './storage';
 import { unchangedExample } from './builtin-files';
 import {DesktopBridge} from './desktop-bridge';
 import {watchFileWindows} from './file-windows';
-import type {FileWindow,DesktopAction,DesktopState} from '../shared/desktop';
+import { FileDocuments } from './file-documents';
+import type {FileWindow,DesktopAction,DesktopState,FileVisitStatus} from '../shared/desktop';
 import builtinHistory from '../../assets/builtin-history.json';
 
 let win: BrowserWindow | null = null;
@@ -32,8 +33,10 @@ let desktop:DesktopBridge|null=null;
 let desktopError='';
 let fileWatcher:ReturnType<typeof watchFileWindows>|null=null;
 let folderWindows:FileWindow[]=[];
-let documentWindow:FileWindow|null=null;
-let homes:{id:number;path:string}[]=[];
+const documents = new FileDocuments();
+let fileNote = '';
+let documentNote = '';
+let homes: FileVisitStatus[] = [];
 
 // ───────────── settings files ─────────────
 
@@ -177,18 +180,25 @@ function updateWatcher() {
   }
   if (!(config.windows || config.fileHomes || config.closeWindows) && lastWins.length) { lastWins = []; win?.webContents.send('world:windows', []); }
   watcher?.setUi(config.screenAware || config.fileHomes);
-  if(config.fileHomes && !fileWatcher)fileWatcher=watchFileWindows(files=>{folderWindows=files;sendFileWindows();},text=>win?.webContents.send('world:fileNote',text));
-  else if(!config.fileHomes && fileWatcher){fileWatcher.stop();fileWatcher=null;folderWindows=[];documentWindow=null;sendFileWindows();}
+  if(config.fileHomes && !fileWatcher)fileWatcher=watchFileWindows(files=>{folderWindows=files;sendFileWindows();},text=>{fileNote=text;win?.webContents.send('world:fileNote',text);});
+  else if(!config.fileHomes && fileWatcher){fileWatcher.stop();fileWatcher=null;folderWindows=[];documents.clear();fileNote='';documentNote='';sendFileWindows();}
   if (!config.screenAware) win?.webContents.send('world:ui', null);
 }
 
 /** What you're doing (app, title, where things are in its window): to the overlay, in its coordinates. */
 function sendUi(ui: UiReport) {
+  let document: FileWindow | null = null;
   if(config.fileHomes && ui.document && path.isAbsolute(ui.document)) {
     const frame=lastWins.find(w=>w.id===ui.win);
     if(frame){let kind:'folder'|'file'='file';try{if(fs.statSync(ui.document).isDirectory())kind='folder';}catch{}
-      documentWindow={id:ui.win,path:ui.document,kind,x:frame.x,y:frame.y,width:frame.w,height:frame.h,tops:toOverlay(ui.els.map(([x,y,w,h],i)=>({id:i,x,y,w,h}))).map(r=>[r.x,r.y,r.w,r.h])};}
-  } else documentWindow=null;
+      document={id:ui.win,path:normalizedPath(ui.document),kind,x:frame.x,y:frame.y,width:frame.w,height:frame.h,tops:toOverlay(ui.els.map(([x,y,w,h],i)=>({id:i,x,y,w,h}))).map(r=>[r.x,r.y,r.w,r.h])};}
+  }
+  if (config.fileHomes) {
+    if (process.platform === 'darwin' && !ui.trusted) {
+      documents.clear();
+      documentNote = 'Allow Accessibility in System Settings → Privacy & Security so document windows can be detected.';
+    } else { documentNote = ''; documents.observe(ui.win, document); }
+  }
   sendFileWindows();
   if (!config.screenAware) return;
   const els = toOverlay(ui.els.map(([x, y, w, h], i) => ({ id: i, x, y, w, h }))).map((r) => [r.x, r.y, r.w, r.h]);
@@ -222,15 +232,8 @@ function sendFileWindows() {
         height: source.h,
       });
   }
-  if (
-    documentWindow &&
-    lastWins.some((w) => w.id === documentWindow!.id) &&
-    !files.some((f) => f.id === documentWindow!.id)
-  )
-    files.push({
-      ...documentWindow,
-      path: normalizedPath(documentWindow.path),
-    });
+  for (const document of documents.visible(lastWins))
+    if (!files.some(f => f.id === document.id)) files.push(document);
   win?.webContents.send('world:files', files);
 }
 function normalizedPath(file: string) {
@@ -241,21 +244,33 @@ function normalizedPath(file: string) {
   return process.platform === 'win32' ? full.toLowerCase() : full;
 }
 async function chooseHabitat(id: number, kind: 'folder' | 'file' = 'folder') {
+  if (!activeFigureIds(config).includes(id))
+    return { ok: false, message: 'Select a figure in the current roster first.' };
+  if (!['darwin', 'win32'].includes(process.platform) || (kind === 'file' && process.platform !== 'darwin'))
+    return { ok: false, message: kind === 'file'
+      ? 'Document visits are available on Mac only, in apps that report their open file. Folder visits work in Finder / Explorer.'
+      : 'Folder visits need the desktop app on Mac or Windows.' };
   const result = await dialog.showOpenDialog({
     title: 'Choose the real file or folder for this figure to enter',
     properties: [kind === 'file' ? 'openFile' : 'openDirectory'],
   });
   if (result.canceled || !result.filePaths[0])
     return { ok: false, message: 'No place selected.' };
-  const target = normalizedPath(fs.realpathSync(result.filePaths[0]));
+  if (!activeFigureIds(config).includes(id))
+    return { ok: false, message: 'That figure left the roster while you were choosing. Select an active figure.' };
+  let target: string;
+  try { target = normalizedPath(fs.realpathSync(result.filePaths[0])); }
+  catch { return { ok: false, message: 'That place is no longer available. Choose an existing file or folder.' }; }
   setConfig(id, { fileHomes: true });
-  win?.webContents.send('desktop:habitat', { id, path: target });
+  if (kind === 'file' && !documents.visible(lastWins).some(f => f.kind === 'file' && f.path === target))
+    return { ok: false, message: 'Open this file in its Mac app first, then try again. Its app must report the document path; the figure stays on the desktop until it is detected.' };
+  win?.webContents.send('desktop:habitat', { id, path: target, kind });
   return {
     ok: true,
     message:
       kind === 'folder'
-        ? 'Entered. Open that folder in Finder / Explorer to see him.'
-        : 'Entered. On Mac, open the file in an app that reports its document path. This file detection still needs a Mac test.',
+        ? 'Folder selected. The figure appears when that exact folder is visible in Finder / Explorer. Return to desktop recalls it even when the folder is closed.'
+        : 'File selected. The figure appears in the detected document window. Return to desktop recalls it at any time.',
   };
 }
 
@@ -433,6 +448,9 @@ ipcMain.handle('desktop:info', () => ({
   error: desktopError,
   homes,
   connected: !!desktop?.state.browser,
+  fileNote: [fileNote,documentNote].filter(Boolean).join(' '),
+  foldersSupported: ['darwin', 'win32'].includes(process.platform),
+  filesSupported: process.platform === 'darwin',
 }));
 ipcMain.on('desktop:extensionFolder', () =>
   shell.openPath(path.join(__dirname, '../extension/chrome')),
@@ -452,7 +470,7 @@ ipcMain.on('desktop:fileHomes', (_e, value: unknown) => {
           h.id < 5 &&
           typeof h.path === 'string' &&
           h.path.length < 4096,
-      );
+      ).map(h => ({id:h.id, path:h.path, kind:h.kind==='file'?'file':'folder', visible:h.visible===true}));
 });
 ipcMain.handle(
   'desktop:action',

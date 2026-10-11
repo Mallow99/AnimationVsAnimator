@@ -392,7 +392,7 @@ export class ToolBag {
   refresh() {
     const pets = this.pets(),
       owner = this.current();
-    if (!owner) { this.toggle(false); return; }
+    if (!owner) { this.bag.hidden = this.bin.hidden = this.undo.hidden = true; this.toggle(false); return; }
     if (this.dragging && !pets.includes(this.tools.held!.owner)) this.cancel();
     this.bag.hidden = !pets[0]?.config.showBag;
     this.bin.hidden = !pets[0]?.config.showTrash;
@@ -465,7 +465,7 @@ export class ToolBag {
         const actual=this.itemOwner(id)!;
         const item = actual.items.list.find(i => String(i.uid) === id)!;
         const state = document.createElement("small");
-        state.textContent = (this.selected==="all"?actual.config.name+" · ":"") + (item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : item.where === "cursor" ? "With cursor" : item.dock!==null ? "Attached to TV" : item.shelf ? "On bookshelf" : item.where === "world" ? "On desktop" : "In bag");
+        state.textContent = (this.selected==="all"?actual.config.name+" · ":"") + (item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : item.where === "cursor" ? "With cursor" : item.dock!==null ? "Attached to TV" : item.shelf ? "On bookshelf" : item.where === "world" ? "Placed" : "In bag");
         if(item.bookmark>0)state.textContent += ` · Page ${item.bookmark+1}`;
         if(item.gameBest>0)state.textContent += ` · Best run ${item.gameBest}`;
         if (item.def.use === "gun") state.textContent += ` · ${item.ammo}/6 rounds`;

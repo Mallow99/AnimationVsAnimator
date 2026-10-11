@@ -223,6 +223,13 @@ export class Item {
   get tip(): V3 { return add3(this.at, scale3(this.dir, this.physicalLength * this.scale)); }
   get butt(): V3 { return add3(this.at, scale3(this.dir, -this.def.grip * this.scale)); }
 
+  /** Move with a room without injecting velocity or a spurious tip strike. */
+  translate(dx: number, dy: number) {
+    this.at.x += dx; this.at.y += dy;
+    for (const p of [this.a, this.b]) { p.x += dx; p.px += dx; p.y += dy; p.py += dy; }
+    for (const p of [this.lastTip, this.previousTip, this.dockPort, this.snackAt])
+      if (p) { p.x += dx; p.y += dy; }
+  }
   /** Start physics from where it is now, moving at (vx, vy). */
   loosen(vx = 0, vy = 0, dt = 1 / 120) {
     const tip = this.tip;

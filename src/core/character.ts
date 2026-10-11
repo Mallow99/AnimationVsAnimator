@@ -299,6 +299,21 @@ export class Character {
     const dx=x-this.x;this.body.translate(dx,0);this.rootX+=dx;this.goalX=null;this.rootVX=0;
     for(const f of [this.feet.L,this.feet.R]){f.x+=dx;f.fromX+=dx;f.toX+=dx;}
   }
+  /** Move a visiting room's frame without adding velocity or leaving planted feet behind. */
+  translateWorld(dx: number, dy: number) {
+    this.body.translate(dx, dy); this.rootX += dx;
+    if (this.goalX !== null) this.goalX += dx;
+    for (const f of [this.feet.L, this.feet.R]) { f.x += dx; f.fromX += dx; f.toX += dx; }
+    for (const p of [this.seat, this.handTarget]) if (p) { p.x += dx; p.y += dy; }
+    if (this.pushAt !== null) this.pushAt += dx;
+    if (this.pushY !== null) this.pushY += dy;
+    for (const g of Object.values(this.grips)) if (g) { g.x += dx; g.y += dy; g.cx += dx; g.cy += dy; }
+    if (this.getup) {
+      for (const set of [this.getup.from, this.getup.crouch, this.getup.stand])
+        for (const p of Object.values(set)) { p.x += dx; p.y += dy; }
+      this.getup.x += dx;
+    }
+  }
   /**
    * How he's sitting on a seat: sitting up (a chair), leaning back, sitting square to you (turned out
    * of the screen, still glancing the way he faces), or lying along it (a couch: head on the armrest

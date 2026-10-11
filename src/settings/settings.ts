@@ -5,6 +5,8 @@ import { PROVIDERS, RANGES, CHARACTER_PRESETS, activeFigureIds, companionConfig,
 import { BUNDLES, PRESET_ROWS, type Variant } from '../core/presets';
 import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
+import type { DesktopInfo } from '../shared/desktop';
+import { fileVisitView } from './file-visits';
 
 interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
 interface Weigh { name: string; score: number; why: string; bias?: number }
@@ -38,7 +40,7 @@ interface Shell {
   onCollections(cb: (c: Collections | {id:number;data:Collections}) => void): void;
   openItemsFolder(): void;
   reloadItems(): void;
-  desktopInfo?():Promise<{pairing:string;error:string;homes:{id:number;path:string}[];connected:boolean}>;
+  desktopInfo?():Promise<DesktopInfo>;
   openExtensionFolder?():void;
   chooseHabitat?(kind?:'folder'|'file',id?:number):Promise<{ok:boolean;message:string}>;
   onFileNote?(cb:(message:string)=>void):void;
@@ -71,6 +73,21 @@ const shell = {...source,
 };
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let cfg: PetConfig;
+let fileDesktopInfo: DesktopInfo | undefined;
+let choosingFileVisit = false;
+function renderFileVisits() {
+  if (!fileDesktopInfo) return;
+  const view = fileVisitView(fileDesktopInfo, allConfigs.map(c => c.name), target, activeFigureIds(allConfigs[0]));
+  $<HTMLButtonElement>('chooseHabitat').disabled = choosingFileVisit || !view.chooseFolder;
+  $<HTMLButtonElement>('chooseFile').disabled = choosingFileVisit || !view.chooseFile;
+  $<HTMLButtonElement>('returnHome').disabled = !view.returnIds.length;
+  $('returnHome').textContent = target === null ? 'Return all visitors' : 'Return to desktop';
+  $('fileSupport').textContent = view.help;
+  $('fileLocations').textContent = view.locations;
+  $('fileWarning').textContent = view.warning;
+  const hidden = fileDesktopInfo.homes.some(h => (target === null || h.id === target) && !h.visible);
+  $('openInventory').textContent = hidden ? (target === null ? 'Return hidden visitors and open bags' : 'Return and open bag') : 'Open bag';
+}
 
 function chooseTarget(value:string){target=value==='all'?null:Number(value);const c=allConfigs[target??targets()[0]];render(c);publishStats();publishCollections();source.command('sync',target??targets()[0]);}
 $<HTMLSelectElement>('figureTarget').onchange=()=>chooseTarget($<HTMLSelectElement>('figureTarget').value);
@@ -360,6 +377,7 @@ function render(c: PetConfig) {
   $<HTMLSelectElement>('figureCount').value=String(c.figureCount);
   $('personality').textContent='Preset: '+c.personality+' · '+(CHARACTER_PRESETS[target??targets()[0]]?.description??'');
   renderRoster();
+  renderFileVisits();
   for(const id of ['browserPlay','closeWindows','fileHomes'] as const)$<HTMLInputElement>(id).checked=c[id];
   $<HTMLInputElement>('debugCombat').checked=c.debugCombat;
   $<HTMLInputElement>('drawTools').checked=c.drawTools;
@@ -891,9 +909,34 @@ shell.command('sync');
 
 $('extensionFolder').onclick=()=>shell.openExtensionFolder?.();
 $('pairChrome').onclick=async()=>{try{const info=await shell.desktopInfo?.();if(!info?.pairing)throw new Error(info?.error || 'The Chrome bridge is unavailable.');await navigator.clipboard.writeText(info.pairing);$('chromeInfo').textContent='Pairing link copied. Paste it into the Chrome extension.';}catch(error){$('chromeInfo').textContent=(error as Error).message;}};
-$('chooseHabitat').onclick=async()=>{try{const result=await shell.chooseHabitat?.('folder');$('fileInfo').textContent=result?.message??'Use the desktop app for file visits.';}catch(error){$('fileInfo').textContent=(error as Error).message;}};
-$('returnHome').onclick=()=>shell.command('returnHome');
-shell.onFileNote?.(message=>{$('fileInfo').textContent=message;});
-setInterval(async()=>{try{const info=await shell.desktopInfo?.();if(!info)return;const home=info.homes.find(h=>h.id===shell.petId);if(home)$('fileInfo').textContent=`Visiting ${home.path}. Open it in Finder / Explorer to see him.`;if(info.error)$('chromeInfo').textContent=info.error;else if(info.connected)$('chromeInfo').textContent='A Chrome page is connected.';}catch{}},3000);
-
-$('chooseFile').onclick=async()=>{try{const result=await shell.chooseHabitat?.('file');$('fileInfo').textContent=result?.message??'Use the desktop app.';}catch(error){$('fileInfo').textContent=(error as Error).message;}};
+async function refreshDesktopInfo() {
+  try {
+    const info = await shell.desktopInfo?.();
+    if (!info) return;
+    fileDesktopInfo = info;
+    renderFileVisits();
+    $('chromeInfo').textContent = info.error || (info.connected ? 'A Chrome page is connected.' : 'No Chrome page connected.');
+  } catch { $('fileWarning').textContent = 'Could not read visit status. You can still use Return to desktop.'; }
+}
+async function chooseFileVisit(kind: 'folder' | 'file') {
+  const id = target;
+  if (id === null || choosingFileVisit) return;
+  choosingFileVisit = true; renderFileVisits();
+  $('fileInfo').textContent = 'Choosing a place for ' + allConfigs[id].name + '…';
+  try {
+    const result = await source.chooseHabitat?.(kind, id);
+    $('fileInfo').textContent = allConfigs[id].name + ': ' + (result?.message ?? 'Use the desktop app for visits.');
+  } catch (error) { $('fileInfo').textContent = (error as Error).message; }
+  finally { choosingFileVisit = false; await refreshDesktopInfo(); renderFileVisits(); }
+}
+$('chooseHabitat').onclick = () => { void chooseFileVisit('folder'); };
+$('chooseFile').onclick = () => { void chooseFileVisit('file'); };
+$('returnHome').onclick = () => {
+  const ids = fileDesktopInfo?.homes.filter(h => target === null || h.id === target).map(h => h.id) ?? targets();
+  for (const id of ids) source.command('returnHome', id);
+  $('fileInfo').textContent = 'Return requested.';
+  void refreshDesktopInfo();
+};
+shell.onFileNote?.(message => { $('fileWarning').textContent = message; });
+void refreshDesktopInfo();
+setInterval(() => { void refreshDesktopInfo(); }, 1500);

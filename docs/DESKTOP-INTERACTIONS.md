@@ -19,8 +19,8 @@ tools with drawings. The ink versions preserve the tool's function and are saved
 
 ## A larger group
 
-General enables companions and selects 2–5 figures. Each figure's settings are in the tray menu.
-Blurp remains inventive, Leonard competitive; Moss, Violet, and Ruby have gentle, mischievous,
+General selects 1–5 preset figures in one shared Settings window. Choose a name or All figures at
+the top. Cobalt is inventive, Amber competitive; Moss, Violet, and Ruby have gentle, mischievous,
 and adventurous defaults. Personality affects offline choices and combat, and gives optional AI context.
 Size stays under your control. Named requests such as **high five Moss, then draw a pistol** select
 the intended companion. Every pair has a separate saved relationship.
@@ -56,7 +56,7 @@ close tabs, or choose file/folder homes; these require your request.
 
 The owner explicitly rejected a special HTML room in Chrome. This build creates no room files.
 
-Use **Enter a folder…** and choose an existing folder. The figure's identity is associated with its
+In General → File and folder visits, select a named figure and use **Visit a folder…** and choose an existing folder. The figure's identity is associated with its
 exact path. When that folder's actual Finder/Explorer window is visible, the figure appears within it;
 when closed or showing another folder, the figure hides. The association and its state survive an app
 restart. **Return to desktop** brings the same figure and memories back. Other figures can visit that
@@ -66,9 +66,21 @@ On Mac, Finder location detection uses a fixed, read-only Automation query; macO
 to control Finder. The native helper also needs the existing Accessibility setup. On Windows, Explorer
 location detection uses `Shell.Application`. Neither query modifies your files.
 
-**Enter a file…** associates an existing document with its path. Mac document apps exposing
-Accessibility's document URL can be detected. This is not established for every editor, Chrome file
-viewer, or Windows document app. Folder and document behavior must be tested on real hardware.
+**Visit an open file…** requires Mac and an already detected document window exposing Accessibility's
+document URL. Enable visits and open the file in its app before choosing it. If its app cannot report
+that path, the action explains this and leaves the figure on the desktop. Windows document visits are
+disabled; Explorer folders remain supported. Focusing another app no longer discards a still-open
+reported document, and moved/resized windows use their current geometry. Closing/changing a document
+releases its old association. Native behavior still needs real Mac/Windows testing.
+
+The status lists names, exact paths and Window detected/Waiting for its window. Permission/helper
+messages remain separate from action feedback. **Return to desktop** works without that window;
+All figures offers **Return all visitors** and requires choosing a name before sending one away.
+Turning visits off clears the saved associations immediately. Original owned items and custom
+artwork travel without cloning; progress, magazines, reloads and memories return. Visible visitors
+retain bag/chat controls. Hidden visitors have an explicit Return and open bag action in Items.
+Saved visits restore only active roster identities. Furniture created within a visit is session-only;
+this prototype is not persistent room storage.
 
 **Current limit:** figures are drawn by this app's overlay, clipped inside the real window and behind
 windows in front. Finder itself does not execute or store the animation. The entry is currently a

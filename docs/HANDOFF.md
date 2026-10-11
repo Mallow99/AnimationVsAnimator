@@ -2,6 +2,49 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest repair: file/folder visits — 2026-10-11
+
+The owner reported file features as broken/unclear. This is a repair of the existing prototype;
+no further Chrome/Finder milestone has started. Continue on `codex/roadmap-continuation`, PR #3.
+
+- Visits move actual item objects between parked/visiting owners, preserving UID, customized stock
+  art, ink, book/game progress, magazines and reloads. Desktop bookshelf/seat/player claims release,
+  and furniture subscriptions reconnect on return. Visiting bodies get the same bag/chat/save callbacks
+  and live custom-definition updates. Live sanity includes visiting inventory, even when hidden.
+- Still-open document identities survive focusing another app. Native window reports supply current
+  bounds and clear closed/replaced document identities; loss of Mac Accessibility clears cached docs
+  and explains the permission. Window relocation shifts walking anchors and item physics together,
+  without double movement or resetting loose-item velocity. Initial same-folder visitors spread out.
+- File and folder visits have their own General card with named path/kind, Window detected/Waiting,
+  separate helper/permission messages and action feedback. All requires a named chooser and offers
+  Return all visitors. Hidden visitors have an explicit Return and open bag action. Unsupported
+  platforms and undetected documents refuse entry; Windows documents are disabled, Explorer folders
+  remain. Choosing an inactive/departed figure is refused. Turning visits off/removing a visitor
+  returns them and clears saved associations immediately; restarts restore only the selected roster.
+- Six new regressions cover original ownership, custom art, clocks/claims/subscriptions, frame
+  movement, inactive/transport refusal, saved window coordinates/progress, document focus and controls.
+  The soak adds six repeated five-figure visit/close/move/return cycles. `PET_FAKE_FILES` parallels
+  `PET_FAKE_WINDOWS` for explicitly simulated native reports; the UI labels this verification mode.
+
+Verified in cloud/Linux: typecheck/build, all 182 regressions (78 general, 30 roadmap, 18 quality,
+20 living, 36 Update 2), full seed-1 simulation, complete actual Chromium interaction check, actual
+Electron preload/input/settings/visit-restart checks and focused five-visitor/All/pointer-return UI
+check. Seed-32 expanded soak: 2,566.4 simulated seconds, 2,635 audits, 35 phases, zero reported issues;
+see verification/file-visits-soak-32.json. The requested duration is a minimum; scheduled feature
+phases plus a required unattended tail make this run longer. Inspected named/All panels and five
+visitors; captures under verification/file-*.png are labeled cloud/fake reports. The focused check is
+reproducible with `npm run build` then, on Linux with an X server,
+`DISPLAY=:91 electron --no-sandbox scripts/file-visits-ui-check.cjs`.
+Windows portable package rebuilt and inspected; it was not run on Windows hardware.
+
+Remaining: Finder/Explorer matching, Mac Swift/Automation/Accessibility, Spaces, occlusion and
+foreground focus/return still need real hardware. Document detection remains limited to Mac apps
+reporting their document path; no new native integration or icon-crawl animation was added. Furniture
+created inside a visit is session-only, not persistent room storage. Your files are never modified.
+No new RAM measurements were made; prior measured resource evidence below remains the available data.
+
+Next concrete step: owner file/folder hardware acceptance using CURRENT-CONTROLS.md. Stop there.
+
 ## Latest correction: relaxed standing — 2026-10-10
 
 The owner disliked the new standing poses. All five personality templates now default to `idle: none`;

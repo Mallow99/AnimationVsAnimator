@@ -193,10 +193,12 @@ try {
   await until(()=>evaluate('window.cutouts.cards[0].bitmap.naturalWidth>0'));
   assert(await evaluate('window.cutouts.hit(window.cutouts.cards[0].x+5,window.cutouts.cards[0].y+5)!==null'));await evaluate('window.cutouts.clear()');
   // A resident uses its existing identity and is returned by the actual controller.
-  await evaluate("window.habitats.enter(0,window.pet,'/test/real-folder');window.habitats.refresh([{id:1,path:'/test/real-folder',kind:'folder',x:100,y:100,width:500,height:400}])");
+  await evaluate("window.fileOriginals=window.pet.items.list.slice();window.habitats.enter(0,window.pet,'/test/real-folder');window.habitats.refresh([{id:1,path:'/test/real-folder',kind:'folder',x:100,y:100,width:500,height:400}])");
   assert.equal(await evaluate('window.habitats.activePets[0].ctx.who===window.pet.ctx.who'),true);
   await evaluate('window.habitats.refresh([])');assert.equal(await evaluate('window.habitats.activePets.length'),0);
-  await evaluate('window.habitats.returnHome(0)');assert.equal(await evaluate('window.pet.paused'),false);
+  await evaluate('window.habitats.returnHome(0)');assert.equal(await evaluate('window.pet.paused'),true);
+  assert(await evaluate('window.fileOriginals.every(i=>window.pet.items.list.includes(i))'));
+  assert.deepEqual(await evaluate('window.checkSanity()'),[]);
   // The physical bag uses real pointer input, and removed objects restore their original identity.
   await evaluate('window.equipCursor("none");for (const [i,p] of window.pets.entries()) { p.mind.reset(p.ctx); p.paused = true; p.mood.asleep=false; p.mood.s.energy=1; p.config.windows=false; p.config.destructible=false; p.setWindows([]); p.command("respawn"); p.char.standUp(); p.char.grab("neck",p.char.body.j.neck.x,p.char.body.j.neck.y);p.char.moveHold(450+i*400,p.ctx.world.bounds.floor-100*p.char.scale,0,0); } for(let i=0;i<180;i++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.char.release();for(let i=0;i<720;i++)for(const p of window.pets)p.update(1/120);');
   const centerOf = async selector => evaluate(`(() => {const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest'});const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
