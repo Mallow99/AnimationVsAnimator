@@ -2,6 +2,64 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest repair: varied life and readable books — 2026-10-12
+
+The owner reported reading-dominated routines, awkward adjacent readers and standing/seated clipping.
+They supplied AvA/AvM reference videos through the v1.0.0 release; sampled full-timeline sheets and
+closer frame sequences informed this repair. Exact comparison, behavior changes, preview captures,
+measurements and limits: [AVA-POLISH-COMPARISON.md](AVA-POLISH-COMPARISON.md).
+
+- Shorter self-chosen read/TV/game/seat sessions (including joining TV), bounded repeat cooldowns,
+  energetic movement/tool choices after long stationary periods and work/play boredom relief.
+  Explicit requests retain long pacing; tasks complete at natural page/game breaks. Quietly seated
+  idle figures can move on; sleeping figures stay asleep. Autonomous reading uses owned unfinished
+  books rather than creating supplies.
+- Raised/tipped compact book grips, both hands following the open width/page reach, actual page gaze,
+  no prone couch reading or unrelated child-seat chatter. Counts update after the completed turn and
+  before closing, with a steady grip until shut. Same originals return to bag/shelf, and interruptions
+  release claims. Eleven focused regressions include five readers facing one way with head clearance.
+- Finite books (default 96 pages), per-original saved progress/completed-reading count, bounded legacy
+  migration, custom `pages` metadata, custom shelf restoration and actual gift preservation. Existing
+  owned cards show page/total/percent or Finished; Read this book/Read again chooses the exact original.
+  Named Settings shows current book/page; All does not display one person's progress.
+- An idle standing spectator walks outside merged occupied-seat intervals, using peer snapshots and
+  actual vertical overlap. Seated readers remain seated; shared contact, approach and combat keep
+  their choreography. Peer snapshots are reused within the contact check.
+- New requests stop old walking destinations. Replaying the failing seed-1 couch/TV assertion found
+  a stale goal taking the figure away from the selected couch until timeout; the assertion was kept,
+  the behavior fixed and a direct opposite-goal regression added. TV game speech has cooldowns while
+  game/button motion continues. Sanity checks also validate finite book state.
+
+Verified typecheck/build, all 193 regressions (182 existing + 11 focused), full seed-1 simulation,
+actual Chromium book controls and all existing pointer/keyboard cases, both facings/every preset,
+and final rendered opening/page/closing/departure frames. Linux Electron/Xvfb passed overlay/preload,
+inventory/keyboard/focusability, visiting bag/chat/status/restart and five-visitor All/pointer-return
+checks with explicitly fake native reports. Windows x64 portable package rebuilt and inspected.
+Functional feature soak:
+2,566.4 simulated seconds, 2,635 audits, 35 phases, zero issues; final compact grip refinement has
+additional focused head/reach checks and rendered browser/preset acceptance. Separate 15-minute
+unattended profiles use seeds 32 and 7, with 900 audits each; reports under verification/polish-*.
+Independent peaceful browser fixtures clear prior combat shots, stop/stow previous activities and
+wait for actual grounded recovery, clearing its incidental plan/gesture before gift/catch selection;
+no acceptance assertion is weakened. Current reports are separate from historical Update 2 evidence.
+
+The 900-second seed-32 furnished offline observation changed reading/TV/games from 79.0% of all
+figure-time to 22.2%; seed 7 measured 30.1%. Each run had 900 clean audits. None of the old or new
+profiles showed stranded seated idle; do not describe the baseline as a universal deadlock.
+
+Fresh Linux Electron/Xvfb furnished five-figure RAM: 348 MiB PSS, 422 with Settings, 384 after closing;
+software rendering, nine furniture/twenty items, disposable offline saves. This is not a Mac estimate
+or leak proof. Windows portable output must match final bundles and exclude source maps/saves/keys.
+Core five-figure/ten-loose-item profile: mean/p95 2.483/6.040 ms per combined 120 Hz update with
+another browser check active. Final Chromium frame median/p95: 16.7/16.7 ms. Concurrent heavy tests
+increased tail timings; native rendering remains unmeasured here.
+
+Remaining: action-specific nonverbal anticipation/recovery and coherent shared outcomes still trail
+the directed reference films. Complex crowded approaches/mixed scales, authored book content, more
+handheld games and existing physics/display limits remain. Mac Swift/focus/Spaces/native file return
+and Windows native helpers/input/DPI still need hardware. Reference movies/stills are not committed.
+Continue on `codex/roadmap-continuation`, open draft PR #3; stop after this repair and owner judgement.
+
 ## Latest repair: file/folder visits — 2026-10-11
 
 The owner reported file features as broken/unclear. This is a repair of the existing prototype;

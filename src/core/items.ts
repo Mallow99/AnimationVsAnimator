@@ -65,6 +65,7 @@ export interface ItemDef {
   blueprint?: string;
   drawable?: boolean;
   refinable?: boolean;
+  pages?: number;
 }
 
 /** Check a definition (from a file you wrote, or from the AI). Returns null if it's unusable. */
@@ -106,6 +107,7 @@ export function parseItemDef(raw: unknown): ItemDef | null {
     drawable: o.drawable !== false, refinable: o.refinable !== false,
     drawn: o.drawn === true || undefined,
     cuts: o.cuts === true ? true : undefined,
+    pages: o.pages === undefined ? undefined : Math.round(num(o.pages,96,8,9999)),
   };
 }
 
@@ -187,6 +189,8 @@ export class Item {
   bookTarget = 0;
   bookPage = 0;
   bookmark = 0;
+  bookPages = 96;
+  bookReadThroughs = 0;
   bookReading = false;
   yoyoDrop = 0;
   blanketSpread=0;snackOpen=0;snackAt:Vec|null=null;
@@ -215,6 +219,7 @@ export class Item {
     this.b = makePoint(at.x, at.y + def.length * scale, 2);
     this.sticks = [{ a: this.a, b: this.b, len: def.length * scale }];
     this.at = { x: at.x, y: at.y, z: 0 };
+    this.bookPages = def.pages ?? 96;
   }
 
   private gameStockDef:ItemDef|null=null;private gameStock=false;
@@ -714,7 +719,7 @@ export class Items {
 
   // ── saving: what he owns and where (anything lying around or with you goes back on his belt) ──
   save() {
-    return this.list.map(it => ({ id: it.def.id, bookmark: it.bookmark, gameBest:it.gameBest, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', ...(it.where === 'world' ? { world: { at: it.at, dir: it.dir } } : {}), ...(it.ink ? { ink: it.ink } : {}), ...(it.shelf ? { shelf: it.shelf } : {}), ...(it.def.use === 'gun' ? { ammo: it.ammo, reloadRemaining: it.reloadRemaining } : {}), def: it.def.drawn || !BUILTIN_ITEMS.some(d => d.id === it.def.id) ? it.def : undefined }));
+    return this.list.map(it => ({ id: it.def.id, bookmark: it.bookmark, ...(isBookItem(it)?{bookPages:it.bookPages,bookReadThroughs:it.bookReadThroughs}:{}), gameBest:it.gameBest, slot: it.where === 'belt' ? it.slot : -1, worn: it.where === 'worn', ...(it.where === 'world' ? { world: { at: it.at, dir: it.dir } } : {}), ...(it.ink ? { ink: it.ink } : {}), ...(it.shelf ? { shelf: it.shelf } : {}), ...(it.def.use === 'gun' ? { ammo: it.ammo, reloadRemaining: it.reloadRemaining } : {}), def: it.def.drawn || !BUILTIN_ITEMS.some(d => d.id === it.def.id) ? it.def : undefined }));
   }
   /**
    * `known`: the built-ins he'd been given when this was saved. Missing (an older save) means
@@ -726,18 +731,21 @@ export class Items {
     this.list = []; this.belt = Array(SLOTS).fill(null);
     for (const d of data.slice(0, 40)) {
       if (!d || typeof d !== 'object') continue;
-      const o = d as { id?: string; slot?: number; worn?: boolean; bookmark?:number; gameBest?:number; ammo?:number; reloadRemaining?: number; shelf?: { key?: string; slot?: number }; ink?:unknown; world?:{at?:V3;dir?:V3}; def?: unknown };
+      const o = d as { id?: string; slot?: number; worn?: boolean; bookmark?:number; bookPages?:number;bookReadThroughs?:number;gameBest?:number; ammo?:number; reloadRemaining?: number; shelf?: { key?: string; slot?: number }; ink?:unknown; world?:{at?:V3;dir?:V3}; def?: unknown };
       const def = o.def ? parseItemDef(o.def) : this.defs.get(String(o.id));
       if (!def) continue;
       if (o.def && o.ink) def.drawn = true;
       const it = new Item(def, { x: ch.x, y: ch.body.j.hip.y }, ch.scale);
       if(Number.isInteger(o.bookmark))it.bookmark=clamp(o.bookmark!,0,9999);
+      it.bookPages=Number.isInteger(o.bookPages)?clamp(o.bookPages!,8,9999):Math.min(9999,Math.max(it.bookPages,it.bookmark+24));
+      it.bookmark=Math.min(it.bookmark,it.bookPages);
+      if(Number.isInteger(o.bookReadThroughs))it.bookReadThroughs=clamp(o.bookReadThroughs!,0,1000);
       if(Number.isInteger(o.gameBest))it.gameBest=clamp(o.gameBest!,0,9999);
       if(def.use==='gun' && Number.isInteger(o.ammo))it.ammo=Math.max(0,Math.min(6,o.ammo!));
       if (def.use === 'gun' && Number.isFinite(o.reloadRemaining)) it.reloadRemaining = clamp(o.reloadRemaining!, 0, 1.15);
       this.list.push(it);
       it.ink = parseProject(o.ink);
-      if (def.id === 'book' && typeof o.shelf?.key === 'string' && /^[a-z0-9-]{1,60}$/.test(o.shelf.key) && Number.isInteger(o.shelf.slot))
+      if (isBookItem(it) && typeof o.shelf?.key === 'string' && /^[a-z0-9-]{1,60}$/.test(o.shelf.key) && Number.isInteger(o.shelf.slot))
         it.shelf = { key: o.shelf.key, slot: clamp(o.shelf.slot!, 0, 4) };
       if (o.world && Number.isFinite(o.world.at?.x) && Number.isFinite(o.world.at?.y)) {
         it.where = 'world'; it.at = { x: clamp(o.world.at!.x, ch.bounds.left, ch.bounds.right), y: clamp(o.world.at!.y, ch.bounds.top, ch.bounds.floor), z: 0 };
@@ -752,6 +760,11 @@ export class Items {
   }
 }
 
+export const isBookItem = (it: Item) => it.def.id === 'book' || it.ink?.source === 'book' || it.def.pages !== undefined;
+export function bookProgress(it: Item) {
+  return it.bookmark >= it.bookPages ? `Finished · ${it.bookPages}/${it.bookPages} pages`
+    : `Page ${it.bookmark+1}/${it.bookPages} · ${Math.floor(it.bookmark/it.bookPages*100)}% read`;
+}
 function presentationShape(it:Item,reading=false):ItemStroke[]{
   let shape=it.animatedBook?bookShape(it.bookOpen,it.bookPage,reading):it.animatedDomestic?domesticShape(it):it.def.shape;
   if(it.animatedHandheld&&it.working&&it.where==='hand')shape=[

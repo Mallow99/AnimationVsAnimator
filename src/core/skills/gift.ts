@@ -185,6 +185,8 @@ export class GiveGift extends Skill {
       ammo: it.ammo,
       reloadRemaining: it.reloadRemaining,
       bookmark: it.bookmark,
+      bookPages: it.bookPages,
+      bookReadThroughs: it.bookReadThroughs,
       gameBest: it.gameBest,
       ink: it.ink,
       wrap: it.giftWrap,

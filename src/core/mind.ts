@@ -4,7 +4,8 @@ import { DomesticItem,SwitchLamp } from './skills/domestic';
 import { ReadBook } from './skills/read-book';
 import { EverydayItem } from './skills/everyday-item';
 import { propActions } from './capabilities';
-import { restlessness, isSettledActivity } from './activity-pacing';
+import { restlessness, isSettledActivity, autonomousActivitySeconds } from './activity-pacing';
+import { isBookItem } from './items';
 // The offline mind ("Mode 0"): instinct, no AI.
 //
 // Two jobs:
@@ -262,6 +263,9 @@ export class Mind {
   private watchStart = -1;
   private chill = false;
   private chillUntil = 0;
+  private stationaryTime = 0;
+  private previousX: number | null = null;
+  private endedAt = new Map<string, number>();
   private boredOfCursor = 0;        // short breather between activities
   private lastCursorSeen = 0;
   /** When you last took one of his things. */
@@ -290,6 +294,9 @@ export class Mind {
 
   update(c: Ctx, dt: number) {
     c.mood.tick(dt);
+    const moved = this.previousX !== null && c.char.walking && Math.abs(c.char.x-this.previousX) > dt*8;
+    this.stationaryTime = Math.max(0, Math.min(300, this.stationaryTime + (moved ? -dt*8 : dt)));
+    this.previousX = c.char.x;
     if(this.suspended&&(c.world.time>=this.suspended.expires||!c.char.whole||c.char.hp<.25||c.mood.asleep))this.suspended=null;
     if (c.char.support !== this.lastSupport && c.char.mode === 'ground') {
       this.lastSupport = c.char.support;
@@ -320,9 +327,10 @@ export class Mind {
       const next = this.queued;
       this.queued = null;
       this.begin(c, next);
-    } else if (c.char.ready && c.world.time >= this.restUntil && c.world.time >= this.holdUntil) {
+    } else if ((c.char.ready || c.char.mode === 'sit') && !c.mood.asleep && c.world.time >= this.restUntil && c.world.time >= this.holdUntil) {
       const o = this.choose(c);
       this.why = o.why;
+      if (c.char.mode === 'sit' && o.name !== 'idle') c.char.standUp();
       this.begin(c, o.make());
     }
     this.updateLook(c);
@@ -337,6 +345,7 @@ export class Mind {
     const quiet=['blanket','snack','read','sitdown','sip','sleep','nap','watchtv'].includes(doing);
     if(social)m.nudge({socialNeed:-dt/65,contentment:dt/250,frustration:-dt/100,affection:dt/400,stress:-dt/130});
     if(creative)m.nudge({inspiration:-dt/120,contentment:dt/300,confidence:dt/700});
+    if(creative || ['videogame','handheld','group','exercise','yoyo','ride'].includes(doing))m.nudge({boredom:-dt/150});
     if(quiet)m.nudge({frustration:-dt/90,contentment:dt/350,stress:-dt/90});
     // How he walks says how he feels.
     if (w.time > this.chillUntil) { this.chill = chance(0.5); this.chillUntil = w.time + rand(90, 240); }
@@ -533,6 +542,7 @@ export class Mind {
     this.skill = null;
     s.stop(c);
     this.last = s.name;
+    if (['read','watchtv','videogame','sitdown'].includes(s.name)) this.endedAt.set(s.name, c.world.time);
     c.look = 'default';
   }
 
@@ -541,6 +551,7 @@ export class Mind {
     this.suspended=null;
     this.end(c);
     c.char.cancelGesture();
+    c.char.stop(); // a new request must not inherit the previous walk's destination
     this.queued = next ?? null;
   }
   private react(c:Ctx,next?:Skill) {
@@ -561,7 +572,11 @@ export class Mind {
     let total = 0;
     const weights = opts.map((o) => {
       const pace = ['idle', 'sit', 'sitdown', 'watchtv', 'read'].includes(o.name) ? 1.3 - restlessness(c) * 0.5 : ['duel', 'dance', 'ride', 'backflip', 'grabcursor'].includes(o.name) ? 0.45 + restlessness(c) : 1;
-      const wt = o.score > 0 ? pace * o.score * o.score * (o.name === this.last ? 0.3 : 1) / (1+this.history.slice(-6).filter(name=>name===o.name).length*0.6) * rand(0.85, 1.15) : 0;
+      const since = c.world.time - (this.endedAt.get(o.name) ?? -1000);
+      const cooldown = ['read','watchtv','videogame','sitdown'].includes(o.name) && since < 240 ? 0.08 + 0.92*Math.max(0,since)/240 : 1;
+      const stiff = this.stationaryTime > 90 && c.mood.s.energy > .3;
+      const movement = stiff ? ['wander','explore','stretch','exercise','yoyo','ride','drawtool','deskwork','paint','doodle'].includes(o.name) ? 2 : ['idle','sit','sitdown','read','watchtv','videogame'].includes(o.name) ? .3 : 1 : 1;
+      const wt = o.score > 0 ? pace * cooldown * movement * o.score * o.score * (o.name === this.last ? 0.3 : 1) / (1+this.history.slice(-6).filter(name=>name===o.name).length*0.6) * rand(0.85, 1.15) : 0;
       total += wt;
       return wt;
     });
@@ -621,7 +636,7 @@ export class Mind {
     ];
     for (const [name, use] of [['sip','sip'],['exercise','exercise'],['yoyo','play']] as const) {
       const item = c.items.find(use);
-      if (item && item.where !== 'cursor') opts.push({name,score:name === 'sip' ? 0.2+(1-s.energy)*0.2 : name === 'exercise' ? 0.05+s.energy*0.18 : 0.1+s.boredom*0.2,why:name === 'sip' ? 'a quiet drink' : name === 'exercise' ? 'a short training set' : 'practicing a pocket trick',make:()=>new EverydayItem(use,name)});
+      if (item && item.where !== 'cursor') opts.push({name,score:name === 'sip' ? 0.2+(1-s.energy)*0.2 : name === 'exercise' ? 0.2+s.energy*0.35 : 0.2+s.boredom*0.4,why:name === 'sip' ? 'a quiet drink' : name === 'exercise' ? 'a short training set' : 'practicing a pocket trick',make:()=>new EverydayItem(use,name)});
     }
     if(c.items.find('rest')?.where!=='cursor' && c.items.find('rest'))opts.push({name:'blanket',score:.1+(1-s.energy)*.45+s.stress*.25+(c.personality==='gentle'?.12:0),why:'a quiet blanket break',make:()=>new DomesticItem('rest')});
     if(c.items.find('snack')?.where!=='cursor' && c.items.find('snack'))opts.push({name:'snack',score:.12+s.frustration*.2,why:'taking a snack break',make:()=>new DomesticItem('snack')});
@@ -813,10 +828,11 @@ export class Mind {
       if (!tv) this.cant.playgame = 'no TV to play on (drop one in from my inventory)';
     }
     if (seat) opts.push({ name: 'sitdown', why: s.energy < 0.5 ? 'tired: having a sit on the ' + seat.def!.name.toLowerCase() : 'taking a seat',
-      score: 0.15 + (1 - s.energy) * 0.7 + (L === 'sad' ? 0.3 : 0), make: () => new SitOnProp(seat) });
-    if (c.items.defs.has('book')) opts.push({ name: 'read', why: 'settling into a book', score: 0.3 + (1 - restlessness(c)) * 0.6, make: () => new ReadBook() });
-    if (tv) opts.push({ name: 'watchtv', why: 'watching TV', score: L === 'bored' ? 0.9 : E === 'lonely' || L === 'sad' ? 0.6 : L === 'sleepy' ? 0.3 : 0.25, make: () => new WatchTV(tv) });
-    if (tv) opts.push({ name: 'videogame', why: 'playing video games', score: L === 'bored' ? 0.7 : L === 'playful' || E === 'excited' ? 0.5 : L === 'sleepy' || L === 'sad' ? 0.05 : 0.2, make: () => new PlayVideoGame(tv) });
+      score: 0.15 + (1 - s.energy) * 0.7 + (L === 'sad' ? 0.3 : 0), make: () => new SitOnProp(seat, this.forced ? null : autonomousActivitySeconds(c,'sitdown')) });
+    const book = c.items.list.find(it => isBookItem(it) && it.where !== 'cursor' && it.bookmark < it.bookPages);
+    if (book || this.forced) opts.push({ name: 'read', why: 'reading another section of his book', score: 0.25 + s.inspiration*.35 + (c.personality==='inventive'?.12:0), make: () => new ReadBook(book??null,0,!this.forced) });
+    if (tv) opts.push({ name: 'watchtv', why: 'watching TV', score: L === 'bored' ? 0.9 : E === 'lonely' || L === 'sad' ? 0.6 : L === 'sleepy' ? 0.3 : 0.25, make: () => new WatchTV(tv,!this.forced) });
+    if (tv) opts.push({ name: 'videogame', why: 'playing video games', score: L === 'bored' ? 0.7 : L === 'playful' || E === 'excited' ? 0.5 : L === 'sleepy' || L === 'sad' ? 0.05 : 0.2, make: () => new PlayVideoGame(tv,!this.forced) });
     if (scooter && ch.legCount === 2 && ch.useHand) opts.push({ name: 'ride', why: 'scooter time', score: E === 'excited' ? 1 : L === 'playful' ? 0.7 : L === 'bored' ? 0.5 : 0.08, make: () => new RideScooter(scooter) });
     if (canvas && c.items.find('draw') && ch.useHand) opts.push({ name: 'paint', why: 'painting on his canvas', score: L === 'bored' ? 0.5 : L === 'playful' ? 0.3 : 0.05, make: () => new PaintCanvas(canvas) });
     if (tv && c.game) opts.push({ name: 'playgame', why: 'asking you to play a game', score: c.world.time - this.gameAskedAt >= 300 && (L === 'bored' || L === 'playful') ? 0.35 : 0,
@@ -883,7 +899,7 @@ export class Mind {
     // He's at the TV: join him (watch with him, or play against him).
     const tv = (f.doing === 'watchtv' || f.doing === 'videogame') ? propsOf(c, 'tv').find((t) => t.watchers.size > 0) : undefined;
     opts.push({ name: 'jointv', score: tv && bond > -0.2 && L !== 'angry' ? 0.45 + bond * 0.4 + s.boredom * 0.3 : 0, why: f.doing === 'videogame' ? `playing video games with ${f.name}` : `watching TV with ${f.name}`,
-      make: () => (f.doing === 'videogame' ? new PlayVideoGame(tv!) : new WatchTV(tv!)) });
+      make: () => (f.doing === 'videogame' ? new PlayVideoGame(tv!,!this.forced) : new WatchTV(tv!,!this.forced)) });
     return opts;
   }
 

@@ -2,6 +2,14 @@
 
 ## Current priority: Pet Quality Update 2 (implementation complete)
 
+The owner's latest reading/inactivity/clipping feedback authorizes a further quality repair, informed
+by their uploaded AvA/AvM release references. [AVA-POLISH-COMPARISON.md](AVA-POLISH-COMPARISON.md)
+records the sampled visual comparison and this pass: varied autonomous sessions, owned finite books,
+raised compact grips, exact-book progress/reread controls, quieter reactions, idle-row clearance and
+new requests replacing stale walking destinations. Keep quiet rests and purposeful task completion;
+do not compensate with constant motion, speech or another integration. Current acceptance is in the
+latest handoff. Stop after this repair and owner visual/native feedback.
+
 Completed the ordered pass in [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md): resources, physical
 contact/intent, continuity, group social context, useful domestic objects, personalized motion/names,
 richer friendships/moods/gifts, handheld peer play, TV console attachments and developing satchels.

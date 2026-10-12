@@ -21,6 +21,13 @@ General → Development checks → **Check live world** reports ownership, coord
 
 ## Satchels, supplies and trash
 
+Books now show **Page/total · percent read** or **Finished** on their owned cards. Select a book
+and choose **Read this book** to use that exact original, or **Read again** after finishing.
+Completed pages and reading counts follow the book through saving, shelving, passing and gifting.
+Stock books have 96 pages; custom items can define `pages`. Named Settings status shows the current
+book/page. A self-chosen reading/TV/game break lasts a few minutes, then leaves room for other
+activities; your explicit requests keep longer pacing. Taking a book remains passive.
+
 Right-click a figure → **Open bag**, click its wearable satchel, or tell it “open bag.”
 A brief hover hint points to this menu. The figure menu has one inventory entry instead of a separate
 Take row for every owned item. **Activities…** opens the activity list directly.

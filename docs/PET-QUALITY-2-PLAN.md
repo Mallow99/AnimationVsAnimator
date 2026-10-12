@@ -47,6 +47,19 @@ presets, offline operation, separate peer messages, actual item ownership and sh
    - [x] Real Chromium/Electron input, visual motion inspection, resource lifecycle run and packaging.
    - [x] Every working commit includes CHANGELOG and chat changelog; update controls/roadmap/handoff/PR.
 
+9. **Owner feedback: inactivity, reading and seated overlap (2026-10-12)**
+   - [x] Inspect owner-provided AvA/AvM video samples; state observable differences and review limits.
+   - [x] Compare unattended furnished life before/after; make autonomous sessions and choices varied
+     without continually interrupting activities or making sleeping figures busy.
+   - [x] Raise/tip books with reachable hands and actual gaze, quiet the reading seat helper, finish
+     turns before closing, and retain finite per-original progress/completion across ownership/saves.
+   - [x] Show exact-book Read/Read again and progress through existing bag/named Settings controls.
+   - [x] Idle standing figures walk clear of occupied rows; preserve intentional social/approach contact.
+   - [x] Replace stale walk destinations on a new request; retain the failing seed-1 assertion.
+   - [x] Focused regressions, existing checks/simulation, feature soak, real browser/Electron input,
+     preset/facing inspection, rendered animation previews and resource measurement.
+   - [x] Record final acceptance, commit/changelog, push and update PR #3; stop for owner judgement.
+
 Baseline implementation: `7a9e0a0`; research: `a3caee5`. Prior acceptance: 140 checks and 34m52s
 scheduled simulated soak. Initial Linux RAM medians: ordinary 1/2/5 = 325/308/309 MiB PSS;
 five + nine furniture + twenty items = 347 MiB; Settings open = 422 MiB; after twelve Settings

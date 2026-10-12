@@ -50,6 +50,7 @@ An item lives in his wearable satchel. He reaches in to use it, and you can pull
 | `bounce`| how bouncy it is when it lands: `0` a thud, `0.9` a super ball. Leave it out for `0.3`. |
 | `cuts`  | `true` for a real blade (like `katana.json`): in a real fight it can take a limb off or run someone through. |
 | `shape` | the drawing (see "Drawing it" below). |
+| `pages` | optional book length, 8–9999 (whole pages). Stock books default to 96. Adding this marks a custom item as a readable book; its artwork stays yours. Progress and completed readings follow the owned original. |
 
 ### What `use` does
 

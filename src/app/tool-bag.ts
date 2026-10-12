@@ -3,7 +3,8 @@ import { OverlayTools } from "../core/overlay-tools";
 import { satchelAt } from "../core/satchel";
 import { thingCard } from "../settings/item-card";
 import { isWeapon } from "../core/combat/armament";
-import type { Item } from "../core/items";
+import { isBookItem, bookProgress, type Item } from "../core/items";
+import { ReadBook } from "../core/skills/read-book";
 import type { Thing } from "../core/props";
 import { activitiesFor } from "./activities";
 
@@ -417,7 +418,7 @@ export class ToolBag {
       this.selected,
       pets.map((p) => [p.ctx.who, p.config.name]),
       this.owned
-        ? this.targets().map(p=>[p.ctx.who,p.items.list.map((i) => [i.uid, i.where, i.ammo, i.shelf, i.bookmark, i.gameBest,i.dock,i.ink?.progress])])
+        ? this.targets().map(p=>[p.ctx.who,p.items.list.map((i) => [i.uid, i.where, i.ammo, i.shelf, i.bookmark, i.bookPages, i.bookReadThroughs, i.gameBest,i.dock,i.ink?.progress])])
         : [
             owner && [...owner.items.defs.values()],
             owner && [...owner.props.defs.values()],
@@ -466,7 +467,7 @@ export class ToolBag {
         const item = actual.items.list.find(i => String(i.uid) === id)!;
         const state = document.createElement("small");
         state.textContent = (this.selected==="all"?actual.config.name+" · ":"") + (item.where === "hand" ? "In hand" : item.where === "worn" ? "Wearing" : item.where === "cursor" ? "With cursor" : item.dock!==null ? "Attached to TV" : item.shelf ? "On bookshelf" : item.where === "world" ? "Placed" : "In bag");
-        if(item.bookmark>0)state.textContent += ` · Page ${item.bookmark+1}`;
+        if(isBookItem(item))state.textContent += ` · ${bookProgress(item)}`;
         if(item.gameBest>0)state.textContent += ` · Best run ${item.gameBest}`;
         if (item.def.use === "gun") state.textContent += ` · ${item.ammo}/6 rounds`;
         button.append(state);
@@ -536,13 +537,21 @@ export class ToolBag {
     this.details.hidden = false;
     const name = document.createElement("strong"); name.textContent = def.name;
     const about = document.createElement("p"); about.textContent = def.about;
+    this.details.append(name, about);
     const actions = document.createElement("div"); actions.className = "bag-item-actions";
     const action = (label: string, id: string, run: () => void) => { const button = document.createElement("button"); button.type = "button"; button.textContent = label; button.dataset.action = id; button.onclick = run; actions.append(button); };
     action(selected.kind === "owned" ? "Take out" : "Place on desktop", "place", () => { const at = satchelAt(owner.char); this.startPull(selected.kind, selected.id, at.x, at.y, false); });
     if (item) {
-      if (item.def.id === 'book') {
+      if (isBookItem(item)) {
+        const progress = document.createElement('p');
+        progress.textContent = bookProgress(item) + (item.bookReadThroughs ? ` · Read ${item.bookReadThroughs} time${item.bookReadThroughs === 1 ? '' : 's'}` : '');
+        this.details.append(progress);
+        if(item.where !== 'cursor') action(item.bookmark >= item.bookPages ? 'Read again' : 'Read this book', 'read-book', () => {
+          owner.mind.startActivity(owner.ctx, new ReadBook(item), 'you chose this book');
+          this.changed(); this.toggle(false);
+        });
         const shelf = owner.props.placed.find(t=>t.def?.id === 'bookshelf' && !t.held && Math.abs(t.tilt)<0.35);
-        if (shelf) action('Store on bookshelf', 'shelve', () => {
+        if (shelf && item.where !== 'cursor') action('Store on bookshelf', 'shelve', () => {
           const occupied = this.pets().flatMap(p=>p.items.list).filter(i=>i!==item && i.shelf?.key === shelf.storageKey).map(i=>i.shelf!.slot);
           const slot = [0,1,2,3,4].find(i=>!occupied.includes(i));
           if (slot === undefined) { this.status.textContent = 'The bookshelf is full.'; return; }
@@ -566,7 +575,7 @@ export class ToolBag {
       this.changed(); this.setView("inventory");
       if(full.length)this.status.textContent=`These bags are full: ${full.map(p=>p.config.name).join(", ")}. Free a slot or place the supply on the desktop.`;
     });
-    this.details.append(name, about, actions);
+    this.details.append(actions);
     if (item && ["wipe", "erase", "color"].includes(item.def.use)) { const hint = document.createElement("small"); hint.textContent = "Take out, choose Use with cursor, then move over the drawing. Stop using lets you carry it safely. Cancel returns it to the bag."; this.details.append(hint); }
   }
   trashObject(owner: Pet, object: Item | Thing) {

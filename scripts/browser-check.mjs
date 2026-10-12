@@ -579,11 +579,11 @@ try {
   })()`);
   await scene('living-duel-spectators');assert(await evaluate('window.pets.slice(2).every(p=>p.char.hp===1 && p.mind.activeSkill?.name!=="duel")'));
   console.log('PASS Living Stickmen browser: rendered five couch seats, brace/lift/shift scoot phases, group listening and spectator-safe combat; live sanity audit clean');
-  // Independent peaceful scene: don't carry the preceding duel's moods into item/group fixtures.
+  // Independent peaceful scene: don't carry the duel's moods or in-flight shots into these fixtures.
   // Update 2: stock supplies, actual Activities buttons and physical motion phases.
   await evaluate(`(() => {
     window.toolBag.cancel();window.cursorWeapon.detach();
-    for(const p of window.pets){p.mind.reset(p.ctx);for(const item of [...p.items.list])p.items.remove(item);p.command('respawn');p.command('resetMood');p.mood.flash=null;p.paused=true;p.char.standUp();p.mind.holdUntil=Infinity;p.items.give('book',p.char);p.items.give('bouncy-ball',p.char);}
+    for(const p of window.pets){p.mind.reset(p.ctx);p.projectiles.rounds.splice(0);p.arrows=[];for(const item of [...p.items.list])p.items.remove(item);p.command('respawn');p.command('resetMood');p.mood.flash=null;p.paused=true;p.char.standUp();p.mind.holdUntil=Infinity;p.items.give('book',p.char);p.items.give('bouncy-ball',p.char);}
     for(const t of [...window.pet.props.things])window.pet.props.remove(t);
     for(const [i,p]of window.pets.entries()){p.char.placeHome([350,850,650,1030,1240][i]);p.char.hp=1;p.mood.s.energy=.8;p.mood.asleep=false;for(const id of ['blanket','snack-box'])p.items.give(id,p.char);}
     window.pet.props.spawn('couch',390,innerHeight-57,1);window.pet.props.spawn('lamp',660,innerHeight-31,1);
@@ -599,7 +599,7 @@ try {
   for(const [phase,ticks]of [['pause',200],['snack-reach',120],['snack-lower',240]]){
     await evaluate(`for(let j=0;j<${ticks};j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);await scene('pq2-domestic-'+phase);
   }
-  await evaluate(`(() => {for(const p of window.pets){p.command('resetMood');p.mood.flash=null;p.mind.holdUntil=Infinity;p.char.standUp();p.char.placeHome(210+window.pets.indexOf(p)*180);p.mood.s.energy=.8;p.mood.asleep=false;p.paused=false;}for(const t of [...window.pet.props.things])window.pet.props.remove(t);for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);if(!window.pet.items.list.some(i=>i.def.id==='bouncy-ball'))window.pet.items.give('bouncy-ball',window.pet.char);window.toolBag.showFor(window.pet,'activities');})()`);
+  await evaluate(`(() => {for(const p of window.pets){p.paused=true;p.mind.reset(p.ctx);p.projectiles.rounds.splice(0);p.arrows=[];for(const item of p.items.list)if(item.where==='hand'||item.where==='world')p.giveBack(item);p.command('respawn');p.command('resetMood');p.mood.flash=null;p.mind.holdUntil=Infinity;p.char.placeHome(210+window.pets.indexOf(p)*180);p.mood.s.energy=.8;p.mood.asleep=false;}for(const t of [...window.pet.props.things])window.pet.props.remove(t);for(let j=0;j<2400&&!window.pets.every(p=>p.char.mode==='ground');j++)for(const p of window.pets)p.update(1/120);for(const p of window.pets){p.mind.reset(p.ctx);p.char.cancelGesture();p.char.stop();}if(!window.pet.items.list.some(i=>i.def.id==='bouncy-ball'))window.pet.items.give('bouncy-ball',window.pet.char);window.toolBag.showFor(window.pet,'activities');})()`);
   assert(!await evaluate('document.querySelector(".bag-activity[data-action=catch]").disabled'),JSON.stringify(await evaluate('window.pets.map(p=>({view:p.view(),why:p.mind.why}))')));
   await click('.bag-activity[data-action=catch]');assert(!await evaluate('window.toolBag.isOpen'));
   await evaluate('for(let j=0;j<1800&&window.pet.view().group?.phase!=="do";j++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.paused=true;');
@@ -611,19 +611,99 @@ try {
   assert(await evaluate('window.toolBag.dragging && !window.toolBag.tools.using && !window.cursorWeapon.active && !window.pet.items.carried?.working'));
   await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});assert(!await evaluate('window.toolBag.dragging'));
   console.log('PASS Update 2 browser: real snack/catch buttons, passive blanket transport/cancel, lamp/blanket/snack and catch motion frames, safe spectators and live audit');
+  // Owner's reading feedback: five original books, raised grips, finite progress and occupied-row space.
+  const recordMotion=async(name,seconds)=>{
+    if(process.env.POLISH_RECORD!=='1')return;
+    const folder=join(root,'.build',name);mkdirSync(folder,{recursive:true});
+    for(let frame=0;frame<seconds*10;frame++){
+      await evaluate('for(let j=0;j<12;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+      await pause(20);
+      const shot=await send('Page.captureScreenshot',{format:'png',clip:{x:440,y:innerHeightFallback-180,width:340,height:180,scale:2}});
+      writeFileSync(join(folder,String(frame).padStart(3,'0')+'.png'),Buffer.from(shot.data,'base64'));
+    }
+  };
+  await evaluate(`(() => {
+    window.toolBag.close();for(const p of window.pets){p.paused=true;p.mind.reset(p.ctx);p.mind.holdUntil=Infinity;p.command('respawn');p.command('resetMood');p.mood.flash=null;p.mood.asleep=false;p.ctx.look='none';for(const item of [...p.items.list])p.items.remove(item);}
+    for(const t of [...window.pet.props.things])window.pet.props.remove(t);
+    for(let j=0;j<2400&&!window.pets.every(p=>p.char.mode==='ground');j++)for(const p of window.pets)p.update(1/120);
+    for(const [i,p]of window.pets.entries()){p.char.placeHome(520+i*38);p.char.look=null;p.char.facing=i<3?1:-1;}
+    window.readingCouch=window.pet.props.spawn('couch',600,innerHeight-60,1);
+    for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);
+    window.readingBooks=window.pets.map(p=>p.items.give('book',p.char));
+    for(const p of window.pets){p.paused=false;p.command('do:read');}
+    for(const p of window.pets)p.paused=true;
+  })()`);
+  await recordMotion('polish-reading-opening',6);
+  await evaluate('for(let j=0;j<1440;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  assert.equal(await evaluate('window.readingCouch.sitters.size'),5);
+  assert(await evaluate('window.pets.every((p,i)=>p.char.mode==="sit" && window.readingBooks[i].where==="hand" && window.readingBooks[i].bookOpen>.9 && window.readingBooks[i].dir.y<-.3)'));
+  await scene('polish-five-reading-open');
+  await evaluate('for(let j=0;j<3000&&!window.readingBooks.some(b=>b.bookPage>.35&&b.bookPage<.7);j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  assert(await evaluate('window.readingBooks.some(b=>b.bookPage>.35&&b.bookPage<.7)'));
+  await scene('polish-five-reading-turn');
+  await evaluate('window.pets[2].command("do:wake");');
+  await recordMotion('polish-reading-departure',6);
+  await evaluate('for(let j=0;j<1080;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  assert.equal(await evaluate('window.readingCouch.sitters.size'),4);
+  assert(await evaluate('window.pets[2].char.mode==="ground" && window.pets.filter(p=>p!==window.pets[2]).every(p=>Math.abs(p.char.body.j.head.x-window.pets[2].char.body.j.head.x)>p.char.d.headR+window.pets[2].char.d.headR)'));
+  await scene('polish-reading-row-clear');
+  await evaluate(`(() => {
+    for(const p of window.pets){p.mind.reset(p.ctx);p.command('respawn');p.char.look=null;}
+    for(const t of [...window.pet.props.things])window.pet.props.remove(t);
+    for(const [i,p]of window.pets.entries()){p.char.placeHome(i<2?570+i*60:900+(i-2)*100);p.char.facing=1;}
+    window.readingCouch=window.pet.props.spawn('couch',600,innerHeight-60,1);
+    for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets.slice(0,2)){p.paused=false;p.command('do:read');}
+    for(let j=0;j<1200;j++)for(const p of window.pets)p.update(1/120);for(const p of window.pets)p.paused=true;
+    for(const p of window.pets.slice(0,2)){p.char.look=null;p.char.facing=1;}
+    for(let j=0;j<120;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}
+  })()`);await scene('polish-two-reading-right');
+  assert(await evaluate('window.pets.slice(0,2).every(p=>p.char.mode==="sit" && p.mind.activeSkill?.name==="read" && p.char.facing===1)'));
+  const readingCloseup=async name=>{await pause(80);const shot=await send('Page.captureScreenshot',{format:'png',clip:{x:440,y:innerHeightFallback-180,width:340,height:180,scale:3}});writeFileSync(join(root,'.build/'+name+'.png'),Buffer.from(shot.data,'base64'));};
+  await readingCloseup('polish-reading-closeup-right');
+  if(process.env.POLISH_RECORD==='1'){
+    await evaluate('for(let j=0;j<3000&&!window.readingBooks.slice(0,2).some(b=>b.bookPage>.05);j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+    assert(await evaluate('window.readingBooks.slice(0,2).some(b=>b.bookPage>.05)'));
+  }
+  await recordMotion('polish-reading-pages',5);
+  await evaluate('for(const p of window.pets.slice(0,2)){p.char.look=null;p.char.facing=-1;}for(let j=0;j<120;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  await scene('polish-two-reading-left');
+  await readingCloseup('polish-reading-closeup-left');
+  await evaluate('window.pet.mind.reset(window.pet.ctx);window.readingBooks[0].bookmark=window.readingBooks[0].bookPages-1;window.toolBag.showFor(window.pet);');
+  const readingUid=await evaluate('String(window.readingBooks[0].uid)');
+  await click('.bag-choice[data-kind=owned][data-id="'+readingUid+'"]');
+  assert((await evaluate('document.querySelector("#bagDetails").textContent')).includes('Page 96/96'));
+  await click('#bagDetails [data-action=read-book]');
+  if(process.env.POLISH_RECORD==='1'){
+    await evaluate('for(let j=0;j<2400 && window.readingBooks[0].bookPage<.1;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+    await recordMotion('polish-reading-closing',4);
+  }
+  await evaluate('for(let j=0;j<3000;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  assert(await evaluate('window.readingBooks[0].bookmark===96 && window.readingBooks[0].bookReadThroughs===1 && window.readingBooks[0].where==="belt" && window.readingBooks[0].bookOpen===0'));
+  await evaluate('window.toolBag.showFor(window.pet)');await click('.bag-choice[data-kind=owned][data-id="'+readingUid+'"]');
+  assert((await evaluate('document.querySelector("#bagDetails").textContent')).includes('Finished · 96/96 pages'));
+  assert.equal(await evaluate('document.querySelector("#bagDetails [data-action=read-book]").textContent'),'Read again');
+  await click('#bagDetails [data-action=read-book]');
+  await evaluate('for(let j=0;j<300;j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}');
+  assert.equal(await evaluate('window.readingBooks[0].bookmark'),0);
+  assert.deepEqual(await evaluate('window.checkSanity()'),[]);
+  console.log('PASS reading polish: real owned-book Read/Read again buttons and finite progress, five raised books, both pair facings, physical spectator departure, originals and live audit');
+  await evaluate('for(const p of window.pets){p.mind.reset(p.ctx);p.command("respawn");p.mood.flash=null;p.command("resetMood");}');
   // Personalization: actual UI commands with separate originals and no TV prerequisite.
   await evaluate(`(() => {
     window.toolBag.cancel();window.toolBag.close();window.cursorWeapon.detach();
     const personalities=['inventive','competitive','gentle','mischievous','adventurous'],names=['Cobalt','Amber','Moss','Violet','Ruby'],colors=['#4450d6','#f7931e','#48a879','#ad72d3','#e46d67'];
     for(const [i,p]of window.pets.entries()){p.mind.reset(p.ctx);p.paused=true;p.mind.holdUntil=Infinity;p.char.standUp();p.char.hp=1;p.mood.asleep=false;p.mood.s.energy=.8;for(const it of [...p.items.list])p.items.remove(it);p.applyConfig({...p.config,name:names[i],personality:personalities[i],windows:false,look:{...p.config.look,color:colors[i]},body:{...p.config.body,pixel:2}});p.setWindows([]);p.char.placeHome([220,810,430,980,1130][i]);p.items.give('pen',p.char);}
     for(const t of [...window.pet.props.things])window.pet.props.remove(t);
-    for(let j=0;j<600;j++)for(const p of window.pets)p.update(1/120);
+    for(let j=0;j<2400&&!window.pets.every(p=>p.char.mode==='ground');j++)for(const p of window.pets)p.update(1/120);
+    for(const p of window.pets){p.mind.reset(p.ctx);p.char.cancelGesture();p.char.stop();}
     window.pet.selectPeer(window.pets[2].ctx.who);
   })()`);
   for(let variant=1;variant<=3;variant++){
-    await evaluate(`window.giftOriginal=window.pet.items.give('book',window.pet.char);window.toolBag.showFor(window.pet,'activities');`);
+    await evaluate(`window.pet.selectPeer(window.pets[2].ctx.who);window.giftOriginal=window.pet.items.give('book',window.pet.char);window.toolBag.showFor(window.pet,'activities');`);
+    assert(!await evaluate('document.querySelector(".bag-activity[data-action=gift]").disabled'),JSON.stringify(await evaluate('({hint:document.querySelector(".bag-activity[data-action=gift]").textContent,pets:window.pets.map(p=>({name:p.config.name,mode:p.char.mode,hp:p.char.hp,whole:p.char.whole,energy:p.mood.s.energy,asleep:p.mood.asleep,skill:p.mind.activeSkill?.name,queued:p.mind.hasQueued,items:p.items.list.map(i=>[i.uid,i.def.id,i.where])}))})')));
     await click('.bag-activity[data-action=gift]');
-    assert(!await evaluate('window.toolBag.isOpen'));
+    assert(!await evaluate('window.toolBag.isOpen'),JSON.stringify(await evaluate('({hint:document.querySelector(".bag-activity[data-action=gift]")?.textContent,pets:window.pets.map(p=>({name:p.config.name,mode:p.char.mode,hp:p.char.hp,whole:p.char.whole,energy:p.mood.s.energy,skill:p.mind.activeSkill?.name,queued:p.mind.hasQueued,items:p.items.list.map(i=>[i.uid,i.def.id,i.where])}))})')));
     await evaluate(`for(let j=0;j<1800&&!(window.giftOriginal.giftWrap>0&&window.giftOriginal.where==='hand');j++)for(const p of window.pets){p.paused=false;p.update(1/120);p.paused=true;}`);
     assert.equal(await evaluate('window.giftOriginal.giftWrap'),variant);
     await scene('pq2-gift-wrap-'+variant);

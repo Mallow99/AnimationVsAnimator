@@ -13,8 +13,8 @@ export function checkSanity(figures:readonly Pet[],active:readonly Pet[]=figures
    if(uids.has(i.uid))report(`${i.def.name}: duplicate ownership (${uids.get(i.uid)}, ${name})`);else uids.set(i.uid,name);
    if(i.where==='belt' && (i.slot<0||p.items.belt[i.slot]!==i))report(`${name}: ${i.def.name} has a stale bag slot`);
    if(i.where!=='belt' && p.items.belt.includes(i))report(`${name}: ${i.def.name} occupies a bag slot while ${i.where}`);
-   if(![i.at.x,i.at.y,i.ammo,i.reloadRemaining,i.bookmark,i.gameBest,i.giftWrap].every(Number.isFinite))report(`${name}: ${i.def.name} has invalid item state`);
-   if(i.bookmark<0||i.gameBest<0||i.gameBest>9999||i.giftWrap<0||i.giftWrap>3)report(`${name}: invalid saved item progress`);
+   if(![i.at.x,i.at.y,i.ammo,i.reloadRemaining,i.bookmark,i.bookPages,i.bookReadThroughs,i.gameBest,i.giftWrap].every(Number.isFinite))report(`${name}: ${i.def.name} has invalid item state`);
+   if(!Number.isInteger(i.bookmark)||i.bookmark<0||i.bookmark>i.bookPages||!Number.isInteger(i.bookPages)||i.bookPages<8||i.bookPages>9999||!Number.isInteger(i.bookReadThroughs)||i.bookReadThroughs<0||i.bookReadThroughs>1000||i.gameBest<0||i.gameBest>9999||i.giftWrap<0||i.giftWrap>3)report(`${name}: invalid saved item progress`);
    if(i.dock!==null&&(i.where!=='world'||i.def.use!=='connect'))report(`${name}: invalid console attachment`);
    if(i.shelf&&active.includes(p)){
     const key=`${i.shelf.key}:${i.shelf.slot}`,slots=shelves.get(p.props)??new Set<string>();

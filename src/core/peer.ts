@@ -69,7 +69,7 @@ export interface WeaponInfo { id: string; hit: number; cuts: boolean }
 
 export type PeerMsg =
   | {type:'moment';kind:'compare'|'check'|'apology'}
-  | {type:'toolGift';token:string;uid:number;def:import('./items').ItemDef;ammo:number;reloadRemaining?:number;bookmark?:number;gameBest?:number;wrap?:number;ink?:import('./crafting-state').InkProject}
+  | {type:'toolGift';token:string;uid:number;def:import('./items').ItemDef;ammo:number;reloadRemaining?:number;bookmark?:number;bookPages?:number;bookReadThroughs?:number;gameBest?:number;wrap?:number;ink?:import('./crafting-state').InkProject}
   | {type:'giftReceipt';token:string;accepted:boolean;appreciation?:number}
 
   | { type: 'groupInvite'; plan: import('./skills/group').GroupPlan }

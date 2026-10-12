@@ -15,6 +15,7 @@ interface Note { id: number; text: string; kind: 'you' | 'event' | 'opinion'; at
 interface MemoryView { summary: string; notes: Note[]; tally: Record<string, number>; firstMet: number; summarizedAt: number }
 interface Collections { gallery: Drawing[]; recentMoves: { name: string; poses: number }[]; savedMoves: { name: string; poses: number }[]; memory?: MemoryView }
 interface Stats {
+  reading?: { title: string; page: number; total: number; completed: boolean };
   friendships?:{name:string;stage:string;trust:number;care:number;rivalry:number;favorite:string;lastGift:string;gifts:number}[];bagDecor?:string[]; name: string; mood: MoodState; label: string; asleep: boolean; doing: string; why: string; recent: string[]; windows: number; platforms: number; windowsStuck?: boolean; moveNote?: string;
   brain: { active: boolean; status: string; log: LogLine[] };
   mind?: { weigh: Weigh[]; thinking: boolean };
@@ -55,7 +56,7 @@ function publishStats() {
  const states=targets().map(id=>statsCache.get(id)).filter((s):s is Stats=>!!s);if(!states.length)return;
  const first=states[0];let state=first;
  if(target===null){const mood={...first.mood};for(const k of Object.keys(mood) as (keyof MoodState)[])mood[k]=states.reduce((sum,s)=>sum+s.mood[k],0)/states.length;
- state={...first,name:'All figures',mood,label:'group average',doing:`${states.length} stick men`,why:'Select a name for individual status',brain:{active:false,status:'Choose a character for a private chat.',log:[]}};}
+ state={...first,reading:undefined,name:'All figures',mood,label:'group average',doing:`${states.length} stick men`,why:'Select a name for individual status',brain:{active:false,status:'Choose a character for a private chat.',log:[]}};}
  for(const cb of statsListeners)cb(state);
 }
 function publishCollections(){const data=collectionsCache.get(target??targets()[0]);if(data)for(const cb of collectionListeners)cb(data);}
@@ -216,7 +217,7 @@ shell.onStats((s) => {
     fills[k][1].textContent = v.toFixed(2);
   }
   $('label').textContent = s.asleep ? 'asleep' : s.label;
-  $('doing').textContent = (DOING[s.doing] ?? s.doing) + (s.why ? ` — ${s.why}` : '');
+  $('doing').textContent = (DOING[s.doing] ?? s.doing) + (s.reading ? ` · ${s.reading.title}, ${s.reading.completed ? 'finished · ' + s.reading.total + ' pages' : 'page ' + s.reading.page + '/' + s.reading.total}` : '') + (s.why ? ` — ${s.why}` : '');
   $('moveInfo').textContent = (s.windowsStuck ? "He tried to move a window and it didn't budge. On a Mac: System Settings → Privacy & Security → Accessibility, and switch on the app he runs in (Terminal or Electron), then restart him. " : '')
     + (s.moveNote ? `Last word from the window helper: ${s.moveNote}` : '');
   $('winInfo').textContent = s.windows ? `He can see ${s.windows} window(s) and ${s.platforms} window top(s) to stand on.` : 'He can\'t see any windows yet. If this stays at zero, check the Terminal for lines starting with [windows].';

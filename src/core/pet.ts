@@ -36,7 +36,7 @@ import { Brain, parseMove, splitSpeech } from './brain';
 import { WindowAccess } from './window-access';
 import { BoardGame } from './board-game';
 import { controllerPart } from './render';
-import { distToSegment, type Vec } from './math';
+import { distToSegment, type Vec, type V3 } from './math';
 import { platY } from './physics';
 import { HIT_HEIGHT, HITS, segDist, viewHitTest, type HitKind } from './fighting';
 import { TALK, Together } from './skills/together';
@@ -1279,8 +1279,44 @@ export class Pet implements Peer {
     const ch = this.char, sc = ch.scale, hip = ch.body.j.hip;
     const doing = this.mind.skill?.name;
     if (ch.mode !== 'ground' || doing === 'duel' || doing === 'together' || doing === 'bump' || doing === 'nap') return;
-    for (const o of this.others) {
-      const v = o.view(), oh = v.joints.hip;
+    const peers = this.others.map(peer => peer.view());
+    // A resting reader is above the floor, so the old hip-height/depth test missed them.
+    // An idle spectator walks clear of the whole occupied row instead of sliding between seats.
+    // Approaches, shared activities and fighting keep their own intentional contact choreography.
+    if (ch.ready && !ch.walking && (!doing || doing === 'idle' || doing === 'wander')) {
+      const joints = ch.body.j;
+      const top = joints.head.y - ch.d.headR;
+      const bottom = Math.max(joints.footL.y, joints.footR.y);
+      const margin = ch.d.headR + 6 * sc;
+      const intervals: { left: number; right: number }[] = [];
+      for (const v of peers) {
+        if (v.mode !== 'sit' || v.social || v.group || !v.joints.head) continue;
+        const points = ['head','neck','hip','handL','handR','elbowL','elbowR']
+          .map(k => v.joints[k as JointName]).filter((p): p is V3 => !!p);
+        const seatTop = Math.min(...points.map(p => p.y)) - v.headR;
+        const seatBottom = Math.max(...points.map(p => p.y)) + v.headR;
+        if (bottom < seatTop || top > seatBottom) continue;
+        intervals.push({ left: Math.min(...points.map(p => p.x)) - v.headR - margin,
+          right: Math.max(...points.map(p => p.x)) + v.headR + margin });
+      }
+      intervals.sort((a,b) => a.left-b.left);
+      const rows: typeof intervals = [];
+      for (const span of intervals) {
+        const last = rows[rows.length-1];
+        if (last && span.left <= last.right + 8 * sc) last.right = Math.max(last.right,span.right);
+        else rows.push({...span});
+      }
+      const row = rows.find(span => ch.x > span.left && ch.x < span.right);
+      if (row) {
+        const b = this.ctx.world.bounds;
+        const choices = [row.left-5*sc,row.right+5*sc]
+          .filter(x => x >= b.left+margin && x <= b.right-margin);
+        const target = choices.sort((a,b) => Math.abs(a-ch.x)-Math.abs(b-ch.x))[0];
+        if (target !== undefined) { ch.walkTo(target); return; }
+      }
+    }
+    for (const v of peers) {
+      const oh = v.joints.hip;
       if (!oh || v.mode !== 'ground' || Math.abs(oh.y - hip.y) > 30 * sc) continue;
       const dx = oh.x - hip.x, dz = hip.z - oh.z;
       const heading = ch.walking ? Math.sign(ch.goalDir) : 0;
@@ -1504,6 +1540,9 @@ export class Pet implements Peer {
       this.gifts.add(m.token);if(this.gifts.size>100)this.gifts.delete(this.gifts.values().next().value!);
       item.ammo=Number.isFinite(m.ammo)?Math.max(0,Math.min(6,m.ammo)):6;item.reloadRemaining=Number.isFinite(m.reloadRemaining)?Math.max(0,Math.min(1.15,m.reloadRemaining!)):0;
       item.bookmark=Number.isFinite(m.bookmark)?Math.max(0,Math.min(9999,Math.floor(m.bookmark!))):0;item.gameBest=Number.isFinite(m.gameBest)?Math.max(0,Math.min(9999,Math.floor(m.gameBest!))):0;
+      item.bookPages=Number.isInteger(m.bookPages)?Math.max(8,Math.min(9999,m.bookPages!)):Math.min(9999,Math.max(item.bookPages,item.bookmark+24));
+      item.bookmark=Math.min(item.bookmark,item.bookPages);
+      item.bookReadThroughs=Number.isInteger(m.bookReadThroughs)?Math.max(0,Math.min(1000,m.bookReadThroughs!)):0;
       item.ink=parseProject(m.ink);item.giftWrap=Number.isInteger(m.wrap)?Math.max(0,Math.min(3,m.wrap!)):0;
       receipt(true);this.ctx.recordGift?.(fv.id,def.id,appreciation,true);this.ctx.say('You brought something for me?',1.6);
       this.mind.startActivity(this.ctx,new ReceiveGift(item,appreciation),'a gift from '+fv.name);return;
@@ -2022,12 +2061,15 @@ export class Pet implements Peer {
 
   /** A snapshot of his inner state (shown as live bars in settings). */
   stats() {
+    const book = this.items.list.find(i => i.bookReading && i.where === 'hand');
     return {
       name: this.config.name, personality:this.config.personality,friendships:this.friendshipSummary(),bagDecor:[...this.stickers],
       mood: { ...this.mood.s },
       label: this.mood.emotion,
       asleep: this.mood.asleep,
       doing: this.mind.skill?.name ?? this.char.mode,
+      reading: book ? { title: book.def.name, page: Math.min(book.bookPages,book.bookmark+1),
+        total: book.bookPages, completed: book.bookmark >= book.bookPages } : undefined,
       missing: [...this.char.missing.keys()],
       why: this.mind.why,
       recent: this.mind.recent.slice(-8),

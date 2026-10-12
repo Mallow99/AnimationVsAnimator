@@ -1,0 +1,69 @@
+{
+  "seed": 32,
+  "seconds": 900,
+  "counts": [
+    {
+      "name": "Cobalt",
+      "counts": {
+        "none": 106,
+        "sitdown": 140,
+        "climb": 3,
+        "doodle": 5,
+        "wander": 1,
+        "together": 2,
+        "sit": 9,
+        "getdown": 1,
+        "videogame": 633
+      },
+      "maxSeatedIdleSeconds": 0
+    },
+    {
+      "name": "Amber",
+      "counts": {
+        "none": 76,
+        "sitdown": 140,
+        "wander": 15,
+        "drawtool": 4,
+        "climb": 2,
+        "together": 2,
+        "read": 661
+      },
+      "maxSeatedIdleSeconds": 0
+    },
+    {
+      "name": "Moss",
+      "counts": {
+        "none": 29,
+        "idle": 29,
+        "sitdown": 27,
+        "watchtv": 815
+      },
+      "maxSeatedIdleSeconds": 0
+    },
+    {
+      "name": "Violet",
+      "counts": {
+        "none": 153,
+        "idle": 65,
+        "wander": 3,
+        "climb": 10,
+        "sit": 18,
+        "drawtool": 3,
+        "sitdown": 23,
+        "explore": 18,
+        "watchtv": 607
+      },
+      "maxSeatedIdleSeconds": 0
+    },
+    {
+      "name": "Ruby",
+      "counts": {
+        "none": 9,
+        "idle": 51,
+        "read": 840
+      },
+      "maxSeatedIdleSeconds": 0
+    }
+  ],
+  "sanity": []
+}

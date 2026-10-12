@@ -3,6 +3,40 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-12 — Varied everyday life, raised books and occupied-seat clearance
+
+- Separated self-chosen reading/TV/gaming/seating from long requested sessions, including joining a
+  friend's TV. Added bounded quiet-activity repeat cooldowns and purposeful movement/tool choices
+  after stationary time; work/play relieve boredom. Quiet seated figures can choose a next activity,
+  sleeping stays protected, and autonomous reading uses owned unfinished books.
+- Raised and tipped books toward the face, tightened the grip for neighboring heads, connected both
+  hands and gaze to actual book/page geometry, avoided prone reading and quieted the seated helper.
+  Turns count after finishing and before closing; covers close in the raised grip before the same
+  original is stowed or returned to a real shelf. Existing proportions, presets and artwork remain.
+- Added finite book lengths (96 default), saved progress/completed-reading counts, bounded old-save
+  migration and custom `pages` metadata. Progress follows restart, custom shelves and actual gifts.
+  Owned cards show page/total/percentage or Finished and offer exact-original Read this book/Read again;
+  named Settings shows the live page without attributing one person's book to All figures.
+- Idle standing spectators walk outside merged occupied-seat intervals through peer snapshots;
+  seated readers retain their books and seats, and purposeful/social/combat contact keeps its timing.
+  A new activity request clears a stale walk destination; this fixes the replayed seed-1 couch/TV
+  failure without weakening its assertion. TV game comments have cooldowns while gameplay continues.
+- Added eleven focused regressions, repeatable unattended observation, book-state live audits and
+  actual browser pointer/facing/preset checks plus rendered opening/page/closing/departure previews.
+  Independent peaceful browser fixtures clear preceding combat shots and wait for recovery/clear
+  incidental recovery plans before starting the next acceptance scene.
+- Verified typecheck/build, 193 regressions (182 existing + 11 new), full seed-1 simulation, functional
+  35-phase soak (2,566.4 simulated seconds, 2,635 audits, zero issues), two 15-minute unattended
+  profiles, actual Chromium/Electron input and visual review. Final tighter grip has additional
+  head/reach regression and rendered acceptance. Windows x64 portable package rebuilt/inspected.
+- In the controlled seed-32 scene, reading/TV/games fell from 79.0% to 22.2% of figure-time; seed 7
+  measured 30.1%. Both had 900 live audits and no stranded seated-idle state. Fresh furnished Linux
+  Electron RAM medians: 348 MiB PSS, 422 with Settings, 384 after closing; these are not Mac estimates.
+- Sampled both owner-supplied AvA/AvM videos and closer sequences; comparison/method/limits in
+  docs/AVA-POLISH-COMPARISON.md. Reference videos/stills are not committed. More specific nonverbal
+  acting/shared outcomes and complex crowded approaches remain; Mac/Windows native acceptance and
+  existing file/physics/display limits remain. Stop before further integration.
+
 ## 2026-10-11 — Repair file/folder ownership, return and controls
 
 - Replaced inventory recreation during visits/returns with original-object transfer; custom artwork,

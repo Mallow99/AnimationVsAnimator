@@ -40,11 +40,12 @@ export class SitOnProp extends Skill {
   private style: SeatStyle = 'up';
   private lastMid: { x: number; y: number } | null = null;
   private talk = { at: 6 + Math.random() * 6 };
-  constructor(private seat: Thing, private dur: number | null = null, private face: 1 | -1 | 0 = 0, readonly why = '') { super(); }
+  constructor(private seat: Thing, private dur: number | null = null, private face: 1 | -1 | 0 = 0, readonly why = '', private quiet = false) { super(); }
   start(c: Ctx) {
     c.look = 'default';
     this.dur ??= activitySeconds(c, 'sitdown');
     this.style = seatStyle(c, this.seat);
+    if (this.why==='reading' && this.style==='lie') this.style='lounge';
     if (this.seat.sitters.size > 1) this.style = 'front';
     // Lying along the couch needs it to himself.
     if (this.style === 'lie' && this.seat.sitters.size) this.style = 'lounge';
@@ -59,7 +60,7 @@ export class SitOnProp extends Skill {
       if (!arrive(c, at.x, 5)) return false;
       if (!ch.sitOn(at, this.face || (chance(0.5) ? 1 : -1), this.style)) return true;
       this.phase = 'sit'; this.t = 0; this.lastMid = seat.seatAt;
-      if (chance(0.5)) c.say(pick(seat.def!.id === 'couch' ? ['ahh', 'comfy', '*flop*'] : ['ahh', 'nice chair', 'much better']), 1.4);
+      if (!this.quiet && chance(0.5)) c.say(pick(seat.def!.id === 'couch' ? ['ahh', 'comfy', '*flop*'] : ['ahh', 'nice chair', 'much better']), 1.4);
       return false;
     }
     if (ch.mode !== 'sit' || !ch.seat) return true;
@@ -78,7 +79,7 @@ export class SitOnProp extends Skill {
     // Someone wants to sit too: up he gets from lying along it, and leans back instead.
     if (ch.seatStyle === 'lie' && seat.sitters.get(c.who)?.lying === false) { ch.seatStyle = 'lounge'; c.say(pick(['oh, ok', 'fine, sit', '*scoots*']), 1.2); }
     // Sharing the couch: a bit of small talk now and then.
-    if (seat.sitters.size > 1) seatedTalk(c, this.t, this.talk);
+    if (!this.quiet && seat.sitters.size > 1) seatedTalk(c, this.t, this.talk);
     if (this.t > (this.dur ?? 90)) { ch.standUp(); return true; }
     return false;
   }
@@ -145,7 +146,8 @@ export class WatchTV extends AtTheTV {
   readonly name = 'watchtv';
   private next = 2;
   private watched = 0;
-  private clock = new ActivityClock('watchtv');
+  private clock: ActivityClock;
+  constructor(tv: Thing, autonomous = false) { super(tv); this.clock = new ActivityClock('watchtv',autonomous); }
   update(c: Ctx, dt: number) {
     const s = this.settle(c, dt);
     if (s === 'gone') return true;
@@ -170,7 +172,9 @@ export class WatchTV extends AtTheTV {
 export class PlayVideoGame extends AtTheTV {
   readonly name = 'videogame';
   private played = 0;
-  private clock = new ActivityClock('videogame');
+  private clock: ActivityClock;
+  private spokenAt = -100;
+  constructor(tv: Thing, autonomous = false) { super(tv); this.clock = new ActivityClock('videogame',autonomous); }
   private readyToFinish = false;
   private chatter = 6;
   private mine: Runner | null = null;
@@ -199,16 +203,16 @@ export class PlayVideoGame extends AtTheTV {
     const g = this.mine, other = g === tv.arcade ? tv.arcade2 : tv.arcade;
     for (const e of g.step(dt)) {
       if (e === 'crash') {
-        c.say(other && other.score > 2 ? pick(['NO', 'you got lucky', 'stop looking at my screen']) : pick(['NO', 'noooo', 'that was lag', 'come ON', 'ugh', 'it jumped late!']), 1.4);
+        if (this.played-this.spokenAt>18) { c.say(other && other.score > 2 ? pick(['NO', 'you got lucky', 'stop looking at my screen']) : pick(['NO', 'noooo', 'that was lag', 'come ON', 'ugh', 'it jumped late!']), 1.4); this.spokenAt=this.played; }
         c.mood.nudge({ annoyance: 0.05, boredom: -0.05 });
       } else if (e === 'record') {
-        c.say(pick(['new record!', 'YES', "let's GO"]), 1.6);
+        if(this.played-this.spokenAt>12){c.say(pick(['new record!', 'YES', "let's GO"]), 1.6);this.spokenAt=this.played;}
         c.mood.nudge({ happiness: 0.08 });
       } else {
         c.sound?.('click', 0.15);
-        if (g.score === 8) c.say(pick(['ooh, a good run', "don't choke", 'easy']), 1.4);
+        if (g.score === 8 && this.played-this.spokenAt>18) { c.say(pick(['ooh, a good run', "don't choke", 'easy']), 1.4);this.spokenAt=this.played; }
         // Ahead of him by a few after his crash: rub it in.
-        if (other && other.crashedAt >= 0 && other.time - other.crashedAt < 0.3 && g.score > 3) c.say(pick(['HA', 'too slow', 'git gud']), 1.2);
+        if (other && other.crashedAt >= 0 && other.time - other.crashedAt < 0.3 && g.score > 3 && this.played-this.spokenAt>18) { c.say(pick(['HA', 'too slow', 'git gud']), 1.2); this.spokenAt=this.played; }
       }
     }
     // Thumbs: busy as a block comes up, easy otherwise.
@@ -221,7 +225,7 @@ export class PlayVideoGame extends AtTheTV {
       if (chance(0.5)) c.say(pick(['ok, one more— no. done.', 'enough for now', 'I was winning']), 1.6);
       return true;
     }
-    return this.readyToFinish && this.played > activitySeconds(c, 'videogame', 1.1) + 30;
+    return this.readyToFinish && this.played > this.clock.duration(c,1.1) + 30;
   }
   stop(c: Ctx) {
     const tv = this.tv, me = c.who;
