@@ -27,11 +27,11 @@ import type { Memory, NoteKind } from './memory';
 
 const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // Ordinary conversation during a match should not replace the seated game skill.
-const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:read|watch|play|close|take|restore|enter|shoot|fire|high five|hug|dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
+const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:read|watch|play|close|take|restore|enter|shoot|fire|float|perform|show me|have a drink|sip|exercise|train|lift|arrange|move|carry|sort|refine|chat together|talk together|high five|hug|dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
 
-/** What he has and where, in words: "pen (on your belt), wooden sword (the person took it)". */
+/** What he has and where, in words: "pen (in your satchel), wooden sword (the person took it)". */
 function itemsText(c: Ctx) {
-  const where = { belt: 'on your belt', hand: 'in your hand', worn: 'wearing it', world: 'lying on the ground', cursor: 'the person took it' } as const;
+  const where = { belt: 'in your satchel', hand: 'in your hand', worn: 'wearing it', world: 'lying on the ground', cursor: 'the person took it' } as const;
   return c.items.list.map((it) => `${it.def.name.toLowerCase()} (${where[it.where]})`).join(', ') || 'nothing';
 }
 
@@ -56,7 +56,7 @@ export interface MadeMove { name: string; frames: Keyframe[] }
 
 /** Longest made-up move: this many poses, this many seconds. Longest plan: this many steps. */
 const MAX_FRAMES = 16, MAX_MOVE_SECONDS = 10, MAX_STEPS = 8;
-const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust'];
+const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust','socialNeed','inspiration','frustration','contentment','confidence','affection','stress'];
 
 const num = (v: unknown) => (typeof v === 'number' || typeof v === 'string') && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
 
@@ -108,7 +108,7 @@ export function parseDrawing(raw: unknown): Vec[][] | null {
 function parseStep(raw: unknown, saved: MadeMove[]): PlanStep | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  if (typeof o.do === 'string') return ACTIONS.includes(o.do) ? { do:o.do,...(typeof o.with==='string' && o.with.trim()?{with:o.with.trim().slice(0,40)}:{}) } : null;
+  if (typeof o.do === 'string') return (ACTIONS.includes(o.do) || /^draw(?:item|prop):[a-z0-9-]{1,30}$/.test(o.do)) ? { do:o.do,...(typeof o.with==='string' && o.with.trim()?{with:o.with.trim().slice(0,40)}:{}) } : null;
   if (typeof o.say === 'string' && o.say.trim()) return { say: o.say.trim().slice(0, 140) };
   if (num(o.wait) !== null) return { wait: Math.min(5, Math.max(0, num(o.wait)!)) };
   if (typeof o.walk === 'string' && ['left', 'right', 'cursor', 'away'].includes(o.walk)) return { walk: o.walk as 'left' };
@@ -270,7 +270,7 @@ export class Brain {
   /** Set by the app when an AI provider is available (desktop only). */
   ask: AskFn | null = null;
   mode: MindMode = 'offline';
-  name = 'Blurp';
+  name = 'Cobalt';
   persona = '';
   /** May the AI make up its own moves (move his body directly)? */
   puppet = true;
@@ -480,16 +480,16 @@ export class Brain {
         ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`]
         : []),
       '- {"draw": [strokes], "title": "..."} draw something with your pen (see DRAWING). Only works if you have your pen.',
-      'YOUR BELT: you wear a belt (left hip, right hip, back, and a pocket) where you keep your things. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mace ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
+      'YOUR SATCHEL: your wearable bag holds your stored tools. You reach into it to take them out and put them back naturally. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mace ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
       'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling), "perch" (hop up and sit on something in their window, like a chat message).',
       'DRAWING YOUR WAY: "ramp" draws a ramp up onto a window and walks up it; "bridge" draws a bridge across a gap to a window; "drawramp" draws one to jump off. Your drawings are solid and have weight.',
-      'QUIET ACTIVITIES: read (get a book and settle into it), watchtv and videogame last minutes depending on hyperactivity and mood. Ordinary chat can continue without leaving a settled activity.\nPROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV, alone), "playgame" (invite the person to Othello on the TV), "ride" (the scooter). Only if they\'re out. "duel": spar with your friend (the other stick figure), if they\'re around.',
+      'QUIET ACTIVITIES: read (get a book and settle into it), watchtv and videogame last minutes depending on hyperactivity and mood. Ordinary chat can continue without leaving a settled activity.\nPROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV, alone), "playgame" (invite the person to Othello on the TV), "ride" (the scooter). Only if they\'re out. handheld plays your own actual pocket runner; handheldduo invites a free friend with their own handheld. gift chooses an owned gift for a free friend, wraps it if you have a pen and presents it; never generates a free item. "duel": spar with your friend (the other stick figure), if they\'re around.',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
       ...(bodyGuide ? BODY_GUIDE : []),
       ...(drawGuide ? DRAW_GUIDE : []),
       '',
-      'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust. {} if nothing changed.',
+      'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust, socialNeed (wanting company), inspiration (wanting to make/learn), frustration, contentment, confidence, affection (warmth toward friends), stress. {} if nothing changed.',
       '',
       'MEMORY: "remember" is a list of up to 3 short notes to keep for the long term, written by you, in your own voice (first person). Only things worth remembering for days: facts about the person (their name, what they like, what they told you), promises, big events, strong opinions. Not every little thing; usually it\'s empty.',
       "Use what you remember naturally (bring it up, hold grudges, be glad), but don't recite it.",
@@ -550,10 +550,15 @@ export class Brain {
     return [
       '[state]',
       `time: ${d.toLocaleDateString('en-US', { weekday: 'long' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
-      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)})`,
+      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)}, social need ${f(s.socialNeed)}, inspiration ${f(s.inspiration)}, frustration ${f(s.frustration)}, contentment ${f(s.contentment)}, confidence ${f(s.confidence)}, affection ${f(s.affection)}, stress ${f(s.stress)})`,
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,
+      `your specialty: ${c.talent ?? 'drawing'}. Friends can teach each other; do not interrupt busy friends.`,
+      `everyday requests: sip (needs a cup), exercise (needs a dumbbell), yoyo (needs a yo-yo), read (open/read/close a book). workshop requests: deskwork, refine, sorttools, arrange, carrytogether, passtool, comparedrawings, checkfriend, pong, handheld, group:wave/chat/couch/watch/duet/triangle/mirror/relay. Only invite available friends.`,
+      `drawable blueprints: ${[...c.items.defs.values()].filter(d=>d.drawable!==false&&!d.drawn&&!d.blueprint).map(d=>`drawitem:${d.id}`).concat([...c.props?.defs.values()??[]].filter(d=>d.drawable!==false&&!d.id.startsWith('ink-')).map(d=>`drawprop:${d.id}`)).join(', ')}`,
+      `shared furniture: ${(c.props?.placed ?? []).map(t=>`${t.def?.name}: ${t.def?.use}${t.ink?' (unfinished ink)':''}`).join('; ')}`,
+
       ...(c.game && c.game.state !== 'closed'
         ? [
             `game: Othello on your TV with the person (${c.game.state}); black/person ${c.game.score.you}, white/you ${c.game.score.him}. You can talk while staying seated. Keep plan empty unless the person explicitly asks for another activity. The board handles your moves offline; never claim a move you did not make.`,
@@ -569,7 +574,7 @@ export class Brain {
         : [
             `body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`,
           ]),
-      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}`).join('; ') || 'alone'}`,
+      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}${p.id ? `, bond ${c.relationship?.(p.id)?.bond.toFixed(2)??'new'}`:''}`).join('; ') || 'alone'}`,
       `relationship with current partner: ${c.feel.bond.toFixed(2)}`,
       `connected Chrome page: ${c.desktopState?.().browser?.title ?? 'none'}. Page selection: ${c.desktopState?.().browser?.selected ? 'available to take' : 'none'}. Use desktop actions only when asked.`,
       `available actions now: ${mind

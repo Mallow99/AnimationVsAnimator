@@ -30,16 +30,52 @@ export function activitySeconds(c: Ctx, activity: LongActivity, variation = 1) {
   return minimum + extra * calm * variation;
 }
 
+/** Self-chosen sessions leave room for a whole offline day; explicit requests retain long pacing. */
+export function autonomousActivitySeconds(c: Ctx, activity: LongActivity, variation = 1) {
+  const calm = (1 - restlessness(c)) ** 2;
+  const [minimum, extra] =
+    activity === 'read'
+      ? [60, 120]
+      : activity === 'watchtv'
+        ? [75, 150]
+        : activity === 'videogame'
+          ? [90, 180]
+          : [30, 90];
+  return minimum + extra * calm * variation;
+}
+
 export class ActivityClock {
   elapsed = 0;
   private variation = rand(0.9, 1.1);
-  constructor(readonly activity: LongActivity) {}
+  constructor(
+    readonly activity: LongActivity,
+    readonly autonomous = false,
+  ) {}
+  duration(c: Ctx, variation = this.variation) {
+    return (this.autonomous ? autonomousActivitySeconds : activitySeconds)(
+      c,
+      this.activity,
+      variation,
+    );
+  }
   tick(c: Ctx, dt: number) {
     this.elapsed += dt;
     // Re-read the setting: changing the slider affects an existing activity at its next natural break.
-    return this.elapsed >= activitySeconds(c, this.activity, this.variation);
+    return this.elapsed >= this.duration(c);
   }
 }
 
 export const isSettledActivity = (name: string | undefined) =>
-  ['watchtv', 'videogame', 'playgame', 'read', 'sitdown'].includes(name ?? '');
+  [
+    'blanket',
+    'snack',
+    'watchtv',
+    'videogame',
+    'playgame',
+    'read',
+    'sitdown',
+    'sip',
+    'exercise',
+    'yoyo',
+    'handheld',
+  ].includes(name ?? '');

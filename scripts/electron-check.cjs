@@ -11,7 +11,19 @@ const issues = [];
 app.on('web-contents-created', (_e, web) => {
   web.on('render-process-gone', (_event, details) => issues.push(`renderer ${details.reason}`));
   web.on('did-fail-load', (_event, code, description) => issues.push(`load ${code}: ${description}`));
+  const execute = web.executeJavaScript.bind(web);
+  web.executeJavaScript = async (source, ...args) => {
+    try { return await execute(source, ...args); }
+    catch (error) { console.error('Failed smoke script:', source); throw error; }
+  };
 });
+// Upgrade an existing install, while keeping an edited example and a deleted example.
+const examplesDir=path.join(dir,'items');fs.mkdirSync(examplesDir);
+const history=require('../assets/builtin-history.json');
+for(const name of ['book','couch','console','tv'])fs.writeFileSync(path.join(examplesDir,name+'.json'),JSON.stringify(history[name+'.json'].at(-1)));
+const editedSponge={...require('../src/core/items/sponge.json'),name:'My sponge'};
+fs.writeFileSync(path.join(examplesDir,'sponge.json'),JSON.stringify(editedSponge));
+fs.writeFileSync(path.join(examplesDir,'.copied.json'),JSON.stringify(['book.json','couch.json','sponge.json','cup.json','console.json','tv.json']));
 require('../dist/electron/main.js');
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 async function until(fn) { for (let i = 0; i < 160; i++) { if (await fn()) return; await pause(50); } throw new Error('Electron readiness timed out'); }
@@ -19,6 +31,12 @@ app.whenReady().then(async () => {
   let overlay, settings;
   await until(() => { overlay = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/app/index.html')); return !!overlay && !overlay.webContents.isLoading(); });
   await until(() => overlay.webContents.executeJavaScript('!!window.pet'));
+  await until(()=>fs.existsSync(path.join(examplesDir,'bookshelf.json')));
+  for(const [name,kind]of [['book','items'],['couch','props'],['console','items'],['tv','props']])assert.deepEqual(JSON.parse(fs.readFileSync(path.join(examplesDir,name+'.json'),'utf8')),require('../src/core/'+kind+'/'+name+'.json'));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(examplesDir,'sponge.json'),'utf8')),editedSponge);
+  assert(!fs.existsSync(path.join(examplesDir,'cup.json')),'an owner-deleted example returned');
+  console.log('PASS Electron upgrade: stock book/couch/console/TV updated, custom sponge kept, deleted example kept deleted, new bookshelf supplied');
+
   await until(() => overlay.webContents.executeJavaScript('window.pet.ctx.world.windows.length === 1'));
   await overlay.webContents.executeJavaScript('window.petShell.openSettings()');
   await until(() => { settings = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/settings/index.html?pet=0')); return !!settings && !settings.webContents.isLoading(); });
@@ -26,11 +44,10 @@ app.whenReady().then(async () => {
   await settings.webContents.executeJavaScript('window.petShell.setConfig({aiInterval:120})');
   await until(() => overlay.webContents.executeJavaScript('window.pet.config.aiInterval === 120'));
   await settings.webContents.executeJavaScript('document.querySelector("[data-tab=items]").click(); window.petShell.command("sync")');
-  await until(() => settings.webContents.executeJavaScript('document.querySelectorAll("#propKinds .thing-card canvas").length === 6'));
-  await settings.webContents.executeJavaScript('document.querySelector("button[aria-label=\\"Wear: Helmet\\"]").click()');
+  await settings.webContents.executeJavaScript('document.querySelector("#openInventory").click()');
+  await until(() => overlay.webContents.executeJavaScript('window.toolBag.isOpen'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#bagSupplies").click();document.querySelector(".bag-choice[data-id=helmet]").click();document.querySelector("#bagDetails [data-action=give]").click();document.querySelector("#bagPanel header button:last-child").click()');
   await until(() => overlay.webContents.executeJavaScript('window.pet.items.onHim.some(i => i.def.id === "helmet" && i.where === "worn")'));
-  await settings.webContents.executeJavaScript('document.querySelector("#itemKinds").scrollIntoView({block:"start"})');
-  await pause(100);
   fs.mkdirSync(path.join(__dirname, '../.build'), {recursive:true});
   fs.writeFileSync(path.join(__dirname, '../.build/settings-smoke.png'), (await settings.webContents.capturePage()).toPNG());
   await overlay.webContents.executeJavaScript(`(() => {
@@ -51,30 +68,77 @@ app.whenReady().then(async () => {
   assert(overlay.isFocusable(), 'closing the game stole focus from open chat');
   await overlay.webContents.executeJavaScript('document.querySelector("#talkClose").click()');
   await until(() => !overlay.isFocusable());
+  // Bag focus/drag/close passes through the actual preload IPC and Electron input path.
+  assert(await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").hidden && document.querySelector("#trashCan").hidden'));
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({showBag:true,showTrash:true})');
+  await until(() => overlay.webContents.executeJavaScript('!document.querySelector("#grabBag").hidden'));
+  await overlay.webContents.executeJavaScript('for(const p of window.pets){p.mind.reset(p.ctx);p.paused=true;}document.querySelector("#grabBag").click()');
+  assert(!overlay.isFocusable(), 'pointer opening a bag changed native focus');
+  assert(await overlay.webContents.executeJavaScript('!document.querySelector("#bagPanel").hidden'));
+  const card = await overlay.webContents.executeJavaScript('(() => {const el=document.querySelector(".bag-choice[data-id=book]");el.scrollIntoView({block:"nearest"});const r=el.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()');
+  overlay.webContents.sendInputEvent({type:'mouseMove',...card});
+  overlay.webContents.sendInputEvent({type:'mouseDown',...card,button:'left',clickCount:1});
+  overlay.webContents.sendInputEvent({type:'mouseMove',x:card.x+10,y:card.y});
+  await until(() => overlay.webContents.executeJavaScript('window.toolBag.dragging'));
+  await overlay.webContents.executeJavaScript('window.electronBagBook=window.toolBag.tools.held.object');
+  assert(!overlay.isFocusable(), 'pointer pulling an item changed native focus');
+  const bin = await overlay.webContents.executeJavaScript('(() => {const r=document.querySelector("#trashCan").getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()');
+  overlay.webContents.sendInputEvent({type:'mouseMove',...bin});
+  overlay.webContents.sendInputEvent({type:'mouseUp',...bin,button:'left',clickCount:1});
+  await until(() => overlay.webContents.executeJavaScript('!window.toolBag.dragging && !document.querySelector("#undoTrash").hidden'));
+  await until(() => !overlay.isFocusable());
+  assert(await overlay.webContents.executeJavaScript('!window.pet.items.list.includes(window.electronBagBook)'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#undoTrash").click()');
+  assert(await overlay.webContents.executeJavaScript('window.pet.items.list.includes(window.electronBagBook)'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").click()');
+  assert(!overlay.isFocusable(), 'reopening the bag changed native focus');
+  await overlay.webContents.executeJavaScript('document.querySelector("#bagKeyboard").click()');
+  await until(() => overlay.isFocusable());
+  await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").click()');
+  await until(() => !overlay.isFocusable());
+  await overlay.webContents.executeJavaScript('document.querySelector("#grabBag").click();document.querySelector("#bagKeyboard").click()');
+  await until(() => overlay.isFocusable());
+  await overlay.webContents.executeJavaScript('document.querySelector(".bag-choice[data-id=book]").focus()');
+  overlay.webContents.sendInputEvent({type:'keyDown',keyCode:'Return'});
+  overlay.webContents.sendInputEvent({type:'keyUp',keyCode:'Return'});
+  await until(() => overlay.webContents.executeJavaScript('!document.querySelector("#bagDetails").hidden'));
+  assert(overlay.isFocusable(), 'selecting an item lost keyboard focus');
+  assert(await overlay.webContents.executeJavaScript('window.toolBag.isOpen && !window.toolBag.dragging'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#bagDetails [data-action=place]").focus()');
+  overlay.webContents.sendInputEvent({type:'keyDown',keyCode:'Return'});
+  overlay.webContents.sendInputEvent({type:'keyUp',keyCode:'Return'});
+  await until(() => overlay.webContents.executeJavaScript('window.toolBag.dragging'));
+  assert(overlay.isFocusable(),'keyboard pull lost focus before Escape could cancel');
+  overlay.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});
+  overlay.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});
+  await until(() => !overlay.isFocusable());
+  assert(await overlay.webContents.executeJavaScript('!window.toolBag.dragging'));
+  console.log('PASS Electron: optional pixel bag, real pointer pull/trash/undo without changing native focus, explicit keyboard navigation and close return focus');
+  await overlay.webContents.executeJavaScript('for(const p of window.pets)p.paused=false');
   // The second stick figure: their own settings window in their own color, their own config, the shared
   // settings kept in step, their own talk box and memory file.
   await until(() => overlay.webContents.executeJavaScript('window.pets.length === 2'));
   await overlay.webContents.executeJavaScript('window.petShell.openSettings(1)');
-  let second;
-  await until(() => { second = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/settings/index.html?pet=1')); return !!second && !second.webContents.isLoading(); });
+  await until(() => settings.webContents.executeJavaScript('document.querySelector("#figureTarget").value === "1"'));
+  assert.equal(BrowserWindow.getAllWindows().filter(w=>w.webContents.getURL().includes('/settings/')).length,1,'settings must reuse one window');
   const accent = (w) => w.webContents.executeJavaScript('getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()');
-  await until(async () => (await accent(second)) === '#f7931e');
-  assert.match(second.getTitle(), /Leonard/);
-  await second.webContents.executeJavaScript('document.querySelector("[data-tab=him]")?.click()');
+  await until(async () => (await accent(settings)) === '#f7931e');
+  assert.match(settings.getTitle(), /Stickmen/);
   await settings.webContents.executeJavaScript('document.querySelector("[data-tab=him]")?.click()');
-  await pause(300);
-  fs.writeFileSync(path.join(__dirname, '../.build/settings-pet1.png'), (await settings.webContents.capturePage()).toPNG());
-  fs.writeFileSync(path.join(__dirname, '../.build/settings-pet2.png'), (await second.webContents.capturePage()).toPNG());
-  await second.webContents.executeJavaScript('window.petShell.setConfig({look:{color:"#22aa55"}})');
+  fs.writeFileSync(path.join(__dirname, '../.build/settings-pet2.png'), (await settings.webContents.capturePage()).toPNG());
+  await settings.webContents.executeJavaScript('const color=document.querySelector("#color");color.value="#22aa55";color.dispatchEvent(new Event("input"));');
   await until(() => overlay.webContents.executeJavaScript('window.pets[1].config.look.color === "#22aa55"'));
-  await until(async () => (await accent(second)) === '#22aa55');
-  assert.notEqual(await accent(settings), '#22aa55', 'the first one changed color too');
+  await until(async () => (await accent(settings)) === '#22aa55');
   assert.equal(await overlay.webContents.executeJavaScript('window.pets[0].config.look.color'), '#4450d6');
-  await second.webContents.executeJavaScript('window.petShell.setConfig({fightMode:"real"})');
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({fightMode:"real"},1)');
   await until(() => overlay.webContents.executeJavaScript('window.pets[0].config.fightMode === "real" && window.pets[1].config.fightMode === "real"'));
+  await settings.webContents.executeJavaScript('const select=document.querySelector("#figureTarget");select.value="all";select.dispatchEvent(new Event("change"));document.querySelector("#openInventory").click()');
+  await until(() => overlay.webContents.executeJavaScript('document.querySelector("#bagOwner").value === "all"'));
+  await overlay.webContents.executeJavaScript('document.querySelector("#bagSupplies").click();document.querySelector(".bag-choice[data-id=cup]").click();document.querySelector("#bagDetails [data-action=give]").click();document.querySelector("#bagPanel header button:last-child").click()');
+  assert(await overlay.webContents.executeJavaScript('window.pets.every(p=>p.items.list.some(i=>i.def.id==="cup"))'));
   await overlay.webContents.executeJavaScript('window.pets[1].onTalk()');
   await until(() => overlay.isFocusable());
-  assert.match(await overlay.webContents.executeJavaScript('document.querySelector("#talkText").placeholder'), /Leonard/);
+  assert.match(await overlay.webContents.executeJavaScript('document.querySelector("#talkText").placeholder'), /Amber/);
   await overlay.webContents.executeJavaScript(`(() => { const input = document.querySelector('#talkText'); input.value = 'hello'; document.querySelector('#talk').requestSubmit(); })()`);
   await until(() => overlay.webContents.executeJavaScript('window.pets[1].brain.log.some(l => l.who === "him")'));
   await overlay.webContents.executeJavaScript('document.querySelector("#talkClose").click()');
@@ -84,8 +148,72 @@ app.whenReady().then(async () => {
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'memory.json'), 'utf8')).summary, 'smoke');
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'memory-2.json'), 'utf8')).summary, 'smoke two');
   await until(() => fs.existsSync(path.join(dir, 'pet-2.json')));
+  await settings.webContents.executeJavaScript('document.querySelector("#sanityCheck").click()');
+  await until(()=>settings.webContents.executeJavaScript('document.querySelector("#sanityResult").textContent.startsWith("Passed:")'));
+  console.log('PASS Electron live sanity check bridge and development UI');
+  await settings.webContents.executeJavaScript('(() => {const select=document.querySelector("#figureTarget");select.value="1";select.dispatchEvent(new Event("change"));window.petShell.command("sync");})()');
+  await until(()=>settings.webContents.executeJavaScript('document.querySelector("#socialBars").children.length===3 && document.querySelector("#friendships").textContent.includes("Cobalt")'));
+  assert(await settings.webContents.executeJavaScript('document.querySelector("#socialBars").closest("details").open===false'));
+  assert(await overlay.webContents.executeJavaScript('window.pet.items.defs.has("flowers")'));
+  await settings.webContents.executeJavaScript('document.querySelector("[data-tab=mood]").click();document.querySelector("#socialBars").closest("details").open=true;document.querySelector("#socialBars").closest("details").scrollIntoView({block:"start"});window.scrollBy(0,-210)');
+  await pause(200);
+  fs.writeFileSync(path.join(__dirname, '../.build/pq2-friendship-settings.png'), (await settings.webContents.capturePage()).toPNG());
+  console.log('PASS Electron personalization: three social dials and named friendships in collapsed details, default name migration, new flowers and stock-console upgrade');
+
+  // Existing file visits: real preload/status/controls, with deliberately simulated native reports.
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({fileHomes:true},0)');
+  await until(() => overlay.webContents.executeJavaScript('window.pet.config.fileHomes'));
+  assert.equal((await settings.webContents.executeJavaScript('window.petShell.chooseHabitat("file",0)')).ok, false, 'Linux offered an unsupported file dialog');
+  await overlay.webContents.executeJavaScript(`(() => {
+    const p=window.figurePool[0]; p.paused=false;p.command('stop');p.mind.holdUntil=Infinity;
+    const book=p.items.give('book',p.char);book.bookmark=27;
+    window.visitOriginals=p.items.list.slice();
+  })()`);
+  overlay.webContents.send('desktop:habitat',{id:0,path:'/test/real-folder',kind:'folder'});
+  await until(() => overlay.webContents.executeJavaScript('window.habitats.isAway(0)'));
+  const frame={id:1,path:'/test/real-folder',kind:'folder',x:100,y:350,width:350,height:300};
+  process.env.PET_FAKE_FILES=JSON.stringify([frame]);
+  overlay.webContents.send('world:files',[frame]);
+  await until(() => overlay.webContents.executeJavaScript('window.habitats.activePets.length===1'));
+  assert(await overlay.webContents.executeJavaScript('window.visitOriginals.every(i=>window.habitats.petFor(0).items.list.includes(i)) && window.figurePool[0].items.list.length===0'));
+  await overlay.webContents.executeJavaScript('window.habitats.petFor(0).onSatchel()');
+  await until(() => overlay.webContents.executeJavaScript('window.toolBag.isOpen'));
+  assert(await overlay.webContents.executeJavaScript('document.querySelector("#bagOwner").value===window.habitats.petFor(0).ctx.who'));
+  await overlay.webContents.executeJavaScript('window.toolBag.close();window.habitats.petFor(0).onTalk()');
+  await until(() => overlay.isFocusable());
+  await overlay.webContents.executeJavaScript('document.querySelector("#talkClose").click()');
+  await until(() => !overlay.isFocusable());
+  await settings.webContents.executeJavaScript('(() => {const select=document.querySelector("#figureTarget");select.value="0";select.dispatchEvent(new Event("change"));document.querySelector("[data-tab=him]").click();})()');
+  await until(() => settings.webContents.executeJavaScript('document.querySelector("#fileLocations").textContent.includes("Window detected")'));
+  assert(await settings.webContents.executeJavaScript('document.querySelector("#chooseFile").disabled && document.querySelector("#chooseHabitat").disabled'));
+  await settings.webContents.executeJavaScript('document.querySelector("#fileSupport").scrollIntoView({block:"center"})');
+  await pause(500);
+  fs.writeFileSync(path.join(__dirname,'../.build/file-visits-settings-cloud.png'),(await settings.webContents.capturePage()).toPNG());
+  // Closing a native window hides the visitor but leaves a clear return-and-open action.
+  process.env.PET_FAKE_FILES='[]';
+  overlay.webContents.send('world:files',[]);
+  await until(() => settings.webContents.executeJavaScript('document.querySelector("#fileLocations").textContent.includes("Waiting for its window")'));
+  assert.equal(await settings.webContents.executeJavaScript('document.querySelector("#openInventory").textContent'),'Return and open bag');
+  await settings.webContents.executeJavaScript('document.querySelector("#openInventory").click()');
+  await until(() => overlay.webContents.executeJavaScript('!window.habitats.isAway(0) && window.toolBag.isOpen'));
+  assert(await overlay.webContents.executeJavaScript('window.visitOriginals.every(i=>window.figurePool[0].items.list.includes(i))'));
+  assert.deepEqual(await overlay.webContents.executeJavaScript('window.checkSanity()'),[]);
+  // A visit survives a renderer restart, and disabling visits clears the saved association immediately.
+  overlay.webContents.send('desktop:habitat',{id:0,path:'/test/real-folder',kind:'folder'});
+  await until(() => overlay.webContents.executeJavaScript('window.habitats.isAway(0)'));
+  await overlay.webContents.executeJavaScript('window.habitats.petFor(0).memory.add("file restart kept", "event", "him")');
+  await pause(1200);
+  overlay.reload();
+  await until(() => !overlay.webContents.isLoading() && overlay.webContents.executeJavaScript('!!window.habitats?.isAway(0)'));
+  assert(await overlay.webContents.executeJavaScript('window.habitats.petFor(0).items.list.some(i=>i.def.id==="book" && i.bookmark===27)'));
+  assert(await overlay.webContents.executeJavaScript('window.habitats.petFor(0).memory.notes.some(n=>n.text==="file restart kept")'));
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({fileHomes:false},0)');
+  await until(() => overlay.webContents.executeJavaScript('!window.habitats.isAway(0) && JSON.parse(localStorage.getItem("file-homes")).length===0'));
+  assert.deepEqual(await overlay.webContents.executeJavaScript('window.checkSanity()'),[]);
+  console.log('PASS Electron file visits: original inventory, visiting bag/chat callbacks, named status, waiting/recall, restart memory/progress, unsupported-platform guard, immediate disable save (fake native windows)');
+
   assert.deepEqual(issues, []);
-  console.log('PASS Electron: overlay, fake helper, settings inventory, Othello/chat focus, configuration, two stick figures (own settings window and color, shared settings, talk box, memory file)');
+  console.log('PASS Electron: overlay, fake helper, settings inventory, Othello/chat focus, configuration, two stick figures (one settings window with target selection, distinct color, All figures supplies, shared settings, talk box, memory file)');
   app.quit();
 }).catch((err) => { console.error(err); process.exitCode = 1; app.exit(1); });
 app.on('will-quit', () => {

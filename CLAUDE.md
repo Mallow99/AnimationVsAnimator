@@ -1,8 +1,8 @@
 # AnimationVsAnimator — project brief
 
 **Latest continuation:** read [docs/HANDOFF.md](docs/HANDOFF.md) and [AGENTS.md](AGENTS.md) first.
-They record the current reliability/item work, tests, Windows distribution steps, and the owner's
-stop point before preparing multiple characters. The original vision and historical handoff below
+They record the current Pet Quality/Living Stickmen work, tests, distribution steps, and the owner's
+stop point before further Chrome/Finder integration. The original vision and historical handoff below
 remain useful context; the latest owner instructions take priority. The owner has since approved
 removable helmet/boots and GUI polish, then chose a house art style: flat, front-on props drawn smooth
 and pixelated at his own pixel size (see the reference notes in docs/HANDOFF.md). The Othello table was

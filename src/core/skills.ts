@@ -13,6 +13,7 @@ import type { LimbId } from './body';
 import { preferredSlots, type Item, type ItemUse } from './items';
 
 import { Skill, arrive, type Ctx, type LookMode } from './skills/context';
+import { Handling } from './skills/handling';
 import { STANCES, SwordMove, type MoveName } from './skills/swordplay';
 export { Skill, DEFAULT_LESSONS, type Ctx, type World, type Lessons, type LookMode } from './skills/context';
 export { propsOf, SitOnProp, WatchTV, PlayVideoGame, RideScooter, PlayBoardGame } from './skills/props';
@@ -587,6 +588,8 @@ export class Tool {
   /** Why he couldn't get it: you have it, it's lying around, he has no hands, he doesn't own one. */
   why: 'gone' | 'lying' | 'nohands' | 'none' | '' = '';
   private t = 0;
+  private taking = new Handling();
+  private storing = new Handling();
   constructor(private use: ItemUse) {}
 
   fetch(c: Ctx, dt: number): 'working' | 'ready' | 'none' {
@@ -595,14 +598,13 @@ export class Tool {
     if (!hand) { this.why = 'nohands'; return 'none'; }
     const it = this.item ??= c.items.find(this.use);
     if (!it) { this.why = 'none'; return 'none'; }
+    if(!c.items.list.includes(it)){this.why='gone';return 'none';}
     if (it.where === 'cursor') { this.why = 'gone'; return 'none'; }
     if (it.where === 'world') { this.why = 'lying'; return 'none'; }
     if (it.where === 'hand') { ch.handTarget = null; return 'ready'; }
     // On his belt: reach down to it and pull it out.
     const slot = c.items.slotPose(ch, it.slot).at;
-    ch.handTarget = { x: slot.x, y: slot.y };
-    const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
-    if (Math.hypot(h.x - slot.x, h.y - slot.y) < 6 * ch.scale || this.t > 0.7) {
+    if (this.taking.reach(c,slot,dt)) {
       c.items.toHand(it, hand);
       ch.handTarget = null;
       c.sound?.('pickup');
@@ -627,9 +629,7 @@ export class Tool {
     const slot = preferredSlots(it.def).find((s) => !c.items.belt[s]);
     if (slot === undefined) { ch.handTarget = null; return true; } // belt's full: he just keeps holding it
     const at = c.items.slotPose(ch, slot).at;
-    ch.handTarget = { x: at.x, y: at.y };
-    const h = ch.body.j[it.hand === 'L' ? 'handL' : 'handR'];
-    if (Math.hypot(h.x - at.x, h.y - at.y) < 6 * ch.scale || this.stowT > 0.7) {
+    if (this.storing.reach(c,at,dt)) {
       c.items.stow(it);
       ch.handTarget = null;
       c.sound?.('pickup');
@@ -659,7 +659,7 @@ export class DoodleSkill extends Skill {
    * `shape`: strokes in a box from -0.5 to 0.5 (y down). Left out = one of his usual pictures.
    * `becomes`: it comes to life when it's done (a ball, a box, a ledge, an item).
    */
-  constructor(private shape?: Vec[][], private title = '', private opts: { becomes?: Becomes; place?: DrawPlace; surface?: Thing } = {}) { super(); }
+  constructor(private shape?: Vec[][], private title = '', private opts: { becomes?: Becomes; place?: DrawPlace; surface?: Thing; size?: number } = {}) { super(); }
   private doodle: Doodle | null = null;
   private plan: Vec[][] = [];
   private si = 0; private pi = 0; private along = 0;
@@ -678,7 +678,7 @@ export class DoodleSkill extends Skill {
     const shape0 = this.shape ?? SHAPES[name];
     const shape = this.opts.becomes === 'ramp' && ch.facing < 0 ? shape0.map((st) => st.map((p) => ({ x: -p.x, y: p.y }))) : shape0;
     const place = this.opts.place ?? 'front', floor = Math.max(j.footL.y, j.footR.y) + 2;
-    let size = (place === 'air' ? 64 : place === 'floor' ? 50 : 46) * sc;
+    let size = this.opts.size ?? (place === 'air' ? 64 : place === 'floor' ? 50 : 46) * sc;
     let cx = ch.x + ch.facing * (place === 'front' ? 40 : place === 'floor' ? 36 : 50) * sc;
     let cy = place === 'floor' ? floor - size * 0.47 : place === 'air' ? floor - 100 * sc : j.neck.y + 8 * sc;
     const surface = this.opts.surface, screen = surface?.def?.screen;
@@ -755,7 +755,7 @@ export class DoodleSkill extends Skill {
       return false;
     }
     // Move the pen along the stroke at a steady speed.
-    this.along += 120 * ch.scale * dt;
+    this.along += (c.talent === 'drawing' ? 150 : 120) * ch.scale * dt;
     while (this.pi < stroke.length - 1) {
       const a = stroke[this.pi], b = stroke[this.pi + 1], seg = Math.hypot(b.x - a.x, b.y - a.y);
       if (this.along < seg) break;
@@ -931,6 +931,7 @@ export class FetchItem extends Skill {
   private phase: 'go' | 'grab' | 'stow' = 'go';
   private tool: Tool;
   private next = 0;
+  private handling = new Handling();
   constructor(private item: Item, private comment = true) { super(); this.tool = new Tool(item.def.use); this.tool.item = item; }
   start(c: Ctx) { c.look = 'target'; }
   update(c: Ctx, dt: number) {
@@ -954,15 +955,13 @@ export class FetchItem extends Skill {
       return false;
     }
     // Bend down and grab it by the handle.
-    ch.handTarget = { x: it.at.x, y: it.at.y };
-    const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
-    if (Math.hypot(h.x - it.at.x, h.y - it.at.y) < 7 * ch.scale) {
+    if (this.handling.reach(c,it.at,dt)) {
       c.items.toHand(it, hand);
       ch.handTarget = null;
       c.sound?.('pickup');
       if (this.comment && chance(0.5)) c.say(pick(['mine.', 'got it', 'there you are']), 1.2);
       this.phase = 'stow';
-    } else if (this.t - this.next > 3) { ch.handTarget = null; this.phase = 'go'; }
+    } else if (this.t - this.next > 3) { ch.handTarget = null; this.phase = 'go'; this.handling=new Handling(); }
     return false;
   }
   stop(c: Ctx) { c.char.handTarget = null; }
@@ -976,7 +975,7 @@ export class AskBack extends Skill {
   start(c: Ctx) { c.look = 'cursor'; c.say(pick([`can I have my ${this.item.def.name.toLowerCase()} back?`, `hey. my ${this.item.def.name.toLowerCase()}.`, 'give it.']), 2); }
   update(c: Ctx) {
     const ch = c.char, cur = c.world.cursor, it = this.item;
-    if (it.where !== 'cursor' || !cur) return true;
+    if (it.where !== 'cursor' || it.cursorControlled || !cur) return true;
     if (this.t > 10) { c.say(pick(['fine. keep it.', 'hmph.', 'whatever']), 1.4); return true; }
     if (ch.ready && this.t > this.next) {
       this.next = this.t + 0.4;

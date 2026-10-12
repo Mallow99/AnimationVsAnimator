@@ -2,8 +2,8 @@
   "type": "prop",
   "id": "desk",
   "name": "Desk",
-  "about": "A little wooden desk. A sturdy surface for his things and somewhere to perch.",
-  "use": "none",
+  "about": "Draw blueprints here, rest tools on the top, and use a nearby chair.",
+  "use": "work",
   "outline": [
     [
       0,
@@ -103,5 +103,73 @@
       "fill": "#6e5a48",
       "radius": 1
     }
+  ],
+  "screen": [
+    12,
+    -10,
+    33,
+    18
+  ],
+  "actions": [
+    "drawhere",
+    "store",
+    "move"
+  ],
+  "move": "drag",
+  "collision": [
+    [
+      [
+        0,
+        0
+      ],
+      [
+        80,
+        0
+      ],
+      [
+        80,
+        8
+      ],
+      [
+        0,
+        8
+      ]
+    ],
+    [
+      [
+        4,
+        8
+      ],
+      [
+        10,
+        8
+      ],
+      [
+        10,
+        44
+      ],
+      [
+        4,
+        44
+      ]
+    ],
+    [
+      [
+        50,
+        8
+      ],
+      [
+        76,
+        8
+      ],
+      [
+        76,
+        44
+      ],
+      [
+        50,
+        44
+      ]
+    ]
   ]
 }

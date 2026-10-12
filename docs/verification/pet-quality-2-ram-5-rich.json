@@ -1,0 +1,122 @@
+{
+  "count": 5,
+  "rich": true,
+  "platform": "linux",
+  "electron": "44.5.1",
+  "display": "Xvfb 1440x900 software rendering",
+  "units": "MiB",
+  "samples": [
+    {
+      "label": "busy",
+      "pss": {
+        "median": 343.615234375,
+        "min": 335.923828125,
+        "max": 355.341796875
+      },
+      "rss": {
+        "median": 670.66796875,
+        "min": 662.8515625,
+        "max": 682.39453125
+      },
+      "private": {
+        "median": 212.05078125,
+        "min": 204.375,
+        "max": 223.77734375
+      },
+      "swap": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "processCount": 7,
+      "scene": {
+        "figures": 5,
+        "props": 9,
+        "items": 20,
+        "skills": [
+          "read",
+          "pickup",
+          "exercise",
+          null,
+          "handheld"
+        ],
+        "sanity": []
+      }
+    },
+    {
+      "label": "busy-settings-open",
+      "pss": {
+        "median": 424.642578125,
+        "min": 417.830078125,
+        "max": 432.158203125
+      },
+      "rss": {
+        "median": 842.00390625,
+        "min": 834.86328125,
+        "max": 849.18359375
+      },
+      "private": {
+        "median": 270.7265625,
+        "min": 264.5,
+        "max": 278.828125
+      },
+      "swap": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "processCount": 8,
+      "scene": {
+        "figures": 5,
+        "props": 9,
+        "items": 20,
+        "skills": [
+          "read",
+          null,
+          null,
+          null,
+          "handheld"
+        ],
+        "sanity": []
+      }
+    },
+    {
+      "label": "busy-settings-closed",
+      "pss": {
+        "median": 398.2802734375,
+        "min": 387.6669921875,
+        "max": 424.7685546875
+      },
+      "rss": {
+        "median": 728.3515625,
+        "min": 717.73828125,
+        "max": 754.83984375
+      },
+      "private": {
+        "median": 265.53515625,
+        "min": 254.921875,
+        "max": 292.0234375
+      },
+      "swap": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "processCount": 7,
+      "scene": {
+        "figures": 5,
+        "props": 9,
+        "items": 20,
+        "skills": [
+          "read",
+          "idle",
+          "idle",
+          "idle",
+          "handheld"
+        ],
+        "sanity": []
+      }
+    }
+  ],
+  "verificationContext": "Linux/Xvfb offline Update 2 Settings lifecycle; not Mac RAM or leak proof"
+}

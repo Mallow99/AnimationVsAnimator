@@ -1,5 +1,6 @@
 import { ActivityClock, activitySeconds, restlessness } from '../activity-pacing';
 // Furniture activities, separated from combat and climbing.
+import { propActions, type PropAction } from '../capabilities';
 import { Skill, arrive, type Ctx } from './context';
 import type { Thing, PropDef } from '../props';
 import type { SeatStyle } from '../character';
@@ -10,7 +11,8 @@ import { seatedTalk } from './together';
 /** The props of a kind (seat, tv, ride, canvas) that are standing up on the floor, nearest first. */
 export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
   const ch = c.char;
-  return (c.props?.placed ?? []).filter((t) => t.def!.use === use && Math.abs(t.tilt) < 0.35 && !t.held)
+  const action: Partial<Record<PropDef['use'],PropAction>> = {seat:'sit',tv:'watch',ride:'ride',canvas:'paint',work:'drawhere',storage:'store'};
+  return (c.props?.placed ?? []).filter((t) => (action[use] ? propActions(t.def!).includes(action[use]!) : t.def!.use === use) && Math.abs(t.tilt) < 0.35 && !t.held)
     .sort((a, b) => Math.abs(a.center.x - ch.x) - Math.abs(b.center.x - ch.x));
 }
 
@@ -21,7 +23,7 @@ export function propsOf(c: Ctx, use: PropDef['use']): Thing[] {
 function seatStyle(c: Ctx, seat: Thing): SeatStyle {
   const L = c.mood.label, slump = L === 'sleepy' || L === 'sad' ? 2 : 1;
   const ways: [SeatStyle, number][] = seat.def!.id === 'couch'
-    ? [['up', 1], ['lounge', 1.2 * slump], ['front', 1], ['lie', 0.8 * slump]]
+    ? [['up', c.personality==='competitive'?3:1], ['lounge', (c.personality==='gentle'?2.2:1.2) * slump], ['front', c.personality==='mischievous'?2:1], ['lie', 0.8 * slump]]
     : [['up', 1.5], ['front', 1]];
   let r = Math.random() * ways.reduce((sum, [, w]) => sum + w, 0);
   for (const [style, w] of ways) if ((r -= w) <= 0) return style;
@@ -38,11 +40,13 @@ export class SitOnProp extends Skill {
   private style: SeatStyle = 'up';
   private lastMid: { x: number; y: number } | null = null;
   private talk = { at: 6 + Math.random() * 6 };
-  constructor(private seat: Thing, private dur: number | null = null, private face: 1 | -1 | 0 = 0, readonly why = '') { super(); }
+  constructor(private seat: Thing, private dur: number | null = null, private face: 1 | -1 | 0 = 0, readonly why = '', private quiet = false) { super(); }
   start(c: Ctx) {
     c.look = 'default';
     this.dur ??= activitySeconds(c, 'sitdown');
     this.style = seatStyle(c, this.seat);
+    if (this.why==='reading' && this.style==='lie') this.style='lounge';
+    if (this.seat.sitters.size > 1) this.style = 'front';
     // Lying along the couch needs it to himself.
     if (this.style === 'lie' && this.seat.sitters.size) this.style = 'lounge';
   }
@@ -56,7 +60,7 @@ export class SitOnProp extends Skill {
       if (!arrive(c, at.x, 5)) return false;
       if (!ch.sitOn(at, this.face || (chance(0.5) ? 1 : -1), this.style)) return true;
       this.phase = 'sit'; this.t = 0; this.lastMid = seat.seatAt;
-      if (chance(0.5)) c.say(pick(seat.def!.id === 'couch' ? ['ahh', 'comfy', '*flop*'] : ['ahh', 'nice chair', 'much better']), 1.4);
+      if (!this.quiet && chance(0.5)) c.say(pick(seat.def!.id === 'couch' ? ['ahh', 'comfy', '*flop*'] : ['ahh', 'nice chair', 'much better']), 1.4);
       return false;
     }
     if (ch.mode !== 'sit' || !ch.seat) return true;
@@ -70,11 +74,12 @@ export class SitOnProp extends Skill {
       return true;
     }
     const at = seat.seatFor(c.who)!;
-    ch.seat = { x: ch.seat.x + (at.x - ch.seat.x) * 0.12, y: at.y };
+    if (seat.sitters.size > 2) ch.seatStyle = 'front';
+    ch.scootTo(at);
     // Someone wants to sit too: up he gets from lying along it, and leans back instead.
     if (ch.seatStyle === 'lie' && seat.sitters.get(c.who)?.lying === false) { ch.seatStyle = 'lounge'; c.say(pick(['oh, ok', 'fine, sit', '*scoots*']), 1.2); }
     // Sharing the couch: a bit of small talk now and then.
-    if (seat.sitters.size > 1) seatedTalk(c, this.t, this.talk);
+    if (!this.quiet && seat.sitters.size > 1) seatedTalk(c, this.t, this.talk);
     if (this.t > (this.dur ?? 90)) { ch.standUp(); return true; }
     return false;
   }
@@ -100,6 +105,7 @@ abstract class AtTheTV extends Skill {
   protected settle(c: Ctx, dt: number): 'go' | 'settled' | 'gone' {
     const ch = c.char, tv = this.tv;
     if (!c.props?.things.includes(tv) || tv.held || Math.abs(tv.tilt) > 0.6) return 'gone';
+    if(this.name!=='watchtv'&&c.consoleRequired&&!tv.consoleConnected){if(this.t<.1)c.say('Let’s attach the console beside the TV first.',2);return 'gone';}
     c.look = 'target'; c.lookTarget = tv.center;
     if (this.sub) {
       this.sub.t += dt;
@@ -140,7 +146,8 @@ export class WatchTV extends AtTheTV {
   readonly name = 'watchtv';
   private next = 2;
   private watched = 0;
-  private clock = new ActivityClock('watchtv');
+  private clock: ActivityClock;
+  constructor(tv: Thing, autonomous = false) { super(tv); this.clock = new ActivityClock('watchtv',autonomous); }
   update(c: Ctx, dt: number) {
     const s = this.settle(c, dt);
     if (s === 'gone') return true;
@@ -165,7 +172,9 @@ export class WatchTV extends AtTheTV {
 export class PlayVideoGame extends AtTheTV {
   readonly name = 'videogame';
   private played = 0;
-  private clock = new ActivityClock('videogame');
+  private clock: ActivityClock;
+  private spokenAt = -100;
+  constructor(tv: Thing, autonomous = false) { super(tv); this.clock = new ActivityClock('videogame',autonomous); }
   private readyToFinish = false;
   private chatter = 6;
   private mine: Runner | null = null;
@@ -194,16 +203,16 @@ export class PlayVideoGame extends AtTheTV {
     const g = this.mine, other = g === tv.arcade ? tv.arcade2 : tv.arcade;
     for (const e of g.step(dt)) {
       if (e === 'crash') {
-        c.say(other && other.score > 2 ? pick(['NO', 'you got lucky', 'stop looking at my screen']) : pick(['NO', 'noooo', 'that was lag', 'come ON', 'ugh', 'it jumped late!']), 1.4);
+        if (this.played-this.spokenAt>18) { c.say(other && other.score > 2 ? pick(['NO', 'you got lucky', 'stop looking at my screen']) : pick(['NO', 'noooo', 'that was lag', 'come ON', 'ugh', 'it jumped late!']), 1.4); this.spokenAt=this.played; }
         c.mood.nudge({ annoyance: 0.05, boredom: -0.05 });
       } else if (e === 'record') {
-        c.say(pick(['new record!', 'YES', "let's GO"]), 1.6);
+        if(this.played-this.spokenAt>12){c.say(pick(['new record!', 'YES', "let's GO"]), 1.6);this.spokenAt=this.played;}
         c.mood.nudge({ happiness: 0.08 });
       } else {
         c.sound?.('click', 0.15);
-        if (g.score === 8) c.say(pick(['ooh, a good run', "don't choke", 'easy']), 1.4);
+        if (g.score === 8 && this.played-this.spokenAt>18) { c.say(pick(['ooh, a good run', "don't choke", 'easy']), 1.4);this.spokenAt=this.played; }
         // Ahead of him by a few after his crash: rub it in.
-        if (other && other.crashedAt >= 0 && other.time - other.crashedAt < 0.3 && g.score > 3) c.say(pick(['HA', 'too slow', 'git gud']), 1.2);
+        if (other && other.crashedAt >= 0 && other.time - other.crashedAt < 0.3 && g.score > 3 && this.played-this.spokenAt>18) { c.say(pick(['HA', 'too slow', 'git gud']), 1.2); this.spokenAt=this.played; }
       }
     }
     // Thumbs: busy as a block comes up, easy otherwise.
@@ -216,7 +225,7 @@ export class PlayVideoGame extends AtTheTV {
       if (chance(0.5)) c.say(pick(['ok, one more— no. done.', 'enough for now', 'I was winning']), 1.6);
       return true;
     }
-    return this.readyToFinish && this.played > activitySeconds(c, 'videogame', 1.1) + 30;
+    return this.readyToFinish && this.played > this.clock.duration(c,1.1) + 30;
   }
   stop(c: Ctx) {
     const tv = this.tv, me = c.who;

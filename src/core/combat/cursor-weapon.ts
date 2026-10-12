@@ -22,7 +22,7 @@ export class CursorWeapon {
   private charge = 0;
   private time = 0;
   private fireAt = 0;
-  private reloadAt = 0;
+
   private hitAt = new Map<Pet, number>();
   readonly projectiles = new Projectiles();
   get active() {
@@ -33,7 +33,7 @@ export class CursorWeapon {
   }
   get status() {
     return this.item?.def.use === 'gun'
-      ? `${this.item.def.name} · ${this.item.ammo}/6 · R reload`
+      ? `${this.item.def.name} · ${this.item.reloadRemaining > 0 ? "Reloading…" : `${this.item.ammo}/6`}`
       : (this.item?.def.name ?? '');
   }
   equip(kind: CursorWeaponKind) {
@@ -78,7 +78,7 @@ export class CursorWeapon {
     this.previous = null;
     this.charge = 0;
     this.releaseBow = false;
-    this.reloadAt = 0;
+
     this.fireAt = this.time;
     this.hitAt.clear();
   }
@@ -103,13 +103,7 @@ export class CursorWeapon {
     this.charge = 0;
   }
   reload() {
-    if (
-      this.kind === 'gun' &&
-      this.item &&
-      this.item.ammo < 6 &&
-      !this.reloadAt
-    )
-      this.reloadAt = this.time + 1.15;
+    if (this.kind === 'gun') this.item?.beginReload();
   }
   update(dt: number, pets: Pet[]) {
     if (!pets.length || !Number.isFinite(dt) || dt <= 0) return;
@@ -148,16 +142,15 @@ export class CursorWeapon {
       }),
       receive: () => {},
     };
-    if (this.reloadAt && this.time >= this.reloadAt && item) {
-      item.ammo = 6;
-      this.reloadAt = 0;
-    }
+    // Owned guns advance on their owner's inventory clock in every location.
+    // Practice guns have no owner and use this controller's clock.
+    if (!this.owner) item?.tickReload(dt);
     if (
       def &&
       item &&
       this.held &&
       this.kind === 'gun' &&
-      !this.reloadAt &&
+      !item.reloadRemaining &&
       this.time >= this.fireAt &&
       item.ammo > 0
     ) {

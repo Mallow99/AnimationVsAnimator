@@ -1,4 +1,4 @@
-// Everything about Blurp you can change from the settings window, in one
+// Everything about a figure you can change from the settings window, in one
 // object that's saved to disk as pet.json. Also: the allowed range for each
 // number (the settings sliders are built from this table) and a safe merge.
 
@@ -21,11 +21,18 @@ export interface PetConfig {
   name: string;
   personality: Personality;
   figureCount: number;
+  /** Stable character ids, in spawn priority order. Count selects the first N. */
+  spawnOrder: number[];
   debugCombat: boolean;
   closeWindows: boolean;
   fileHomes: boolean;
   browserPlay: boolean;
   drawTools: boolean;
+  inkLifetime: number;
+  consoleRequired: boolean;
+  dailyRhythm: boolean;
+  showBag: boolean;
+  showTrash: boolean;
   scale: number;   // overall size (1 ≈ 90 px tall)
   look: Look;
   body: BodyStyle;
@@ -83,9 +90,10 @@ export interface PetConfig {
 }
 
 export const DEFAULT_CONFIG: PetConfig = {
-  name: 'Blurp',
-  personality: 'inventive', figureCount: 2, debugCombat: false,
-  closeWindows: false, fileHomes:false, browserPlay: false, drawTools: true,
+  name: 'Cobalt',
+  personality: 'inventive', figureCount: 2, spawnOrder: [0,1,2,3,4], debugCombat: false,
+  closeWindows: false, fileHomes:false, browserPlay: false, drawTools: true, inkLifetime: 300, consoleRequired: false, dailyRhythm: true,
+  showBag: false, showTrash: false,
   scale: 1.1,
   look: { ...DEFAULT_LOOK },
   body: { ...DEFAULT_BODY },
@@ -108,7 +116,7 @@ export const DEFAULT_CONFIG: PetConfig = {
   volume: 0.6,
   biases: {},
   mindLook: 'head',
-  friend: { on: true, name: 'Leonard', color: '#f7931e' },
+  friend: { on: true, name: 'Amber', color: '#f7931e' },
   fightMode: 'play',
 };
 
@@ -134,7 +142,8 @@ const TEXT_LIMITS: Record<string, number> = { persona: 1500, model: 80, provider
 
 /** Every adjustable number: its limits, and how the settings window labels it. */
 export const RANGES: Record<string, Range> = {
-  'figureCount': { min: 2, max: 5, step: 1, label: 'Figures', hint: 'A small group, each with their own settings' },
+  'inkLifetime': {min:0,max:1800,step:30,label:'Ink lifetime',hint:'Seconds of unused ink life. 0 disables expiry; holding and supporting pause it.'},
+  'figureCount': { min: 1, max: 5, step: 1, label: 'Stick men', hint: 'Choose how many and which characters live on the desktop' },
   'hyperactivity': { min: 0, max: 1, step: 0.05, label: 'Hyperactivity', hint: 'Calm ← → restless. Mood also changes how long he settles into activities.' },
   'aiInterval': { min: 40, max: 300, step: 10, label: 'AI thinking interval', hint: 'Full mode: seconds between his own ideas (higher uses fewer calls)' },
   'scale': { min: 0.6, max: 2.5, step: 0.05, label: 'Size', hint: 'How big he is on screen' },
@@ -185,6 +194,13 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   if (!/^#[0-9a-f]{6}$/i.test(out.friend.color)) out.friend.color = base.friend.color;
   if (!out.friend.name.trim()) out.friend.name = base.friend.name;
   out.figureCount = Math.round(out.figureCount);
+  if (Array.isArray(p.spawnOrder)) {
+    const ids = [...new Set(p.spawnOrder.filter((id): id is number => Number.isInteger(id) && id >= 0 && id < 5))];
+    out.spawnOrder = [...ids, ...[0,1,2,3,4].filter(id=>!ids.includes(id))];
+  }
+  // Old installs used an independent second-figure toggle. Migrate that intent once.
+  if (!Array.isArray(p.spawnOrder) && p.friend && typeof p.friend === 'object' && (p.friend as {on?:boolean}).on === false) out.figureCount = 1;
+  if (typeof p.figureCount === 'number' && !p.friend) out.friend.on = out.figureCount > 1;
   if (!['inventive', 'competitive', 'gentle', 'mischievous', 'adventurous'].includes(out.personality)) out.personality = base.personality;
   if (out.fightMode !== 'play' && out.fightMode !== 'real') out.fightMode = base.fightMode;
   merge(out.body as unknown as Record<string, unknown>, p.body, 'body.');
@@ -192,9 +208,13 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
   if (out.mindLook !== 'head' && out.mindLook !== 'circuit') out.mindLook = base.mindLook;
   if (!/^#[0-9a-f]{6}$/i.test(out.look.color)) out.look.color = base.look.color;
   if (!out.name.trim()) out.name = base.name;
+  if(out.name==='Blurp')out.name='Cobalt';
+  if(['Leonard','Leanord'].includes(out.name))out.name='Amber';
+  if(['Leonard','Leanord'].includes(out.friend.name))out.friend.name='Amber';
   if (!Object.hasOwn(PROVIDERS, out.provider)) out.provider = base.provider;
   // A bad model name, or one left over from before he had a choice of services: use the service's default.
   if (!/^[a-z0-9._:/-]+$/i.test(out.model) || /^claude-/.test(out.model)) out.model = PROVIDERS[out.provider].model;
+  out.inkLifetime = Number.isFinite(out.inkLifetime) ? Math.max(0, Math.min(86400, out.inkLifetime)) : base.inkLifetime;
   return out;
 }
 
@@ -211,4 +231,18 @@ export function companionConfig(main: PetConfig, id: number): PetConfig {
   const p = profiles[Math.max(0, Math.min(2, id - 2))];
   c.name = p.name; c.look.color = p.color; c.personality = p.personality; c.persona = p.persona; c.biases = {};
   return c;
+}
+
+/** Preset identity is distinct from user-edited appearance/settings and stays at a stable save id. */
+export const CHARACTER_PRESETS = [
+  {id:0,name:'Cobalt',personality:'inventive',description:'Curious maker. Reads, sketches and shares ideas; thoughtful pauses.'},
+  {id:1,name:'Amber',personality:'competitive',description:'Focused trainer. Enjoys fair sparring, practice and friendly rivalries.'},
+  {id:2,name:'Moss',personality:'gentle',description:'Patient companion. Quiet drinks, shared rests and checking on friends.'},
+  {id:3,name:'Violet',personality:'mischievous',description:'Playful inventor. Pocket tricks, affectionate teasing and making things.'},
+  {id:4,name:'Ruby',personality:'adventurous',description:'Enthusiastic explorer. Parkour, games and bringing friends along.'},
+] as const;
+
+export function activeFigureIds(c: PetConfig): number[] {
+  const order = [...new Set([...(c.spawnOrder ?? []),0,1,2,3,4])].filter(id=>Number.isInteger(id)&&id>=0&&id<5);
+  return order.slice(0,c.friend.on ? Math.max(1,Math.min(5,c.figureCount)) : 1);
 }
