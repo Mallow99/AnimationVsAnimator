@@ -1,5 +1,8 @@
 # Pet Quality Update 2 — completed checklist
 
+**Latest owner-directed prototype is paused and unfinished.** The completed checklist below remains
+historical acceptance; see item 10 and [PROP-MODEL-CHECKPOINT.md](PROP-MODEL-CHECKPOINT.md) before resuming.
+
 The owner authorized implementation after the 2026-10-08 research and RAM review. This coherent
 quality pass is complete. Stop before Chrome/Finder roadmap work. Preserve procedural figures,
 presets, offline operation, separate peer messages, actual item ownership and shared controls.
@@ -59,6 +62,15 @@ presets, offline operation, separate peer messages, actual item ownership and sh
    - [x] Focused regressions, existing checks/simulation, feature soak, real browser/Electron input,
      preset/facing inspection, rendered animation previews and resource measurement.
    - [x] Record final acceptance, commit/changelog, push and update PR #3; stop for owner judgement.
+
+10. **Owner-selected 3D prop and hinged book prototype — paused 2026-10-12**
+    - [x] Implement reusable XYZ surfaces/transforms/grips/projection/picking and solid hinged books.
+    - [x] Integrate model-based reading hands, artwork/hulls and a separate development preview.
+    - [x] Save an honest WIP checkpoint/handoff at the owner's pause request.
+    - [ ] Diagnose depth assertion and cursor-gun browser readiness failure.
+    - [ ] Verify final source, isolated performance, model-lab interactions and real five-book animation.
+    - [ ] Run final lifecycle soak/RAM/native Linux checks and rebuild/inspect delivery packaging.
+    - [ ] Capture model previews, record final acceptance and stop before further integration.
 
 Baseline implementation: `7a9e0a0`; research: `a3caee5`. Prior acceptance: 140 checks and 34m52s
 scheduled simulated soak. Initial Linux RAM medians: ordinary 1/2/5 = 325/308/309 MiB PSS;

@@ -1,5 +1,9 @@
 # Current controls and Mac acceptance
 
+The current branch also contains a **paused, unaccepted 3D book prototype**. Inventory controls stay
+as described below. The separate development preview (`npm run modellab`) is not a new bag entry.
+Known depth/browser failures and pending acceptance are in [PROP-MODEL-CHECKPOINT.md](PROP-MODEL-CHECKPOINT.md).
+
 Pet Quality / Living Stickmen adds selectable preset characters, unified controls, physical scooting,
 group conversations, spectator-safe combat, stronger offline needs and discoverable furniture moving.
 Books, cups, dumbbells, yo-yos, blankets, snack boxes and existing tools use the shared inventory. See [PET-QUALITY.md](PET-QUALITY.md)

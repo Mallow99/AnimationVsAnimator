@@ -1,4 +1,6 @@
 import { CHARACTER_TEMPLATES } from '../src/core/character-template';
+import { projectModel } from '../src/core/prop-model';
+import { readerBookAxes } from '../src/core/book-model';
 import { mergeConfig } from '../src/core/config';
 import { friendshipStage, sharedMoment } from '../src/core/relationships';
 import { ShoulderBump } from '../src/core/skills/together';
@@ -508,7 +510,7 @@ test('interrupted removal/transfer cannot resurrect an item in its old bag or ov
     assert.deepEqual(checkSanity([a, b]), []);
   }
 });
-test('visible blanket hems and reader-facing pages are selectable in both facings', () => {
+test('visible blanket hems and reader-facing modeled book surfaces are selectable in both facings', () => {
   const [p] = pets();
   for (const f of [-1, 1]) {
     const blanket = p.items.give('blanket', p.char)!;
@@ -526,8 +528,10 @@ test('visible blanket hems and reader-facing pages are selectable in both facing
     book.bookReading = true;
     book.at = { x: 500, y: 600, z: 0 };
     book.dir = { x: f, y: 0, z: 0 };
-    assert(book.distTo(500 + f * 12 * book.scale, 600 - 4 * book.scale) < 1);
-    assert(book.distTo(500 + f * 12 * book.scale, 600 - 20 * book.scale) > 5);
+    book.bookAxes=readerBookAxes({x:f,y:0,z:0});
+    const faces=projectModel(book.model3D!,book.modelPose());assert(faces.length);
+    for(const face of faces){const center=face.points.reduce((p,q)=>({x:p.x+q.x/face.points.length,y:p.y+q.y/face.points.length}),{x:0,y:0});assert(book.distTo(center.x,center.y)<1);}
+    assert(book.distTo(500 + f * 60 * book.scale,600)>20);
     p.items.remove(book);
   }
 });

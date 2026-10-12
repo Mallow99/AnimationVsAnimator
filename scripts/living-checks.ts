@@ -9,7 +9,8 @@ import {CursorWeapon} from '../src/core/combat/cursor-weapon';
 import {Props,makeBox} from '../src/core/props';
 import {drawItem,itemParts} from '../src/core/items';
 import {satchelParts} from '../src/core/satchel';
-import {bookShape} from '../src/core/book-art';
+import {readerBookAxes} from '../src/core/book-model';
+import {modelVertices,projectModel} from '../src/core/prop-model';
 import {checkSanity} from '../src/core/sanity';
 import {GroupActivity,groupPlan} from '../src/core/skills/group';
 import {Mood} from '../src/core/mood';
@@ -54,8 +55,8 @@ test('passive carrying reloads and an active owned controller never doubles its 
 });
 test('closed and open stock-book hulls match their visible artwork',()=>{
  const [p]=fixture(),book=p.items.spawn('book',{x:900,y:600},1)!;book.dir={x:1,y:0,z:0};book.loosen();
- for(const open of [0,.5,1]){book.bookOpen=open;const art=bookShape(open).flatMap(s=>s.pts),hull=book.collisionHull;
-  assert.equal(Math.max(...art.map(p=>p[0]))-Math.min(...art.map(p=>p[0])),Math.max(...hull.map(p=>p.x))-Math.min(...hull.map(p=>p.x)));}
+ for(const open of [0,.5,1]){book.bookOpen=open;const art=modelVertices(book.model3D!,book.modelPose()),hull=book.collisionHull;
+  for(const axis of ['x','y'] as const)assert(Math.abs((Math.max(...art.map(p=>p[axis]))-Math.min(...art.map(p=>p[axis])))-(Math.max(...hull.map(p=>p[axis]))-Math.min(...hull.map(p=>p[axis]))))<1e-8);}
 });
 test('edited book artwork is rendered from its definition',()=>{
  const [p]=fixture(),book=p.items.give('book',p.char)!;
@@ -71,12 +72,14 @@ test('returning to a distant bookshelf releases old reading hand targets',()=>{
   if(done){r.stop(p.ctx);returned=!!p.items.list.find(i=>i.shelf);break;}}
  assert(walked&&returned);
 });
-test('held reading-book depth stays in front of its strap in either facing',()=>{
+test('modeled book faces use real depth on both sides of the grip in either facing',()=>{
  const [p]=fixture(),book=p.items.give('book',p.char)!;p.items.toHand(book,p.char.useHand!);book.bookReading=true;
- for(const facing of [-1,1] as const){p.char.facing=facing;const bookZ=itemParts(book,p.char)[0].z,strapZ=satchelParts(p.char)[0].z;assert(bookZ>strapZ);}
- const upright=bookShape(1),reading=bookShape(1,0,true);
- const span=(s:typeof upright)=>Math.max(...s.flatMap(x=>x.pts.map(p=>p[1])))-Math.min(...s.flatMap(x=>x.pts.map(p=>p[1])));
- assert(span(reading)<span(upright)*.6,'pages must tilt toward the reader');
+ book.bookOpen=1;
+ for(const facing of [-1,1] as const){p.char.facing=facing;book.bookAxes=readerBookAxes({x:facing,y:0,z:0});
+  const faces=projectModel(book.model3D!,book.modelPose()),parts=itemParts(book,p.char);
+  assert.deepEqual(parts.map(p=>p.z),faces.map(f=>f.depth));
+  assert(parts.some(p=>p.z<book.at.z)&&parts.some(p=>p.z>book.at.z),'faces should interleave at their actual depth');
+  assert(Math.max(...parts.map(p=>p.z))-Math.min(...parts.map(p=>p.z))>5);}
 });
 test('a five-body stack settles without creep, overlap or shape deformation and still responds to impact',()=>{
  const props=new Props(),boxes=Array.from({length:5},(_,i)=>{const t=makeBox({strokes:[],color:'#555555',born:0,done:true},680+i*3,745-i*50,800+i*3,793-i*50);t.forever=true;props.add(t);return t;});

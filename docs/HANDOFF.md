@@ -2,6 +2,19 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Paused WIP: modeled props and hinged book — 2026-10-12
+
+The owner chose a reusable 3D prop system with a hinged book prototype, then requested a pause.
+The source is checkpointed but **not accepted as a finished update**. Typed XYZ surfaces/grips,
+reader-facing solid books, model-based hulls/picking and a separate development lab are implemented.
+Final typecheck/build/lab build pass; a depth regression and cursor-gun browser timeout remain
+unresolved. Final visual acceptance, isolated performance, soak, RAM and packaging are pending.
+[PROP-MODEL-CHECKPOINT.md](PROP-MODEL-CHECKPOINT.md) records exact failures, partial verification,
+limits and ordered resume steps. Leave development paused until the owner resumes it.
+
+The following completed repair/evidence refers to `b727a02`, not the unfinished prototype now at
+the branch head. Existing Windows portable output also remains that prior build.
+
 ## Latest repair: varied life and readable books — 2026-10-12
 
 The owner reported reading-dominated routines, awkward adjacent readers and standing/seated clipping.

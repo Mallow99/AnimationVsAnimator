@@ -1,5 +1,13 @@
 # Project roadmap
 
+## Active work paused: reusable 3D prop/book prototype
+
+The owner approved a reusable 3D prop system and hinged book, then asked to pause. Implementation
+is checkpointed, with final acceptance incomplete. See [PROP-MODEL-CHECKPOINT.md](PROP-MODEL-CHECKPOINT.md)
+for depth/browser failures, partial checks and ordered resume steps. Do not resume work until asked;
+do not begin Chrome/Finder integration. The completed Update 2 and polish evidence below refers to
+the preceding verified checkpoints rather than this unfinished branch head.
+
 ## Current priority: Pet Quality Update 2 (implementation complete)
 
 The owner's latest reading/inactivity/clipping feedback authorizes a further quality repair, informed

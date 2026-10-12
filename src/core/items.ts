@@ -40,6 +40,8 @@ import { drawSprite, parseSprite, type PixelSprite } from './pixel-art';
 import type { DepthPart } from './render';
 import { satchelAt } from './satchel';
 import { bookShape } from './book-art';
+import { bookModel, bookDepth, looseBookAxes } from './book-model';
+import { drawModel, modelParts, modelVertices, projectModel, projectedDistance, poseAtGrip, type ModelAxes, type ModelPose, type PropModel } from './prop-model';
 import { parseProject, type InkProject } from './crafting-state';
 
 /** What he does with it: draw (a pen), swing (a sword), smash (a mace, overhead), throw (a ball), shoot (a bow), none (just carries it). */
@@ -192,6 +194,25 @@ export class Item {
   bookPages = 96;
   bookReadThroughs = 0;
   bookReading = false;
+  /** A transient model orientation while reading; ownership/progress stays with this item. */
+  bookAxes: ModelAxes | null = null;
+  private bookMesh: PropModel | null = null;
+  private meshOpen = -1;
+  private meshPage = -1;
+  private modelHullCache: {now?:{model:PropModel;state:number[];points:Vec[]};before?:{model:PropModel;state:number[];points:Vec[]}} = {};
+  get model3D(): PropModel | null {
+    if(!this.animatedBook)return null;
+    if(!this.bookMesh||this.meshOpen!==this.bookOpen||this.meshPage!==this.bookPage){
+      this.bookMesh=bookModel(this.bookOpen,this.bookPage);this.meshOpen=this.bookOpen;this.meshPage=this.bookPage;
+    }
+    return this.bookMesh;
+  }
+  get modeledBook() { return !!this.model3D && !(this.giftWrap>0&&this.giftUnwrap<1); }
+  modelPose(pose:ItemPose=this):ModelPose {
+    const reading=this.bookReading&&this.where==='hand'&&this.bookAxes;
+    const axes=reading||looseBookAxes(pose.dir);
+    return poseAtGrip(this.model3D!,reading?(this.hand==='R'?'right':'left'):'spine',pose.at,axes,pose.scale);
+  }
   yoyoDrop = 0;
   blanketSpread=0;snackOpen=0;snackAt:Vec|null=null;
   shelf: { key: string; slot: number } | null = null;
@@ -224,7 +245,7 @@ export class Item {
 
   private gameStockDef:ItemDef|null=null;private gameStock=false;
   get animatedHandheld(){if(this.gameStockDef!==this.def){this.gameStockDef=this.def;this.gameStock=this.def.id==='handheld'&&!this.def.sprite&&JSON.stringify(this.def.shape)===JSON.stringify(BUILTIN_ITEMS.find(d=>d.id==='handheld')!.shape);}return this.gameStock;}
-  private get physicalLength() { return this.animatedBook ? 12 + 12 * this.bookOpen : this.def.length; }
+  private get physicalLength() { return this.animatedBook ? bookDepth(this.bookOpen) : this.def.length; }
   get tip(): V3 { return add3(this.at, scale3(this.dir, this.physicalLength * this.scale)); }
   get butt(): V3 { return add3(this.at, scale3(this.dir, -this.def.grip * this.scale)); }
 
@@ -258,6 +279,15 @@ export class Item {
   }
 
   private hull(previous = false) {
+    const model=this.model3D;
+    if(model){
+      const a=previous?{x:this.a.px,y:this.a.py,z:this.a.pz}:this.a;
+      const b=previous?{x:this.b.px,y:this.b.py,z:this.b.pz}:this.b;
+      const key=previous?'before':'now',state=[a.x,a.y,a.z,b.x,b.y,b.z,this.scale],was=this.modelHullCache[key];
+      if(was?.model===model&&was.state.every((v,i)=>v===state[i]))return was.points;
+      const pose:ModelPose={...looseBookAxes(norm3(sub3(b,a))),at:a,scale:this.scale};
+      const points=convexHull(modelVertices(model,pose));this.modelHullCache[key]={model,state,points};return points;
+    }
     // Custom definitions can be reloaded while their existing item stays in the world.
     if (this.contourDef !== this.def || this.animatedBook && this.contourOpen !== this.bookOpen) {
       const { sprite, shape } = this.def;
@@ -419,6 +449,7 @@ export class Item {
   /** Distance from (x, y) to the item on screen. */
   distTo(x: number, y: number) {
     const poses = this.where === 'worn' ? this.poses : [this];
+    if(this.modeledBook)return Math.min(...poses.map(pose=>projectedDistance(projectModel(this.model3D!,this.modelPose(pose)),{x,y})));
     return Math.min(
       ...poses.map((pose) => {
         const dx = x - pose.at.x,
@@ -533,7 +564,7 @@ export class Items {
       this.onChange?.(); return true;
     }
     if (it.where === 'belt') return true;
-    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
+    it.bookTarget = 0; it.bookAxes=null;it.bookReading=false;it.bookPage=0;it.shelf = null;it.dock=null;it.dockPort=null;
     const slot = preferredSlots(it.def).find((s) => !this.belt[s]);
     if (slot === undefined) return false;
     if (it.where === 'hand') this.rummage = { hand: it.hand, left: 0.45 };
@@ -580,7 +611,7 @@ export class Items {
   drop(it: Item, vx: number, vy: number) {
     if (!this.list.includes(it)) return;
     this.unslot(it);
-    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
+    it.bookTarget = 0; it.bookAxes=null;it.bookReading=false;it.bookPage=0;it.shelf = null;it.dock=null;it.dockPort=null;
     it.where = 'world'; it.cursorControlled = false; it.pull = null; it.aim = null; it.aimLocal = null;
     it.loosen(vx, vy);
     this.onChange?.();
@@ -590,7 +621,7 @@ export class Items {
   toCursor(it: Item, at: Vec) {
     if (!this.list.includes(it)) return;
     this.unslot(it);
-    it.bookTarget = 0; it.shelf = null;it.dock=null;it.dockPort=null;
+    it.bookTarget = 0; it.bookAxes=null;it.bookReading=false;it.bookPage=0;it.shelf = null;it.dock=null;it.dockPort=null;
     it.where = 'cursor'; it.cursorControlled = false; it.pull = null; it.aim = null; it.aimLocal = null;
     it.at = { x: at.x, y: at.y, z: 30 };
     it.dir = { x: 0, y: 1, z: 0 };
@@ -806,6 +837,7 @@ export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderin
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if(it.modeledBook){drawModel(ctx,it.model3D!,it.modelPose(pose));ctx.restore();return;}
   if (it.def.sprite) {
     const mirror = pose.mirror ? -1 : 1;
     ctx.save(); ctx.translate(pose.at.x, pose.at.y); ctx.transform(d.x * sc * mirror, d.y * sc * mirror, ax * sc, ay * sc, 0, 0);
@@ -867,6 +899,7 @@ export function equipmentPoses(it: Item, ch: Character): ItemPose[] {
 
 /** Worn gear gets one depth-sorted part per attachment (one helmet, two boots). */
 export function itemParts(it: Item, ch?: Character): DepthPart[] {
+  if(it.modeledBook)return modelParts(it.model3D!,it.modelPose(),it.ink&&it.ink.remaining>=0?Math.max(.15,Math.min(1,it.ink.remaining/15)):1);
   const poses = it.where === 'worn' ? ch ? equipmentPoses(it, ch) : it.poses : [it];
   return poses.map((pose) => {
     const pad = it.drawPadding * pose.scale / it.scale;

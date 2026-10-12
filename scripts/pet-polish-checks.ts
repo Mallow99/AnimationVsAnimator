@@ -232,7 +232,7 @@ test('both readers hold their original books toward their faces with normal reac
     assert(book.bookOpen > 0.9 && book.bookmark > 0 && book.bookReading);
     const neck = p.char.body.j.neck,
       hand = p.char.body.j[book.hand === 'L' ? 'handL' : 'handR'];
-    assert(hand.y < neck.y + 14 * p.char.scale, `${p.config.name} kept the book in its lap`);
+    assert(hand.y < neck.y + 14 * p.char.scale, JSON.stringify({name:p.config.name,neck:{x:neck.x,y:neck.y,z:neck.z},hand:{x:hand.x,y:hand.y,z:hand.z},target:p.char.handsAt,mode:p.char.mode,style:p.char.seatStyle,axes:book.bookAxes}));
     assert(book.dir.y < -0.3, 'pages should tip toward the reader');
     assert(p.ctx.lookTarget && p.ctx.lookTarget.y < neck.y + 10 * p.char.scale);
     assert(

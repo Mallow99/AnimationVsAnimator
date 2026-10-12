@@ -238,7 +238,7 @@ export class Character {
    * Both hands placed by a skill (a handshake, a high five, patty cake, a hug): screen positions for one or
    * both hands (as far as his arms reach). Null = his normal arms.
    */
-  handsAt: { L?: Vec; R?: Vec; lean?: number } | null = null;
+  handsAt: { L?: Vec & { z?: number }; R?: Vec & { z?: number }; lean?: number } | null = null;
   satchelReach: { hand: 'L' | 'R'; at: Vec; amount: number } | null = null;
   /** Sword fighting: the pose the fight skill wants this frame (null = not holding a sword up). */
   fightPose: FightPose | null = null;
@@ -1092,7 +1092,15 @@ export class Character {
 
     switch (this.mode) {
       case 'ground': this.groundPose(dt, t, s); break;
-      case 'sit': this.sitPose(t, s); break;
+      case 'sit': {
+        this.sitPose(t, s);
+        // Solid-prop grips carry an explicit depth. Resting arms stay soft, while a grip follows
+        // its surface closely enough that the fingers do not lag behind a rotating cover.
+        for(const hand of ['L','R'] as const)if(this.handsAt?.[hand]?.z!==undefined){
+          s[hand==='L'?'handL':'handR']=.45;s[hand==='L'?'elbowL':'elbowR']=.22;
+        }
+        break;
+      }
       case 'lie': this.liePose(t, s); break;
       case 'getup': this.getupPose(t, s); break;
       case 'air': this.airPose(t, s, 0.07); internal = true; break;
@@ -2168,9 +2176,9 @@ export class Character {
   }
 
   /** Where hand k gets to reaching for a spot on screen (as far as his arm goes). */
-  private reachToward(from: V3, at: Vec, k: 'L' | 'R'): V3 {
+  private reachToward(from: V3, at: Vec & { z?: number }, k: 'L' | 'R'): V3 {
     const armLen = (this.d.upperArm + this.d.foreArm) * 0.97;
-    const z = from.z + this.latZ(k, 4 * this.scale);
+    const z = at.z ?? from.z + this.latZ(k, 4 * this.scale);
     const dx = at.x - from.x, dy = at.y - from.y, dz = z - from.z, dd = Math.hypot(dx, dy, dz) || 1;
     const k2 = Math.min(1, armLen / dd);
     return { x: from.x + dx * k2, y: from.y + dy * k2, z: from.z + dz * k2 };

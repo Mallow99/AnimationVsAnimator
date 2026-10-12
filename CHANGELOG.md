@@ -3,6 +3,23 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-12 — Paused WIP: reusable 3D props and hinged book prototype
+
+- Added typed XYZ surfaces, solid boxes, named grips, visible-face projection/picking, shading and
+  depth parts; retained the pixelated Canvas renderer and added no dependencies.
+- Stock books now have solid hinged covers, spine/page blocks and a turning leaf. Reading points
+  pages at the figure and connects XYZ hands to model grips. Rendering, picking and projected
+  collision hulls share geometry; bounded caches reuse unchanged contours. Custom artwork, original
+  ownership and progress stay supported; transient reading orientation clears during custody changes.
+- Added nine model checks, updated old flat-art fixtures, book-axis live audits and a separate
+  development preview for model rotation/hinge/page/grip/picking. No new production controls.
+- Paused at the owner's request. Final typecheck/build/lab build passed; intermediate focused
+  regressions and seed-1 simulation passed. Living-depth assertion and cursor-gun browser readiness
+  failed and remain unresolved. Latest edits have not received full regression/visual acceptance.
+- Five-figure profile p95 was 13.219 ms under concurrent tests; isolated measurement is pending.
+  No new RAM/soak/native acceptance/Windows package. Existing delivery is still `b727a02`.
+  PROP-MODEL-CHECKPOINT records exact next steps. This checkpoint is not a finished release.
+
 ## 2026-10-12 — Varied everyday life, raised books and occupied-seat clearance
 
 - Separated self-chosen reading/TV/gaming/seating from long requested sessions, including joining a

@@ -14,6 +14,7 @@ export function checkSanity(figures:readonly Pet[],active:readonly Pet[]=figures
    if(i.where==='belt' && (i.slot<0||p.items.belt[i.slot]!==i))report(`${name}: ${i.def.name} has a stale bag slot`);
    if(i.where!=='belt' && p.items.belt.includes(i))report(`${name}: ${i.def.name} occupies a bag slot while ${i.where}`);
    if(![i.at.x,i.at.y,i.ammo,i.reloadRemaining,i.bookmark,i.bookPages,i.bookReadThroughs,i.gameBest,i.giftWrap].every(Number.isFinite))report(`${name}: ${i.def.name} has invalid item state`);
+   if(i.bookAxes&&[i.bookAxes.right,i.bookAxes.down,i.bookAxes.front].some(v=>![v.x,v.y,v.z].every(Number.isFinite)||Math.abs(Math.hypot(v.x,v.y,v.z)-1)>.01))report(`${name}: invalid book model frame`);
    if(!Number.isInteger(i.bookmark)||i.bookmark<0||i.bookmark>i.bookPages||!Number.isInteger(i.bookPages)||i.bookPages<8||i.bookPages>9999||!Number.isInteger(i.bookReadThroughs)||i.bookReadThroughs<0||i.bookReadThroughs>1000||i.gameBest<0||i.gameBest>9999||i.giftWrap<0||i.giftWrap>3)report(`${name}: invalid saved item progress`);
    if(i.dock!==null&&(i.where!=='world'||i.def.use!=='connect'))report(`${name}: invalid console attachment`);
    if(i.shelf&&active.includes(p)){

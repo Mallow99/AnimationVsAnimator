@@ -7,6 +7,8 @@ import { FetchItem, Tool } from '../skills';
 import { clamp, smooth, rand } from '../math';
 import { ReadingLight } from './domestic';
 import { Handling } from './handling';
+import { readerBookAxes } from '../book-model';
+import { modelGrip, poseAtGrip, type ModelPose } from '../prop-model';
 
 /** Fetch, open, read at natural page breaks, close, and return the same book. */
 export class ReadBook extends Skill {
@@ -185,12 +187,26 @@ export class ReadBook extends Skill {
     book.aimLocal = null;
     c.look = 'target';
     c.lookTarget = { x: at.x + aim.x * length * 0.5 * sc, y: at.y + aim.y * length * 0.5 * sc };
+    if(book.model3D){
+      const forward=ch.dirToWorld(1,0),axes=readerBookAxes(forward);
+      const pose:ModelPose={...axes,scale:sc,at:{x:n.x+forward.x*18*sc,y:n.y+(24-12*ready)*sc,z:n.z+forward.z*18*sc}};
+      const main=book.hand==='R'?'right':'left',other=book.hand==='R'?'L':'R';
+      const anchored=poseAtGrip(book.model3D,main,ch.body.j[book.hand==='R'?'handR':'handL'],axes,sc);
+      ch.handsAt={
+        [book.hand]:modelGrip(book.model3D,main,pose),
+        [other]:modelGrip(book.model3D,book.model3D.grips.turn?'turn':other==='R'?'right':'left',anchored),
+      };
+      book.bookAxes=axes;book.aim=axes.front;
+      const gaze=modelGrip(book.model3D,'spine',pose);
+      c.lookTarget={x:gaze.x+axes.down.x*-10*sc,y:gaze.y+axes.down.y*-10*sc};
+    }
     c.mood.s.boredom = Math.max(0, c.mood.s.boredom - dt / 300);
     if (this.phase === 'close') {
       if (book.bookOpen > 0.02) return false;
       ch.handsAt = null;
       ch.handTarget = null;
       book.bookReading = false;
+      book.bookAxes = null;
       book.aim = null;
       this.seat?.stop(c);
       this.seat = null;
@@ -247,6 +263,7 @@ export class ReadBook extends Skill {
       this.book.bookTarget = 0;
       this.book.bookPage = 0;
       this.book.bookReading = false;
+      this.book.bookAxes = null;
     }
     // Interruptions stow locally; completing the activity walks back to the shelf first.
     if (this.book?.where === 'hand' && !c.items.stow(this.book)) c.items.drop(this.book, 0, 0);
