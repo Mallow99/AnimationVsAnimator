@@ -8,8 +8,9 @@ import { DEFAULT_LOOK, type Look } from './render';
 export type MindMode = 'offline' | 'chat' | 'full';
 
 /** Where his AI brain runs. The free ones just need a key from their website (no credit card). */
-export type ProviderId = 'gemini' | 'groq' | 'openrouter';
+export type ProviderId = 'gemini' | 'groq' | 'openrouter' | 'ollama';
 export const PROVIDERS: Record<ProviderId, { label: string; free: boolean; model: string; keyUrl: string; base: string }> = {
+  ollama: { label: 'Ollama (local, no key)', free: true, model: 'llama3.2:3b', keyUrl: 'https://ollama.com/download', base: 'http://127.0.0.1:11434/v1' },
   gemini: { label: 'Google Gemini', free: true, model: 'gemini-flash-latest', keyUrl: 'https://aistudio.google.com/apikey', base: 'https://generativelanguage.googleapis.com/v1beta/openai' },
   groq: { label: 'Groq', free: true, model: 'openai/gpt-oss-120b', keyUrl: 'https://console.groq.com/keys', base: 'https://api.groq.com/openai/v1' },
   openrouter: { label: 'OpenRouter (free models)', free: true, model: 'meta-llama/llama-3.3-70b-instruct:free', keyUrl: 'https://openrouter.ai/keys', base: 'https://openrouter.ai/api/v1' },

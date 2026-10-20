@@ -43,6 +43,24 @@ app.whenReady().then(async () => {
   assert.equal(await settings.webContents.executeJavaScript('document.querySelector("#aiInterval").value'), '40');
   await settings.webContents.executeJavaScript('window.petShell.setConfig({aiInterval:120})');
   await until(() => overlay.webContents.executeJavaScript('window.pet.config.aiInterval === 120'));
+  // Real preload/IPC: local dialogue, selected scope, reset and save use the production shell.
+  await settings.webContents.executeJavaScript('document.querySelector("[data-tab=chat]").click();document.querySelector("#talkText").value="my name is Sam";document.querySelector("#talkForm").requestSubmit()');
+  await until(()=>overlay.webContents.executeJavaScript('window.pet.brain.log.some(l=>l.who==="him"&&l.text.includes("Sam"))'));
+  await until(()=>settings.webContents.executeJavaScript('document.querySelector("#chat").textContent.includes("Sam")'));
+  await settings.webContents.executeJavaScript('var conversationTarget=document.querySelector("#figureTarget");conversationTarget.value="all";conversationTarget.dispatchEvent(new Event("change"))');
+  assert(await settings.webContents.executeJavaScript('document.querySelector("#talkText").disabled && document.querySelector("#sendTalk").disabled'));
+  await settings.webContents.executeJavaScript('var conversationTarget=document.querySelector("#figureTarget");conversationTarget.value="0";conversationTarget.dispatchEvent(new Event("change"));document.querySelector("#newChat").click();document.querySelector("#cancelNewChat").click()');
+  assert(await overlay.webContents.executeJavaScript('window.pet.brain.log.some(l=>l.text.includes("Sam"))'));
+  await settings.webContents.executeJavaScript('document.querySelector("#newChat").click();document.querySelector("#confirmNewChat").click()');
+  await until(()=>overlay.webContents.executeJavaScript('window.pet.brain.log.length===0'));
+  await settings.webContents.executeJavaScript('document.querySelector("#talkText").value="tell me a story";document.querySelector("#talkForm").requestSubmit()');
+  await until(()=>overlay.webContents.executeJavaScript('window.pet.brain.log.some(l=>l.text.includes("brass key"))'));
+  await until(()=>overlay.webContents.executeJavaScript('JSON.parse(localStorage.getItem("pet-save")??"null")?.conversation?.local?.story?.place==="door"'));
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({provider:"ollama",model:"installed-model"})');
+  await until(()=>settings.webContents.executeJavaScript('document.querySelector("#keyForm").hidden && document.querySelector("#provider").value==="ollama"'));
+  await settings.webContents.executeJavaScript('window.petShell.setConfig({provider:"gemini",model:"gemini-flash-latest"})');
+  await until(()=>overlay.webContents.executeJavaScript('window.pet.config.provider==="gemini"'));
+  console.log('PASS Electron conversation: actual preload/IPC, private named/All scope, confirmation/cancel, local story, persisted context and keyless provider controls');
   await settings.webContents.executeJavaScript('document.querySelector("[data-tab=items]").click(); window.petShell.command("sync")');
   await settings.webContents.executeJavaScript('document.querySelector("#openInventory").click()');
   await until(() => overlay.webContents.executeJavaScript('window.toolBag.isOpen'));

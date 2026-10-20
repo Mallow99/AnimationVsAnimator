@@ -13,7 +13,7 @@ if (what === 'lab' || what === 'modellab') {
   mkdirSync('dist/lab', { recursive: true });
   const html = readFileSync(`src/lab/${entry}.html`, 'utf8').replace('/*__LAB_SCRIPT__*/', () => out.outputFiles[0].text.replace(/<\/script/g, '<\\/script'));
   writeFileSync(what==='modellab'?'dist/lab/prop-model.html':'dist/lab/index.html', html);
-} else if (what === 'sim' || what === 'checks' || what === 'roadmap-checks' || what === 'quality-checks' || what === 'quality-profile' || what === 'living-checks' || what === 'living-soak' || what === 'pet-quality-2-checks' || what === 'pet-polish-checks' || what === 'pet-life-profile' || what === 'model-checks' || what === 'soak') {
+} else if (what === 'sim' || what === 'checks' || what === 'conversation-checks' || what === 'roadmap-checks' || what === 'quality-checks' || what === 'quality-profile' || what === 'living-checks' || what === 'living-soak' || what === 'pet-quality-2-checks' || what === 'pet-polish-checks' || what === 'pet-life-profile' || what === 'model-checks' || what === 'soak') {
   await build({ ...common, entryPoints: [`scripts/${what}.ts`], outfile: `.build/${what}.mjs`, platform: 'node', format: 'esm' });
 } else {
   await Promise.all([

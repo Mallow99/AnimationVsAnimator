@@ -3,6 +3,44 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-20 — UX sanity and keyless long-form conversations
+
+- Added a UX sanity guide with user controls, motion/contact contracts, interruption/recovery,
+  conversation scope, truthful feedback, acceptance checks and a concrete remaining-cleanup list.
+  General now includes an Experience guide; controls and README describe the new chat paths.
+- Built-in local dialogue retains topics, facts, follow-up turns, personality and branching story
+  choices without an account, model, download or key. Unknown subjects request direction rather
+  than pretending to answer everything. Each figure saves its own bounded transcript/context,
+  including visits and returns. Export saves text; scoped New conversation confirms before clearing.
+- Desktop and Settings chat now have selectable scrollable transcripts, 4,000-character multiline
+  composers, Enter/Shift+Enter/IME handling, persistent-in-session individual drafts, visible focus,
+  accurate local capability text and private named scope. All/inactive scopes cannot send chat.
+  New messages preserve history scrolling and append to live regions; desktop rendering updates
+  the transcript only when its version changes. Long replies show a short bubble excerpt.
+- Added optional Ollama on fixed local loopback for open-ended local-model conversations without
+  keys or key-store reads. Installed-model discovery, JSON compatibility fallback and stopped-server
+  feedback use the existing adapter without dependencies. Ollama/model installation is separate.
+  Provider replies allow paragraphs; bounded recent model context restores from the saved transcript.
+- Questions, ordinary activity mentions and negated clauses no longer start physical commands.
+  Story choices stay fictional. Separate queued messages get separate answers. Stop/reset/provider
+  changes invalidate late replies; reaching the call cap falls back to local dialogue.
+- Open chat no longer stops a requested walk or an active activity's approach/return every frame.
+  Pong court visibility is now explicitly controlled rather than appearing/disappearing on a timer.
+- Diagnosed the modeled-book depth fixture: outer cover grips are not an interior depth plane.
+  The test now checks both real cover contacts and depth around the spine in both facings. No depth
+  assertion was simply removed. Full browser cursor-gun attachment passed; the earlier timeout was
+  not reproduced, so no underlying weapon fix is claimed.
+- Verification: typecheck/build; 217 focused regressions (78 general, 30 roadmap, 18 quality, 20 living,
+  36 Update 2, 11 polish, 9 model, 15 conversation); full seed-1 simulation; complete Chromium
+  pointer/keyboard/render/preset suite; final dedicated chat UI/reload/export/scope checks; local
+  provider adapter with fake HTTP responses; Linux Electron/Xvfb including real preload/IPC,
+  named/All chat, reset/cancel, saved story, provider controls and existing activity/file checks.
+  New chat captures under docs/verification/ux-*.png are cloud previews, not native desktop evidence.
+- Limits: built-in dialogue covers authored topics; actual Ollama inference/quality/resources were
+  not tested. Mac/Windows hardware input/focus/permissions/DPI, isolated model performance, full
+  prototype lifecycle/RAM acceptance and a new Windows package remain outstanding. The earlier
+  model prototype is not declared complete. No new Chrome/Finder integration.
+
 ## 2026-10-12 — Paused WIP: reusable 3D props and hinged book prototype
 
 - Added typed XYZ surfaces, solid boxes, named grips, visible-face projection/picking, shading and

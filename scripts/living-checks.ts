@@ -10,7 +10,7 @@ import {Props,makeBox} from '../src/core/props';
 import {drawItem,itemParts} from '../src/core/items';
 import {satchelParts} from '../src/core/satchel';
 import {readerBookAxes} from '../src/core/book-model';
-import {modelVertices,projectModel} from '../src/core/prop-model';
+import {modelVertices,modelGrip,projectModel} from '../src/core/prop-model';
 import {checkSanity} from '../src/core/sanity';
 import {GroupActivity,groupPlan} from '../src/core/skills/group';
 import {Mood} from '../src/core/mood';
@@ -72,13 +72,18 @@ test('returning to a distant bookshelf releases old reading hand targets',()=>{
   if(done){r.stop(p.ctx);returned=!!p.items.list.find(i=>i.shelf);break;}}
  assert(walked&&returned);
 });
-test('modeled book faces use real depth on both sides of the grip in either facing',()=>{
+test('modeled book faces interleave around the spine and stay attached to either real cover grip',()=>{
  const [p]=fixture(),book=p.items.give('book',p.char)!;p.items.toHand(book,p.char.useHand!);book.bookReading=true;
  book.bookOpen=1;
- for(const facing of [-1,1] as const){p.char.facing=facing;book.bookAxes=readerBookAxes({x:facing,y:0,z:0});
-  const faces=projectModel(book.model3D!,book.modelPose()),parts=itemParts(book,p.char);
+ for(const facing of [-1,1] as const)for(const hand of ['L','R'] as const){p.char.facing=facing;book.hand=hand;book.bookAxes=readerBookAxes({x:facing,y:0,z:0});
+  const pose=book.modelPose(),model=book.model3D!,faces=projectModel(model,pose),parts=itemParts(book,p.char);
+  const grip=modelGrip(model,hand==='R'?'right':'left',pose);
+  for(const axis of ['x','y','z'] as const)assert(Math.abs(grip[axis]-book.at[axis])<1e-8,'cover grip must remain attached to the real hand');
   assert.deepEqual(parts.map(p=>p.z),faces.map(f=>f.depth));
-  assert(parts.some(p=>p.z<book.at.z)&&parts.some(p=>p.z>book.at.z),'faces should interleave at their actual depth');
+  // The held cover edge is outside most face centroids. The spine is the interior reference plane.
+  assert(parts.some(p=>p.z<pose.at.z)&&parts.some(p=>p.z>pose.at.z),'faces should interleave around the spine');
+  const vertices=modelVertices(model,pose);
+  assert(Math.min(...vertices.map(v=>v.z))<grip.z&&Math.max(...vertices.map(v=>v.z))>grip.z,'the hand must contact the solid cover, not float outside it');
   assert(Math.max(...parts.map(p=>p.z))-Math.min(...parts.map(p=>p.z))>5);}
 });
 test('a five-body stack settles without creep, overlap or shape deformation and still responds to impact',()=>{

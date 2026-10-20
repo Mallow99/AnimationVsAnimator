@@ -1,3 +1,4 @@
+import { transcriptView, exportConversation, conversationKeys } from './conversation-view';
 import {checkSanity} from "../core/sanity";
 import { isWeapon } from '../core/combat/armament';
 // The overlay page: sets up the canvas, runs the frame loop, feeds mouse input to the stick figures,
@@ -281,8 +282,13 @@ resize();
 // Double-click one (or pick "Talk" from their right-click menu): a little text box pops up over their head,
 // in their color. Whatever you type goes to that one.
 const talk = document.getElementById('talk') as HTMLFormElement;
-const talkText = document.getElementById('talkText') as HTMLInputElement;
-let talkOpen = false, talkIdle = 0, gameTyping = false, toolsTyping = false;
+const talkText = document.getElementById('talkText') as HTMLTextAreaElement;
+const talkDrafts = new Map<string, string>();
+const renderTalkLog = transcriptView(document.getElementById('talkLog')!);
+let talkLogVersion = -1;
+conversationKeys(talkText, talk);
+document.getElementById('talkExport')!.onclick = () => exportConversation(talkPet.brain.log, talkPet.config.name);
+let talkOpen = false, gameTyping = false, toolsTyping = false;
 let talkPet: Pet = pets[0];
 let typingSent = false;
 const syncTyping = () => {
@@ -291,20 +297,24 @@ const syncTyping = () => {
   typingSent = on; shell?.setTyping(on);
 };
 function openTalk(p: Pet = talkPet) {
-  if (talkOpen && talkPet !== p) talkPet.listening = false;
+  if (talkOpen) { talkDrafts.set(talkPet.ctx.who, talkText.value); talkPet.listening = false; }
   talkPet = p;
+  talkText.value = talkDrafts.get(p.ctx.who) ?? "";
+  document.getElementById("talkTitle")!.textContent = `Talk to ${p.config.name}`;
+  renderTalkLog(p.brain.log, p.config.name, p.ctx.who);
+  talkLogVersion = p.brain.conversationVersion;
   talkOpen = true;
   talk.classList.add('open');
   talk.style.setProperty('--ink', p.config.look.color);
   talkText.placeholder = `say something to ${p.config.name}…`;
   syncTyping(); // the desktop window has to accept typing for a moment
   p.listening = true;
-  talkIdle = performance.now();
   placeTalk();
   setTimeout(() => talkText.focus(), 30);
 }
 function closeTalk() {
   if (!talkOpen) return;
+  talkDrafts.set(talkPet.ctx.who, talkText.value);
   talkOpen = false;
   talk.classList.remove('open');
   talkText.blur();
@@ -329,11 +339,9 @@ talk.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = talkText.value.trim();
   if (text) talkPet.command(`hear:${text}`);
-  talkText.value = '';
-  talkIdle = performance.now();
+  talkText.value = ''; talkDrafts.delete(talkPet.ctx.who); talkText.focus();
 });
-talkText.addEventListener('input', () => { talkIdle = performance.now(); });
-talkText.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTalk(); });
+talk.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); closeTalk(); } });
 document.getElementById('talkClose')!.addEventListener('click', closeTalk);
 const overTalk = (x: number, y: number) => {
   if (!talkOpen) return false;
@@ -410,7 +418,7 @@ function equipCursor(kind: CursorWeaponKind) {
 }
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') equipCursor('none');
-  if ((e.key === 'r' || e.key === 'R') && !(e.target instanceof HTMLInputElement) && cursorWeapon.active) { cursorWeapon.reload(); e.preventDefault(); }
+  if ((e.key === 'r' || e.key === 'R') && !(e.target as Element).closest('input, textarea, [contenteditable]') && cursorWeapon.active) { cursorWeapon.reload(); e.preventDefault(); }
 });
 if (shell)
   shell.onCommand(({ cmd }) => {
@@ -601,8 +609,11 @@ function frame(now: number) {
   updateClickThrough(last.x, last.y);
   if (talkOpen) {
     placeTalk();
-    if (now - talkIdle > 45000 && document.activeElement !== talkText)
-      closeTalk();
+    if (talkLogVersion !== talkPet.brain.conversationVersion) {
+      renderTalkLog(talkPet.brain.log, talkPet.config.name, talkPet.ctx.who);
+      talkLogVersion = talkPet.brain.conversationVersion;
+    }
+    document.getElementById("talkStatus")!.textContent = talkPet.brain.status || (talkPet.brain.active ? "AI mode · local fallback available" : "Local conversation · no key needed");
   }
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   if (fakeWins.length && pets[0]?.config.windows) drawFakeWindows();

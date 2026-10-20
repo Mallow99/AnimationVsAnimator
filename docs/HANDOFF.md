@@ -2,6 +2,54 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest owner request: UX sanity and keyless conversation — 2026-10-20
+
+The owner resumed work for broad UX cleanup, a sanity guide, and sustained dynamic conversations
+without AI keys. This pass continues the existing draft PR #3, on `codex/roadmap-continuation`.
+It does not complete the older 3D prototype or start new Chrome/Finder integration.
+
+Start with [UX-SANITY-GUIDE.md](UX-SANITY-GUIDE.md): user controls, keyless setup, exact retention,
+interaction/motion contracts, repeatable acceptance, known limits and next cleanup priorities.
+General → Experience guide provides the short version in the app. Preserve the original character
+proportions/presets and the passive-carry/explicit-Use ownership contract.
+
+Implemented: per-figure saved local dialogue with facts/topics/follow-ups/personality/branching
+stories; full desktop/Settings transcripts; multiline 4,000-character input; Enter/Shift+Enter/IME;
+per-figure session drafts; history-scroll preservation; export and confirmed scoped reset. All or
+inactive selections cannot broadcast private chat. Separate messages stay separate; Stop/new chat
+invalidate late provider actions. Mentions and negated clauses cannot trigger physical requests.
+The listening controller now allows explicit walking and active approach/return transitions.
+Pong has an explicit stable court toggle. Settings honors reduced-motion for interface transitions.
+
+Ollama is an optional fixed-loopback provider with no key or credential-store access. It supports
+installed-model discovery and the existing optional Chat/Full modes. It requires the user's own
+Ollama/model installation; no background downloads or new dependencies. Built-in authored dialogue
+is ready immediately. Missing local service/model errors explain setup and fall back to local
+responses. Optional model replies support up to 2,000 characters and bounded recent context restores
+from the transcript. Retention: 240 log entries/120,000 text characters; model context 32 turns/
+16,000 characters. Name notes remain in Mind when a chat is reset; the reset explains this distinction.
+
+Verification: typecheck/build, all 217 focused regressions (including 15 new conversation checks),
+full seed-1 simulation, full Chromium interaction/preset/rendered activity suite and final dedicated
+chat UI checks (export download, long input, keyboard/IME, drafts/scope, bounds, scroll, reload and
+story continuity). Linux Electron/Xvfb passed the real preload/IPC and Settings conversation/reset/
+persistence/provider controls, plus existing file/activity/focusability checks. Native window/file
+reports remain explicitly fake. Provider adapter verification uses fake HTTP, never a downloaded
+model. Captures: verification/ux-local-conversation.png and ux-settings-conversation.png.
+Use `npm run conversationcheck`, `npm run conversationui`, `npm run localbraincheck` to repeat the
+new checks. The existing Electron smoke script now contains actual bridge conversation acceptance.
+
+The book-depth failure was a fixture anchored to an outside cover edge. It now checks attachment
+of both real grips, solid contact, projected face depths and interior spine depth for both facings.
+No model rendering code was changed for that correction. Full browser cursor-gun readiness passed;
+the earlier timeout is not reproduced or claimed fixed. The unfinished prototype's isolated
+performance, full lifecycle/RAM, model-lab/extended visual acceptance and Windows packaging remain
+pending. Do not reclassify it as completed based on these chat/UX checks.
+
+Next: owner review of the conversations and UX guide; real Mac/Windows and actual local inference
+acceptance. Crowded bubble layout, richer action-specific anticipation/recovery and crowded mixed
+scales remain cleanup candidates. Existing Windows binaries are older; no package rebuilt here.
+
 ## Paused WIP: modeled props and hinged book — 2026-10-12
 
 The owner chose a reusable 3D prop system with a hinged book prototype, then requested a pause.

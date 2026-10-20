@@ -7,6 +7,7 @@ import { MOOD_PRESETS, type MoodState } from '../core/mood';
 import { COMMANDS } from '../core/mind';
 import type { DesktopInfo } from '../shared/desktop';
 import { fileVisitView } from './file-visits';
+import { transcriptView, exportConversation, conversationKeys } from '../app/conversation-view';
 
 interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
 interface Weigh { name: string; score: number; why: string; bias?: number }
@@ -90,10 +91,11 @@ function renderFileVisits() {
   $('openInventory').textContent = hidden ? (target === null ? 'Return hidden visitors and open bags' : 'Return and open bag') : 'Open bag';
 }
 
-function chooseTarget(value:string){target=value==='all'?null:Number(value);const c=allConfigs[target??targets()[0]];render(c);publishStats();publishCollections();source.command('sync',target??targets()[0]);}
+function chooseTarget(value:string){chatDrafts.set(target, $<HTMLTextAreaElement>('talkText').value);target=value==='all'?null:Number(value);const c=allConfigs[target??targets()[0]];$<HTMLTextAreaElement>('talkText').value=chatDrafts.get(target)??'';updateChatControls();currentLog=[];showTranscript([],c.name,String(target));render(c);publishStats();publishCollections();source.command('sync',target??targets()[0]);}
 $<HTMLSelectElement>('figureTarget').onchange=()=>chooseTarget($<HTMLSelectElement>('figureTarget').value);
 source.onSelect?.(id=>chooseTarget(String(id)));
 function renderRoster(){
+ updateChatControls();
  const active=activeFigureIds(allConfigs[0]),select=$<HTMLSelectElement>('figureTarget');
  const options=[new Option('All figures on the desktop','all'),...allConfigs.map((c,id)=>new Option(c.name+(active.includes(id)?'':' (not on desktop)'),String(id)))];
  const signature=options.map(o=>o.textContent).join('|');if(select.dataset.signature!==signature){select.replaceChildren(...options);select.dataset.signature=signature;}
@@ -164,39 +166,40 @@ $('sayForm').addEventListener('submit', (e) => {
   t.value = '';
 });
 // ── talking ──
-$('talkForm').addEventListener('submit', (e) => {
+const chatDrafts = new Map<number | null, string>();
+const talkInput = $<HTMLTextAreaElement>('talkText');
+const chatForm = $<HTMLFormElement>('talkForm');
+const showTranscript = transcriptView($('chat'));
+let currentLog: LogLine[] = [];
+const canChat = () => target !== null && activeFigureIds(allConfigs[0]).includes(target);
+function updateChatControls() {
+  const enabled = canChat();
+  talkInput.disabled = !enabled;
+  for (const id of ['sendTalk', 'exportChat', 'newChat']) $<HTMLButtonElement>(id).disabled = !enabled;
+  $('chatReset').hidden = true;
+  $('chatHeading').textContent = enabled ? `Talk to ${allConfigs[target!].name}` : 'Choose a figure to chat';
+  $('brainState').textContent = enabled ? 'Local conversation · no key needed' : 'Choose a named figure on the desktop. Chats are private to each figure.';
+}
+conversationKeys(talkInput, chatForm);
+chatForm.addEventListener('submit', e => {
   e.preventDefault();
-  const t = $<HTMLInputElement>('talkText');
-  if (t.value.trim()) shell.command(`hear:${t.value}`);
-  t.value = '';
+  if (!canChat() || !talkInput.value.trim()) return;
+  source.command(`hear:${talkInput.value}`, target!);
+  talkInput.value = ''; chatDrafts.delete(target); talkInput.focus();
 });
-let chatShown = '';
+$('exportChat').onclick = () => { if (canChat()) exportConversation(currentLog, allConfigs[target!].name); };
+$('newChat').onclick = () => { $('chatReset').hidden = false; $('confirmNewChat').focus(); };
+$('cancelNewChat').onclick = () => { $('chatReset').hidden = true; $('newChat').focus(); };
+$('confirmNewChat').onclick = () => {
+  if (!canChat()) return;
+  source.command('conversation:new', target!); currentLog = []; showTranscript([], allConfigs[target!].name, String(target));
+  $('chatReset').hidden = true; talkInput.focus();
+};
 function renderChat(log: LogLine[], status: string, active: boolean) {
-  const key = JSON.stringify(log) + status;
-  if (key === chatShown) return;
-  chatShown = key;
-  const box = $('chat');
-  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 30;
-  box.replaceChildren(...(log.length ? log : [{ who: 'note' as const, text: 'Say hi. He answers in his speech bubble.', at: 0 } as LogLine]).flatMap((l) => {
-    const out: HTMLElement[] = [];
-    if (l.text || !l.acts) {
-      const p = document.createElement('p');
-      p.className = l.who;
-      p.textContent = l.text || '…';
-      out.push(p);
-    }
-    if (l.acts) {
-      // What he did, in his own grey line: "*hop ×3, walks away*"
-      const a = document.createElement('p');
-      a.className = 'acts';
-      a.textContent = `*${l.acts}*`;
-      out.push(a);
-    }
-    return out;
-  }));
-  if (atBottom) box.scrollTop = box.scrollHeight;
-  $('brainState').textContent = status === 'thinking…' ? 'He\'s thinking…'
-    : active ? '' : 'His brain is Offline, so he won\'t understand. Turn on Chat or Full under General → Brain.';
+  currentLog = canChat() ? log : [];
+  showTranscript(currentLog, canChat() ? allConfigs[target!].name : 'a figure', String(target));
+  $('brainState').textContent = !canChat() ? 'Choose a named figure on the desktop. Chats are private to each figure.'
+    : status || (active ? 'AI mode · local fallback available' : 'Local conversation · no key or internet needed');
 }
 
 const DOING: Record<string, string> = {
@@ -319,7 +322,7 @@ providerSel.addEventListener('change', () => {
 });
 function showKey(k: KeyStatus) {
   if (k.provider !== providerSel.value) return;
-  $('keyInfo').textContent = k.saved ? `Saved (${k.hint}). Stored on this computer only.` : `No ${PROVIDERS[k.provider].label} key yet.`;
+  $('keyInfo').textContent = k.provider === 'ollama' ? k.hint : k.saved ? `Saved (${k.hint}). Stored on this computer only.` : `No ${PROVIDERS[k.provider].label} key yet.`;
 }
 $('findModels').addEventListener('click', async () => {
   const provider = providerSel.value;
@@ -398,7 +401,13 @@ function render(c: PetConfig) {
   if (document.activeElement !== persona) persona.value = c.persona;
   if (document.activeElement !== model) model.value = c.model;
   providerSel.value = c.provider;
+  const localProvider = c.provider === 'ollama';
+  for (const id of ['keyForm', 'apiKeyLabel']) $(id).hidden = localProvider;
+  $('providerHelp').textContent = localProvider ? 'Runs on this computer. Install Ollama separately and download a model; the app downloads nothing automatically.' : 'Cloud services need their own account and API key. Local conversations work without either.';
+  $('keyLink').textContent = localProvider ? 'Get Ollama →' : 'Get a key →';
+  $('keyInfo').textContent = localProvider ? 'No API key needed.' : '';
   $<HTMLAnchorElement>('keyLink').href = PROVIDERS[c.provider].keyUrl;
+  if (localProvider) $('modelInfo').textContent = 'Use Find models to choose an installed model. Choose Chat or Full above to use it. If Ollama is stopped, built-in dialogue still answers.';
   $<HTMLInputElement>('puppet').checked = c.puppet;
   const interval = $<HTMLSelectElement>('aiInterval');
   for (const o of [...interval.options]) if (o.dataset.custom) o.remove();

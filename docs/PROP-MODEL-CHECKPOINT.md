@@ -80,3 +80,13 @@ above so resuming does not depend on those files surviving.
    rebuild/inspect Windows packaging. Decide explicitly whether the development lab ships.
 6. Record final results/limits, update changelog/handoff/PR, and stop for owner judgement before
    Chrome/Finder work. Do not label this prototype complete until the unresolved checks are addressed.
+
+## UX continuation verification — 2026-10-20
+
+The owner resumed UX cleanup/conversation work on this source. The book-depth fixture was diagnosed:
+its main-hand anchor is an outer cover edge, so visible face centroids need not surround it. The
+revised check proves both real cover contacts and face depths around the interior spine, for both
+facings. `sanitycheck`, all nine model checks and the full Chromium interaction/preset/render suite
+passed. The earlier cursor-gun timeout was not reproduced; no weapon implementation repair is
+claimed. This does not close isolated model performance, full model lifecycle/RAM, extended lab/
+visual acceptance or current Windows packaging. The prototype remains unfinished.

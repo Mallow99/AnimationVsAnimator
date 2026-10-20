@@ -350,6 +350,7 @@ export class Pet implements Peer {
     this.items.onChange = () => this.onCollections?.();
     this.memory.onChange = () => { this.onCollections?.(); this.onMemorySave?.(this.memory.save()); };
     this.brain.onSpeak = (text) => this.speak(text);
+    this.brain.onConversation = () => this.onMemorySave?.(this.memory.save());
     this.ctx.savedMoves = this.brain.savedMoves;
     this.brain.onMoves = () => this.onCollections?.();
     this.ctx.onDrawn = (d) => {
@@ -409,7 +410,12 @@ export class Pet implements Peer {
     if (this.char.hangingOn && this.ctx.world.time - this.ctx.world.cursorMovedAt > 0.06 && this.ctx.world.cursor) {
       this.char.moveHold(this.ctx.world.cursor.x, this.ctx.world.cursor.y, 0, 0); // the mouse is still: so is the hand
     }
-    if (this.listening) { this.char.presentWant = 0.6; this.mind.holdUntil = this.ctx.world.time + 1; if (this.char.walking) this.char.stop(); }
+    if (this.listening) {
+      this.char.presentWant = 0.6;
+      this.mind.holdUntil = this.ctx.world.time + 1;
+      // Listening pauses idle wandering, not an explicit walk or an activity's return/approach.
+      if (this.char.walking && this.mind.idle) this.char.stop();
+    }
     else this.char.presentWant = 0;
     if (this.downUntil && this.ctx.world.time > this.downUntil) { this.downUntil = 0; this.char.stayDown = false; if(this.char.hp<=0 && this.mind.skill?.name!=='duel')this.char.hp=1; }
     if (!this.paused) { this.mind.update(this.ctx, dt); this.brain.update(this.ctx, this.mind); }
@@ -2077,7 +2083,7 @@ export class Pet implements Peer {
       windowsStuck: this.windowAccess.anyBlocked(this.ctx.world.time),
       moveNote: this.moveNote,
       platforms: this.ctx.world.platforms.length,
-      brain: { active: this.brain.active, status: this.brain.status, log: this.brain.log.slice(-20) },
+      brain: { active: this.brain.active, status: this.brain.status, log: this.brain.log },
       // For the neurons view: everything he's weighing, how much, and what won.
       mind: { weigh: this.mind.weigh(this.ctx), thinking: this.brain.status === 'thinking…' },
     };
@@ -2106,6 +2112,7 @@ export class Pet implements Peer {
    *   do:<skill>  mood:<preset>  setMood:{"energy":0.3}  say:<text>  resetMood  respawn
    */
   command(cmd: string) {
+    if (cmd === 'conversation:new') { this.brain.newConversation(); return; }
     const [verb, ...rest] = cmd.split(':');
     const arg = rest.join(':');
     if (verb === 'do') { this.mind.command(this.ctx, arg); return; }
@@ -2246,12 +2253,13 @@ export class Pet implements Peer {
 
   // ── saving between runs ──
   save() {
-    return JSON.stringify({ v: 1, mood: this.mood.save(), bond: Math.round(this.ctx.feel.bond * 100) / 100, bonds: Object.fromEntries(this.relationships), stickers:this.stickers, lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], ...(this.ownsProps ? { props: this.props.savePlaced() } : {}) });
+    return JSON.stringify({ v: 1, conversation: this.brain.saveConversation(), mood: this.mood.save(), bond: Math.round(this.ctx.feel.bond * 100) / 100, bonds: Object.fromEntries(this.relationships), stickers:this.stickers, lessons: this.ctx.lessons, gallery: this.gallery, moves: this.brain.savedMoves, items: this.items.save(), itemsKnown: [...this.items.known], ...(this.ownsProps ? { props: this.props.savePlaced() } : {}) });
   }
   load(json: string | null) {
     if (!json) return;
     try {
       const d = JSON.parse(json);
+      this.brain.loadConversation(d.conversation);
       this.mood.load(d.mood);
       if(Array.isArray(d.stickers))this.stickers=[...new Set(d.stickers.filter((v:unknown)=>typeof v==='string'&&['pencil','star','leaf','heart','bolt'].includes(v)))].slice(0,3) as Sticker[];
       if(d.bonds && typeof d.bonds==='object')for(const [id,value] of Object.entries(d.bonds).slice(0,8)) {

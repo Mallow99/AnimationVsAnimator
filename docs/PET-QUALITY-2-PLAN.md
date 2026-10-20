@@ -1,6 +1,6 @@
 # Pet Quality Update 2 — completed checklist
 
-**Latest owner-directed prototype is paused and unfinished.** The completed checklist below remains
+**The 2026-10-20 owner request resumes UX cleanup and keyless conversations. The earlier model prototype remains unfinished.** The completed checklist below remains
 historical acceptance; see item 10 and [PROP-MODEL-CHECKPOINT.md](PROP-MODEL-CHECKPOINT.md) before resuming.
 
 The owner authorized implementation after the 2026-10-08 research and RAM review. This coherent
@@ -88,3 +88,12 @@ Chromium/Linux Electron interactions and visual motion review, five two-hour sta
 RAM/Settings lifecycle and Windows x64 packaging. Final seed-32: 7,200 seconds, 7,215 audits,
 34 phases, no reported issues. Details and limitations: [PET-QUALITY-2.md](PET-QUALITY-2.md).
 Do not advance the integration roadmap. Owner hardware acceptance is the remaining gate.
+
+11. **Owner request: UX sanity and keyless conversations — 2026-10-20**
+    - [x] Establish a practical UX acceptance guide and an in-app control reminder.
+    - [x] Separate activity mentions/negated clauses/story choices from physical requests.
+    - [x] Replace disappearing Pong preview timing with an explicit court toggle.
+    - [x] Add persistent per-figure local dialogue, follow-ups, topic facts and branching stories.
+    - [x] Add multiline transcripts, draft isolation, export and scoped confirmed reset.
+    - [x] Add optional keyless Ollama support for open-ended local-model dialogue.
+    - [x] Record final checks and rendered acceptance in the handoff/changelog.

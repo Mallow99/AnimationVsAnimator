@@ -1,5 +1,14 @@
 # Current controls and Mac acceptance
 
+Latest chat controls: double-click a figure or choose Settings → Chat. Enter sends; Shift+Enter
+adds a line. Offline conversation needs no keys and saves topics, details and story choices for
+each figure. Export or start a confirmed New conversation in Chat. Drafts survive closing and
+switching names within the session. All figures cannot send private messages. “Stop” cancels
+pending actions. Optional Ollama supports open-ended local AI without keys, with separate setup.
+See [UX-SANITY-GUIDE.md](UX-SANITY-GUIDE.md) for setup, limits and acceptance rules.
+Pong now uses Show court/Hide court rather than automatically flashing its court preview.
+
+
 The current branch also contains a **paused, unaccepted 3D book prototype**. Inventory controls stay
 as described below. The separate development preview (`npm run modellab`) is not a new bag entry.
 Known depth/browser failures and pending acceptance are in [PROP-MODEL-CHECKPOINT.md](PROP-MODEL-CHECKPOINT.md).
