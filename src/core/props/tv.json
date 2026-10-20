@@ -2,7 +2,7 @@
   "type": "prop",
   "id": "tv",
   "name": "TV",
-  "about": "A chunky old TV on a cabinet, with a game console. He watches cartoons, plays his own games, and plays Othello with you.",
+  "about": "A chunky old TV on a wooden cabinet. Watch cartoons or play TV games; a console can attach beside it.",
   "use": "tv",
   "outline": [
     [
@@ -141,45 +141,42 @@
         13
       ],
       "radius": 2,
-      "fill": "#5b4a3d"
+      "fill": "#705a46"
     },
     {
       "rect": [
-        9,
+        7,
+        54,
         56,
-        24,
-        9
+        10
       ],
-      "radius": 2,
-      "fill": "#3b3f4f"
+      "radius": 1,
+      "fill": "#a28a71"
+    },
+    {
+      "pts": [
+        [
+          8,
+          64
+        ],
+        [
+          62,
+          64
+        ]
+      ],
+      "color": "#b69c80",
+      "width": 1
     },
     {
       "rect": [
-        28,
-        59,
-        3,
+        30,
+        58,
+        10,
         3
       ],
-      "fill": "#6fe08a"
-    },
-    {
-      "rect": [
-        39,
-        59,
-        16,
-        6
-      ],
-      "radius": 3,
-      "fill": "#3b3f4f"
-    },
-    {
-      "rect": [
-        44,
-        61,
-        3,
-        2
-      ],
-      "fill": "#9aa3b8"
+      "radius": 1,
+      "fill": "#50473f"
     }
-  ]
+  ],
+  "move": "drag"
 }

@@ -5,27 +5,38 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'" />
   <title>AnimationVsAnimator</title>
   <link rel="stylesheet" href="game.css" />
+  <link rel="stylesheet" href="tools.css" />
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; user-select: none; }
-    canvas { display: block; width: 100vw; height: 100vh; }
+    #stage { display: block; width: 100vw; height: 100vh; }
     /* Preview mode (plain browser): fake a desktop so you can see him. */
     body.preview { background: linear-gradient(160deg, #2c3e50, #4a6278); }
     body.preview .hint { position: fixed; top: 10px; left: 12px; color: #fffa; font: 13px system-ui, sans-serif; }
     /* The talk box: a chunky pixel-style text field that pops up above his head. */
-    #talk { position: fixed; display: none; gap: 0; transform: translate(-50%, -100%); filter: drop-shadow(3px 3px 0 #0006); }
+    #talk { position: fixed; display: none; width: min(430px, calc(100vw - 16px)); max-height: calc(100vh - 16px); box-sizing: border-box; flex-direction: column; gap: 8px; padding: 12px; transform: translate(-50%, -100%); color: #29232d; background: #faf6eb; border: 2px solid var(--ink, #232a6b); box-shadow: 3px 3px 0 #0004; font: 14px/1.5 system-ui, sans-serif; }
     #talk.open { display: flex; }
-    #talk input, #talk button { font: 15px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #1b1d2e; background: #fff;
-      border: 3px solid var(--ink, #232a6b); border-radius: 0; padding: 7px 9px; outline: none; }
-    #talk input { width: min(230px, calc(100vw - 125px)); border-right: 0; }
-    #talk button { background: var(--ink, #232a6b); color: #fff; cursor: pointer; padding: 7px 10px; }
-    #talk .x { background: #fff; color: var(--ink, #232a6b); border-left: 0; }
-    #talk::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 9px; height: 9px; background: var(--ink, #232a6b);
-      clip-path: polygon(0 0, 100% 0, 50% 100%); }
+    #talk header, #talk .compose { display: flex; align-items: center; gap: 8px; }
+    #talk header strong { flex: 1; }
+    #talk button { min-height: 32px; font: inherit; background: #fff; color: #29232d; border: 1px solid #bab2a5; padding: 4px 8px; cursor: pointer; }
+    #talk textarea { flex: 1; min-width: 0; min-height: 66px; max-height: 24vh; resize: vertical; font: inherit; color: #29232d; background: #fff; border: 1px solid #9c9488; padding: 8px; }
+    #talk :focus-visible { outline: 2px solid var(--ink, #232a6b); outline-offset: 2px; }
+    #talkLog { height: min(260px, 34vh); min-height: 70px; overflow: auto; user-select: text; overscroll-behavior: contain; }
+    #talkLog p { margin: 0 0 10px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 90%; background: #eee9df; }
+    #talkLog .you { margin-left: auto; background: #e3e6fa; }
+    #talkLog .note { background: transparent; color: #686073; font-size: 12px; }
+    #talkLog .acts { display: block; color: #686073; font-size: 12px; }
+    #talk small { font-size: 11px; color: #686073; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <canvas id="stage"></canvas>
-  <form id="talk" autocomplete="off"><input id="talkText" maxlength="300" aria-label="Talk to him" placeholder="say something…" spellcheck="false" /><button type="submit" aria-label="Send message">↵</button><button class="x" type="button" id="talkClose" aria-label="Close chat" title="Close (Esc)">✕</button></form>
+  <form id="talk" autocomplete="off" aria-label="Conversation">
+    <header><strong id="talkTitle">Conversation</strong><button type="button" id="talkExport" title="Export conversation">Export</button><button type="button" id="talkClose" aria-label="Close chat" title="Close (Esc)">✕</button></header>
+    <div id="talkLog" role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions" tabindex="0"></div>
+    <div class="compose"><textarea id="talkText" rows="2" maxlength="4000" aria-label="Message" aria-describedby="talkHelp" placeholder="say something…"></textarea><button type="submit" aria-label="Send message">Send</button></div>
+    <small id="talkHelp">Enter to send · Shift+Enter for a new line · Saved on this device</small><small id="talkStatus" role="status"></small>
+  </form>
   <script src="renderer.js"></script>
 </body>
 </html>

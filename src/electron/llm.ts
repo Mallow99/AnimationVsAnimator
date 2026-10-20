@@ -34,6 +34,7 @@ function saveKeys() {
 
 /** Save (or with an empty string, forget) the key for one service. */
 export function setKey(provider: ProviderId, key: string) {
+  if (provider === 'ollama') return;
   const k = loadKeys();
   key = key.trim();
   if (key) k[provider] = key; else delete k[provider];
@@ -42,6 +43,7 @@ export function setKey(provider: ProviderId, key: string) {
 
 /** For the settings window: is a key saved for this service? Shows only the last 4 characters. */
 export function keyStatus(provider: ProviderId) {
+  if (provider === 'ollama') return { provider, saved: false, hint: 'No key needed. Uses Ollama on this computer.' };
   const k = loadKeys()[provider];
   return { provider, saved: !!k, hint: k ? `…${k.slice(-4)}` : '' };
 }
@@ -50,6 +52,7 @@ export type AskResult = { ok: true; text: string } | { ok: false; error: string 
 
 function explain(status: number, body: string, provider: ProviderId, model: string): string {
   const name = PROVIDERS[provider].label;
+  if (provider === 'ollama' && (status === 401 || status === 403)) return 'The local Ollama server refused the connection. Check its local access settings; this app sends no API key.';
   if (status === 401 || status === 403) return `${name} rejected the API key. Check it in Settings → General → Brain.`;
   if (status === 404) return `${name} doesn't know the model "${model}". Use "Find models" in Settings to pick one.`;
   if (status === 429) return `${name}'s free limit is used up for now (too many requests). He'll try again later.`;
@@ -61,11 +64,11 @@ function explain(status: number, body: string, provider: ProviderId, model: stri
 const noJsonMode = new Set<string>();
 
 export async function ask(provider: ProviderId, model: string, req: BrainRequest): Promise<AskResult> {
-  const p = PROVIDERS[provider], key = loadKeys()[provider];
-  if (!key) return { ok: false, error: `No ${p.label} key yet. Get a free one at ${p.keyUrl} and paste it in Settings → General → Brain.` };
+  const p = PROVIDERS[provider], local = provider === 'ollama', key = local ? '' : loadKeys()[provider];
+  if (!local && !key) return { ok: false, error: `No ${p.label} key yet. Get a free one at ${p.keyUrl} and paste it in Settings → General → Brain.` };
   const send = (json: boolean) => fetch(`${p.base}/chat/completions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    headers: { 'Content-Type': 'application/json', ...(!local ? { Authorization: `Bearer ${key}` } : {}) },
     body: JSON.stringify({
       model,
       messages: [{ role: 'system', content: req.system }, ...req.messages.map((m) => ({ role: m.role, content: m.text }))],
@@ -85,16 +88,16 @@ export async function ask(provider: ProviderId, model: string, req: BrainRequest
     return text.trim() ? { ok: true, text } : { ok: false, error: 'The AI sent back an empty answer.' };
   } catch (err) {
     if (err instanceof Error && err.name === 'TimeoutError') return { ok: false, error: `${p.label} took too long to answer.` };
-    return { ok: false, error: 'Couldn\'t reach the internet.' };
+    return { ok: false, error: local ? 'Could not reach Ollama on this computer (port 11434). Start Ollama and download a model, then use Find models. Local dialogue is still available.' : 'Couldn\'t reach the internet.' };
   }
 }
 
 /** Ask the service which models this key can use (so you don't have to guess names). */
 export async function listModels(provider: ProviderId): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> {
-  const p = PROVIDERS[provider], key = loadKeys()[provider];
-  if (!key) return { ok: false, error: 'Save a key first.' };
+  const p = PROVIDERS[provider], local = provider === 'ollama', key = local ? '' : loadKeys()[provider];
+  if (!local && !key) return { ok: false, error: 'Save a key first.' };
   try {
-    const res = await fetch(`${p.base}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(20000) });
+    const res = await fetch(`${p.base}/models`, { headers: local ? {} : { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(20000) });
     const body = await res.text();
     if (!res.ok) return { ok: false, error: explain(res.status, body, provider, '') };
     const data = JSON.parse(body)?.data ?? [];
@@ -103,6 +106,6 @@ export async function listModels(provider: ProviderId): Promise<{ ok: true; mode
     if (provider === 'gemini') ids = ids.filter((id) => /gemini/.test(id) && !/embedding|image|tts|audio|live/.test(id));
     return { ok: true, models: ids.sort() };
   } catch {
-    return { ok: false, error: 'Couldn\'t reach the internet.' };
+    return { ok: false, error: local ? 'Start Ollama on this computer, download a model, then try Find models again.' : 'Couldn\'t reach the internet.' };
   }
 }

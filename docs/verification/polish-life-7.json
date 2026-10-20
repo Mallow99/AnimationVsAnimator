@@ -1,0 +1,164 @@
+{
+  "seed": 7,
+  "seconds": 900,
+  "fps": 30,
+  "fixture": "5 preset figures; couch, TV, bookshelf, desk, canvas, scooter; owned books/cups/dumbbells/handhelds/balls; offline, cursor absent",
+  "audits": 900,
+  "counts": [
+    {
+      "name": "Cobalt",
+      "counts": {
+        "none": 367,
+        "drawtool": 12,
+        "wander": 36,
+        "getdown": 1,
+        "idle": 133,
+        "monkeybars": 106,
+        "oops": 4,
+        "explore": 61,
+        "sigh": 15,
+        "swing": 2,
+        "climb": 3,
+        "sulk": 10,
+        "group": 109,
+        "sip": 28,
+        "mope": 13
+      },
+      "modes": {
+        "air": 3,
+        "ground": 761,
+        "climb": 29,
+        "ceiling": 69,
+        "ragdoll": 2,
+        "getup": 3,
+        "sit": 32,
+        "puppet": 1
+      },
+      "activityChanges": 56,
+      "movingSeconds": 102,
+      "speech": 34,
+      "maxSeatedIdleSeconds": 0
+    },
+    {
+      "name": "Amber",
+      "counts": {
+        "none": 253,
+        "idle": 95,
+        "wander": 22,
+        "duel": 25,
+        "climb": 7,
+        "exercise": 43,
+        "explore": 37,
+        "watchtv": 162,
+        "waveat": 1,
+        "paint": 4,
+        "group": 58,
+        "videogame": 193
+      },
+      "modes": {
+        "air": 2,
+        "ground": 545,
+        "puppet": 1,
+        "sit": 352
+      },
+      "activityChanges": 30,
+      "movingSeconds": 78,
+      "speech": 16,
+      "maxSeatedIdleSeconds": 0
+    },
+    {
+      "name": "Moss",
+      "counts": {
+        "none": 186,
+        "idle": 70,
+        "sitdown": 80,
+        "duel": 26,
+        "playgame": 52,
+        "bounce": 3,
+        "wander": 13,
+        "climb": 2,
+        "watchtv": 165,
+        "group": 51,
+        "kick": 5,
+        "videogame": 247
+      },
+      "modes": {
+        "air": 1,
+        "ground": 366,
+        "sit": 529,
+        "ragdoll": 2,
+        "getup": 1,
+        "puppet": 1
+      },
+      "activityChanges": 28,
+      "movingSeconds": 37,
+      "speech": 28,
+      "maxSeatedIdleSeconds": 0
+    },
+    {
+      "name": "Violet",
+      "counts": {
+        "none": 281,
+        "idle": 68,
+        "wander": 48,
+        "sit": 17,
+        "explore": 42,
+        "videogame": 208,
+        "watchtv": 162,
+        "group": 58,
+        "drawtool": 6,
+        "climb": 6,
+        "stretch": 3,
+        "frontflip": 1
+      },
+      "modes": {
+        "air": 2,
+        "ground": 515,
+        "sit": 382,
+        "puppet": 1
+      },
+      "activityChanges": 39,
+      "movingSeconds": 93,
+      "speech": 28,
+      "maxSeatedIdleSeconds": 0
+    },
+    {
+      "name": "Ruby",
+      "counts": {
+        "none": 372,
+        "idle": 37,
+        "climb": 28,
+        "drawtool": 3,
+        "deskwork": 9,
+        "monkeybars": 47,
+        "oops": 8,
+        "wander": 30,
+        "explore": 38,
+        "watchtv": 174,
+        "group": 70,
+        "doodle": 7,
+        "kick": 5,
+        "paint": 10,
+        "waveat": 2,
+        "sit": 17,
+        "getdown": 1,
+        "videogame": 42
+      },
+      "modes": {
+        "air": 3,
+        "ground": 617,
+        "puppet": 3,
+        "climb": 13,
+        "ceiling": 30,
+        "ragdoll": 2,
+        "getup": 3,
+        "sit": 229
+      },
+      "activityChanges": 49,
+      "movingSeconds": 119,
+      "speech": 34,
+      "maxSeatedIdleSeconds": 0
+    }
+  ],
+  "sanity": []
+}

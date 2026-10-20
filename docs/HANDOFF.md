@@ -2,10 +2,389 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
-## Latest milestone: adaptive weapons, quiet activities, sleeping pickup and full hitboxes
+## Latest owner request: UX sanity and keyless conversation — 2026-10-20
+
+The owner resumed work for broad UX cleanup, a sanity guide, and sustained dynamic conversations
+without AI keys. This pass continues the existing draft PR #3, on `codex/roadmap-continuation`.
+It does not complete the older 3D prototype or start new Chrome/Finder integration.
+
+Start with [UX-SANITY-GUIDE.md](UX-SANITY-GUIDE.md): user controls, keyless setup, exact retention,
+interaction/motion contracts, repeatable acceptance, known limits and next cleanup priorities.
+General → Experience guide provides the short version in the app. Preserve the original character
+proportions/presets and the passive-carry/explicit-Use ownership contract.
+
+Implemented: per-figure saved local dialogue with facts/topics/follow-ups/personality/branching
+stories; full desktop/Settings transcripts; multiline 4,000-character input; Enter/Shift+Enter/IME;
+per-figure session drafts; history-scroll preservation; export and confirmed scoped reset. All or
+inactive selections cannot broadcast private chat. Separate messages stay separate; Stop/new chat
+invalidate late provider actions. Mentions and negated clauses cannot trigger physical requests.
+The listening controller now allows explicit walking and active approach/return transitions.
+Pong has an explicit stable court toggle. Settings honors reduced-motion for interface transitions.
+
+Ollama is an optional fixed-loopback provider with no key or credential-store access. It supports
+installed-model discovery and the existing optional Chat/Full modes. It requires the user's own
+Ollama/model installation; no background downloads or new dependencies. Built-in authored dialogue
+is ready immediately. Missing local service/model errors explain setup and fall back to local
+responses. Optional model replies support up to 2,000 characters and bounded recent context restores
+from the transcript. Retention: 240 log entries/120,000 text characters; model context 32 turns/
+16,000 characters. Name notes remain in Mind when a chat is reset; the reset explains this distinction.
+
+Verification: typecheck/build, all 217 focused regressions (including 15 new conversation checks),
+full seed-1 simulation, full Chromium interaction/preset/rendered activity suite and final dedicated
+chat UI checks (export download, long input, keyboard/IME, drafts/scope, bounds, scroll, reload and
+story continuity). Linux Electron/Xvfb passed the real preload/IPC and Settings conversation/reset/
+persistence/provider controls, plus existing file/activity/focusability checks. Native window/file
+reports remain explicitly fake. Provider adapter verification uses fake HTTP, never a downloaded
+model. Captures: verification/ux-local-conversation.png and ux-settings-conversation.png.
+Use `npm run conversationcheck`, `npm run conversationui`, `npm run localbraincheck` to repeat the
+new checks. The existing Electron smoke script now contains actual bridge conversation acceptance.
+
+The book-depth failure was a fixture anchored to an outside cover edge. It now checks attachment
+of both real grips, solid contact, projected face depths and interior spine depth for both facings.
+No model rendering code was changed for that correction. Full browser cursor-gun readiness passed;
+the earlier timeout is not reproduced or claimed fixed. The unfinished prototype's isolated
+performance, full lifecycle/RAM, model-lab/extended visual acceptance and Windows packaging remain
+pending. Do not reclassify it as completed based on these chat/UX checks.
+
+Next: owner review of the conversations and UX guide; real Mac/Windows and actual local inference
+acceptance. Crowded bubble layout, richer action-specific anticipation/recovery and crowded mixed
+scales remain cleanup candidates. Existing Windows binaries are older; no package rebuilt here.
+
+## Paused WIP: modeled props and hinged book — 2026-10-12
+
+The owner chose a reusable 3D prop system with a hinged book prototype, then requested a pause.
+The source is checkpointed but **not accepted as a finished update**. Typed XYZ surfaces/grips,
+reader-facing solid books, model-based hulls/picking and a separate development lab are implemented.
+Final typecheck/build/lab build pass; a depth regression and cursor-gun browser timeout remain
+unresolved. Final visual acceptance, isolated performance, soak, RAM and packaging are pending.
+[PROP-MODEL-CHECKPOINT.md](PROP-MODEL-CHECKPOINT.md) records exact failures, partial verification,
+limits and ordered resume steps. Leave development paused until the owner resumes it.
+
+The following completed repair/evidence refers to `b727a02`, not the unfinished prototype now at
+the branch head. Existing Windows portable output also remains that prior build.
+
+## Latest repair: varied life and readable books — 2026-10-12
+
+The owner reported reading-dominated routines, awkward adjacent readers and standing/seated clipping.
+They supplied AvA/AvM reference videos through the v1.0.0 release; sampled full-timeline sheets and
+closer frame sequences informed this repair. Exact comparison, behavior changes, preview captures,
+measurements and limits: [AVA-POLISH-COMPARISON.md](AVA-POLISH-COMPARISON.md).
+
+- Shorter self-chosen read/TV/game/seat sessions (including joining TV), bounded repeat cooldowns,
+  energetic movement/tool choices after long stationary periods and work/play boredom relief.
+  Explicit requests retain long pacing; tasks complete at natural page/game breaks. Quietly seated
+  idle figures can move on; sleeping figures stay asleep. Autonomous reading uses owned unfinished
+  books rather than creating supplies.
+- Raised/tipped compact book grips, both hands following the open width/page reach, actual page gaze,
+  no prone couch reading or unrelated child-seat chatter. Counts update after the completed turn and
+  before closing, with a steady grip until shut. Same originals return to bag/shelf, and interruptions
+  release claims. Eleven focused regressions include five readers facing one way with head clearance.
+- Finite books (default 96 pages), per-original saved progress/completed-reading count, bounded legacy
+  migration, custom `pages` metadata, custom shelf restoration and actual gift preservation. Existing
+  owned cards show page/total/percent or Finished; Read this book/Read again chooses the exact original.
+  Named Settings shows current book/page; All does not display one person's progress.
+- An idle standing spectator walks outside merged occupied-seat intervals, using peer snapshots and
+  actual vertical overlap. Seated readers remain seated; shared contact, approach and combat keep
+  their choreography. Peer snapshots are reused within the contact check.
+- New requests stop old walking destinations. Replaying the failing seed-1 couch/TV assertion found
+  a stale goal taking the figure away from the selected couch until timeout; the assertion was kept,
+  the behavior fixed and a direct opposite-goal regression added. TV game speech has cooldowns while
+  game/button motion continues. Sanity checks also validate finite book state.
+
+Verified typecheck/build, all 193 regressions (182 existing + 11 focused), full seed-1 simulation,
+actual Chromium book controls and all existing pointer/keyboard cases, both facings/every preset,
+and final rendered opening/page/closing/departure frames. Linux Electron/Xvfb passed overlay/preload,
+inventory/keyboard/focusability, visiting bag/chat/status/restart and five-visitor All/pointer-return
+checks with explicitly fake native reports. Windows x64 portable package rebuilt and inspected.
+Functional feature soak:
+2,566.4 simulated seconds, 2,635 audits, 35 phases, zero issues; final compact grip refinement has
+additional focused head/reach checks and rendered browser/preset acceptance. Separate 15-minute
+unattended profiles use seeds 32 and 7, with 900 audits each; reports under verification/polish-*.
+Independent peaceful browser fixtures clear prior combat shots, stop/stow previous activities and
+wait for actual grounded recovery, clearing its incidental plan/gesture before gift/catch selection;
+no acceptance assertion is weakened. Current reports are separate from historical Update 2 evidence.
+
+The 900-second seed-32 furnished offline observation changed reading/TV/games from 79.0% of all
+figure-time to 22.2%; seed 7 measured 30.1%. Each run had 900 clean audits. None of the old or new
+profiles showed stranded seated idle; do not describe the baseline as a universal deadlock.
+
+Fresh Linux Electron/Xvfb furnished five-figure RAM: 348 MiB PSS, 422 with Settings, 384 after closing;
+software rendering, nine furniture/twenty items, disposable offline saves. This is not a Mac estimate
+or leak proof. Windows portable output must match final bundles and exclude source maps/saves/keys.
+Core five-figure/ten-loose-item profile: mean/p95 2.483/6.040 ms per combined 120 Hz update with
+another browser check active. Final Chromium frame median/p95: 16.7/16.7 ms. Concurrent heavy tests
+increased tail timings; native rendering remains unmeasured here.
+
+Remaining: action-specific nonverbal anticipation/recovery and coherent shared outcomes still trail
+the directed reference films. Complex crowded approaches/mixed scales, authored book content, more
+handheld games and existing physics/display limits remain. Mac Swift/focus/Spaces/native file return
+and Windows native helpers/input/DPI still need hardware. Reference movies/stills are not committed.
+Continue on `codex/roadmap-continuation`, open draft PR #3; stop after this repair and owner judgement.
+
+## Latest repair: file/folder visits — 2026-10-11
+
+The owner reported file features as broken/unclear. This is a repair of the existing prototype;
+no further Chrome/Finder milestone has started. Continue on `codex/roadmap-continuation`, PR #3.
+
+- Visits move actual item objects between parked/visiting owners, preserving UID, customized stock
+  art, ink, book/game progress, magazines and reloads. Desktop bookshelf/seat/player claims release,
+  and furniture subscriptions reconnect on return. Visiting bodies get the same bag/chat/save callbacks
+  and live custom-definition updates. Live sanity includes visiting inventory, even when hidden.
+- Still-open document identities survive focusing another app. Native window reports supply current
+  bounds and clear closed/replaced document identities; loss of Mac Accessibility clears cached docs
+  and explains the permission. Window relocation shifts walking anchors and item physics together,
+  without double movement or resetting loose-item velocity. Initial same-folder visitors spread out.
+- File and folder visits have their own General card with named path/kind, Window detected/Waiting,
+  separate helper/permission messages and action feedback. All requires a named chooser and offers
+  Return all visitors. Hidden visitors have an explicit Return and open bag action. Unsupported
+  platforms and undetected documents refuse entry; Windows documents are disabled, Explorer folders
+  remain. Choosing an inactive/departed figure is refused. Turning visits off/removing a visitor
+  returns them and clears saved associations immediately; restarts restore only the selected roster.
+- Six new regressions cover original ownership, custom art, clocks/claims/subscriptions, frame
+  movement, inactive/transport refusal, saved window coordinates/progress, document focus and controls.
+  The soak adds six repeated five-figure visit/close/move/return cycles. `PET_FAKE_FILES` parallels
+  `PET_FAKE_WINDOWS` for explicitly simulated native reports; the UI labels this verification mode.
+
+Verified in cloud/Linux: typecheck/build, all 182 regressions (78 general, 30 roadmap, 18 quality,
+20 living, 36 Update 2), full seed-1 simulation, complete actual Chromium interaction check, actual
+Electron preload/input/settings/visit-restart checks and focused five-visitor/All/pointer-return UI
+check. Seed-32 expanded soak: 2,566.4 simulated seconds, 2,635 audits, 35 phases, zero reported issues;
+see verification/file-visits-soak-32.json. The requested duration is a minimum; scheduled feature
+phases plus a required unattended tail make this run longer. Inspected named/All panels and five
+visitors; captures under verification/file-*.png are labeled cloud/fake reports. The focused check is
+reproducible with `npm run build` then, on Linux with an X server,
+`DISPLAY=:91 electron --no-sandbox scripts/file-visits-ui-check.cjs`.
+Windows portable package rebuilt and inspected; it was not run on Windows hardware.
+
+Remaining: Finder/Explorer matching, Mac Swift/Automation/Accessibility, Spaces, occlusion and
+foreground focus/return still need real hardware. Document detection remains limited to Mac apps
+reporting their document path; no new native integration or icon-crawl animation was added. Furniture
+created inside a visit is session-only, not persistent room storage. Your files are never modified.
+No new RAM measurements were made; prior measured resource evidence below remains the available data.
+
+Next concrete step: owner file/folder hardware acceptance using CURRENT-CONTROLS.md. Stop there.
+
+## Latest correction: relaxed standing — 2026-10-10
+
+The owner disliked the new standing poses. All five personality templates now default to `idle: none`;
+neutral standing uses the chosen stance rather than permanent hips/behind-back hands and a turn
+toward the viewer. Personalized walking, sitting, speech and satchels remain; mood/activity reactions
+still express feelings. Keep personality in context instead of turning resting figures into poses.
+
+Verified typecheck/build, all 176 regressions (36 Update 2), full seed-1 simulation and actual Chromium
+input plus neutral-standing/reading fixtures for all presets and both facings; inspected before/after
+frames under `docs/verification/pq2-standing-*.png`. The seed-1 replay exposed a simulation fixture
+sampling only 0.167 seconds into a sit. It now measures a settled seated figure and asserts the same
+ledge/state after moving 50 pixels; the scrolling controller was unchanged. Windows x64 package
+rebuild and bundle inspection passed. Peaceful browser fixtures reset moods after the separate duel
+scene. Native hardware acceptance remains pending. Earlier Electron/RAM/two-hour soak evidence below
+belongs to the prior delivery, not new measurements for this correction. Stop before integration work.
+
+## Latest update: Pet Quality 2 complete — 2026-10-09
+
+The owner authorized completion and the personalization expansion. Implementation is complete on
+`codex/roadmap-continuation`, continuing open draft PR #3, stacked on `codex/desktop-life`. Stop
+before the next Chrome/Finder milestone. Do not resume it without a new owner instruction.
+
+Working checkpoints: `143850c` resources; `2b92188` contact, physical handling, book bookmarks,
+one brief safe activity continuation, directed group turns, lamp/blanket/snack/catch; `df5d138`
+personalized walking/sitting/speech/satchels, Cobalt/Amber default migration, richer saved friendship
+and moods, thoughtful original gifts/three wrappers/flowers, meaningful handhelds/shared runner
+sessions and detachable actual TV consoles. The final delivery clarifies the TV cabinet drawer,
+records evidence and closes the checklist. Custom names, stock-custom/deleted examples, body presets,
+owned originals and gun reload mechanics remain; taking items stays passive until explicit Use.
+
+Exact change/assessment/resource/limit record: [PET-QUALITY-2.md](PET-QUALITY-2.md).
+Completed checklist: [PET-QUALITY-2-PLAN.md](PET-QUALITY-2-PLAN.md).
+Future preset basis: [CHARACTER-TEMPLATES.md](CHARACTER-TEMPLATES.md).
+Current controls and hardware sequence: [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
+
+Cloud acceptance: typecheck/build, 175 regression checks (72 general, 30 roadmap, 18 original quality,
+20 living and 35 Update 2), full seed-7 sim, actual Chromium/Linux Electron pointer/keyboard/preload/
+configuration/upgrades/focusability checks and visual motion inspection. Three two-hour core soaks
+and two two-hour expanded soaks passed; final seed-32: 7,200 simulated seconds, 7,215 live audits,
+34 phases and zero reported issues. Reports under `docs/verification` label the earlier candidates.
+Windows x64 portable package rebuilt: 368.5 MiB, current bundle hashes, 32 definitions, real
+PowerShell helper, no source maps/saves/provider keys; it has not run on Windows hardware.
+
+Isolated Linux core mean/p95: two figures 0.237/0.532 ms; five 1.168/2.351 ms per combined 120 Hz
+update. Loaded Chromium frame median/p95 16.7/33.4 ms. Linux whole-process RAM medians: one ordinary
+figure 293 MiB PSS; five furnished 344–378; Settings open 425; twelve Settings cycles 384, another
+minute 391. Seven closed/eight Settings-open processes, zero swap. These are software-rendered Xvfb
+measurements, not Mac estimates, a proven reduction or a leak guarantee.
+
+Remaining: actual Mac Swift compilation, focus/foreground desktop return, Spaces, permissions and
+click-through; Windows helpers/input/mixed DPI; main-display limitation, rotation/extreme-speed
+physics limits and snapshot cross-owner contacts. Dense simultaneous bubbles can crowd. Handheld
+sharing compares the one runner game, sticker marks are preset, and brief suspended activities are
+session-only. Native window integration was inspected/tested through fake helpers; no new integration
+was added and no Mac foreground-return fix can be declared accepted without the owner's machine.
+
+Next concrete step: owner hardware acceptance of this build using CURRENT-CONTROLS.md. Stop there.
+
+## Previous update: Pet Quality / Living Stickmen — 2026-10-08
+
+The owner expanded the Pet Quality scope and authorized completion. The update continues open draft
+PR #3 on `codex/roadmap-continuation`, stacked on `codex/desktop-life`. No new Chrome/Finder feature
+was started. Stop before the next roadmap milestone. This is the historical first quality update; later owner instructions explicitly authorized Update 2. Every working commit includes CHANGELOG.md and a chat changelog.
+The ordered request checklist is [LIVING-STICKMEN-PLAN.md](LIVING-STICKMEN-PLAN.md).
+
+- Foundation (`af56778`): drawing a new tool preserves earlier original projects; reload clocks advance
+  once for owned guns in hand/bag/world/passive transport/cursor use. Six-round reload mechanics remain.
+  Stock books have reader-facing pages, correct open/closed contours and depth ahead of the satchel;
+  custom book artwork stays custom. Returning books release stale reading targets and prefer their
+  original usable shelf. Cups, dumbbells, yo-yos, handhelds and the broader item audit remain included.
+- Roster/shared controls (`8bc46a8`): 1–5 stickmen count labels, selectable preset characters (including
+  Ruby alone), stable identity/config/save slots and one Settings window with named/All figures scope.
+  Bag/Supplies/Activities is shared, searchable and reachable from right-click Open bag, tray and
+  Settings. Bulk supplies create separately owned originals; full bags explain the limit. Existing
+  edited names/colors/personalities and old solo saves migrate. Removed characters retain possessions.
+- Physical/social life: brace/lift/small scoot/settle replaces seat slides; five fit the couch and can
+  overlap briefly during movement. Ordinary conversation joins available 3–5 figures with timed turns,
+  listeners and distinct preset replies. Busy readers/queued work are protected; quiet seated figures
+  can join. Duels keep one opponent and incidental figure attacks cannot recruit or hurt spectators.
+- Social/creative need, frustration and contentment have activity/rest causes and saved values. Existing
+  bonds plus cooperation influence partners/invitations; care influences reassurance; friendly rivalry
+  favors familiar game partners. Completed activities record shared history for all participants,
+  including Pong and friendly duels; interruption does not automatically damage affection. Optional
+  AI context and Mind nodes describe the new needs while all behavior remains usable offline.
+- TV/furniture menus expose Move beside the matching furniture and target the exact clicked original.
+  Autonomous TV arranging is more likely when the TV is far from a couch. Occupied/held/blocked objects
+  release their move claims. Departing figures put away shelved books and reconnect furniture-platform
+  notifications when rejoining, avoiding invisible slot reservations and stale collision platforms.
+- Physics: rigid contacts resolve once, share separation by mass/support and preserve velocity during
+  shape correction. Rigid linear/angular projection prevents deformation energy from launching leaning
+  furniture. Five-box stacks settle while impacts/dragging/carrying/throwing remain active.
+- Development checks in General run a bounded read-only ownership/coordinate/controller/group/claim/
+  bookshelf-slot audit. Hidden duplicate Settings catalogs were removed. Native focus guards from the
+  preceding update remain; the earlier desktop-return report still needs reproduction on the Mac.
+
+Final cloud acceptance: typecheck/build; 140 regressions; full seed-7 sim; scheduled seed-21 soak
+(2,092.4 simulated seconds, 2,159 audits, 26 phases, zero reported issues); actual Chromium/Linux
+Electron controls and visual inspection; current Windows x64 portable package. Core five-figure
+mean/p95 1.327/1.805ms; loaded Chromium median/p95 16.7/33.4ms. Persistent phase report:
+docs/verification/living-soak-2026-10-08.json.
+
+Acceptance details, commands and representative images: [PET-QUALITY.md](PET-QUALITY.md).
+Current owner controls and native hardware sequence: [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md).
+
+Cloud checks cover the platform-free simulation and real Chromium/Electron input with fake windows
+and disposable app data. They cannot establish Swift compilation, actual Mac focus hand-back, Spaces,
+permissions or click-through. Real Windows input, PowerShell helpers and mixed DPI also need hardware.
+Convex contacts approximate concave gaps and have extreme-speed tunneling limits; cross-owner loose
+items resolve against peer snapshots. Undo is one session-only object, books retain ownership, and
+main-display limits remain. A soak checks exercised paths, not every possible native/user action.
+
+Historical next step: owner hardware acceptance. The owner subsequently authorized Update 2.
+Research only: [PET-QUALITY-2-RESEARCH.md](PET-QUALITY-2-RESEARCH.md) ranks attention/motion,
+activity continuity, social timing, physical affordances and useful everyday objects, with primary
+sources and acceptance criteria. The research preceded the Update 2 implementation described above.
+
+## Previous update: interaction and rendering cleanup
+
+The owner reported clunky/discoverability problems, thin limbs while drawing/sitting, and returning
+behavior that may involve native focus. This pass finishes those bugs and interaction coherence;
+the owner hit their usage limit and explicitly asked to stop before further roadmap work.
+
+- Figure right-click → Open bag / Activities, plus an offline “open bag” request and a brief hover
+  hint. The menu no longer grows a Take row for every item. Clicking an item inspects it; dragging
+  remains available. Bag / Supplies / Activities tabs separate existing possessions, new objects
+  and actual offline actions. Item state/ammo, descriptions, explicit actions, requirements, in-panel
+  instructions and a stable panel position make the controls visible. Scrolling retains navigation.
+- Take out/Place, Give to a figure, Store, Drop, Use with cursor, Trash and Cancel are consistent across
+  bag, object menus and Settings. Settings' misleading Put away deletion labels are now Trash.
+  Undo remains accessible in the bag with both shortcuts hidden. Transport controls sit top-right
+  so they don't cover the floor figures; clicking Cancel/Use does not first drop the held object.
+- Cancel restores an existing item's previous hand/worn/bag state; unplaced supplies are removed.
+  Removing the original owner returns an existing held item through a current figure. User-controlled
+  transport/weapons cannot be reclaimed by AskBack. Settings returns also release transport ownership.
+- Each depth accessory draws inside save/restore. The satchel's narrow brush width no longer leaks
+  into limbs drawn afterward. Furniture menus target the exact clicked seat/TV/desk/bench/shelf.
+  Explicit group leaders can start from sitting, and Stop clears a queued activity too.
+- Pong controls stay above its intermittent preview, and visibility is applied before measuring.
+  The stage's canvas CSS is scoped to the stage, so it cannot override hidden preview canvases.
+- Mac refocus only activates the previous app when our own app actually became foreground. This
+  prevents unnecessary reactivation; the Swift helper and Spaces behavior remain unverified here.
+  The owner's earlier “return to the original thing” report still needs precise hardware confirmation.
+
+Validated: typecheck/build, 72 existing regressions plus 30 roadmap/cleanup checks, and the complete
+simulation with seed 1. Actual Chromium pointer/keyboard checks cover right-click Open bag with both
+shortcuts hidden, inspect without taking/closing, Give/Place, safe Cancel, stable panels, visible
+requirements/instructions, hidden-shortcut Trash/Undo, Settings take/return, full bag refusal, existing
+weapon/Othello/book flows, five-seat/workshop rendering and Pong Join/Keyboard/Escape/Rematch.
+Linux Electron/Xvfb passes real preload focus/input paths and the existing settings/chat/group checks.
+Inspected inventory, activities, small-screen supplies, couch and workshop screenshots. Mac Swift
+compilation/Spaces and real Windows behavior were not tested. No next roadmap update is started.
+
+## Latest milestone: Workshop and Household
+
+The owner authorized completing missing Update 2 work plus the next two old updates, then supplied
+an expanded five-update plan. [UPDATE-PLAN.md](UPDATE-PLAN.md) is now the current plan; the previous
+plan is archived in UPDATE-PLAN-LEGACY.md. Batch scope is unlimited by explicit owner instruction.
+This branch completes Workshop and Household, including their new tools/talents/clock/Pong additions.
+Work is on `codex/roadmap-continuation`, stacked on `codex/desktop-life` (`a674a44`). GitHub PR #2
+is still draft/open; the uploaded plan's assumption that combat was merged was not true on inspection.
+
+Implemented:
+
+- Pixel supplies/trash shortcuts, hidden by default, independently enabled in General and draggable
+  with saved placements. Satchel click/menu works with both hidden. Pointer catalog use never toggles
+  native focus; Keyboard explicitly enables it, including a held selection that Escape can cancel.
+  Duplicate typing IPC is ignored. This was intended to address overlay flicker;
+  Mac Spaces behavior still needs real hardware verification.
+- Wearable satchels replace belt rendering, with a reach/flap motion and 16 slots. Legacy slot indices
+  still load, and worn helmets/boots remain attached. Owned satchel entries move the original item.
+  Direct equipped-hand selection uses visible art. Existing weapon cursor controls remain available.
+- Sponge clips only local raw strokes; eraser removes ink objects and prompts a reaction; paint bucket
+  colors a project before polishing. Supplies expose a useful desk, workbench and tool shelf. Desk paper
+  receives a traced katana blueprint and a copy goes in the satchel. Shelf sorting picks/places loose
+  tools; world item placements/ammo and furniture position/tilt/facing/art save.
+- Definitions advertise use capabilities, movement type and draw/refine permissions. Blueprint drawing
+  traces actual tool/furniture art, with matching outline and actions. Workbench color/polish progresses
+  on the same object, preserving state and ownership. Interrupted ink projects save/resume. General's
+  ink lifetime is tunable; zero disables expiry, and held/stored/supporting objects pause it.
+- Group invitations coordinate 2–5 through JSON peer snapshots/messages: wave/chat/couch/watch for
+  any group, duet for two, hands-in for three, paired mirroring for four, relay for five. Couch seating
+  reserves five distinct spots and recenters them. Forward-facing legs hang in front of furniture;
+  backrest collision no longer lifts hips off the cushions. Late-added companions use local clocks
+  for synchronized starts. Interruptions release claims, hands, watcher/controller state and movement.
+- Carry/drag/push furniture, clear routes, braced grips, light lifting, and cooperative TV carries.
+  Occupied furniture waits briefly; grabbing/tipping/blocking cancels. TV/couch, reading and work
+  arrangements save. Moving platform reports cannot carry a figure beyond screen bounds between steps.
+- Pair trust, shared activity preferences, disagreement memory and landed-move rivalry memory save.
+  Small tool gifts use exclusive ownership and bounded JSON/deduplication; compare/check moments work
+  offline. Personality specialties improve drawing/refining speed or game skill, favor a game expert
+  for invitations and a drawing expert for feedback. Real system idle/time arrives via Electron;
+  daily rhythm is optional and doesn't wake an explicit daytime nap.
+- Real Pong physics, first-to-five scoring, winners, rematches, spectators and the same live TV state
+  in a pixel preview. Join supports mouse or explicit keyboard controls. Handhelds run the existing
+  runner on their own screens. Optional console gating starts off for legacy compatibility.
+- Every new action ships with an offline command and the optional AI's validated action vocabulary.
+  Custom named drawing requests take priority over incidental words in their names. Existing provider
+  cadence/cost controls remain; no paid provider calls were used.
+
+Validation: typecheck/build; 72 existing regressions and 25 roadmap regressions; full simulation seed 1;
+300-second two- and five-figure soaks seed 1 with no trouble. Chromium checks cover pointer/keyboard
+supplies, trash/undo, hidden shortcuts, saved repositioning, small-screen bounds, existing combat/book/
+Othello controls, rendered five-seat/workshop scenes, and real Pong mouse/keyboard/join/rematch controls. Linux Electron/Xvfb checks actual preload
+focus IPC and mouse transport, explicit keyboard pulling/Escape and existing configuration/chat/game
+behavior. Inspected normal/small supplies, couch and workshop screenshots. Windows x64 portable
+packaging succeeds; its real PowerShell helpers are present and app-data/provider keys are excluded.
+
+Remaining: no real Mac/Windows run was possible here. Use [CURRENT-CONTROLS.md](CURRENT-CONTROLS.md)
+for acceptance. Native permissions/Spaces/click-through, multiple monitors/mixed DPI and clock/idle
+behavior need hardware checks. Props use conservative convex collision, not precise concave gaps.
+Undo remains one session-only object. Talents use existing personality specialties, not new artwork.
+
+Next: owner acceptance of Steel/Workshop/Household. Out of the Box starts by verifying installed Chrome,
+native closing and Finder associations on real hardware; its explicit gate remains in the new plan.
+Mind & Ship (provider discovery, onboarding, profiling, backup/restore, reduced motion and replay clips)
+remains later authorized roadmap work, not claimed shipped in this milestone.
+
+## Previous milestone: adaptive weapons, quiet activities, sleeping pickup and full hitboxes
 
 The owner asked to plan future work in focused updates instead of rediscovering the whole project.
-Read [UPDATE-PLAN.md](UPDATE-PLAN.md): ten updates, each with 8–12 features, dependencies, completion
+Read the archived [UPDATE-PLAN-LEGACY.md](UPDATE-PLAN-LEGACY.md): ten updates, each with 8–12 features, dependencies, completion
 criteria and a new-ideas inbox. It includes every request about combat, fewer GUI controls, satchel
 storage, drawing/moving furniture, TV orientation/previews, real companion games, handhelds/console,
 workshop refinement and possible ink lifespans, quiet pacing, sleep-carry, Chrome, real folders,

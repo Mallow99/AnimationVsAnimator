@@ -35,15 +35,17 @@ or system tray (Windows, bottom right). From there: Settings, Smack mode, Drop h
   and drags it around for a moment. Move your mouse to take it back. He also doodles on your screen.
 - **Settings tabs**: Chat (talk to him), Mood (his feelings + make him do things), Mind (his neurons, personality, moves
   he made up, drawings, memories), Items (tools, equipment and furniture), Look, Movement, General.
-- **Talk to him** (AI brain, free): Settings → General → Brain. Pick a service (Google Gemini is the default), click
-  "Get a free key", make the key on their site (no credit card), paste it, and pick **Chat** (AI only when you talk
-  to him) or **Full** (he also decides what to do and comments on things). Type to him in Settings → Chat →
-  Talk to him, or pick "Talk to Blurp…" from the tray icon. Ask him for weird stuff ("do a handstand", "float"):
-  with "Let the AI move his body" on, the AI makes up the move itself. Edit who he is under Mind → Personality.
-  Free services have daily limits; Offline mode needs no internet and no key.
-- **Talk to him right on the desktop**: double-click him, or right-click → Talk. A little text box pops up over his
-  head. Even with his brain Offline he understands simple things ("dance", "sit down", "draw something", "fight me",
-  "throw the ball", "surf", "kick that window", "my name is ...").
+- **Conversations without keys**: double-click a figure or use Settings → Chat. Messages can span
+  paragraphs; Enter sends and Shift+Enter adds a line. Offline dialogue remembers topics/details,
+  follows up, and runs stories with choices that change later scenes. Try “my name is Sam”,
+  “I am building a game”, “why?”, or “tell me a story”. History saves per figure; export it or start
+  a new conversation from Chat. This built-in system covers authored topics, not arbitrary factual answers.
+- **Optional open-ended local AI**: install [Ollama](https://ollama.com/download), download a model,
+  select Ollama in General → Brain, choose an installed model with Find models, and select Chat.
+  No API key needed. The app downloads nothing automatically. Cloud providers remain optional.
+- **Talk during activities**: “I read a book today” stays conversation; “read a book” requests the
+  action. “Stop” cancels. Offline chat works without internet, accounts or model downloads.
+- **UX sanity guide**: [controls, conversation setup and acceptance rules](docs/UX-SANITY-GUIDE.md).
 - **Right-click him**: talk, take his things (his pen, his wooden sword, his mace, his ball), give them back, fix him up, settings.
 - **His belt and inventory**: he starts with just his pen (he draws with it, so no pen = no drawing). Everything else is in
   his inventory (Settings → Items): **Drop it in** and it falls from the top of the screen and he goes to get it, or
@@ -143,6 +145,7 @@ For a portable Windows copy that friends can run without Node, see [docs/WINDOWS
 | `npm run sim` | Headless physics tests |
 | `npm run lab` | Design lab: compare looks side by side |
 | `npm run typecheck` | Check the TypeScript for errors |
+| `npm run conversationcheck` | Verify persistent local dialogue, story branches and cancellation |
 | `npm run checks` | Focused regression checks for saves, AI, items and activities |
 | `npm run browsercheck` | Functional preview check (requires Chromium) |
 | `npm run package:win` | Build a portable Windows x64 app |

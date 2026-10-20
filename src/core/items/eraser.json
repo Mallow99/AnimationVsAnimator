@@ -1,0 +1,1 @@
+{"id":"eraser","name":"Ink eraser","about":"Take out and choose Use with cursor to erase an ink object. Its maker notices. Stop using carries it safely.","use":"erase","length":12,"grip":2,"belt":"pocket","hit":0,"shape":[{"pts":[[-2,-5],[12,-5],[12,5],[-2,5]],"fill":"#d79c9b","width":0},{"pts":[[4,-5],[12,-5],[12,5],[4,5]],"fill":"#ece2c9","width":0}]}

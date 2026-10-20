@@ -9,6 +9,7 @@ export interface LooseWeapon {
   at: Vec;
   speed: number;
   ammo: number;
+  reloadRemaining?: number;
 }
 
 export const isWeapon = (d: ItemDef) =>

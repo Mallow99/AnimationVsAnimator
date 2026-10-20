@@ -1,0 +1,182 @@
+{
+  "seed": 31,
+  "simulatedSeconds": 7200,
+  "audits": 7215,
+  "featureFps": 120,
+  "unattendedFps": 30,
+  "physicsHz": 120,
+  "coverage": [
+    {
+      "feature": "all 22 stock item lifecycles",
+      "seconds": 66,
+      "result": "passive take/move, cancel, pass, trash/undo, store, original identity retained"
+    },
+    {
+      "feature": "all 10 stock furniture lifecycles",
+      "seconds": 60,
+      "result": "place, rigid dragging, release, settle, trash/undo"
+    },
+    {
+      "feature": "five parallel everyday activities",
+      "seconds": 77,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "blanket rest, snack and reading light",
+      "seconds": 97,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "catch with three spectators",
+      "seconds": 37,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "book open/read/page/close/return",
+      "seconds": 362,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "TV and Othello invitation",
+      "seconds": 47,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "painting, blueprint and drawing",
+      "seconds": 82,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "refinement and tool sorting",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "group:wave (5 figures)",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "group:chat (5 figures)",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "group:couch (5 figures)",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "group:watch (5 figures)",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "group:duet (2 figures)",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "group:triangle (3 figures)",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "group:mirror (4 figures)",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "group:relay (5 figures)",
+      "seconds": 67,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "Pong match and interruption",
+      "seconds": 92,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "TV arrangement",
+      "seconds": 42,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "cooperative carry",
+      "seconds": 47,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "reading corner",
+      "seconds": 42,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "work corner",
+      "seconds": 42,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "peer gift and drawing comparison",
+      "seconds": 42,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "wrapped thoughtful gift and acceptance",
+      "seconds": 27,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "two actual handheld runners without a TV",
+      "seconds": 57,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "actual console attachment, TV move and detach",
+      "seconds": 5,
+      "result": "same owned console follows the TV; taking it detaches it"
+    },
+    {
+      "feature": "emotional reassurance",
+      "seconds": 27,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "repair after intentional disagreement",
+      "seconds": 22,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "reassurance",
+      "seconds": 27,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "duel with three spectators",
+      "seconds": 32,
+      "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+    },
+    {
+      "feature": "cursor gun, reload and restart",
+      "seconds": 6.4,
+      "result": "one gun, one clock, inventories/moods/relationships restored"
+    },
+    {
+      "feature": "roster removal/rejoin and sleeping pickup",
+      "seconds": 38,
+      "result": "same Ruby and belongings; gentle carry preserves sleep"
+    },
+    {
+      "feature": "stacking, impact and leaning",
+      "seconds": 85,
+      "result": "resting stack drift <0.5px; impact moves it; mixed contact remains finite"
+    },
+    {
+      "feature": "unattended furnished life",
+      "seconds": 4960.6,
+      "result": "autonomous offline behavior; every-second live audits clean"
+    }
+  ],
+  "issues": [],
+  "verificationContext": "Expanded candidate before the final one-time apology repair"
+}

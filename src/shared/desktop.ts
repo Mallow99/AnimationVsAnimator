@@ -36,3 +36,18 @@ export interface FileWindow {
 export interface DesktopState {
   browser: BrowserPage | null;
 }
+export interface FileVisitStatus {
+  id: number;
+  path: string;
+  kind: 'folder' | 'file';
+  visible: boolean;
+}
+export interface DesktopInfo {
+  pairing: string;
+  error: string;
+  homes: FileVisitStatus[];
+  connected: boolean;
+  fileNote: string;
+  foldersSupported: boolean;
+  filesSupported: boolean;
+}

@@ -128,5 +128,6 @@
       "fill": "#9aa3b8",
       "radius": 2
     }
-  ]
+  ],
+  "move": "drag"
 }

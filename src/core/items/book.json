@@ -1,73 +1,35 @@
 {
   "id": "book",
   "name": "Book",
-  "about": "A small book to settle down with. He turns pages and reads at his own pace.",
+  "about": "A hinged book. Fetch it from a bookshelf or bag, read and turn pages, then close and return it.",
   "use": "none",
   "belt": "pocket",
-  "length": 21,
-  "grip": 2,
+  "length": 24,
+  "grip": 1,
   "hit": 0,
+  "bounce": 0.12,
   "shape": [
     {
       "pts": [
-        [-2, -12],
-        [21, -12],
-        [21, 12],
-        [-2, 12]
+        [
+          -1,
+          -20
+        ],
+        [
+          25,
+          -20
+        ],
+        [
+          25,
+          1
+        ],
+        [
+          -1,
+          1
+        ]
       ],
       "fill": "#687c95",
-      "color": "#354357",
-      "width": 1.4
-    },
-    {
-      "pts": [
-        [0, -10],
-        [19, -10],
-        [19, 10],
-        [0, 10]
-      ],
-      "fill": "#eee6ce",
       "width": 0
-    },
-    {
-      "pts": [
-        [10, -10],
-        [10, 10]
-      ],
-      "color": "#b4a98e",
-      "width": 1
-    },
-    {
-      "pts": [
-        [3, -6],
-        [7, -6]
-      ],
-      "color": "#9d9380",
-      "width": 1
-    },
-    {
-      "pts": [
-        [13, -6],
-        [17, -6]
-      ],
-      "color": "#9d9380",
-      "width": 1
-    },
-    {
-      "pts": [
-        [3, -2],
-        [7, -2]
-      ],
-      "color": "#9d9380",
-      "width": 1
-    },
-    {
-      "pts": [
-        [13, -2],
-        [17, -2]
-      ],
-      "color": "#9d9380",
-      "width": 1
     }
   ]
 }

@@ -5,14 +5,15 @@ import { cpSync, mkdirSync, rmSync } from 'node:fs';
 const common = { bundle: true, sourcemap: true, logLevel: 'warning', target: 'es2022' };
 const what = process.argv[2];
 
-if (what === 'lab') {
+if (what === 'lab' || what === 'modellab') {
   // One self-contained HTML file: the lab page with its script inlined.
   const { readFileSync, writeFileSync } = await import('node:fs');
-  const out = await build({ ...common, sourcemap: false, minify: true, entryPoints: ['src/lab/lab.ts'], platform: 'browser', format: 'iife', write: false });
+  const entry=what==='modellab'?'prop-model':'lab';
+  const out = await build({ ...common, sourcemap: false, minify: true, entryPoints: [`src/lab/${entry}.ts`], platform: 'browser', format: 'iife', write: false });
   mkdirSync('dist/lab', { recursive: true });
-  const html = readFileSync('src/lab/lab.html', 'utf8').replace('/*__LAB_SCRIPT__*/', () => out.outputFiles[0].text.replace(/<\/script/g, '<\\/script'));
-  writeFileSync('dist/lab/index.html', html);
-} else if (what === 'sim' || what === 'checks' || what === 'soak') {
+  const html = readFileSync(`src/lab/${entry}.html`, 'utf8').replace('/*__LAB_SCRIPT__*/', () => out.outputFiles[0].text.replace(/<\/script/g, '<\\/script'));
+  writeFileSync(what==='modellab'?'dist/lab/prop-model.html':'dist/lab/index.html', html);
+} else if (what === 'sim' || what === 'checks' || what === 'conversation-checks' || what === 'roadmap-checks' || what === 'quality-checks' || what === 'quality-profile' || what === 'living-checks' || what === 'living-soak' || what === 'pet-quality-2-checks' || what === 'pet-polish-checks' || what === 'pet-life-profile' || what === 'model-checks' || what === 'soak') {
   await build({ ...common, entryPoints: [`scripts/${what}.ts`], outfile: `.build/${what}.mjs`, platform: 'node', format: 'esm' });
 } else {
   await Promise.all([
@@ -29,6 +30,7 @@ if (what === 'lab') {
   mkdirSync('dist/app', { recursive: true });
   cpSync('src/app/index.html', 'dist/app/index.html');
   cpSync('src/app/game.css', 'dist/app/game.css');
+  cpSync('src/app/tools.css', 'dist/app/tools.css');
   // Example item and prop files (and the how-to) for your items folder. Start clean, so an example
   // that was retired (the Othello table, the mallet) doesn't linger from an older build.
   rmSync('dist/items', { recursive: true, force: true });

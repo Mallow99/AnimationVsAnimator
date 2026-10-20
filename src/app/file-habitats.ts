@@ -1,25 +1,30 @@
 // A figure visits an existing file/folder's actual native window, clipped to its contents.
 // The desktop body is parked while its visiting body uses the same identity and saved state.
 import { Pet } from '../core/pet';
-import type { FileWindow } from '../shared/desktop';
-import type { Bounds } from '../core/physics';
+import type { FileWindow, FileVisitStatus } from '../shared/desktop';
 
 interface Visit {
   path: string;
   pet: Pet;
   home: Pet;
   frame: FileWindow | null;
+  kind: 'folder' | 'file';
+  paused: boolean;
+  placed: boolean;
 }
-function figureSave(pet: Pet) {
+function figureSave(pet: Pet, items = true) {
   const data = JSON.parse(pet.save());
   delete data.props;
+  if (!items) delete data.items;
   return JSON.stringify(data);
 }
 export class FileHabitats {
   private visits = new Map<number, Visit>();
   private windows: FileWindow[] = [];
+  private lastStatus = '';
   constructor(
-    private changed: (homes: { id: number; path: string }[]) => void,
+    private changed: (homes: FileVisitStatus[]) => void,
+    private configure: (id: number, pet: Pet) => void = () => {},
   ) {}
   petFor(id: number) {
     return this.visits.get(id)?.pet ?? null;
@@ -30,12 +35,18 @@ export class FileHabitats {
   get activePets() {
     return [...this.visits.values()].filter((v) => v.frame).map((v) => v.pet);
   }
+  get allPets() {
+    return [...this.visits.values()].map((v) => v.pet);
+  }
   private frame(path: string) {
     return this.windows.find((w) => w.path === path) ?? null;
   }
-  enter(id: number, home: Pet, path: string) {
+  enter(id: number, home: Pet, path: string, kind: 'folder' | 'file' = 'folder') {
+    // Transport must finish before changing worlds; no controller may retain an old owner.
+    if (home.items.carried || home.userWeaponControlled) return false;
     if (this.visits.has(id)) this.returnHome(id);
-    home.mind.reset(home.ctx);
+    const paused = home.paused;
+    home.leaveWorld();
     home.char.cancelGesture();
     home.pointerUp(0, 0);
     const pet = new Pet(
@@ -49,20 +60,40 @@ export class FileHabitats {
       },
       { identity: home.ctx.who },
     );
-    pet.load(figureSave(home));
+    pet.items.defs = new Map(home.items.defs);
+    pet.props.defs = new Map(home.props.defs);
+    pet.load(figureSave(home, false));
+    // Move the originals, including bookmarks, ink and reload clocks. Never clone inventory.
+    pet.items.list = home.items.list;
+    pet.items.belt = home.items.belt;
+    pet.items.known = new Set(home.items.known);
+    home.items.list = [];
+    home.items.belt = home.items.belt.map(() => null);
+    const old = home.ctx.world.bounds;
+    for (const item of pet.items.list)
+      if (item.where === 'world') item.translate(300 - (old.left + old.right) / 2, 400 - old.floor);
     pet.memory.load(home.memory.save());
     pet.onDesktopAction = home.onDesktopAction;
     pet.brain.ask = home.brain.ask;
     pet.onBlip = home.onBlip;
     pet.onSound = home.onSound;
-    this.visits.set(id, { path, pet, home, frame: null });
+    this.configure(id, pet);
+    this.visits.set(id, { path, pet, home, frame: null, kind, paused, placed: false });
     home.paused = true;
     home.others = [];
     this.refresh(this.windows);
     this.notify();
+    return true;
   }
   refresh(windows: FileWindow[]) {
-    this.windows = windows;
+    this.windows = windows.filter(
+      (w) =>
+        w &&
+        typeof w.path === 'string' &&
+        [w.id, w.x, w.y, w.width, w.height].every(Number.isFinite) &&
+        w.width > 100 &&
+        w.height > 150,
+    );
     for (const visit of this.visits.values()) {
       const frame = this.frame(visit.path),
         before = visit.frame;
@@ -83,14 +114,26 @@ export class FileHabitats {
         top: frame.y + 70,
         floor: frame.y + frame.height - 22,
       };
+      const old = visit.pet.ctx.world.bounds;
+      const dx = before ? frame.x - before.x : (b.left + b.right - old.left - old.right) / 2;
+      const dy = before ? frame.y - before.y : b.floor - old.floor;
+      visit.pet.char.translateWorld(dx, dy);
       visit.pet.setBounds(b);
-      if (!before)
-        visit.pet.char.body.translate(
-          (b.left + b.right) / 2 - visit.pet.char.x,
-          b.floor - visit.pet.char.body.j.footR.y,
+      if (!visit.placed) {
+        const roommates = [...this.visits.values()].filter((v) => v.path === visit.path);
+        visit.pet.char.placeHome(
+          b.left + ((b.right - b.left) * (roommates.indexOf(visit) + 1)) / (roommates.length + 1),
         );
-      else
-        visit.pet.char.body.translate(frame.x - before.x, frame.y - before.y);
+        visit.placed = true;
+      }
+      for (const item of visit.pet.items.list) if (item.where === 'world') item.translate(dx, dy);
+      for (const thing of visit.pet.props.things)
+        for (const point of thing.points) {
+          point.x += dx;
+          point.px += dx;
+          point.y += dy;
+          point.py += dy;
+        }
       visit.pet.setWindows(
         (frame.tops ?? []).map(([x, y, width], i) => ({
           id: 700000000 + i,
@@ -105,10 +148,10 @@ export class FileHabitats {
       visit.pet.others = [...this.visits.values()]
         .filter((v) => v !== visit && v.path === visit.path && v.frame)
         .map((v) => v.pet);
+    this.notify();
   }
   update(dt: number) {
-    for (const visit of this.visits.values())
-      if (visit.frame) visit.pet.update(dt);
+    for (const visit of this.visits.values()) if (visit.frame) visit.pet.update(dt);
   }
   draw(
     g: CanvasRenderingContext2D,
@@ -141,13 +184,7 @@ export class FileHabitats {
   ) {
     for (const visit of [...this.visits.values()].reverse()) {
       const f = visit.frame;
-      if (
-        !f ||
-        x < f.x + 8 ||
-        x > f.x + f.width - 8 ||
-        y < f.y + 64 ||
-        y > f.y + f.height - 12
-      )
+      if (!f || x < f.x + 8 || x > f.x + f.width - 8 || y < f.y + 64 || y > f.y + f.height - 12)
         continue;
       const index = nativeWindows.findIndex((w) => w.id === f.id);
       if (
@@ -157,45 +194,78 @@ export class FileHabitats {
           .some((w) => x >= w.x && x <= w.x + w.w && y >= w.y && y <= w.y + w.h)
       )
         continue;
-      if (visit.pet.hit(x, y) || visit.pet.uiHit(x, y) || visit.pet.carrying)
-        return visit.pet;
+      if (visit.pet.hit(x, y) || visit.pet.uiHit(x, y) || visit.pet.carrying) return visit.pet;
     }
     return null;
   }
   returnHome(id: number) {
     const visit = this.visits.get(id);
     if (!visit) return;
-    visit.pet.mind.reset(visit.pet.ctx);
-    visit.home.load(figureSave(visit.pet));
-    visit.home.memory.load(visit.pet.memory.save());
-    visit.home.paused = false;
     visit.pet.leaveWorld();
+    visit.home.load(figureSave(visit.pet, false));
+    visit.home.items.list = visit.pet.items.list;
+    visit.home.items.belt = visit.pet.items.belt;
+    visit.home.items.known = new Set(visit.pet.items.known);
+    const b = visit.home.ctx.world.bounds;
+    for (const item of visit.home.items.list)
+      if (item.where === 'world') {
+        item.at = {
+          x: Math.max(b.left, Math.min(b.right, item.at.x)),
+          y: Math.max(b.top, Math.min(b.floor, item.at.y)),
+          z: item.at.z,
+        };
+        item.loosen();
+      }
+    visit.pet.items.list = [];
+    visit.pet.items.belt = visit.pet.items.belt.map(() => null);
+    visit.home.memory.load(visit.pet.memory.save());
+    visit.home.paused = visit.paused;
+    visit.home.enterWorld();
+    visit.home.char.standUp();
     this.visits.delete(id);
+    visit.home.onCollections?.();
+    this.refresh(this.windows);
     this.notify();
   }
   save() {
     return [...this.visits].map(([id, v]) => ({
       id,
       path: v.path,
+      kind: v.kind,
+      bounds: { ...v.pet.ctx.world.bounds },
       save: figureSave(v.pet),
       memory: v.pet.memory.save(),
     }));
   }
-  restore(saved: unknown, pets: Pet[]) {
+  restore(saved: unknown, pets: Pet[], activeIds = pets.map((_, id) => id)) {
     if (!Array.isArray(saved)) return;
     for (const v of saved.slice(0, 5))
       if (
         v &&
         Number.isInteger(v.id) &&
+        activeIds.includes(v.id) &&
         pets[v.id] &&
         typeof v.path === 'string' &&
+        v.path.length > 0 &&
         v.path.length < 4096
       ) {
-        this.enter(v.id, pets[v.id], v.path);
+        if (!this.enter(v.id, pets[v.id], v.path, v.kind === 'file' ? 'file' : 'folder')) continue;
         const visit = this.visits.get(v.id)!;
+        const b = v.bounds;
+        if (
+          b &&
+          [b.left, b.right, b.top, b.floor].every(Number.isFinite) &&
+          b.right > b.left + 50 &&
+          b.floor > b.top + 50 &&
+          [b.left, b.right, b.top, b.floor].every((n) => Math.abs(n) < 100000)
+        ) {
+          visit.pet.setBounds(b);
+          visit.frame = null;
+        }
         if (typeof v.save === 'string') visit.pet.load(v.save);
         if (typeof v.memory === 'string') visit.pet.memory.load(v.memory);
       }
+    this.refresh(this.windows);
   }
   sync(pets: Pet[]) {
     for (const [id, visit] of this.visits)
@@ -210,6 +280,15 @@ export class FileHabitats {
         });
   }
   private notify() {
-    this.changed([...this.visits].map(([id, v]) => ({ id, path: v.path })));
+    const status = [...this.visits].map(([id, v]) => ({
+      id,
+      path: v.path,
+      kind: v.kind,
+      visible: !!v.frame,
+    }));
+    const signature = JSON.stringify(status);
+    if (signature === this.lastStatus) return;
+    this.lastStatus = signature;
+    this.changed(status);
   }
 }

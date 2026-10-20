@@ -16,7 +16,8 @@ import { isSettledActivity } from './activity-pacing';
 // This file decides WHEN to ask, WHAT to tell the model, and what to do with
 // the answer. `ask` is plugged in from outside, so the headless tests can use a fake.
 
-import { offlineReply } from './brains/offline';
+import { isActionRequest } from './brains/offline';
+import { OfflineConversation, MESSAGE_LIMIT, TRANSCRIPT_LIMIT } from './brains/conversation';
 import { COMMANDS, type Mind, type MindEvent, type PlanStep } from './mind';
 import { PUPPET_JOINTS, type Keyframe, type PuppetJoint } from './character';
 import type { MindMode } from './config';
@@ -27,11 +28,11 @@ import type { Memory, NoteKind } from './memory';
 
 const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // Ordinary conversation during a match should not replace the seated game skill.
-const asksForActivity = (text: string) => /^(?:(?:please|can you|could you|would you|let's)\s+)?(?:read|watch|play|close|take|restore|enter|shoot|fire|high five|hug|dance|boogie|jump|hop|sit|sleep|nap|rest|wake|paint|draw|doodle|climb|swing|slash|fight|punch|spar|attack|smash|throw|catch|surf|knock|wave|stretch|come here|go away|stop playing|leave the game)\b/i.test(text.trim());
+const asksForActivity = isActionRequest;
 
-/** What he has and where, in words: "pen (on your belt), wooden sword (the person took it)". */
+/** What he has and where, in words: "pen (in your satchel), wooden sword (the person took it)". */
 function itemsText(c: Ctx) {
-  const where = { belt: 'on your belt', hand: 'in your hand', worn: 'wearing it', world: 'lying on the ground', cursor: 'the person took it' } as const;
+  const where = { belt: 'in your satchel', hand: 'in your hand', worn: 'wearing it', world: 'lying on the ground', cursor: 'the person took it' } as const;
   return c.items.list.map((it) => `${it.def.name.toLowerCase()} (${where[it.where]})`).join(', ') || 'nothing';
 }
 
@@ -56,7 +57,7 @@ export interface MadeMove { name: string; frames: Keyframe[] }
 
 /** Longest made-up move: this many poses, this many seconds. Longest plan: this many steps. */
 const MAX_FRAMES = 16, MAX_MOVE_SECONDS = 10, MAX_STEPS = 8;
-const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust'];
+const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust','socialNeed','inspiration','frustration','contentment','confidence','affection','stress'];
 
 const num = (v: unknown) => (typeof v === 'number' || typeof v === 'string') && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
 
@@ -108,7 +109,7 @@ export function parseDrawing(raw: unknown): Vec[][] | null {
 function parseStep(raw: unknown, saved: MadeMove[]): PlanStep | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  if (typeof o.do === 'string') return ACTIONS.includes(o.do) ? { do:o.do,...(typeof o.with==='string' && o.with.trim()?{with:o.with.trim().slice(0,40)}:{}) } : null;
+  if (typeof o.do === 'string') return (ACTIONS.includes(o.do) || /^draw(?:item|prop):[a-z0-9-]{1,30}$/.test(o.do)) ? { do:o.do,...(typeof o.with==='string' && o.with.trim()?{with:o.with.trim().slice(0,40)}:{}) } : null;
   if (typeof o.say === 'string' && o.say.trim()) return { say: o.say.trim().slice(0, 140) };
   if (num(o.wait) !== null) return { wait: Math.min(5, Math.max(0, num(o.wait)!)) };
   if (typeof o.walk === 'string' && ['left', 'right', 'cursor', 'away'].includes(o.walk)) return { walk: o.walk as 'left' };
@@ -132,7 +133,7 @@ function parseStep(raw: unknown, saved: MadeMove[]): PlanStep | null {
 export function parseReply(text: string, saved: MadeMove[] = []): BrainReply | null {
   const start = text.indexOf('{'), end = text.lastIndexOf('}');
   // No JSON at all: it just talked. Keep the words, short.
-  if (start < 0 || end <= start) return text.trim() ? { say: text.trim().slice(0, 140), feel: {}, plan: [], remember: [] } : null;
+  if (start < 0 || end <= start) return text.trim() ? { say: text.trim().slice(0, 2000), feel: {}, plan: [], remember: [] } : null;
   let data: Record<string, unknown>;
   try { data = JSON.parse(text.slice(start, end + 1)); } catch { return null; }
   const feel: Partial<MoodState> = {};
@@ -150,7 +151,7 @@ export function parseReply(text: string, saved: MadeMove[] = []): BrainReply | n
   }
   const raw = Array.isArray(data.remember) ? data.remember : typeof data.remember === 'string' ? [data.remember] : [];
   const remember = raw.filter((x): x is string => typeof x === 'string' && !!x.trim()).slice(0, 3).map((x) => x.trim().slice(0, 140));
-  return { say: typeof data.say === 'string' ? data.say.trim().slice(0, 200) : '', feel, plan, remember };
+  return { say: typeof data.say === 'string' ? data.say.trim().slice(0, 2000) : '', feel, plan, remember };
 }
 
 /** How his body works, for the AI (only when it's allowed to move him directly). */
@@ -188,7 +189,7 @@ const REACT_EVERY = 15;
 /** Hard cap on model calls per hour, so a bug or a chatty mood can't run up a bill. */
 const MAX_PER_HOUR = 120;
 /** How many past messages he remembers in a conversation. */
-const HISTORY = 16;
+const HISTORY = 32;
 
 /** Notable things that happened to him, in words (what the model sees). */
 function describe(e: MindEvent): string | null {
@@ -267,10 +268,13 @@ export function describePlan(plan: PlanStep[]) {
 }
 
 export class Brain {
+  readonly conversation = new OfflineConversation();
+  conversationVersion = 0;
+  onConversation: () => void = () => {};
   /** Set by the app when an AI provider is available (desktop only). */
   ask: AskFn | null = null;
   mode: MindMode = 'offline';
-  name = 'Blurp';
+  name = 'Cobalt';
   persona = '';
   /** May the AI make up its own moves (move his body directly)? */
   puppet = true;
@@ -294,7 +298,9 @@ export class Brain {
       settings.persona !== this.persona
     ) {
       this.revision++;
+      this.busy = false;
       this.heard = [];
+      this.heardOffline = [];
       this.reactPending = null;
       this.status = '';
       this.failureCount = 0;
@@ -334,9 +340,13 @@ export class Brain {
 
   /** You typed something to him. */
   hear(c: Ctx, text: string) {
-    text = text.trim().slice(0, 300);
+    text = text.trim().slice(0, MESSAGE_LIMIT);
     if (!text) return;
     this.addLog('you', text, c);
+    if (/^(?:please )?(?:stop|enough|cancel|don't|do not)\b/i.test(text)) {
+      this.revision++; this.busy = false; this.heard = []; this.heardOffline = [text]; this.status = '';
+      return;
+    }
     if (!this.active) {
       this.heardOffline.push(text);
       return;
@@ -348,10 +358,7 @@ export class Brain {
   private failureCount = 0;
   private retryAt = 0;
 
-  /**
-   * No AI: he still understands a few simple things (do this, how are you, my name is...),
-   * like a dog that knows some words. Anything else gets a confused look.
-   */
+  /** Authored local conversations retain their own state even when a provider is unavailable. */
   private offlineAnswer(c: Ctx, mind: Mind, text: string) {
     if (!this.active && !this.explainedOffline) {
       this.addLog(
@@ -361,7 +368,7 @@ export class Brain {
       );
       this.explainedOffline = true;
     }
-    const reply = offlineReply(c, text);
+    const reply = this.conversation.respond(c, text, this.name);
     if (reply.stop) {
       mind.reset(c);
       c.char.stop();
@@ -375,8 +382,11 @@ export class Brain {
       mind.perform(c, reply.plan, 'you asked')
     )
       did = describePlan(reply.plan);
-    this.onSpeak(reply.say);
+    // The full reply belongs in the transcript; a short excerpt keeps desktop bubbles readable.
+    this.onSpeak(reply.say.length > 220 ? reply.say.slice(0, 190).replace(/\s+\S*$/, '') + '… (more in chat)' : reply.say);
     this.addLog('him', reply.say, c, did);
+    this.history.push({ role: 'user', text }, { role: 'assistant', text: JSON.stringify({ say: reply.say, plan: [] }) });
+    this.trimHistory();
   }
 
   /** Something happened to him. Remembered as context; in full mode he may comment on it. */
@@ -389,9 +399,8 @@ export class Brain {
   }
 
   update(c: Ctx, mind: Mind) {
+    if (this.heardOffline.length) this.offlineAnswer(c, mind, this.heardOffline.shift()!);
     if (!this.active) {
-      if (this.heardOffline.length)
-        this.offlineAnswer(c, mind, this.heardOffline.splice(0).join(' '));
       if (c.memory.needsTidy) c.memory.tidyOffline();
       return;
     }
@@ -402,8 +411,7 @@ export class Brain {
       return;
     }
     if (this.heard.length) {
-      const said = this.heard.join(' / ');
-      this.heard = [];
+      const said = this.heard.shift()!;
       this.think(c, mind, `You hear: "${said}"`, 'you');
     } else if (
       this.mode === 'full' &&
@@ -457,7 +465,7 @@ export class Brain {
       "Your world: you live on top of their desktop, in the spirit of Animator vs. Animation. Your body runs on physics: you walk, climb windows, fall, and get poked, petted, grabbed and thrown by their mouse cursor. You only use the computer through the supported actions listed in [state]. Never claim you clicked, read, closed or changed something unless the action reports success. You CAN hit their cursor (your punches, kicks, sword, mace, bow, pistol and ball send it flying; they take it back by moving the mouse) and shove their windows around (push, kick, surf on them) when that's switched on.",
       '',
       'HOW YOU TALK',
-      '- Short, like speech in a comic: a few words, at most two short sentences. No lists, no markdown, at most one emoji.',
+      '- For ordinary reactions, speak briefly like a comic. In conversation, follow what the person said and ask a relevant follow-up. If they share a long message, ask for detail or a story, or want to talk something through, you may answer in a few paragraphs (up to 2000 characters). Keep your own voice. No markdown, at most one emoji.',
       '- Always in your own voice. Never sound like a customer-service bot, a teacher or a therapist: no "I\'m here to help", "As an AI", "It sounds like you\'re feeling", "I understand", and no advice nobody asked for.',
       "- Your feelings are real. They come from the mood in [state]: snappy when annoyed, mopey when sad, short when sleepy, bouncy when playful. You don't have to do what you're asked, especially when you're not in the mood or they've been mean to you.",
       '- If they\'re rude or mean to you, take it personally like a character would: hurt, offended, sarcastic or grumpy. Maybe stomp, sulk or walk off. Let it change your mood ("feel"). Don\'t lecture them.',
@@ -480,16 +488,16 @@ export class Brain {
         ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`]
         : []),
       '- {"draw": [strokes], "title": "..."} draw something with your pen (see DRAWING). Only works if you have your pen.',
-      'YOUR BELT: you wear a belt (left hip, right hip, back, and a pocket) where you keep your things. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mace ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
+      'YOUR SATCHEL: your wearable bag holds your stored tools. You reach into it to take them out and put them back naturally. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mace ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
       'WINDOWS: "pushwindow", "kickwindow", "surf" (ride the window you\'re on across the screen), "knock" (knock on one), "ledgesit" (sit on the edge with your legs dangling), "perch" (hop up and sit on something in their window, like a chat message).',
       'DRAWING YOUR WAY: "ramp" draws a ramp up onto a window and walks up it; "bridge" draws a bridge across a gap to a window; "drawramp" draws one to jump off. Your drawings are solid and have weight.',
-      'QUIET ACTIVITIES: read (get a book and settle into it), watchtv and videogame last minutes depending on hyperactivity and mood. Ordinary chat can continue without leaving a settled activity.\nPROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV, alone), "playgame" (invite the person to Othello on the TV), "ride" (the scooter). Only if they\'re out. "duel": spar with your friend (the other stick figure), if they\'re around.',
+      'QUIET ACTIVITIES: read (get a book and settle into it), watchtv and videogame last minutes depending on hyperactivity and mood. Ordinary chat can continue without leaving a settled activity.\nPROPS: furniture the person gives you: "sitdown" (a chair or couch), "watchtv", "videogame" (play your little runner game on the TV, alone), "playgame" (invite the person to Othello on the TV), "ride" (the scooter). Only if they\'re out. handheld plays your own actual pocket runner; handheldduo invites a free friend with their own handheld. gift chooses an owned gift for a free friend, wraps it if you have a pen and presents it; never generates a free item. "duel": spar with your friend (the other stick figure), if they\'re around.',
       'Repeat steps to repeat things: "hop 3 times" = three hop steps. Doing what was asked matters more than talking about it. An empty plan is fine.',
       ...(bodyGuide ? BODY_GUIDE : []),
       ...(drawGuide ? DRAW_GUIDE : []),
       '',
-      'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust. {} if nothing changed.',
+      'FEELINGS: "feel" says how this moment changes your mood: numbers from -0.4 to 0.4 for any of happiness, energy, boredom, annoyance, fear, trust, socialNeed (wanting company), inspiration (wanting to make/learn), frustration, contentment, confidence, affection (warmth toward friends), stress. {} if nothing changed.',
       '',
       'MEMORY: "remember" is a list of up to 3 short notes to keep for the long term, written by you, in your own voice (first person). Only things worth remembering for days: facts about the person (their name, what they like, what they told you), promises, big events, strong opinions. Not every little thing; usually it\'s empty.',
       "Use what you remember naturally (bring it up, hold grudges, be glad), but don't recite it.",
@@ -550,10 +558,15 @@ export class Brain {
     return [
       '[state]',
       `time: ${d.toLocaleDateString('en-US', { weekday: 'long' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
-      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)})`,
+      `mood: ${m.asleep ? 'asleep' : m.emotion} (happiness ${f(s.happiness)}, energy ${f(s.energy)}, boredom ${f(s.boredom)}, annoyance at the person ${f(s.annoyance)}, fear ${f(s.fear)}, trust in the person ${f(s.trust)}, social need ${f(s.socialNeed)}, inspiration ${f(s.inspiration)}, frustration ${f(s.frustration)}, contentment ${f(s.contentment)}, confidence ${f(s.confidence)}, affection ${f(s.affection)}, stress ${f(s.stress)})`,
       `doing: ${mind.skill?.name ?? 'nothing'}${mind.why ? ` (${mind.why})` : ''}`,
       `where: ${where}`,
       `your things: ${itemsText(c)}`,
+      `your specialty: ${c.talent ?? 'drawing'}. Friends can teach each other; do not interrupt busy friends.`,
+      `everyday requests: sip (needs a cup), exercise (needs a dumbbell), yoyo (needs a yo-yo), read (open/read/close a book). workshop requests: deskwork, refine, sorttools, arrange, carrytogether, passtool, comparedrawings, checkfriend, pong, handheld, group:wave/chat/couch/watch/duet/triangle/mirror/relay. Only invite available friends.`,
+      `drawable blueprints: ${[...c.items.defs.values()].filter(d=>d.drawable!==false&&!d.drawn&&!d.blueprint).map(d=>`drawitem:${d.id}`).concat([...c.props?.defs.values()??[]].filter(d=>d.drawable!==false&&!d.id.startsWith('ink-')).map(d=>`drawprop:${d.id}`)).join(', ')}`,
+      `shared furniture: ${(c.props?.placed ?? []).map(t=>`${t.def?.name}: ${t.def?.use}${t.ink?' (unfinished ink)':''}`).join('; ')}`,
+
       ...(c.game && c.game.state !== 'closed'
         ? [
             `game: Othello on your TV with the person (${c.game.state}); black/person ${c.game.score.you}, white/you ${c.game.score.him}. You can talk while staying seated. Keep plan empty unless the person explicitly asks for another activity. The board handles your moves offline; never claim a move you did not make.`,
@@ -569,7 +582,7 @@ export class Brain {
         : [
             `body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`,
           ]),
-      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}`).join('; ') || 'alone'}`,
+      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}${p.id ? `, bond ${c.relationship?.(p.id)?.bond.toFixed(2)??'new'}`:''}`).join('; ') || 'alone'}`,
       `relationship with current partner: ${c.feel.bond.toFixed(2)}`,
       `connected Chrome page: ${c.desktopState?.().browser?.title ?? 'none'}. Page selection: ${c.desktopState?.().browser?.selected ? 'available to take' : 'none'}. Use desktop actions only when asked.`,
       `available actions now: ${mind
@@ -601,7 +614,7 @@ export class Brain {
           "He's hit his limit of AI calls for this hour. Try again in a bit.",
           c,
         );
-        c.say('...', 1.2);
+        this.offlineAnswer(c, mind, prompt.replace(/^You hear: "|"$/g, ''));
       }
       return;
     }
@@ -644,7 +657,7 @@ export class Brain {
             ...(reply.remember.length ? { remember: reply.remember } : {}),
           }),
         });
-        while (this.history.length > HISTORY) this.history.splice(0, 2);
+        this.trimHistory();
         this.apply(c, mind, reply, why, interruptGame);
       })
       .catch((err: unknown) => {
@@ -660,6 +673,7 @@ export class Brain {
         }
       })
       .finally(() => {
+        if (revision !== this.revision) return;
         this.busy = false;
         if (why === 'auto') mind.holdUntil = 0;
       });
@@ -713,7 +727,7 @@ export class Brain {
     )
       did = describePlan(plan);
     if (why === 'auto') mind.holdUntil = 0;
-    if (reply.say) this.onSpeak(reply.say);
+    if (reply.say) this.onSpeak(reply.say.length > 220 ? reply.say.slice(0, 190).replace(/\s+\S*$/, '') + '… (more in chat)' : reply.say);
     if (playing && !interruptGame)
       for (const step of reply.plan) if ('say' in step) this.onSpeak(step.say);
     const said = [
@@ -763,12 +777,46 @@ export class Brain {
         }
       })
       .finally(() => {
+        if (revision !== this.revision) return;
         this.busy = false;
       });
   }
 
   private addLog(who: LogLine['who'], text: string, c: Ctx, acts = '') {
     this.log.push({ who, text, at: c.world.time, ...(acts ? { acts } : {}) });
-    if (this.log.length > 40) this.log.shift();
+    while (this.log.length > TRANSCRIPT_LIMIT || this.log.reduce((n, l) => n + l.text.length, 0) > 120000) this.log.shift();
+    this.conversationVersion++; this.onConversation();
+  }
+
+  saveConversation() { return { v: 1, log: this.log, local: this.conversation.save() }; }
+  loadConversation(raw: unknown) {
+    this.conversationVersion++;
+    this.log = []; this.history = []; this.heard = []; this.heardOffline = [];
+    this.conversation.reset();
+    if (!raw || typeof raw !== 'object') return;
+    const d = raw as { v?: unknown; log?: unknown; local?: unknown };
+    if (d.v !== 1) return;
+    this.conversation.load(d.local);
+    if (Array.isArray(d.log)) for (const rawLine of d.log.slice(-TRANSCRIPT_LIMIT)) {
+      if (!rawLine || typeof rawLine !== 'object') continue;
+      const l = rawLine as LogLine;
+      if (!['you', 'him', 'note'].includes(l.who) || typeof l.text !== 'string' || !Number.isFinite(l.at)) continue;
+      this.log.push({ who: l.who, text: l.text.slice(0, MESSAGE_LIMIT), at: Math.max(0, l.at),
+        ...(typeof l.acts === 'string' ? { acts: l.acts.slice(0, 500) } : {}) });
+    }
+    while (this.log.reduce((n,l) => n + l.text.length, 0) > 120000) this.log.shift();
+    this.history = this.log.filter(l => l.who !== 'note').slice(-HISTORY).map(l => ({
+      role: l.who === 'you' ? 'user' : 'assistant',
+      text: l.who === 'you' ? l.text : JSON.stringify({ say: l.text, plan: [] }),
+    }));
+    this.trimHistory();
+    this.explainedOffline = this.log.some(l => l.who === 'note' && l.text.startsWith('Offline:'));
+  }
+  newConversation() {
+    this.revision++; this.busy = false; this.loadConversation(null); this.status = ''; this.explainedOffline = false;
+    this.reactPending = null; this.onSpeak(''); this.onConversation();
+  }
+  private trimHistory() {
+    while (this.history.length > HISTORY || this.history.reduce((n,l) => n + l.text.length, 0) > 16000) this.history.splice(0,2);
   }
 }

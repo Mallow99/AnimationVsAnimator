@@ -68,7 +68,12 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look, extras: Dept
     ctx.arc(j.head.x, j.head.y, c.d.headR, 0, Math.PI * 2);
     ctx.fill();
   } });
-  for (const e of extras) parts.push({ z: e.z, draw: () => e.draw(ctx) });
+  // Accessories can change stroke width, alpha or transforms. Isolate each one so
+  // limbs drawn after it retain the figure's look in every pose/depth order.
+  for (const e of extras) parts.push({ z: e.z, draw: () => {
+    ctx.save();
+    try { e.draw(ctx); } finally { ctx.restore(); }
+  } });
   parts.sort((a, b) => a.z - b.z);
   for (const p of parts) p.draw();
 
@@ -103,6 +108,8 @@ export function drawLooseLimb(ctx: Ctx2D, piece: LooseLimb, look: Look, scale: n
  */
 export class PixelLayer {
   private cv: OffscreenCanvas | null = null;
+  private smallFrames = 0;
+  private outlineMask = new Uint8Array(0);
 
   /** Draw him (with his belt and anything in his hands, and any limbs he's lost) as pixel art. */
   draw(ctx: CanvasRenderingContext2D, c: Character, look: Look, extras: DepthPart[] = []) {
@@ -125,10 +132,28 @@ export class PixelLayer {
       maxX = Math.max(maxX, pt.x); maxY = Math.max(maxY, pt.y);
     }
     // Snap to the pixel grid so the pixels don't shimmer as he moves.
-    const x0 = Math.floor((minX - pad) / p) * p, y0 = Math.floor((minY - pad) / p) * p;
-    const w = Math.ceil((maxX + pad - x0) / p), h = Math.ceil((maxY + pad - y0) / p);
+    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+    // Offscreen limbs/throws must not allocate a desktop-sized pixel workspace. Respect the
+    // caller's scale/translation (including Retina); keep one art pixel outside the viewport.
+    const transform = ctx.getTransform();
+    if (transform.a > 0 && transform.d > 0 && !transform.b && !transform.c) {
+      minX = Math.max(minX, -transform.e / transform.a - p);
+      minY = Math.max(minY, -transform.f / transform.d - p);
+      maxX = Math.min(maxX, (ctx.canvas.width - transform.e) / transform.a + p);
+      maxY = Math.min(maxY, (ctx.canvas.height - transform.f) / transform.d + p);
+    }
+    const x0 = Math.floor(minX / p) * p, y0 = Math.floor(minY / p) * p;
+    const w = Math.ceil((maxX - x0) / p), h = Math.ceil((maxY - y0) / p);
     if (w <= 0 || h <= 0 || w > 4000 || h > 4000) return;
-    if (!this.cv || this.cv.width < w || this.cv.height < h) this.cv = new OffscreenCanvas(Math.max(w, 64, this.cv?.width ?? 0), Math.max(h, 64, this.cv?.height ?? 0));
+    const bucket = (n: number) => Math.max(64, Math.ceil(n / 64) * 64);
+    if (this.cv && this.cv.width * this.cv.height > Math.max(4096, w * h) * 4) this.smallFrames++;
+    else this.smallFrames = 0;
+    if (!this.cv) this.cv = new OffscreenCanvas(bucket(w), bucket(h));
+    else if (this.cv.width < w || this.cv.height < h || this.smallFrames > 120) {
+      // Resize the existing object, rather than leaving successive backing stores to GC.
+      this.cv.width = bucket(w); this.cv.height = bucket(h); this.smallFrames = 0;
+      this.outlineMask = new Uint8Array(0);
+    }
     const g = this.cv.getContext('2d', { willReadFrequently: true })!;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, w, h);
@@ -138,7 +163,8 @@ export class PixelLayer {
     for (let i = 3; i < a.length; i += 4) a[i] = a[i] >= 110 ? 255 : 0;
     if (look.outline) {
       // Any empty pixel touching him becomes outline.
-      const n = parseInt(shade(look.color, -0.7).slice(1), 16), solid = new Uint8Array(w * h);
+      if (this.outlineMask.length < w * h) this.outlineMask = new Uint8Array(this.cv.width * this.cv.height);
+      const n = parseInt(shade(look.color, -0.7).slice(1), 16), solid = this.outlineMask;
       for (let i = 0; i < w * h; i++) solid[i] = a[i * 4 + 3] ? 1 : 0;
       for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
         const i = yy * w + xx;

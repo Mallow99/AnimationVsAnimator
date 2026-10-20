@@ -7,9 +7,55 @@ export interface OfflineReply {
   plan: PlanStep[];
   feel?: Partial<MoodState>;
   stop?: boolean;
+  understood?: boolean;
+}
+/** Mentions, questions and negated requests must never start a physical action. */
+export function isActionRequest(text: string): boolean {
+  const t = text.trim().toLowerCase().split(/\s+(?:and then|then|and)\s+|[;,]/)[0].replace(/[.!?]+$/, '');
+  if (/^(?:please\s+)?(?:don['’]t|do not|never|stop|cancel|enough)\b/.test(t)) return false;
+  if (/\b(?:don't|don’t|do not|never)\b/.test(t)) return false;
+  const request = t.replace(/^(?:please\s+)?(?:(?:can|could|would|will) you\s+|let['’]s\s+)?(?:please\s+)?/, '');
+  if (/^(?:i|we|they|he|she|my|why|what|how|when|do you|have you|tell me|talk about)\b/.test(request)) return false;
+  if (/^switch (?:the |your )?lamp\b/.test(request)) return true;
+  return /^(?:play|pass|throw|catch|rest|curl|have|sip|drink|exercise|work|workout|lift|train|share|give|apologize|apologise|make|say sorry|compare|check|help|carry|move|pull|arrange|put|push|group|wave|duet|hands in|triangle|four|two|five|refine|polish|finish|color|colour|sort|store|tidy|blueprint|draw|sketch|watch|read|close|shut|take|steal|pluck|grab|restore|enter|visit|go into|crawl into|high[ -]?five|fist[ -]?bump|patty[ -]?cake|handshake|shake|hug|bring|wrap|talk to|chat with|chat together|talk together|sit|nap|sleep|join|duel|spar|fight|paint|shoot|fire|float|levitate|perform|show me|dance|boogie|backflip|frontflip|flip|jump|hop|wake|climb|get down|come down|swing|slash|punch|box|attack|hit me|smash|bonk|bounce|surf|knock|stretch|come here|come over|follow me|go away|leave me alone)\b/.test(request)
+    || /^(?:blanket|snack|lamp|yo-yo|yoyo|handheld|handheldduo|pong|reading corner|work corner|work area|couch huddle|pistol|gun|arrows?|archery|sword|mace|mallet|hammer|edge|dangle|ledge|bye)$/.test(request);
 }
 const choose = (a: string[]) => a[Math.floor(Math.random() * a.length)];
 const ACTIONS: [RegExp, string][] = [
+  [/\b(?:play catch|catch with|pass the ball|throw.*ball.*friend)\b/, 'catch'],
+  [/\b(?:blanket|curl up)\b/, 'blanket'],
+  [/\b(?:snack|snack box)\b/, 'snack'],
+  [/\b(?:lamp|reading light)\b/, 'lamp'],
+  [/\b(?:sip|have a drink|drink from|drink your|tea break|coffee break)\b/, 'sip'],
+  [/\b(?:exercise|work out|workout|lift weights|dumbbell|train with)\b/, 'exercise'],
+  [/\b(?:yo-yo|yoyo)\b/, 'yoyo'],
+  [/\b(?:pass|share|give).*tool\b/,'passtool'],
+  [/\b(?:apologize|apologise|make up with|say sorry to)\b/, 'apologize'],
+  [/\bcompare.*drawing\b/,'comparedrawings'],
+  [/\b(?:check on|help).*friend\b/,'checkfriend'],
+  [/\b(?:handhelds?|pocket games?|gameboys?|game boys?)\b.*\b(?:together|friend|friends)\b|\bhandheldduo\b/, 'handheldduo'],
+  [/\b(?:handheld|game boy|gameboy|pocket console)\b/, 'handheld'],
+  [/\bpong\b/, 'pong'],
+  [/\b(?:carry(?: it)? together|carry.*with.*friend|help.*carry)\b/, 'carrytogether'],
+  [/\b(?:move|pull|arrange|put|push).*(?:tv|television).*(?:couch|seat)\b/, 'arrange'],
+  [/\breading corner\b/, 'readingcorner'],
+  [/\b(?:work corner|work area)\b/, 'workcorner'],
+  [/\b(?:group wave|wave together)\b/, 'group:wave'],
+  [/\b(?:group chat|group conversation|talk together|chat together)\b/, 'group:chat'],
+  [/\b(?:couch huddle|all.*couch|group.*couch)\b/, 'group:couch'],
+  [/\b(?:group watch|everyone.*watch|all.*watch|watch together)\b/, 'group:watch'],
+  [/\b(?:duet|two.*mirror)\b/, 'group:duet'],
+  [/\b(?:hands in|triangle)\b/, 'group:triangle'],
+  [/\b(?:four.*dance|two.pair dance)\b/, 'group:mirror'],
+  [/\b(?:wave relay|five.*wave)\b/, 'group:relay'],
+  [/\b(?:refine|polish|finish|color in|colour in)\b/, 'refine'],
+  [/\b(?:sort|store|tidy)(?: the| your)? (?:tools|weapons|items)\b/, 'sorttools'],
+  [/\b(?:blueprint|work at (?:the )?desk)\b/, 'deskwork'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? katana\b/, 'drawitem:katana'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? (?:tv|television)\b/, 'drawprop:tv'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? couch\b/, 'drawprop:couch'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? chair\b/, 'drawprop:chair'],
+  [/\b(?:draw|make|sketch)(?: me| a| the)? desk\b/, 'drawprop:desk'],
   [/\b(?:watch|watching)(?: a| the| some)? (?:tv|television|movie|film)\b/, 'watchtv'],
   [/\b(?:read|reading)(?: a| your| the)?(?: book)?\b/, 'read'],
   [/\b(?:close|shut) (?:this |the |that )?tab\b/, 'closetab'],
@@ -36,6 +82,9 @@ const ACTIONS: [RegExp, string][] = [
   [/\bpatty[ -]?cake\b/, 'pattycake'],
   [/\b(?:handshake|shake hands)\b/, 'handshake'],
   [/\bhug\b/, 'hug'],
+  [/\b(?:give|make|bring|wrap)(?: a| your| them a| him a| her a)? (?:gift|present)\b/, 'gift'],
+  [/\b(?:handhelds?|pocket games?|gameboys?|game boys?)\b.*\b(?:together|friend|friends)\b|\bhandheldduo\b/, 'handheldduo'],
+  [/\b(?:handhelds?|pocket games?|gameboys?|game boys?)\b/, 'handheld'],
   [/\b(?:talk to|chat with)\b/, 'chat'],
   [/\b(?:sit with|sit together)\b/, 'sitwith'],
   [/\b(?:nap together|sleep together)\b/, 'naptogether'],
@@ -102,13 +151,14 @@ const moodLine = (c: Ctx) => {
     content: 'pretty good',
     proud: 'did you see that?',
     embarrassed: "don't ask",
+    supported:'good. glad my friends are here.',frustrated:'that didn’t work. I need a breather.',overwhelmed:'a bit much right now. quiet sounds nice.',
   }[c.mood.emotion];
 };
 export function offlineReply(c: Ctx, text: string): OfflineReply {
   const t = text.toLowerCase().trim(),
     plan: PlanStep[] = [];
   const name = /my name is ([a-z][a-z'-]{0,20})/i.exec(text)?.[1];
-  if (name) {
+  if (name && /^my name is\b/i.test(text.trim())) {
     const n = name[0].toUpperCase() + name.slice(1);
     c.memory.add(`the person's name is ${n}`, 'you', 'him', 3);
     return { say: `${n}. got it.`, plan: [{ do: 'wave' }] };
@@ -156,6 +206,7 @@ export function offlineReply(c: Ctx, text: string): OfflineReply {
   if (partner?.id) c.selectPeer?.(partner.id);
   const clauses = t.split(/\s+(?:and then|then|and)\s+|[;,]/).slice(0, 4);
   for (const clause of clauses) {
+    if (!isActionRequest(clause)) continue;
     if (/\b(?:come here|come over|follow me)\b/.test(clause)) {
       plan.push({ walk: 'cursor' });
       continue;
@@ -165,8 +216,11 @@ export function offlineReply(c: Ctx, text: string): OfflineReply {
       continue;
     }
     const action = ACTIONS.find(([re]) => re.test(clause));
-    if (!action) continue;
-    let doName = action[1];
+    const definitions = [...c.items.defs.values(),...(c.props?.defs.values()??[])];
+    const mentions=(name:string)=>new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`,'i').test(clause);
+    const drawing = /\b(?:draw|sketch|make)\b/.test(clause) ? definitions.find(d=>d.drawable!==false && (mentions(d.name)||mentions(d.id))) : undefined;
+    if (!action && !drawing) continue;
+    let doName = drawing && (!action || !action[1].startsWith('draw')) ? `${c.props?.defs.has(drawing.id)?'drawprop':'drawitem'}:${drawing.id}` : action![1];
     if (doName === 'pushwindow' && /kick/.test(clause)) doName = 'kickwindow';
     if (doName === 'spar' && c.mood.label === 'angry') doName = 'brawl';
     const repeats = Math.min(
@@ -210,7 +264,7 @@ export function offlineReply(c: Ctx, text: string): OfflineReply {
       plan: [{ do: 'laugh' }],
       feel: { happiness: 0.08, trust: 0.02 },
     };
-  if (/\b(?:stupid|dumb|hate|ugly|useless)\b/.test(t))
+  if (/^(?:(?:you(?:'re| are)?|your)\s+(?:so\s+)?)?(?:stupid|dumb|ugly|useless)\b|^i hate you\b/.test(t))
     return {
       say: choose(['rude.', 'wow.', 'hmph.']),
       plan: [{ do: 'stomp' }],
@@ -242,6 +296,7 @@ export function offlineReply(c: Ctx, text: string): OfflineReply {
       feel: { fear: 0.03, trust: 0.02 },
     };
   return {
+    understood: false,
     say: choose([
       'I know moves, games, drawing and friends. what should we try?',
       "I didn't catch that. try a short request?",

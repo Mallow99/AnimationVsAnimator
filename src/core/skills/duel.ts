@@ -181,6 +181,8 @@ export class Duel extends Skill {
       real = c.fightMode === 'real';
     this.endPose(c);
     this.ending = this.t + 1.8;
+    const peer=c.foe?.()?.id;
+    if(peer)c.recordActivity?.(peer,'duel',!real&&how!=='cut');
     if (how === 'won') {
       c.say(
         real
@@ -651,7 +653,12 @@ export class Duel extends Skill {
       return;
     }
     const far = dist > R * 1.7;
-    const plan = tactical.moves;
+    const plan = [...tactical.moves];
+    const memory = foe.id ? c.relationship?.(foe.id)?.vulnerable : undefined;
+    if (memory && !foe.guard) {
+      const proven = Object.entries(memory).sort((a,b)=>b[1]-a[1]).find(([move,n])=>n>=2 && Object.hasOwn(MOVES,move));
+      if (proven && chance(0.3)) plan[0] = proven[0] as typeof plan[number];
+    }
     // Mix in a kick to shove him off a guard (it's a gesture, not a sword move).
     if (this.blocksSeen > 1.5 && chance(0.3) && dist < R) {
       ch.doGesture('frontkick', {
@@ -712,7 +719,7 @@ export class Duel extends Skill {
     ch.handTarget = { x: slot.x, y: slot.y };
     const h = ch.body.j[hand === 'L' ? 'handL' : 'handR'];
     if (
-      Math.hypot(h.x - slot.x, h.y - slot.y) < 7 * ch.scale ||
+      (this.drawT >= 0.3 && Math.hypot(h.x - slot.x, h.y - slot.y) < 7 * ch.scale) ||
       this.drawT > 0.6
     ) {
       ch.handTarget = null;

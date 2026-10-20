@@ -19,6 +19,8 @@ export class Runner {
   score = 0;
   best = 0;
   crashedAt = -1;
+  lastPressAt=-Infinity;
+  presses=0;
   private nextBlock = 0.6;
   private recorded = false;
 
@@ -29,7 +31,7 @@ export class Runner {
   constructor(private skill = 0.75, private random = Math.random) {}
 
   /** Jump, if he's on the ground. */
-  press() { if (this.y <= 0) { this.vy = JUMP; return true; } return false; }
+  press() { if (this.y <= 0) { this.vy = JUMP;this.lastPressAt=this.time;this.presses++; return true; } return false; }
 
   /** One step. He presses jump himself when a block gets close (well-timed, mostly). Returns what happened. */
   step(dt: number): ArcadeEvent[] {

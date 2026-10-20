@@ -16,6 +16,7 @@ export interface WindowWatcher {
   stop(): void;
   /** macOS: give focus back to the app the user was using. */
   refocus(): void;
+  setKeyboard(on: boolean): void;
   /** Move the mouse cursor to (x, y) in screen coordinates (he grabbed it, or knocked it flying). */
   moveCursor(x: number, y: number): void;
   /** Move another app's window so its top-left is at (x, y), in the helper's own screen coordinates. */
@@ -49,6 +50,7 @@ async function macHelper(log: (m: string) => void): Promise<string | null> {
 
 export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: string) => void, onUi: (ui: UiReport) => void = () => {}): WindowWatcher {
   let uiOn = false;
+  let keyboard = false;
   let nextAction=0;
   const actions=new Map<number,{resolve:(r:{ok:boolean;message:string})=>void;timer:ReturnType<typeof setTimeout>}>();
   let child: ChildProcess | null = null;
@@ -81,7 +83,7 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
       return;
     }
     const running = child;
-    running.once('spawn', () => { if (uiOn) send('ui on\n'); });
+    running.once('spawn', () => { if (uiOn) send('ui on\n'); if (keyboard && process.platform === 'darwin') send('keyboard on\n'); });
     // A helper that can't spawn, or a pipe closed while moving a window, should not crash the pet.
     running.on('error', (err) => log(`could not start window helper: ${err.message}`));
     running.stdin?.on('error', (err) => log(`window helper input closed: ${err.message}`));
@@ -116,7 +118,8 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
 
   return {
     stop() { for(const wait of actions.values()){clearTimeout(wait.timer);wait.resolve({ok:false,message:'The window helper stopped.'});}actions.clear(); stopped = true; clearTimeout(retry); clearInterval(fakeTimer); child?.kill(); },
-    refocus() { if (process.platform === 'darwin') send('refocus\n'); },
+    refocus() { if (process.platform === 'darwin' && !keyboard) send('refocus\n'); },
+    setKeyboard(on) { keyboard = on; if (process.platform === 'darwin') send(on ? 'keyboard on\n' : 'keyboard off\n'); },
     moveCursor(x, y) { if ([x, y].every(Number.isFinite)) send(`cursor ${Math.round(x)} ${Math.round(y)}\n`); },
     moveWindow(id, x, y) { if ([id, x, y].every(Number.isFinite)) send(`win ${Math.round(id)} ${Math.round(x)} ${Math.round(y)}\n`); },
     closeWindow(id) {

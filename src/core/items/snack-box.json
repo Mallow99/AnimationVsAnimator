@@ -1,0 +1,79 @@
+{
+  "id": "snack-box",
+  "name": "Snack box",
+  "about": "A reusable snack box. Open, take a quiet snack, close and put it away.",
+  "use": "snack",
+  "length": 20,
+  "grip": 2,
+  "belt": "pocket",
+  "hit": 0,
+  "bounce": 0.1,
+  "shape": [
+    {
+      "pts": [
+        [
+          -2,
+          -12
+        ],
+        [
+          20,
+          -12
+        ],
+        [
+          20,
+          2
+        ],
+        [
+          -2,
+          2
+        ]
+      ],
+      "fill": "#b78b61",
+      "width": 0
+    },
+    {
+      "pts": [
+        [
+          -3,
+          -15
+        ],
+        [
+          21,
+          -15
+        ],
+        [
+          21,
+          -11
+        ],
+        [
+          -3,
+          -11
+        ]
+      ],
+      "fill": "#d7b383",
+      "width": 0
+    },
+    {
+      "pts": [
+        [
+          5,
+          -9
+        ],
+        [
+          13,
+          -9
+        ],
+        [
+          13,
+          -3
+        ],
+        [
+          5,
+          -3
+        ]
+      ],
+      "fill": "#6d846b",
+      "width": 0
+    }
+  ]
+}
