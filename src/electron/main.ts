@@ -496,6 +496,7 @@ ipcMain.handle('product:exportBackup', async (): Promise<SaveResult> => {
     writeAtomic(filePath, JSON.stringify(backup, null, 2)); return { ok: true };
   } catch { return { ok: false, message: 'The backup could not be exported. Your existing saves have not been changed.' }; }
 });
+ipcMain.on('app:quit', () => app.quit());
 ipcMain.handle('session:get', () => session);
 ipcMain.on('session:set', (_e, patch: Partial<SessionState>) => setSession({
   ...(typeof patch?.paused === 'boolean' ? { paused: patch.paused } : {}),

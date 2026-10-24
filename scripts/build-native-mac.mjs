@@ -6,5 +6,5 @@ const dir = resolve('.build/native'); mkdirSync(dir, { recursive: true });
 const binary = resolve(dir, 'windows-mac-arm64');
 execFileSync('xcrun', ['swiftc', '-O', '-target', 'arm64-apple-macos13.0', 'src/electron/native/windows-mac.swift', '-o', binary], { stdio: 'inherit' });
 execFileSync('codesign', ['--force', '--sign', '-', binary], { stdio: 'inherit' });
-execFileSync('lipo', ['-verify_arch', 'arm64', binary], { stdio: 'inherit' });
+execFileSync('lipo', [binary, '-verify_arch', 'arm64'], { stdio: 'inherit' });
 console.log('Built and ad-hoc signed arm64 helper. This is not Developer ID signing or notarization.');

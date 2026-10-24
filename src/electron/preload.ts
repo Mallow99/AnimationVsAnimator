@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('petShell', {
   saved: (token: number, ok: boolean) => ipcRenderer.send('save:flushed', token, ok),
   productInfo: () => ipcRenderer.invoke('product:info'),
   productSetup: (patch: unknown) => ipcRenderer.invoke('product:setup', patch),
+  quit: () => ipcRenderer.send('app:quit'),
   getSession: () => ipcRenderer.invoke('session:get'),
   setSession: (patch: unknown) => ipcRenderer.send('session:set', patch),
   onSession: on('session:changed'),

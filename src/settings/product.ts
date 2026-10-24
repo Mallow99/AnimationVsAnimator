@@ -128,6 +128,7 @@ shell.onSaveHealth(showHealth); void shell.getSaveHealth().then(showHealth);
 $('retrySave').onclick = () => shell.retrySaves();
 function sessionView(value: SessionState) { session = value; $('pause').textContent = session.paused ? 'Resume buddies' : 'Pause buddies'; $('hide').textContent = session.hidden ? 'Show all buddies' : 'Hide all buddies'; }
 shell.onSession(sessionView); void shell.getSession().then(sessionView);
+$('quit').onclick = () => shell.quit();
 $('pause').onclick = () => shell.setSession({ paused: !session.paused }); $('hide').onclick = () => shell.setSession({ hidden: !session.hidden });
 $('finishIntro').onclick = async () => { const result = await shell.productSetup({ introDone: true }); if (result.ok) $('welcome').hidden = true; };
 $('showWelcome').onclick = () => { $('welcome').hidden = false; window.scrollTo({ top: 0, behavior: 'auto' }); };
