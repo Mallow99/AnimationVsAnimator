@@ -49,7 +49,7 @@ if (platform === 'darwin') {
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', bundle], { stdio: 'inherit' });
   execFileSync('codesign', ['--verify', '--deep', '--strict', bundle], { stdio: 'inherit' });
 }
-for (const file of ['INSTALL.md', 'PRIVACY.md', 'LICENSE.txt', 'RECOVERY.md', 'THIRD-PARTY-NOTICES.md']) copyFileSync(join('docs/release', file), join(folder, file));
+for (const file of ['INSTALL.md', 'FEATURES.md', 'PRIVACY.md', 'LICENSE.txt', 'RECOVERY.md', 'THIRD-PARTY-NOTICES.md']) copyFileSync(join('docs/release', file), join(folder, file));
 copyFileSync(join(stage, 'release-source.json'), join(folder, 'release-source.json'));
 // Audit the actual packaged tree before archiving it.
 function walk(dir) { return readdirSync(dir).flatMap(name => { const file = join(dir, name); return statSync(file).isDirectory() ? walk(file) : [file]; }); }

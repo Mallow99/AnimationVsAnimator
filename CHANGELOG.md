@@ -3,6 +3,23 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-24 — feature guide and per-buddy customization (rc.2)
+
+- Added a complete feature/customization guide to customer downloads and store/readme links;
+  Settings now includes a discoverable feature list and shortcut back to customization.
+- Exposed the existing five personality styles per buddy, with descriptions that match the
+  selected personality. Preserves identity, conversation, original items and friendships.
+- Added mix-and-match stance, walk, colour, line/head and rendering preset rows alongside
+  the existing whole looks and fine sliders. Choices apply immediately and save per buddy.
+- Bumped the candidate to 1.0.0-rc.2. Draft preservation now reads the metadata version
+  instead of replacing rc.1. Native acceptance and store access gates remain open.
+- Verification: typecheck, real Electron customization/scope/persistence + existing
+  save/offline/quit flow passed; workflow YAML and core-change/manual selection verified.
+  Native rc.2 package jobs are next.
+- Core logic is unchanged. CI repeats core/browser/customer/native checks and performance;
+  extended soaks repeat for core/dependency changes or manual runs. UI-only changes reuse
+  the already passed seed-7/32 core soaks. Final validation results follow in the handoff.
+
 ## 2026-10-24 — native candidate validation and runtime update
 
 - Windows native packaging passed on CI. Corrected Mac `lipo` argument order after

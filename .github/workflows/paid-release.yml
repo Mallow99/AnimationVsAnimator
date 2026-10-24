@@ -27,6 +27,21 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select extended core checks
+        id: extended
+        env:
+          BEFORE_COMMIT: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" != push || -z "$BEFORE_COMMIT" || "$BEFORE_COMMIT" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE_COMMIT^{commit}" 2>/dev/null; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BEFORE_COMMIT" HEAD -- src/core src/shared scripts/living-soak.ts scripts/build.mjs package.json package-lock.json; then
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -40,6 +55,7 @@ jobs:
           npm run build:release
           xvfb-run -a node_modules/.bin/electron --no-sandbox scripts/release-electron-check.cjs
       - name: Feature and lifecycle soak
+        if: steps.extended.outputs.run == 'true'
         run: |
           LIVING_SOAK_SEED=7 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak
           LIVING_SOAK_SEED=32 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak

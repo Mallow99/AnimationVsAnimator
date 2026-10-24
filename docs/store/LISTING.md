@@ -20,7 +20,8 @@ what they get up to.
 
 - Pet, pick up and toss your buddies; they react, recover and remember.
 - Give them furniture and objects. They read, draw, play games and spend time together.
-- Change names, colours, size and movement. Their belongings and friendships persist.
+- Change names, colours, size and personality. Mix stance, walking style, line/head style
+  and smooth or pixel rendering, or start with a whole-look preset. Belongings and friendships persist.
 - Join a game, start a familiar conversation or follow a branching story.
 - Enable window climbing or playful mischief when you want it. Pause or hide everyone
   from the menu-bar / tray controls.
@@ -47,6 +48,8 @@ are explained in Settings and start off. Refund requests follow itch.io's proces
 
 Project direction: Mallow99. Developed with AI assistance. Independent original
 desktop toy; no affiliation with animation franchises or other companion apps.
+
+Full feature and customization guide: [../release/FEATURES.md](../release/FEATURES.md).
 
 ## Upload checklist
 

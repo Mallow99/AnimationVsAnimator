@@ -4,7 +4,7 @@ The commercial edition is a $5 offline desktop toy for Apple Silicon Macs and Wi
 It has a customer interface, quiet defaults, local conversations, save recovery and native
 packaging. It is **not approved for sale yet**: real Mac/Windows acceptance and storefront
 setup remain. [Release checklist](docs/release/ACCEPTANCE.md) ·
-[Install guide](docs/release/INSTALL.md) · [Store draft](docs/store/LISTING.md).
+[Features and customization](docs/release/FEATURES.md) · [Install guide](docs/release/INSTALL.md) · [Store draft](docs/store/LISTING.md).
 
 Develop the customer edition with `npm run start:release`. Build a candidate on the target OS
 with `npm run package:release -- darwin` or `npm run package:release -- win32`. CI packages

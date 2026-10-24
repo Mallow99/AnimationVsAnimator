@@ -2,6 +2,19 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Feature list and customization — 2026-10-24
+
+The owner requested a feature list and customization. Candidate metadata is now rc.2.
+Customer downloads include release/FEATURES.md. Buddies exposes five existing personality
+choices, whole-look bundles, mix-and-match stance/walk/colour/line/render presets and fine
+sliders; all apply per selected buddy. Settings contains a feature list and shortcut.
+Core character proportions, personality templates and movement presets are unchanged.
+
+Draft preservation uses product.json's version, preserving the verified rc.1 download.
+CI skips the already-passed extended soaks for UI-only pushes; any core/shared/build/dependency
+change or a manual run repeats them. Aggregate/browser/customer flow and native package
+smokes still run. New candidate verification is in progress; prior evidence below is rc.1.
+
 ## Latest owner request: commercial product implementation — 2026-10-24
 
 The owner approved turning this repository into a $5 offline product, **Mallow Desk Buddies**,

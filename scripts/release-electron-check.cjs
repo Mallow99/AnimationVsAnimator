@@ -47,6 +47,24 @@ app.whenReady().then(async () => {
   assert(await ui('document.querySelector("#chatLog").textContent.includes("Sam")'));
   await ui('document.querySelector("#name").value="Clover";document.querySelector("#name").dispatchEvent(new Event("change"))');
   await until(() => run('window.pet.config.name==="Clover"'), 'name persisted through IPC');
+  const bookUid = await run('window.pet.items.list.find(i=>i.def.id==="book").uid');
+  await ui('document.querySelector("#personalityChoice").value="adventurous";document.querySelector("#personalityChoice").dispatchEvent(new Event("change"))');
+  await until(() => run('window.pet.config.personality==="adventurous"'), 'personality choice');
+  assert(await ui('document.querySelector("#personality").textContent.includes("explorer")'));
+  for (const [key, value] of [['walk','4'],['line','fine'],['render','px4'],['stance','B']]) {
+    await ui(`document.querySelector("#preset-${key}").value="${value}";document.querySelector("#preset-${key}").dispatchEvent(new Event("change"))`);
+    await pause(50);
+  }
+  await until(() => run('window.pet.config.body.stride===1.45 && window.pet.config.look.lineWidth===3.5 && window.pet.config.look.pixel===4 && window.pet.config.body.stand===0.75'), 'mixed appearance choices');
+  assert.equal(await run('window.pet.config.look.color'), '#596cb2');
+  assert(await run(`window.pet.items.list.some(i=>i.uid===${bookUid}) && window.pet.brain.log.some(l=>l.text.includes("Sam"))`));
+  await ui('document.querySelector("#buddy").value="1";document.querySelector("#buddy").dispatchEvent(new Event("change"));document.querySelector("#personalityChoice").value="gentle";document.querySelector("#personalityChoice").dispatchEvent(new Event("change"))');
+  await until(() => run('window.pets[1].config.personality==="gentle"'), 'second personality');
+  assert.equal(await run('window.pet.config.personality'), 'adventurous');
+  await ui('document.querySelector("#buddy").value="0";document.querySelector("#buddy").dispatchEvent(new Event("change"))');
+  await ui('document.querySelector("[data-tab=settings]").click();document.querySelector("#customizeBuddy").click()');
+  assert(await ui('!document.querySelector("#buddies").hidden && document.activeElement.id==="personalityChoice"'));
+  console.log('PASS customization: scoped personality and descriptions, mixed presets preserve color/items/chat, feature guide returns keyboard focus to customization');
   await ui('document.querySelector("[data-tab=things]").click();document.querySelector("[data-supply=handheld]").click();document.querySelector("#openBag").click()');
   await until(() => run('window.toolBag.isOpen && window.pet.items.list.some(i=>i.def.id==="handheld")'), 'bag and supply');
   await run('window.toolBag.close()');
@@ -88,6 +106,8 @@ app.whenReady().then(async () => {
   overlay.reload();
   await until(() => !overlay.webContents.isLoading() && run('window.pets?.length===2 && window.pet.config.name==="Clover"'), 'reload restored identity');
   assert.equal(await run('window.pet.props.placed.length'), oldCount, 'starter scene duplicated on reload');
+  assert(await run('window.pet.config.personality==="adventurous" && window.pets[1].config.personality==="gentle" && window.pet.config.look.pixel===4 && window.pet.config.body.stride===1.45'));
+
   assert(await run('window.pet.items.list.some(i=>i.def.id==="handheld")'));
   assert(await run('window.pet.brain.log.some(l=>l.text.includes("Sam"))'));
   console.log('PASS release: reload retains name, dialogue, owned items and exact furniture count without reseeding');

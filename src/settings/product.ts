@@ -1,5 +1,5 @@
-import { CHARACTER_PRESETS, RANGES, type PetConfig } from '../core/config';
-import { BUNDLES } from '../core/presets';
+import { CHARACTER_PRESETS, RANGES, type PetConfig, type Personality } from '../core/config';
+import { BUNDLES, PRESET_ROWS } from '../core/presets';
 import { conversationKeys, exportConversation, transcriptView } from '../app/conversation-view';
 import { PRODUCT_NAME, type SaveHealth, type SaveResult, type SessionState } from '../shared/product';
 
@@ -76,7 +76,9 @@ function render() {
     if (document.activeElement !== $(id)) $<HTMLInputElement>(id).value = String(value);
   }
   for (const id of ['windows', 'sound', 'sfx', 'dailyRhythm', 'moveWindows', 'knockCursor', 'mischief', 'screenAware', 'smacking', 'destructible'] as const) $<HTMLInputElement>(id).checked = c[id];
-  $('personality').textContent = `${c.personality[0].toUpperCase() + c.personality.slice(1)} · ${CHARACTER_PRESETS[selected].description}`;
+  $<HTMLSelectElement>('personalityChoice').value = c.personality;
+  $('personality').textContent = CHARACTER_PRESETS.find(p => p.personality === c.personality)?.description ?? '';
+  renderPresetRows();
   const enabled = active.includes(selected);
   for (const id of ['chatText', 'sendChat', 'exportChat', 'newChat', 'stopActivity']) $<HTMLButtonElement>(id).disabled = !enabled;
   $('confirmReset').hidden = true;
@@ -96,6 +98,35 @@ $<HTMLInputElement>('color').oninput = () => set({ look: { ...configs[selected].
 for (const [id, key] of [['size', 'scale'], ['pace', 'hyperactivity'], ['volume', 'volume']] as const) $<HTMLInputElement>(id).oninput = () => set({ [key]: Number($<HTMLInputElement>(id).value) });
 for (const key of ['windows', 'sound', 'sfx', 'dailyRhythm', 'moveWindows', 'knockCursor', 'mischief', 'screenAware', 'smacking', 'destructible'] as const) $<HTMLInputElement>(key).onchange = () => set({ [key]: $<HTMLInputElement>(key).checked });
 $<HTMLSelectElement>('fightMode').onchange = () => set({ fightMode: $<HTMLSelectElement>('fightMode').value as PetConfig['fightMode'] });
+for (const preset of CHARACTER_PRESETS) {
+  const label = preset.personality[0].toUpperCase() + preset.personality.slice(1);
+  $<HTMLSelectElement>('personalityChoice').add(new Option(label, preset.personality));
+}
+$<HTMLSelectElement>('personalityChoice').onchange = () => set({ personality: $<HTMLSelectElement>('personalityChoice').value as Personality });
+$('customizeBuddy').onclick = () => { tab('buddies'); $('personalityChoice').focus(); };
+for (const row of PRESET_ROWS) {
+  const label = document.createElement('label'), select = document.createElement('select'); label.className = 'field';
+  select.id = 'preset-' + row.key; select.title = row.blurb;
+  select.add(new Option('Custom', ''));
+  for (const variant of row.variants) select.add(new Option(variant.name, variant.id));
+  select.onchange = () => {
+    const variant = row.variants.find(v => v.id === select.value); if (!variant) return;
+    const config = configs[selected];
+    set({ look: { ...config.look, ...variant.look }, body: { ...config.body, ...variant.body } });
+  };
+  label.append(document.createTextNode(row.title), select); $('presetRows').append(label);
+}
+function renderPresetRows() {
+  const config = configs[selected];
+  for (const row of PRESET_ROWS) {
+    const select = $<HTMLSelectElement>('preset-' + row.key);
+    if (document.activeElement === select) continue;
+    const match = row.variants.find(v =>
+      Object.entries(v.look ?? {}).every(([key, value]) => config.look[key as keyof typeof config.look] === value) &&
+      Object.entries(v.body ?? {}).every(([key, value]) => config.body[key as keyof typeof config.body] === value));
+    select.value = match?.id ?? '';
+  }
+}
 for (const preset of BUNDLES) { const button = document.createElement('button'); button.textContent = preset.name; button.onclick = () => set({ look: { ...configs[selected].look, ...preset.look }, body: { ...configs[selected].body, ...preset.body } }); $('presets').append(button); }
 for (const [key, range] of Object.entries(RANGES).filter(([key]) => key.startsWith('body.') || key.startsWith('look.'))) {
   const label = document.createElement('label'), input = document.createElement('input'); label.className = 'field'; input.type = 'range'; input.min = String(range.min); input.max = String(range.max); input.step = String(range.step); input.title = range.hint;
