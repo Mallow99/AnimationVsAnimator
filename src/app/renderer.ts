@@ -23,6 +23,9 @@ import { companionConfig, activeFigureIds } from '../core/config';
 import { CursorWeapon, type CursorWeaponKind } from '../core/combat/cursor-weapon';
 import { SwordMove, MOVES, STANCES, guardPose } from '../core/skills/swordplay';
 import { ToolBag } from './tool-bag';
+import { placeSpeech } from '../core/speech-layout';
+import { readLocalSave, writeLocalSave } from './local-storage';
+import { COMMERCIAL, PRODUCT_NAME, productDefaults, offlineEdition, type SaveResult, type SaveHealth, type ProductState, type SessionState } from '../shared/product';
 
 /** Provided by the Electron preload script. Missing in a plain browser (preview mode). */
 interface PetShell {
@@ -41,7 +44,16 @@ interface PetShell {
   moveWindow(id: number, x: number, y: number, w: number, h: number): void;
   ask(id: number, req: BrainRequest): Promise<{ ok: true; text: string } | { ok: false; error: string }>;
   loadMemory(id: number): Promise<string | null>;
-  saveMemory(id: number, json: string): void;
+  saveMemory(id: number, json: string): Promise<SaveResult> | void;
+  getSaveHealth?(): Promise<SaveHealth>;
+  retrySaves?(): void;
+  onSaveHealth?(cb: (health: SaveHealth) => void): void;
+  onSaveRequest?(cb: (token: number) => void): void;
+  saved?(token: number, ok: boolean): void;
+  productInfo?(): Promise<{ state: ProductState }>;
+  productSetup?(patch: Partial<ProductState>): Promise<SaveResult>;
+  onSession?(cb: (state: SessionState) => void): void;
+  getSession?(): Promise<SessionState>;
   openSettings(id?: number, tab?: string): void;
   getItemDefs(): Promise<unknown[]>;
   onItemDefs(cb: (defs: unknown[]) => void): void;
@@ -55,6 +67,28 @@ interface PetShell {
   fileHomes(homes:FileVisitStatus[]):void;
 }
 const shell = (window as unknown as { petShell?: PetShell }).petShell;
+const releaseDefaults = COMMERCIAL ? productDefaults(DEFAULT_CONFIG) : DEFAULT_CONFIG;
+const localIssues = new Map<string, string>();
+const blockedLocalSaves = new Set<string>();
+let mainIssues: SaveHealth = { issues: [] };
+let session: SessionState = { paused: false, hidden: false };
+const saveNotice = document.createElement('aside');
+saveNotice.id = 'saveNotice'; saveNotice.hidden = true; saveNotice.setAttribute('role', 'status');
+saveNotice.style.cssText = 'position:fixed;z-index:100;top:12px;left:12px;right:12px;max-width:560px;padding:12px 16px;background:#fff4df;color:#483421;border:1px solid #aa6b37;border-radius:8px;font:14px/1.5 system-ui;box-shadow:0 4px 20px #0002';
+const saveMessage = document.createElement('span'), retrySave = document.createElement('button');
+retrySave.type = 'button'; retrySave.textContent = 'Retry saves'; retrySave.style.cssText = 'margin-left:12px;padding:6px 10px;cursor:pointer';
+saveNotice.append(saveMessage, retrySave); document.body.append(saveNotice);
+function showSaveHealth() {
+  const messages = [...localIssues.values(), ...mainIssues.issues.map(i => i.message)];
+  saveNotice.hidden = !messages.length;
+  saveMessage.textContent = messages.length ? 'Changes need attention. ' + [...new Set(messages)].join(' ') : '';
+}
+function localResult(key: string, result: SaveResult) {
+  if (result.ok) localIssues.delete(key); else localIssues.set(key, result.message);
+  showSaveHealth(); return result.ok;
+}
+shell?.onSaveHealth?.(health => { mainIssues = health; showSaveHealth(); });
+shell?.getSaveHealth?.().then(health => { mainIssues = health; showSaveHealth(); });
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -98,33 +132,57 @@ let lastWins: WinRect[] = [], lastDefs: unknown[] = [];
 const saveKey = (id: number) => (id ? `pet-save-${id + 1}` : 'pet-save');
 const memoryKey = (id: number) => (id ? `pet-memory-${id + 1}` : 'pet-memory');
 const memoryLoaded: boolean[] = [];
+const memoryLoads: Promise<unknown>[] = [];
+let freshWorld = false;
+try { freshWorld = localStorage.getItem(saveKey(0)) === null && localStorage.getItem(saveKey(0) + '.backup') === null; } catch { /* Reported by readLocalSave. */ }
 
 /** Save one of them (mood, things, gallery) and their memories. */
-function saveOne(id: number) {
+async function saveOne(id: number): Promise<boolean> {
   const home=figures[id],p=habitats.petFor(id)??home;
-  if (!p) return;
-  try { const saved=JSON.parse(p.save());if(id===0)saved.props=home.props.savePlaced();else delete saved.props;localStorage.setItem(saveKey(id),JSON.stringify(saved)); } catch { /* ignore */ }
-  if (!memoryLoaded[id]) return; // don't overwrite the file before we've read it
+  if (!p) return true;
+  let ok = !blockedLocalSaves.has(saveKey(id));
+  if (ok) try {
+    const saved = JSON.parse(p.save()); if (id === 0) saved.props = home.props.savePlaced(); else delete saved.props;
+    ok = localResult(saveKey(id), writeLocalSave(localStorage, saveKey(id), JSON.stringify(saved)));
+  } catch { ok = localResult(saveKey(id), { ok: false, message: 'The current scene could not be saved. Your previous save is kept.' }); }
+  if (!memoryLoaded[id] || blockedLocalSaves.has(memoryKey(id))) return false; // Never replace unread or damaged memories.
   const json = p.memory.save();
-  if (shell) shell.saveMemory(id, json); else try { localStorage.setItem(memoryKey(id), json); } catch { /* ignore */ }
+  if (shell) {
+    try { const result = await shell.saveMemory(id, json); if (result) ok = localResult(memoryKey(id), result) && ok; }
+    catch { ok = localResult(memoryKey(id), { ok: false, message: 'Memories could not be saved. Retry before quitting.' }); }
+  } else ok = localResult(memoryKey(id), writeLocalSave(localStorage, memoryKey(id), json)) && ok;
+  return ok;
 }
-const save = () => {figures.forEach((_,id)=>saveOne(id));try{localStorage.setItem('file-homes',JSON.stringify(habitats.save()));}catch{}};
+const save = async () => {
+  const results = await Promise.all(figures.map((_, id) => saveOne(id)));
+  if (!COMMERCIAL) try { localStorage.setItem('file-homes', JSON.stringify(habitats.save())); } catch { /* Development-only visit state. */ }
+  return results.every(Boolean) && !localIssues.size;
+};
+retrySave.onclick = () => { void save(); shell?.retrySaves?.(); };
+shell?.onSaveRequest?.(token => { void Promise.allSettled(memoryLoads).then(() => save()).then(ok => shell.saved?.(token, ok), () => shell.saved?.(token, false)); });
 setInterval(save, 15000);
-window.addEventListener('beforeunload', save);
+window.addEventListener('beforeunload', () => { void save(); });
 
 /** Bring one of them to life: load their save and memories, and wire them to the desktop. */
 function makePet(id: number, config: PetConfig): Pet {
   const p = id === 0 ? new Pet(bounds(), config,{identity:'pet-0'}) : new Pet(bounds(), config, { props: figures[0].props,identity:`pet-${id}` });
   try {
     // (The second one used to be saved as "friend-save"/"friend-memory": pick those up once.)
-    p.load(localStorage.getItem(saveKey(id)) ?? (id === 1 ? localStorage.getItem('friend-save') : null));
-    if (!shell) p.memory.load(localStorage.getItem(memoryKey(id)) ?? (id === 1 ? localStorage.getItem('friend-memory') : null));
-  } catch { /* storage blocked */ }
+    const loaded = readLocalSave(localStorage, saveKey(id));
+    if (loaded.error) { blockedLocalSaves.add(saveKey(id)); localResult(saveKey(id), { ok: false, message: loaded.error }); }
+    p.load(loaded.text ?? (id === 1 ? localStorage.getItem('friend-save') : null));
+    if (!shell) {
+      const memory = readLocalSave(localStorage, memoryKey(id));
+      if (memory.error) { blockedLocalSaves.add(memoryKey(id)); localResult(memoryKey(id), { ok: false, message: memory.error }); }
+      p.memory.load(memory.text ?? (id === 1 ? localStorage.getItem('friend-memory') : null));
+    }
+  } catch { localResult(saveKey(id), { ok: false, message: 'Local saves are unavailable. Changes remain in this session only.' }); }
   memoryLoaded[id] = !shell;
-  shell?.loadMemory(id).then((json) => {
+  const memoryLoad = shell?.loadMemory(id).then((json) => {
     if (json === null && id === 1) { try { json = localStorage.getItem('friend-memory'); } catch { /* ignore */ } }
     const current=habitats.petFor(id)??p; current.memory.load(json); memoryLoaded[id] = true; current.onCollections?.();
-  }, () => { memoryLoaded[id] = true; });
+  }, () => { localResult(memoryKey(id), { ok: false, message: 'Saved memories need recovery. The original file has been kept.' }); });
+  if (memoryLoad) memoryLoads.push(memoryLoad);
   wirePet(id, p);
   return p;
 }
@@ -164,6 +222,7 @@ function wirePet(id: number, p: Pet) {
 
 /** Apply a selected roster without reassigning identity, possessions or save slots. */
 function applyConfigs(configs: PetConfig[]) {
+  if (COMMERCIAL) configs = configs.map(offlineEdition);
   const ids = activeFigureIds(configs[0]), previous = new Set(pets);
   const time = Math.max(0,...figures.map(p=>p.ctx.world.time));
   for (let id=0;id<5;id++) {
@@ -195,10 +254,11 @@ function applyConfigs(configs: PetConfig[]) {
     if(configs[0].fileHomes)try{habitats.restore(JSON.parse(localStorage.getItem('file-homes')??'null'),figures,ids);}catch{}
   }
   syncPeers();
-  save();
+  void save();
+  void prepareWelcomeScene();
 }
 
-const configs: PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(DEFAULT_CONFIG,id));
+const configs: PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(releaseDefaults,id));
 figures[0] = makePet(0, configs[0]);
 pets[0] = figures[0];
 
@@ -222,6 +282,10 @@ if (shell) {
       if (visiting && !habitats.activePets.includes(visiting)) returnFromVisit(id);
       const p = activePets().find(p => p.ctx.who === figures[id]?.ctx.who) ?? activePets()[0];
       if (p) toolBag.showFor(p);
+      return;
+    }
+    if (cmd === 'openActivities' || cmd === 'openSupplies') {
+      const p = figures[id]; if (p && pets.includes(p)) toolBag.showFor(p, cmd === 'openActivities' ? 'activities' : 'supplies');
       return;
     }
     if (cmd === 'returnHome') { returnFromVisit(id); return; }
@@ -261,7 +325,7 @@ if (!shell) {
   document.body.classList.add('preview');
   const hint = document.createElement('div');
   hint.className = 'hint';
-  hint.textContent = 'Preview mode — click to poke, drag to pick up, fling to throw. Press S to toggle smack mode.';
+  hint.textContent = COMMERCIAL ? `${PRODUCT_NAME} · Browser preview · double-click to talk · right-click for activities` : 'Preview mode — click to poke, drag to pick up, fling to throw. Press S to toggle smack mode.';
   window.addEventListener('keydown', (e) => {
     if (e.key === 's' && !e.ctrlKey && !e.metaKey && !((e.target as Element).closest('input, textarea, button, summary, [contenteditable]'))) for (const p of pets) p.config.smacking = !p.config.smacking;
   });
@@ -360,7 +424,9 @@ const gamePanel = createGamePanel(gamePet, (on) => { gameTyping = on; syncTyping
 let ignoring = true;
 const onPet = (p: Pet, x: number, y: number) => p.dragging || p.hit(x, y) || p.satchelHit(x, y) || p.uiHit(x, y) || p.carrying;
 function updateClickThrough(x: number, y: number) {
-  const want = !cursorWeapon.active && !(toolBag.dragging || toolBag.over(x, y) || gamePanel.dragging || pongPanel.over(x,y) || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
+  const notice = saveNotice.getBoundingClientRect();
+  const overNotice = !saveNotice.hidden && x >= notice.left && x <= notice.right && y >= notice.top && y <= notice.bottom;
+  const want = session.paused || session.hidden ? true : !cursorWeapon.active && !(overNotice || toolBag.dragging || toolBag.over(x, y) || gamePanel.dragging || pongPanel.over(x,y) || overTalk(x, y) || gamePanel.over(x, y) || !!cutouts.hit(x,y) || !!habitats.hit(x,y,lastWins) || activePets().some((p) => p.dragging) || desktopPets().some((p) => onPet(p, x, y)));
   if (want !== ignoring) {
     ignoring = want;
     shell?.setClickThrough(want);
@@ -431,6 +497,39 @@ let last = { x: 0, y: 0, t: performance.now() };
 let vel = { x: 0, y: 0 };
 const toolBag = new ToolBag(activePets, save, on => { toolsTyping = on; syncTyping(); }, () => !cursorWeapon.active);
 Object.assign(window, { toolBag, checkSanity:()=>audit() });
+Object.assign(window, { exportBackupSnapshot: () => ({
+  worlds: figures.map((p, id) => { const value = JSON.parse(p.save()); if (id === 0) value.props = figures[0].props.savePlaced(); else delete value.props; return value; }),
+  memories: figures.map(p => JSON.parse(p.memory.save())),
+}) });
+let welcomePrepared = false;
+async function prepareWelcomeScene() {
+  if (!COMMERCIAL || welcomePrepared || !pets.length) return;
+  welcomePrepared = true;
+  try {
+    const info = await shell?.productInfo?.();
+    if (freshWorld && !info?.state.sceneReady) {
+      const first = pets[0], floor = bounds().floor, width = bounds().right;
+      for (const p of pets) { p.items.give('book', p.char); p.items.give('bouncy-ball', p.char); }
+      for (const [id, fraction] of [['couch', 0.42], ['tv', 0.68], ['lamp', 0.25]] as const) {
+        const def = first.props.defs.get(id);
+        if (def?.bounds) first.props.spawn(id, width * fraction, floor - (def.bounds[3] - def.bounds[1]) / 2 - 2, 1);
+      }
+      first.command('say:hello! make yourself at home.');
+    }
+    await Promise.allSettled(memoryLoads);
+    if (await save()) await shell?.productSetup?.({ sceneReady: true });
+  } catch { localResult('welcome', { ok: false, message: 'The starter scene could not be saved. Retry before quitting.' }); }
+}
+const applySession = (state: SessionState) => {
+  session = state;
+  if (state.paused || state.hidden) {
+    closeTalk(); toolBag.cancel(); toolBag.close(); equipCursor('none'); cutouts.release();
+    for (const p of activePets()) { p.closeMenu(); p.pointerUp(last.x, last.y); }
+    shell?.setClickThrough(true); shell?.setTyping(false);
+  }
+};
+shell?.onSession?.(applySession);
+shell?.getSession?.().then(applySession);
 window.addEventListener('mousemove', (e) => {
   lastPointerAt = performance.now();
   const now = performance.now();
@@ -439,6 +538,7 @@ window.addEventListener('mousemove', (e) => {
   vel.x += ((e.clientX - last.x) / dt - vel.x) * 0.5;
   vel.y += ((e.clientY - last.y) / dt - vel.y) * 0.5;
   last = { x: e.clientX, y: e.clientY, t: now };
+  if (session.paused || session.hidden) { vel.x = vel.y = 0; return; }
   cursorWeapon.pointer(e.clientX,e.clientY);
   cutouts.move(e.clientX,e.clientY,vel.x,vel.y);
   for (const p of activePets()) { p.cursor(e.clientX, e.clientY, vel.x, vel.y); p.pointerMove(e.clientX, e.clientY, vel.x, vel.y, now); }
@@ -456,6 +556,7 @@ const petAt = (x: number, y: number) => {
 };
 window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  if (session.paused || session.hidden) return;
   if (toolBag.dragging) { toolBag.cancel(); updateClickThrough(e.clientX, e.clientY); return; }
   if (gamePanel.over(e.clientX, e.clientY)) return;
   toolBag.close();
@@ -473,6 +574,7 @@ window.addEventListener('contextmenu', (e) => {
   updateClickThrough(e.clientX, e.clientY);
 });
 window.addEventListener('mousedown', (e) => {
+  if (session.paused || session.hidden || saveNotice.contains(e.target as Node)) return;
   if (e.button !== 0) return;
   if((e.target as Element).closest('#weaponBar'))return;
   if (toolBag.over(e.clientX, e.clientY)) return;
@@ -505,6 +607,7 @@ window.addEventListener('mousedown', (e) => {
   }
 });
 window.addEventListener('mouseup', (e) => {
+  if (session.paused || session.hidden) return;
   if (e.button !== 0) return;
   if (toolBag.release(e.clientX, e.clientY, vel.x, vel.y)) { shell?.pressed(); updateClickThrough(e.clientX, e.clientY); return; }
   if (toolBag.overTrash(e.clientX, e.clientY)) {
@@ -552,6 +655,7 @@ let toolsRefreshAt = 0;
 function frame(now: number) {
   const dt = (now - prev) / 1000;
   prev = now;
+  if (session.paused || session.hidden) { requestAnimationFrame(frame); return; }
   // The mouse may sit still while held; decay its velocity so nobody gets "thrown" on release.
   if (now - last.t > 50) {
     vel.x *= 0.8;
@@ -622,7 +726,10 @@ function frame(now: number) {
   for (const p of [...desktopPets()].sort(
     (a, b) => a.char.body.j.hip.z - b.char.body.j.hip.z,
   ))
-    p.draw(ctx);
+    p.draw(ctx, false);
+  const speakers = desktopPets().filter(p => p.speaking);
+  const rectangles = placeSpeech(speakers.map(p => p.speechRect(ctx)!), window.innerWidth, window.innerHeight);
+  if (!desktopPets().some(p => p.menuOpen)) speakers.forEach((p, i) => p.drawSpeech(ctx, rectangles[i]));
   habitats.draw(ctx, lastWins);
   cutouts.draw(ctx);
   cursorWeapon.draw(ctx);

@@ -11,12 +11,14 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { WinRect } from '../core/world';
+import { COMMERCIAL } from '../shared/product';
 
 export interface WindowWatcher {
   stop(): void;
   /** macOS: give focus back to the app the user was using. */
   refocus(): void;
   setKeyboard(on: boolean): void;
+  setWindowScan(on: boolean): void;
   /** Move the mouse cursor to (x, y) in screen coordinates (he grabbed it, or knocked it flying). */
   moveCursor(x: number, y: number): void;
   /** Move another app's window so its top-left is at (x, y), in the helper's own screen coordinates. */
@@ -33,6 +35,12 @@ const nativeDir = path.join(__dirname, 'native');
 
 /** macOS: compile the Swift helper once (cached by source hash) and return its path. */
 async function macHelper(log: (m: string) => void): Promise<string | null> {
+  const bundled = path.join(nativeDir, `windows-mac-${process.arch}`);
+  if (fs.existsSync(bundled)) return bundled;
+  if (COMMERCIAL || app.isPackaged) {
+    log('The bundled window helper is missing. Window climbing is unavailable in this build; the buddies can still play on the desktop.');
+    return null;
+  }
   const src = path.join(nativeDir, 'windows-mac.swift');
   const hash = createHash('sha1').update(fs.readFileSync(src)).digest('hex').slice(0, 10);
   const dir = path.join(app.getPath('userData'), 'bin');
@@ -51,6 +59,7 @@ async function macHelper(log: (m: string) => void): Promise<string | null> {
 export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: string) => void, onUi: (ui: UiReport) => void = () => {}): WindowWatcher {
   let uiOn = false;
   let keyboard = false;
+  let windowScan = true;
   let nextAction=0;
   const actions=new Map<number,{resolve:(r:{ok:boolean;message:string})=>void;timer:ReturnType<typeof setTimeout>}>();
   let child: ChildProcess | null = null;
@@ -74,7 +83,7 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
     if (process.platform === 'darwin') {
       const bin = await macHelper(log);
       if (!bin || stopped) return;
-      child = spawn(bin, [String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'] });
+      child = spawn(bin, [String(process.pid), ...(windowScan ? [] : ['--focus-only'])], { stdio: ['pipe', 'pipe', 'pipe'] });
     } else if (process.platform === 'win32') {
       child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
         path.join(nativeDir, 'windows-win.ps1'), '-SelfPid', String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
@@ -83,7 +92,7 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
       return;
     }
     const running = child;
-    running.once('spawn', () => { if (uiOn) send('ui on\n'); if (keyboard && process.platform === 'darwin') send('keyboard on\n'); });
+    running.once('spawn', () => { if (process.platform === 'darwin') send(windowScan ? 'scan on\n' : 'scan off\n'); if (uiOn) send('ui on\n'); if (keyboard && process.platform === 'darwin') send('keyboard on\n'); });
     // A helper that can't spawn, or a pipe closed while moving a window, should not crash the pet.
     running.on('error', (err) => log(`could not start window helper: ${err.message}`));
     running.stdin?.on('error', (err) => log(`window helper input closed: ${err.message}`));
@@ -119,6 +128,7 @@ export function watchWindows(onUpdate: (wins: WinRect[]) => void, log: (m: strin
   return {
     stop() { for(const wait of actions.values()){clearTimeout(wait.timer);wait.resolve({ok:false,message:'The window helper stopped.'});}actions.clear(); stopped = true; clearTimeout(retry); clearInterval(fakeTimer); child?.kill(); },
     refocus() { if (process.platform === 'darwin' && !keyboard) send('refocus\n'); },
+    setWindowScan(on) { windowScan = on; if (process.platform === 'darwin') send(on ? 'scan on\n' : 'scan off\n'); },
     setKeyboard(on) { keyboard = on; if (process.platform === 'darwin') send(on ? 'keyboard on\n' : 'keyboard off\n'); },
     moveCursor(x, y) { if ([x, y].every(Number.isFinite)) send(`cursor ${Math.round(x)} ${Math.round(y)}\n`); },
     moveWindow(id, x, y) { if ([id, x, y].every(Number.isFinite)) send(`win ${Math.round(id)} ${Math.round(x)} ${Math.round(y)}\n`); },

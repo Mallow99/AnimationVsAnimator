@@ -1,0 +1,78 @@
+name: Paid release candidates
+
+on:
+  push:
+    branches: [codex/paid-release]
+  pull_request:
+    branches: [codex/roadmap-continuation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paid-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Select installed Chromium
+        run: echo "CHROMIUM_BIN=$(command -v google-chrome || command -v chromium)" >> "$GITHUB_ENV"
+      - run: npm run verify
+      - name: Real Electron customer flow (simulated native windows)
+        run: |
+          npm run build:release
+          xvfb-run -a node_modules/.bin/electron --no-sandbox scripts/release-electron-check.cjs
+      - name: Feature and lifecycle soak
+        run: |
+          LIVING_SOAK_SEED=7 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak
+          LIVING_SOAK_SEED=32 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak
+      - name: Isolated core performance
+        run: npm run qualityprofile
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: automated-evidence
+          path: |
+            .build/verification/
+            .build/release/
+            .build/living-soak-report-*.json
+          retention-days: 14
+
+  packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin
+          - os: windows-latest
+            platform: win32
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build audited candidate
+        run: npm run package:release -- ${{ matrix.platform }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mallow-candidate-${{ matrix.platform }}
+          path: |
+            out/*.zip
+            out/*.sha256
+          retention-days: 14
+      # Physical Mac/PC acceptance remains a separate release gate; no automatic public release.

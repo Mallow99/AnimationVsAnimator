@@ -1,5 +1,9 @@
 # Pet Quality Update 2 — completed checklist
 
+**The 2026-10-24 owner request resumes product and release quality work.** Follow
+[release/ACCEPTANCE.md](release/ACCEPTANCE.md) and [release/IMPLEMENTATION.md](release/IMPLEMENTATION.md).
+Original appearance and presets remain; no new Chrome/Finder milestone.
+
 **The 2026-10-20 owner request resumes UX cleanup and keyless conversations. The earlier model prototype remains unfinished.** The completed checklist below remains
 historical acceptance; see item 10 and [PROP-MODEL-CHECKPOINT.md](PROP-MODEL-CHECKPOINT.md) before resuming.
 
@@ -97,3 +101,13 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
     - [x] Add multiline transcripts, draft isolation, export and scoped confirmed reset.
     - [x] Add optional keyless Ollama support for open-ended local-model dialogue.
     - [x] Record final checks and rendered acceptance in the handoff/changelog.
+
+11. **Commercial release candidate — owner-approved 2026-10-24**
+    - [x] Customer UI, first-run scene, quiet defaults, stable identities and offline enforcement.
+    - [x] Visible save failures/retry, automatic last-good recovery, backup export and quit flush.
+    - [x] Crowded speech layout and rotating modeled-book collision repair/regression.
+    - [x] Native packaging scripts, bundled Mac helper build, archive audits/checksums and CI.
+    - [x] Honest installation/privacy/recovery/license/store materials.
+    - [ ] Final extended soaks, resource/evidence log and native CI candidates.
+    - [ ] Physical Mac/Windows acceptance, seller setup and actual store entitlement test.
+    - [ ] Stable paid release only after acceptance; no revenue claim before sales.

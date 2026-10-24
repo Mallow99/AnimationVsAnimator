@@ -29,7 +29,14 @@
     "polishcheck": "node scripts/build.mjs pet-polish-checks && node .build/pet-polish-checks.mjs",
     "lifeprofile": "node scripts/build.mjs pet-life-profile && node .build/pet-life-profile.mjs",
     "modelcheck": "node scripts/build.mjs model-checks && node .build/model-checks.mjs",
-    "modellab": "node scripts/build.mjs modellab && node scripts/preview.mjs dist/lab/prop-model.html"
+    "modellab": "node scripts/build.mjs modellab && node scripts/preview.mjs dist/lab/prop-model.html",
+    "build:release": "node scripts/build.mjs release",
+    "start:release": "node scripts/build.mjs release && electron .",
+    "releasecheck": "node scripts/build.mjs release-checks && node .build/release-checks.mjs",
+    "package:release": "node scripts/package-release.mjs",
+    "native:mac": "node scripts/build-native-mac.mjs",
+    "verify": "node scripts/verify.mjs",
+    "releaseui": "node scripts/build.mjs release && electron scripts/release-electron-check.cjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

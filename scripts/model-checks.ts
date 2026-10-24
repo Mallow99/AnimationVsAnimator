@@ -164,6 +164,27 @@ test('all orientations have finite bounds and the loose collider contains the ac
     assert(hull.every((v) => [v.x, v.y].every(Number.isFinite)));
   }
 });
+test('spinning modeled books land on a platform as their projected hull changes topology', () => {
+  const [p] = pets(), def = p.items.defs.get('book')!;
+  const sizes = new Set<number>();
+  for (let i = 0; i < 72; i++) {
+    const angle = i * Math.PI / 36;
+    const book = new Item(def, { x: 700, y: 520 }, 1);
+    book.where = 'world'; book.bookOpen = 0.7;
+    book.dir = norm3({ x: Math.cos(angle), y: Math.sin(angle), z: Math.sin(angle * 2) * 0.6 });
+    book.loosen();
+    const previous = norm3({ x: Math.cos(angle - 0.4), y: Math.sin(angle - 0.4), z: Math.sin((angle - 0.4) * 2) * 0.6 });
+    const length = dist3(book.a, book.b);
+    book.a.py -= 70;
+    Object.assign(book.b, { px: book.a.px + previous.x * length,
+      py: book.a.py + previous.y * length, pz: book.a.pz + previous.z * length });
+    sizes.add(book.collisionHull.length);
+    book.step(dt, { left: 0, right: 1400, top: 0, floor: 800 }, [{ id: 1, x1: 400, x2: 1000, y: 600 }]);
+    assert(book.collisionHull.every(v => Number.isFinite(v.x) && Number.isFinite(v.y)));
+    assert(Math.max(...book.collisionHull.map(v => v.y)) <= 600.001, `book penetrated platform at ${i}: ${Math.max(...book.collisionHull.map(v => v.y))}`);
+  }
+  assert(sizes.size > 1, 'exercise changing convex hull vertex counts');
+});
 test('both hands follow real model grips in three dimensions without stretching bones', () => {
   const all = pets(2);
   all[0].props.spawn('couch', 470, 740, 1);

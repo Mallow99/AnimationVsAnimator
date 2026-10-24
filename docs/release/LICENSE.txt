@@ -1,0 +1,16 @@
+Mallow Desk Buddies — distribution terms
+
+You may install and use this application on computers you own or control, customize
+your local items and furniture, and record or stream the application in your videos.
+Your own drawings, custom items and personal data remain yours.
+
+You may not resell or redistribute the packaged application as your own product.
+These terms do not restrict rights granted by the separate licenses of third-party
+components. See THIRD-PARTY-NOTICES.md and the licenses accompanying Electron.
+
+The application is provided as-is, without warranties, to the extent permitted by
+applicable law. Applicable consumer rights and the storefront's refund process remain
+in effect. No subscription, cloud service, perpetual update schedule or future feature
+is included in the purchase.
+
+Project direction: Mallow99. Implementation developed with AI assistance.

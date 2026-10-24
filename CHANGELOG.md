@@ -3,6 +3,31 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-24 — Mallow Desk Buddies commercial candidate
+
+- Added a distinct offline customer build with four simple tabs, welcome setup, a small
+  starter scene, stable roster/name/appearance choices, local chat, activities, supplies,
+  emergency Pause/Hide controls, save status and backup export. Original proportions,
+  movement presets, item ownership and the development edition remain.
+- Disabled commercial cloud/local AI, browser pairing server and file/document visits at
+  shell boundaries. Quiet fresh defaults disable sound, window movement and cursor mischief.
+  Mac focus hand-back keeps a helper mode that does not scan windows when features are off.
+- Added acknowledged saves/quit, last-good backups, corrupt-original retention, visible
+  write/quota failures and retry. Unread damaged saves are protected from replacement.
+- Separated speech layout from body drawing so crowded bubbles can use free screen space.
+  Fixed a long-soak crash: rotating modeled books cannot match previous convex-hull vertices
+  by index. Platform contact now uses stable material vertices. Added 72-orientation landing
+  coverage and repaired gift wording.
+- Added allowlisted Mac ARM64 / Windows x64 packaging, compiled/ad-hoc-signed Mac helper,
+  source manifests, SHA-256 archives, original icons and CI. Added install/privacy/recovery/
+  distribution terms and truthful $5 store copy. No references, keys or saves are packaged.
+- Verification so far: full pre-repair 217-check/core/Chromium suite, development Electron,
+  final customer Electron IPC/reload/offline/failed-save/quit flow and the new 10-case model
+  suite. Extended seed-7/32 soaks, final aggregate checks, resource measurement and CI native
+  packaging are running; results will be recorded in the release implementation log.
+- Candidate 1.0.0-rc.1 is not approved for sale. Native desktop/input/permissions/sleep/DPI/
+  resources acceptance and seller payout/store entitlement verification remain required.
+
 ## 2026-10-20 — UX sanity and keyless long-form conversations
 
 - Added a UX sanity guide with user controls, motion/contact contracts, interruption/recovery,

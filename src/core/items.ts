@@ -321,6 +321,15 @@ export class Item {
 
   get collisionHull() { return this.hull(); }
 
+  /** Model vertices retain their identity as a book rotates; convex hull vertices do not. */
+  private platformPoints(previous = false): Vec[] {
+    const model = this.model3D;
+    if (!model) return this.hull(previous);
+    const a = previous ? { x: this.a.px, y: this.a.py, z: this.a.pz } : this.a;
+    const b = previous ? { x: this.b.px, y: this.b.py, z: this.b.pz } : this.b;
+    return modelVertices(model, { ...looseBookAxes(norm3(sub3(b, a))), at: a, scale: this.scale });
+  }
+
   private contourOpen = -1;
   private domesticDef:ItemDef|null=null;private domesticStock=false;
   get animatedDomestic(){if(this.domesticDef!==this.def){this.domesticDef=this.def;const stock=BUILTIN_ITEMS.find(d=>d.id===this.def.id);this.domesticStock=!!stock&&['blanket','snack-box'].includes(stock.id)&&!this.def.sprite&&JSON.stringify(stock.shape)===JSON.stringify(this.def.shape);}return this.domesticStock;}
@@ -377,12 +386,12 @@ export class Item {
         });
       }
     }
-    const hull = this.hull(),
-      was = this.hull(true);
+    const hull = this.hull(), points = this.platformPoints(),
+      was = this.platformPoints(true);
     let up = Math.max(0, ...hull.map((p) => p.y - bounds.floor));
     for (const pl of platforms)
-      for (let i = 0; i < hull.length; i++) {
-        const p = hull[i],
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i],
           previous = was[i];
         if (
           p.x < pl.x1 ||

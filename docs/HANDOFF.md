@@ -2,6 +2,34 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Latest owner request: commercial product implementation — 2026-10-24
+
+The owner approved turning this repository into a $5 offline product, **Mallow Desk Buddies**,
+with Apple Silicon Mac and Windows 11 x64 candidates, no upfront spend and minimal intervention.
+Work is on `codex/paid-release`, based on `codex/roadmap-continuation` (609a844). The request
+resumes the relevant model quality/lifecycle work and supersedes historical pause instructions.
+No new Chrome/Finder feature work is authorized or necessary.
+
+Use [release/IMPLEMENTATION.md](release/IMPLEMENTATION.md) for current scope/evidence and
+[release/ACCEPTANCE.md](release/ACCEPTANCE.md) for the unchecked release gates. Commercial
+build: `npm run build:release`; development build remains `npm run build`. Both use `dist`,
+so do not rebuild one while testing/reloading the other. Keep `product.json` as version source.
+
+Customer features and reliability are implemented, including original-look figures, quiet
+fresh defaults, welcome scene, four tabs, offline enforcement, pause/hide, acknowledged saves,
+backup recovery and quit. Native packages are candidates, not proof of native acceptance.
+The Mac helper is compiled on macOS CI; customers never compile it. Mac focus-only mode
+keeps hand-back available while window scanning is off. Real hardware behavior is unverified.
+
+The extended soak exposed a rotating-book crash in platform contact. Convex hull counts/order
+are unstable under rotation; stable model vertices now pair current/previous material points.
+A 72-orientation landing regression passes. Restarted seed-7/32 two-hour simulated soaks and
+aggregate verification; resource results and CI status will be added to the implementation log.
+
+No authenticated itch.io session is available. Store copy, support/privacy/install/recovery
+and licensing documents are prepared. Seller verification/payout/tax setup must be completed
+by the owner directly. Do not publish or describe rc.1 as ready for sale before native gates pass.
+
 ## Latest owner request: UX sanity and keyless conversation — 2026-10-20
 
 The owner resumed work for broad UX cleanup, a sanity guide, and sustained dynamic conversations

@@ -172,7 +172,7 @@ export class GiveGift extends Skill {
     it.working = true;
     c.say(
       this.wrapped
-        ? `I thought you might like ${it.def.name.toLowerCase()}.`
+        ? `I thought you might like this.`
         : 'Here, you can keep this.',
       2,
     );

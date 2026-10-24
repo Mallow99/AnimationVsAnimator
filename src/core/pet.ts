@@ -16,7 +16,7 @@ import { SitOnProp, WatchTV, RideScooter } from './skills/props';
 import { DeskWork, RefineProject, SortTools } from './skills/workshop';
 import { groupPlan } from './skills/group';
 import { windowPlatforms, windowSides, windowWalls, type WinRect } from './world';
-import { drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
+import { measureBubble, drawBubble, drawCharacter, drawLooseLimb, drawMenu, drawPixelBubble, drawPuffs, drawSparks, menuLayout, PixelLayer, shade, type DepthPart, type Puff, type Spark } from './render';
 import { propActions } from './capabilities';
 import { parseProject } from './crafting-state';
 import { LifeRhythm, type LifeSample } from './life-rhythm';
@@ -543,7 +543,7 @@ export class Pet implements Peer {
     if (this.ownsProps) this.props.draw(ctx, this.ctx.world.time, Math.round(this.config.look.pixel));
   }
 
-  draw(ctx: CanvasRenderingContext2D) {
+  draw(ctx: CanvasRenderingContext2D, speech = true) {
     const look = this.config.look;
     // Squash and stretch (drawing only): scale him about his feet for a moment.
     const restore = this.squashFor(this.char.squash);
@@ -583,12 +583,18 @@ export class Pet implements Peer {
       const m = this.menuLayout();
       drawMenu(ctx, m, this.menu.hover, shade(look.color, -0.45));
     }
-    if (this.bubble) {
-      const b = this.bubble;
-      const alpha = Math.min(1, (b.ttl - b.t) * 4);
-      if (look.pixel > 1) drawPixelBubble(ctx, this.char, b.text, b.shown, alpha, this.ctx.world.bounds, Math.round(look.pixel), shade(look.color, -0.45));
-      else drawBubble(ctx, this.char, b.text.slice(0, Math.floor(b.shown)), alpha, this.ctx.world.bounds);
-    }
+    if (speech) this.drawSpeech(ctx);
+  }
+
+  speechRect(ctx: CanvasRenderingContext2D) {
+    return this.bubble ? measureBubble(ctx, this.char, this.bubble.text, this.ctx.world.bounds, Math.round(this.config.look.pixel)) : null;
+  }
+  drawSpeech(ctx: CanvasRenderingContext2D, placement?: {x: number; y: number}) {
+    if (!this.bubble) return;
+    const b = this.bubble, look = this.config.look;
+    const alpha = Math.min(1, (b.ttl - b.t) * 4);
+    if (look.pixel > 1) drawPixelBubble(ctx, this.char, b.text, b.shown, alpha, this.ctx.world.bounds, Math.round(look.pixel), shade(look.color, -0.45), placement);
+    else drawBubble(ctx, this.char, b.text, alpha, this.ctx.world.bounds, placement, b.shown);
   }
 
   private drawCombatDebug(g: CanvasRenderingContext2D) {

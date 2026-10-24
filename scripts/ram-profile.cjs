@@ -3,6 +3,8 @@ const {app,BrowserWindow}=require('electron');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const count=Number(process.env.AVA_RAM_COUNT||2),rich=process.env.AVA_RAM_RICH==='1';
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ava-ram-'));
+process.env.PET_DATA_DIR=dir;
+fs.writeFileSync(path.join(dir,'product-state.json'),JSON.stringify({introDone:true,sceneReady:false}));
 app.setPath('userData',dir);app.disableHardwareAcceleration();
 process.env.PET_FAKE_WINDOWS='[]';
 fs.writeFileSync(path.join(dir,'pet.json'),JSON.stringify({figureCount:count,spawnOrder:[0,1,2,3,4],friend:{on:count>1,name:'Amber',color:'#f7931e'},windows:false,dailyRhythm:false,mind:'offline'}));
@@ -22,7 +24,7 @@ async function sample(label,overlay,warm=30000){await pause(warm);const samples=
 app.whenReady().then(async()=>{let overlay;await until(()=>{overlay=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/app/index.html'));return overlay&&!overlay.webContents.isLoading();});await until(()=>overlay.webContents.executeJavaScript(`!!window.pet&&window.pets.length===${count}`));
  if(rich)await overlay.webContents.executeJavaScript(`(()=>{for(const [i,p]of window.pets.entries()){p.items.give(['book','cup','dumbbell','yo-yo','handheld'][i],p.char);p.items.spawn('book',{x:900+i*45,y:750},1);p.items.spawn('cup',{x:920+i*45,y:725},1);p.command('do:'+['read','sip','exercise','yoyo','handheld'][i]);}for(const [i,id]of ['chair','couch','tv','canvas','scooter','desk','workbench','storage','bookshelf'].entries())window.pet.props.spawn(id,60+i*140,760,1);})()`);
  await sample(rich?'busy':'ordinary',overlay);
- if(rich && process.env.AVA_RAM_CHURN==='1'){for(let i=0;i<12;i++){await overlay.webContents.executeJavaScript('window.petShell.openSettings()');await until(()=>{const w=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/settings/'));return w&&!w.webContents.isLoading();});await pause(500);for(const w of BrowserWindow.getAllWindows())if(w.webContents.getURL().includes('/settings/'))w.close();await pause(1000);}await sample('after-12-settings-cycles',overlay,15000);await sample('after-12-settings-cycles-rested',overlay,60000);app.quit();return;}
+ if(rich && process.env.AVA_RAM_CHURN==='1'){for(let i=0;i<20;i++){await overlay.webContents.executeJavaScript('window.petShell.openSettings()');await until(()=>{const w=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/settings/'));return w&&!w.webContents.isLoading();});await pause(500);for(const w of BrowserWindow.getAllWindows())if(w.webContents.getURL().includes('/settings/'))w.close();await pause(1000);}await sample('after-20-settings-cycles',overlay,15000);await sample('after-20-settings-cycles-rested',overlay,60000);app.quit();return;}
  if(rich){await overlay.webContents.executeJavaScript('window.petShell.openSettings()');await until(()=>{const w=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/settings/'));return w&&!w.webContents.isLoading();});await sample('busy-settings-open',overlay,15000);for(const w of BrowserWindow.getAllWindows())if(w.webContents.getURL().includes('/settings/'))w.close();await sample('busy-settings-closed',overlay,15000);}
  app.quit();
 }).catch(error=>{console.error(error);app.exit(1);});

@@ -228,17 +228,35 @@ export function beltParts(c: Character, color: string): DepthPart[] {
 }
 
 /** A speech bubble above his head, kept on screen. */
-export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, alpha: number, b: { left: number; right: number; top: number }) {
+export function measureBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, b: { left: number; right: number; top: number }, pixel = 1) {
+  const short = text.length <= 3;
+  ctx.save();
+  ctx.font = `${short ? 600 : 500} ${short ? 15 : 13}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  const nativeLines: string[] = [];
+  let line = '';
+  const maxWidth = Math.max(24, Math.min(320, b.right - b.left - 34));
+  for (const char of text) {
+    if (line && ctx.measureText(line + char).width > maxWidth) { nativeLines.push(line); line = ''; }
+    line += char;
+  }
+  nativeLines.push(line);
+  const pixelWidth = Math.max(6, Math.min(100, Math.floor((b.right - b.left - 16) / pixel) - 8));
+  const lines = pixel > 1 ? wrapPixelText(text, pixelWidth) : nativeLines;
+  const w = pixel > 1 ? (Math.max(...lines.map(textWidth), 7) + 8) * pixel : Math.max(...lines.map(t => ctx.measureText(t).width), 6) + (short ? 14 : 18);
+  const h = pixel > 1 ? (lines.length * (FONT_HEIGHT + 4) + 3) * pixel : (short ? 24 : 26) + (lines.length - 1) * 18;
+  ctx.restore();
+  const tipX = c.body.j.head.x, tipY = c.body.j.head.y - c.d.headR - 5 * c.scale;
+  return { x: Math.max(b.left + 4, Math.min(tipX - w / 2, b.right - w - 4)), y: Math.max(tipY - 8 - h, b.top + 4), w, h, tipX, tipY, lines };
+}
+
+export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, alpha: number, b: { left: number; right: number; top: number }, placement?: { x: number; y: number }, shown = text.length) {
   const head = c.body.j.head, sc = c.scale;
   const short = text.length <= 3; // emotes like "!" or "♥" get a smaller bubble
   ctx.save();
   ctx.globalAlpha = Math.max(0, alpha);
   ctx.font = `${short ? 600 : 500} ${short ? 15 : 13}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-  const padX = short ? 7 : 9, h = short ? 24 : 26;
-  const w = Math.max(ctx.measureText(text).width + padX * 2, h);
-  const tipX = head.x, tipY = head.y - c.d.headR - 5 * sc;
-  const x = Math.min(Math.max(tipX - w / 2, b.left + 4), b.right - w - 4);
-  const y = Math.max(tipY - 8 - h, b.top + 4);
+  const layout = measureBubble(ctx, c, text, b);
+  const { w, h, tipX, lines } = layout, x = placement?.x ?? layout.x, y = placement?.y ?? layout.y;
 
   ctx.fillStyle = 'rgba(255,255,255,0.96)';
   ctx.strokeStyle = 'rgba(0,0,0,0.25)';
@@ -257,7 +275,8 @@ export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: st
   ctx.fillStyle = '#222';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + w / 2, y + h / 2 + 1);
+  let left = Math.floor(shown);
+  for (const [i, line] of lines.entries()) { ctx.fillText(line.slice(0, Math.max(0, left)), x + w / 2, y + 13 + i * 18); left -= line.length; }
   ctx.restore();
 }
 
@@ -266,9 +285,9 @@ export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: st
  * corners and a stepped tail. `shown` = how many letters have appeared so far
  * (they type out one by one). `p` = screen size of one pixel.
  */
-export function drawPixelBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, shown: number, alpha: number, b: { left: number; right: number; top: number }, p: number, ink: string) {
+export function drawPixelBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, shown: number, alpha: number, b: { left: number; right: number; top: number }, p: number, ink: string, placement?: { x: number; y: number }) {
   const head = c.body.j.head, sc = c.scale;
-  const lines = wrapPixelText(text, 100);
+  const lines = wrapPixelText(text, Math.max(6, Math.min(100, Math.floor((b.right - b.left - 16) / p) - 8)));
   // Lay out the full text so the bubble doesn't grow while typing.
   const wText = Math.max(...lines.map(textWidth), 7);
   const lineH = FONT_HEIGHT + 4;
@@ -277,8 +296,8 @@ export function drawPixelBubble(ctx: CanvasRenderingContext2D, c: Character, tex
   const W = wPx * p, H = hPx * p;
   const snap = (v: number) => Math.round(v / p) * p;
   const tipX = head.x, tipY = head.y - c.d.headR - 5 * sc;
-  const x = snap(Math.min(Math.max(tipX - W / 2, b.left + 4), b.right - W - 4));
-  const y = snap(Math.max(tipY - 4 * p - H, b.top + 4));
+  const x = placement?.x ?? snap(Math.min(Math.max(tipX - W / 2, b.left + 4), b.right - W - 4));
+  const y = placement?.y ?? snap(Math.max(tipY - 4 * p - H, b.top + 4));
   ctx.save();
   ctx.globalAlpha = Math.max(0, alpha);
   // Outline, then fill, with the corner pixels knocked out.

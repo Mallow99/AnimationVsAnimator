@@ -1,4 +1,18 @@
-# AnimationVsAnimator
+# Mallow Desk Buddies — release candidate
+
+The commercial edition is a $5 offline desktop toy for Apple Silicon Macs and Windows 11 x64.
+It has a customer interface, quiet defaults, local conversations, save recovery and native
+packaging. It is **not approved for sale yet**: real Mac/Windows acceptance and storefront
+setup remain. [Release checklist](docs/release/ACCEPTANCE.md) ·
+[Install guide](docs/release/INSTALL.md) · [Store draft](docs/store/LISTING.md).
+
+Develop the customer edition with `npm run start:release`. Build a candidate on the target OS
+with `npm run package:release -- darwin` or `npm run package:release -- win32`. CI packages
+both systems with source manifests and SHA-256 checksums. Customers need no Node/tools.
+The development edition below retains experimental integrations and optional AI; those
+integrations are disabled in the commercial edition.
+
+# Development edition: AnimationVsAnimator
 
 A stick-figure desktop pet inspired by Alan Becker's *Animator vs. Animation*.
 He lives on top of your screen, has his own physics and moods, and you can poke,
