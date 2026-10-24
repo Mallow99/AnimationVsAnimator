@@ -24,6 +24,7 @@ async function connect(){
  const port=Number(readFileSync(join(data,'DevToolsActivePort'),'utf8').split('\n')[0]);let tab;
  await until(async()=>{const tabs=await(await fetch(`http://127.0.0.1:${port}/json/list`)).json();tab=tabs.find(t=>t.url.endsWith('/app/index.html'));return tab;},'overlay');
  socket=new WebSocket(tab.webSocketDebuggerUrl);await new Promise((yes,no)=>{socket.onopen=yes;socket.onerror=no;});
+ socket.onclose=()=>{for(const p of pending.values())p.reject(Error('App connection closed'));pending.clear();};
  socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.id){const p=pending.get(message.id);pending.delete(message.id);if(message.error)p?.reject(Error(JSON.stringify(message.error)));else p?.resolve(message.result);}if(message.method==='Runtime.exceptionThrown')errors.push(message.params);};
  await send('Runtime.enable');await until(()=>run('window.pets?.length===2'),'two buddies');
 }

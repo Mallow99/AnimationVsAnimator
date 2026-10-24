@@ -9,7 +9,8 @@ remaining issues here. Entries describe shipped behavior; unverified hardware be
   compilation and ad-hoc signing succeeded but architecture verification failed.
 - Added target-OS extraction/launch/helper/save/quit/restart smoke checks, including
   a path with spaces. Kept physical desktop acceptance separate from CI smoke tests.
-- Added a direct Settings Quit control using the same acknowledged shutdown path.
+- Added a direct Settings Quit control using the same acknowledged shutdown path,
+  including its typed bridge declaration (corrected after the first typecheck).
 - Updated Electron to 44.9.1 and build-time undici to resolve the audit advisories.
   Final Electron/native validation is repeated against the patched runtime.
 - Aggregate types, 218 core regressions plus release checks, simulation and actual

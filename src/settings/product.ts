@@ -5,6 +5,7 @@ import { PRODUCT_NAME, type SaveHealth, type SaveResult, type SessionState } fro
 
 interface Stats { name: string; label: string; doing: string; windows: number; moveNote?: string; brain: { log: Parameters<typeof exportConversation>[0] } }
 interface Shell {
+  quit(): void;
   getConfigs(): Promise<PetConfig[]>;
   setConfig(patch: unknown, id?: number): void;
   onConfig(cb: (value: { id: number; config: PetConfig }) => void): void;
