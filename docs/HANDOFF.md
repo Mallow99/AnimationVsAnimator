@@ -13,7 +13,12 @@ Core character proportions, personality templates and movement presets are uncha
 Draft preservation uses product.json's version, preserving the verified rc.1 download.
 CI skips the already-passed extended soaks for UI-only pushes; any core/shared/build/dependency
 change or a manual run repeats them. Aggregate/browser/customer flow and native package
-smokes still run. New candidate verification is in progress; prior evidence below is rc.1.
+smokes still run. Candidate rc.2 verification passed in CI run 40048614400: aggregate/browser/customer
+flow, customization scope/reload, both native packages and performance. The packaged
+feature guide is asserted in native extraction checks. Both ZIPs/checksums are in a
+separate rc.2 draft; remote digests match the CI-built archives. See
+verification/mallow-customization.json and release/FEATURES.md. Prior evidence below
+is rc.1. Physical desktop/store acceptance remains open.
 
 ## Latest owner request: commercial product implementation — 2026-10-24
 

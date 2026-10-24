@@ -54,7 +54,7 @@ Full feature and customization guide: [../release/FEATURES.md](../release/FEATUR
 ## Upload checklist
 
 Use `docs/release/ACCEPTANCE.md`. Keep this listing in draft until its gates pass.
-Prepared media is in `docs/store/media/`: cover, three actual screenshots and a
+Prepared media is in `docs/store/media/`: cover, four actual screenshots and a
 15-second runtime demo. `SOURCE.json` records the source and capture conditions. Include
 the version, tested systems, ZIP checksums and a link to the repository's issue tracker.
 Use itch.io's “Collected by itch.io” payout mode, default 10% revenue share, and the

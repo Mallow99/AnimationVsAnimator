@@ -1,5 +1,15 @@
 # Commercial candidate implementation
 
+Latest UI candidate: **1.0.0-rc.2**, source `9e166bc`. Adds the feature/customization guide,
+per-buddy personality selection, readable mixed presets and an in-app feature list.
+CI run [40048614400](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40048614400)
+passed all applicable checks and both native packages; core is unchanged from rc.1,
+so the previously passed extended core soaks were retained. New evidence:
+[../verification/mallow-customization.json](../verification/mallow-customization.json).
+Draft downloads: https://github.com/Mallow99/AnimationVsAnimator/releases/tag/untagged-5d695bfa397f59ecb7b5
+
+The earlier core and reliability baseline follows.
+
 Version: 1.0.0-rc.1. Branch: `codex/paid-release`. Status: **not approved for sale**.
 
 Implemented: customer interface and welcome scene, offline local dialogue, original

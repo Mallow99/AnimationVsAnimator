@@ -1,0 +1,43 @@
+Source: 9e166bcd875259ebecd7c5c493ec6f83e7ce8bae
+CI: https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40048614400
+UI-only update; extended core soaks retained from rc.1, all other jobs passed.
+
+Checking typecheck…
+PASS typecheck
+Checking checks…
+PASS checks
+Checking roadmapcheck…
+PASS roadmapcheck
+Checking qualitycheck…
+PASS qualitycheck
+Checking sanitycheck…
+PASS sanitycheck
+Checking quality2check…
+PASS quality2check
+Checking polishcheck…
+PASS polishcheck
+Checking conversationcheck…
+PASS conversationcheck
+Checking modelcheck…
+PASS modelcheck
+Checking releasecheck…
+PASS releasecheck
+Checking sim…
+PASS sim
+Checking browsercheck…
+PASS browsercheck
+All automated core and browser checks passed. Native release acceptance is separate.
+PASS release: four customer tabs, onboarding, quiet fresh defaults, old identity/colour preserved, integrations forced offline, no loopback service
+PASS customization: scoped personality and descriptions, mixed presets preserve color/items/chat, feature guide returns keyboard focus to customization
+PASS release IPC: local dialogue, reset cancellation, rename, supplies, bags and contextual activity chooser
+PASS release: Pause freezes simulation, Hide/Show controls the real overlay, resume restores the same buddies
+PASS release: injected storage quota and disk-write failures are visible, acknowledged and recover after Retry
+PASS release: reload retains name, dialogue, owned items and exact furniture count without reseeding
+PASS release: full JSON backup contains every stable identity, excludes credential files and respects cancellation
+PASS release: customer screenshots, 380px layout, no runtime exceptions or network requests; requesting acknowledged quit
+PASS release: real quit flush acknowledged before teardown; configs and memories exist on disk
+2 figures + 4 loose items + couch/bookshelf: 60 simulated seconds in 1.68s; mean 0.234ms, p95 0.429ms per combined 120Hz update (8.33ms budget)
+5 figures + 10 loose items + couch/bookshelf: 60 simulated seconds in 5.90s; mean 0.819ms, p95 1.095ms per combined 120Hz update (8.33ms budget)
+Artifact automated-evidence.zip successfully finalized. Artifact ID 12542082674
+Artifact automated-evidence has been successfully uploaded! Final size is 180030 bytes. Artifact ID is 12542082674
+

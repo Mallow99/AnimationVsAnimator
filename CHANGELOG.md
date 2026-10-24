@@ -408,3 +408,13 @@ remaining issues here. Entries describe shipped behavior; unverified hardware be
   YAML parses; this reporting-only correction does not change the tested app archives.
 - Updated handoff/checklist and complete machine-readable verification. Physical
   desktop acceptance and authenticated store/seller verification remain open. No public sale.
+
+### rc.2 customization acceptance and media
+
+- CI 40048614400 passed aggregate checks, real Electron personality/preset scope and
+  reload, existing save/backup/offline/quit flow, both native candidate/helper smokes,
+  packaged feature guide presence, and performance (two/five p95 0.429/1.095ms).
+- Both ZIPs/checksums are preserved in a separate rc.2 draft. Remote digests match
+  native CI package hashes. Core is unchanged, retaining rc.1's passed extended soaks.
+- Refreshed runtime media and added an expanded customization screenshot/capture recipe.
+  Recorded exact results and download provenance; physical QA/store setup remain open.

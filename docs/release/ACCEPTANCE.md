@@ -1,4 +1,7 @@
-# Release acceptance — 1.0.0-rc.1
+# Release acceptance — commercial candidates
+
+Latest candidate: rc.2; UI/customization checks and both native package smokes passed
+in CI run 40048614400. The core baseline below is unchanged.
 
 Status: **candidate; not approved for sale**. Automated CI produces downloadable test
 archives. A successful package job does not complete native or commercial acceptance.

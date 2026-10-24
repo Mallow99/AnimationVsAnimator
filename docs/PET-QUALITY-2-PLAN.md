@@ -115,4 +115,4 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
 12. **Feature list and customization — owner request 2026-10-24**
     - [x] Buyer-facing feature/customization guide included in downloads.
     - [x] Scoped personality chooser and readable mix-and-match appearance controls.
-    - [ ] Verify persistence/scope, publish rc.2 draft candidates and update evidence.
+    - [x] Verify persistence/scope, preserve rc.2 draft candidates and update evidence.
