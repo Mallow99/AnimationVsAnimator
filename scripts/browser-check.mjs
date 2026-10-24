@@ -787,7 +787,7 @@ try {
   mkdirSync(join(root,'.build/verification'),{recursive:true});
   writeFileSync(join(root,'.build/verification/browser-launch.log'),launchLog);
   socket?.close(); browser.kill();
-  await new Promise((done) => { if (browser.exitCode !== null) done(); else browser.once('close', done); });
+  await new Promise((done) => { if (browser.exitCode !== null || browser.signalCode !== null) done(); else browser.once('close', done); });
   rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   await new Promise((done) => server.close(done));
 }

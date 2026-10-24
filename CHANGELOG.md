@@ -3,6 +3,19 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-24 — final surface and browser cleanup
+
+- Fixed desktop chat stylesheet precedence; retained buddy-coloured borders and
+  verified the actual computed paper surface in release Electron.
+- Fixed QA cleanup waiting forever after a browser exits by signal. Reproduced with
+  an injected SIGTERM: previously timed out, now fails immediately with startup stderr.
+  No rendering or interaction assertion is bypassed.
+- Isolated five-figure rich-scene memory: 407.9 MiB median PSS initially, 407.0 after
+  20 Settings cycles, 404.2 after rest. Six processes and clean sanity audits throughout.
+  This short Linux/software test does not complete native resource acceptance.
+- Local full Chromium and release Electron pass; native/extended CI repeats on the
+  final candidate. Hardware/store acceptance remains open.
+
 ## 2026-10-24 — candidate verification diagnostics and refreshed media
 
 - Refreshed customer screenshots, cover and actual 15-second demo. Capture waits for

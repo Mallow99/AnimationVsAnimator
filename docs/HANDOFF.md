@@ -2,6 +2,21 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Verification continuation — 2026-10-24
+
+The browser diagnostic listener exposed a QA cleanup bug: signal-exited children have
+null exitCode but a nonnull signalCode. Waiting for a close event that already fired
+hung verification. An injected SIGTERM reproduced it (timeout 124); cleanup now checks
+both properties and reports the failure immediately (exit 1 with stderr). The stalled
+CI attempt was cancelled to retrieve its launch evidence. Local Chromium passed with
+diagnostics enabled. Desktop chat CSS precedence is also fixed and computed-style
+asserted in actual release Electron, alongside the existing flow (passed).
+
+Isolated release rich five-figure RAM evidence is verification/mallow-material-memory.json:
+407.9 MiB PSS before, 407.0 after 20 Settings cycles, 404.2 rested, six processes and
+clean audits. An earlier run overlapped capture and is not used for the resource result.
+No native performance or long-term leak guarantee follows from this short Linux run.
+
 ## Textured UI and continuous customization — 2026-10-24
 
 The owner requested release cleanup, richer textures and sliders/hue controls in

@@ -36,6 +36,7 @@ app.whenReady().then(async () => {
   assert(await run('window.pets.every(p=>p.config.mind==="offline"&&!p.config.fileHomes&&!p.config.browserPlay&&!p.config.closeWindows&&!p.config.sound&&!p.config.sfx&&!p.config.moveWindows&&!p.config.knockCursor)'));
   assert.equal(await ui('document.querySelector("#name").value'), 'My little friend');
   assert.equal(await ui('document.querySelector("#color").value'), '#596cb2');
+  assert(await run('getComputedStyle(document.querySelector("#talk")).backgroundImage.includes("gradient")'), 'desktop chat lost its paper surface');
   assert.equal(listens, 0, 'offline build started a loopback service');
   console.log('PASS release: four customer tabs, onboarding, quiet fresh defaults, old identity/colour preserved, integrations forced offline, no loopback service');
 
