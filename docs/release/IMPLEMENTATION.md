@@ -17,7 +17,7 @@ Automated evidence is written to `.build/verification`, `.build/release` and the
 seeded soak reports; CI retains checks and native archives as downloadable artifacts.
 These ignored working outputs are not bundled into the customer download.
 
-## Evidence at the first implementation checkpoint
+## Recorded verification
 
 - All 218 focused core regressions, five release storage/layout checks, simulation and
   actual Chromium controls passed after the long-soak repair. Typecheck also passes.
@@ -28,7 +28,7 @@ These ignored working outputs are not bundled into the customer download.
 - 10 model checks passed after the book collision repair. The new case drops rotating
   books on a one-way platform across 72 orientations with changing hull topology.
 - Seed 7 passed 7,200 simulated seconds, 7,220 live audits and 35 feature phases. Seed 32
-  is running. This is simulated time, not two hours of hardware battery/focus testing.
+  also passed the same duration, audit count and feature coverage. This is simulated time, not two hours of hardware battery/focus testing.
 - Isolated core p95 combined update: two figures 0.337ms, five 0.958ms (8.33ms target).
   Linux software-rendered whole-process-tree PSS medians: ordinary two 315MiB, five 319MiB;
   rich five 381MiB, after 20 Settings cycles 389MiB, after rest 397MiB; six processes.
@@ -36,7 +36,10 @@ These ignored working outputs are not bundled into the customer download.
 - Mac ARM64 and Windows x64 archives built and passed native CI extraction, real helper,
   Pause/Resume, save/normal quit/restart, with a path containing spaces. Run 40045300981,
   PR merge 603d06a (tree identical to a82b6f4). Both ZIP checksums/content verified locally.
-- CI is being extended to preserve the final validated archives in a draft GitHub release.
+- Final source 2a78d2b built and passed native smoke checks on both target OS runners
+  in CI run 40046018836. Full checks/customer Electron passed; extended CI repetition and
+  automatic draft preservation are running. Final archive hashes and detailed results
+  are in [../verification/mallow-release.json](../verification/mallow-release.json).
   Workspace credentials could create the draft but were refused by the upload endpoint;
   the workflow uses its own scoped token. Physical native acceptance remains pending.
 - Runtime media and reproducible capture recipe are in `docs/store/media` and

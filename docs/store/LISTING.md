@@ -25,6 +25,9 @@ what they get up to.
 - Enable window climbing or playful mischief when you want it. Pause or hide everyone
   from the menu-bar / tray controls.
 
+Includes cartoon sparring and slapstick: buddies can tumble or lose and reattach a limb.
+There is no gore or permanent death; breakable limbs can be switched off in Settings.
+
 Everything runs offline. No account, API key, subscription or model download.
 Conversations use authored local dialogue with familiar topics and story choices;
 this is a desktop toy rather than a general-purpose assistant.
@@ -52,7 +55,7 @@ Prepared media is in `docs/store/media/`: cover, three actual screenshots and a
 15-second runtime demo. `SOURCE.json` records the source and capture conditions. Include
 the version, tested systems, ZIP checksums and a link to the repository's issue tracker.
 Use itch.io's “Collected by itch.io” payout mode, default 10% revenue share, and the
-owner's own verified payout information. Do not create fake reviews or self-purchases.
+owner's own verified payout information.
 
 No authenticated itch.io session is available in this workspace. This document is an
 upload-ready copy package, not evidence of a published store or generated revenue.
@@ -61,9 +64,8 @@ upload-ready copy package, not evidence of a published store or generated revenu
 
 Launch only the systems that pass native acceptance. Keep the initial $5 price and
 one plain page; no hosting/subscription costs are needed. Add the actual runtime
-media, tested OS versions, limitations and the issue tracker to the listing. Post
-one honest release announcement from the owner's own account only when they choose
-to do so; no automated outreach has been sent.
+media, tested OS versions, limitations and the issue tracker to the listing. A release
+announcement can point to the actual runtime demo, tested systems and $5 download.
 
 After the first week, review real page views, downloads, refund/support requests
 and paid purchases. A first target is one legitimate purchase per week, roughly

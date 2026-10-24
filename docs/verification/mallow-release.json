@@ -1,0 +1,730 @@
+{
+  "version": "1.0.0-rc.1",
+  "status": "candidate; not approved for sale",
+  "source": "2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0",
+  "ciRun": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40046018836",
+  "ciStatus": "native packages/customer flow/aggregate checks passed; extended CI repetition and draft preservation in progress",
+  "localVerification": {
+    "method": "pre-commit workspace verification; final committed source is independently repeated in CI",
+    "coreRegressions": 218,
+    "releaseGroups": 5,
+    "commands": [
+      {
+        "command": "typecheck",
+        "passed": true
+      },
+      {
+        "command": "checks",
+        "passed": true
+      },
+      {
+        "command": "roadmapcheck",
+        "passed": true
+      },
+      {
+        "command": "qualitycheck",
+        "passed": true
+      },
+      {
+        "command": "sanitycheck",
+        "passed": true
+      },
+      {
+        "command": "quality2check",
+        "passed": true
+      },
+      {
+        "command": "polishcheck",
+        "passed": true
+      },
+      {
+        "command": "conversationcheck",
+        "passed": true
+      },
+      {
+        "command": "modelcheck",
+        "passed": true
+      },
+      {
+        "command": "releasecheck",
+        "passed": true
+      },
+      {
+        "command": "sim",
+        "passed": true
+      },
+      {
+        "command": "browsercheck",
+        "passed": true
+      }
+    ]
+  },
+  "soaks": [
+    {
+      "seed": 7,
+      "simulatedSeconds": 7200,
+      "audits": 7220,
+      "featureFps": 120,
+      "unattendedFps": 30,
+      "physicsHz": 120,
+      "coverage": [
+        {
+          "feature": "all 22 stock item lifecycles",
+          "seconds": 66,
+          "result": "passive take/move, cancel, pass, trash/undo, store, original identity retained"
+        },
+        {
+          "feature": "all 10 stock furniture lifecycles",
+          "seconds": 60,
+          "result": "place, rigid dragging, release, settle, trash/undo"
+        },
+        {
+          "feature": "five parallel everyday activities",
+          "seconds": 77,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "blanket rest, snack and reading light",
+          "seconds": 97,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "catch with three spectators",
+          "seconds": 37,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "book open/read/page/close/return",
+          "seconds": 362,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "TV and Othello invitation",
+          "seconds": 47,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "painting, blueprint and drawing",
+          "seconds": 82,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "refinement and tool sorting",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:wave (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:chat (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:couch (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:watch (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:duet (2 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:triangle (3 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:mirror (4 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:relay (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "Pong match and interruption",
+          "seconds": 92,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "TV arrangement",
+          "seconds": 42,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "cooperative carry",
+          "seconds": 47,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "reading corner",
+          "seconds": 42,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "work corner",
+          "seconds": 42,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "peer gift and drawing comparison",
+          "seconds": 42,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "wrapped thoughtful gift and acceptance",
+          "seconds": 27,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "two actual handheld runners without a TV",
+          "seconds": 57,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "actual console attachment, TV move and detach",
+          "seconds": 5,
+          "result": "same owned console follows the TV; taking it detaches it"
+        },
+        {
+          "feature": "emotional reassurance",
+          "seconds": 27,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "repair after intentional disagreement",
+          "seconds": 22,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "reassurance",
+          "seconds": 27,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "duel with three spectators",
+          "seconds": 32,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "cursor gun, reload and restart",
+          "seconds": 6.4,
+          "result": "one gun, one clock, inventories/moods/relationships restored"
+        },
+        {
+          "feature": "roster removal/rejoin and sleeping pickup",
+          "seconds": 38,
+          "result": "same Ruby and belongings; gentle carry preserves sleep"
+        },
+        {
+          "feature": "five-figure file visit lifecycle",
+          "seconds": 138,
+          "result": "six visits/closures/moves/returns, original items retained, shared claims and coordinates clean"
+        },
+        {
+          "feature": "stacking, impact and leaning",
+          "seconds": 85,
+          "result": "resting stack drift <0.5px; impact moves it; mixed contact remains finite"
+        },
+        {
+          "feature": "unattended furnished life",
+          "seconds": 4813.6,
+          "result": "autonomous offline behavior; every-second live audits clean"
+        }
+      ],
+      "issues": []
+    },
+    {
+      "seed": 32,
+      "simulatedSeconds": 7200,
+      "audits": 7220,
+      "featureFps": 120,
+      "unattendedFps": 30,
+      "physicsHz": 120,
+      "coverage": [
+        {
+          "feature": "all 22 stock item lifecycles",
+          "seconds": 66,
+          "result": "passive take/move, cancel, pass, trash/undo, store, original identity retained"
+        },
+        {
+          "feature": "all 10 stock furniture lifecycles",
+          "seconds": 60,
+          "result": "place, rigid dragging, release, settle, trash/undo"
+        },
+        {
+          "feature": "five parallel everyday activities",
+          "seconds": 77,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "blanket rest, snack and reading light",
+          "seconds": 97,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "catch with three spectators",
+          "seconds": 37,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "book open/read/page/close/return",
+          "seconds": 362,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "TV and Othello invitation",
+          "seconds": 47,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "painting, blueprint and drawing",
+          "seconds": 82,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "refinement and tool sorting",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:wave (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:chat (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:couch (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:watch (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:duet (2 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:triangle (3 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:mirror (4 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "group:relay (5 figures)",
+          "seconds": 67,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "Pong match and interruption",
+          "seconds": 92,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "TV arrangement",
+          "seconds": 42,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "cooperative carry",
+          "seconds": 47,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "reading corner",
+          "seconds": 42,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "work corner",
+          "seconds": 42,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "peer gift and drawing comparison",
+          "seconds": 42,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "wrapped thoughtful gift and acceptance",
+          "seconds": 27,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "two actual handheld runners without a TV",
+          "seconds": 57,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "actual console attachment, TV move and detach",
+          "seconds": 5,
+          "result": "same owned console follows the TV; taking it detaches it"
+        },
+        {
+          "feature": "emotional reassurance",
+          "seconds": 27,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "repair after intentional disagreement",
+          "seconds": 22,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "reassurance",
+          "seconds": 27,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "duel with three spectators",
+          "seconds": 32,
+          "result": "started, observed, completed or explicitly stopped; claims and ownership clean"
+        },
+        {
+          "feature": "cursor gun, reload and restart",
+          "seconds": 6.4,
+          "result": "one gun, one clock, inventories/moods/relationships restored"
+        },
+        {
+          "feature": "roster removal/rejoin and sleeping pickup",
+          "seconds": 38,
+          "result": "same Ruby and belongings; gentle carry preserves sleep"
+        },
+        {
+          "feature": "five-figure file visit lifecycle",
+          "seconds": 138,
+          "result": "six visits/closures/moves/returns, original items retained, shared claims and coordinates clean"
+        },
+        {
+          "feature": "stacking, impact and leaning",
+          "seconds": 85,
+          "result": "resting stack drift <0.5px; impact moves it; mixed contact remains finite"
+        },
+        {
+          "feature": "unattended furnished life",
+          "seconds": 4813.6,
+          "result": "autonomous offline behavior; every-second live audits clean"
+        }
+      ],
+      "issues": []
+    }
+  ],
+  "coreProfile": {
+    "platform": "Linux isolated Node",
+    "twoFigureP95Ms": 0.337,
+    "fiveFigureP95Ms": 0.958,
+    "combinedUpdateBudgetMs": 8.33,
+    "nativeFpsClaim": false
+  },
+  "ram": [
+    {
+      "fixture": "ram-2",
+      "platform": "linux",
+      "electron": "44.9.1",
+      "units": "MiB",
+      "display": "Xvfb 1440x900 software rendering",
+      "samples": [
+        {
+          "label": "ordinary",
+          "pss": {
+            "median": 315.3515625,
+            "min": 313.09375,
+            "max": 316.30859375
+          },
+          "rss": {
+            "median": 635.6171875,
+            "min": 633.359375,
+            "max": 636.57421875
+          },
+          "private": {
+            "median": 174.5390625,
+            "min": 172.28125,
+            "max": 175.49609375
+          },
+          "swap": {
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "processCount": 6,
+          "scene": {
+            "figures": 2,
+            "props": 3,
+            "items": 6,
+            "skills": [
+              null,
+              "idle"
+            ],
+            "sanity": []
+          }
+        }
+      ]
+    },
+    {
+      "fixture": "ram-5",
+      "platform": "linux",
+      "electron": "44.9.1",
+      "units": "MiB",
+      "display": "Xvfb 1440x900 software rendering",
+      "samples": [
+        {
+          "label": "ordinary",
+          "pss": {
+            "median": 319.328125,
+            "min": 318.046875,
+            "max": 323.51171875
+          },
+          "rss": {
+            "median": 639.84375,
+            "min": 638.5390625,
+            "max": 644.02734375
+          },
+          "private": {
+            "median": 178.078125,
+            "min": 176.796875,
+            "max": 182.26171875
+          },
+          "swap": {
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "processCount": 6,
+          "scene": {
+            "figures": 5,
+            "props": 3,
+            "items": 16,
+            "skills": [
+              null,
+              "idle",
+              "monkeybars",
+              "idle",
+              null
+            ],
+            "sanity": []
+          }
+        }
+      ]
+    },
+    {
+      "fixture": "ram-5-rich-churn",
+      "platform": "linux",
+      "electron": "44.9.1",
+      "units": "MiB",
+      "display": "Xvfb 1440x900 software rendering",
+      "samples": [
+        {
+          "label": "busy",
+          "pss": {
+            "median": 381.310546875,
+            "min": 380.900390625,
+            "max": 381.970703125
+          },
+          "rss": {
+            "median": 702.63671875,
+            "min": 702.2265625,
+            "max": 703.296875
+          },
+          "private": {
+            "median": 240.85546875,
+            "min": 240.4453125,
+            "max": 241.515625
+          },
+          "swap": {
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "processCount": 6,
+          "scene": {
+            "figures": 5,
+            "props": 12,
+            "items": 31,
+            "skills": [
+              null,
+              null,
+              "exercise",
+              "idle",
+              "handheld"
+            ],
+            "sanity": []
+          }
+        },
+        {
+          "label": "after-20-settings-cycles",
+          "pss": {
+            "median": 388.736328125,
+            "min": 384.451171875,
+            "max": 406.00390625
+          },
+          "rss": {
+            "median": 718.578125,
+            "min": 714.29296875,
+            "max": 735.90234375
+          },
+          "private": {
+            "median": 241.3984375,
+            "min": 237.11328125,
+            "max": 258.72265625
+          },
+          "swap": {
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "processCount": 6,
+          "scene": {
+            "figures": 5,
+            "props": 12,
+            "items": 31,
+            "skills": [
+              null,
+              null,
+              "exercise",
+              "yoyo",
+              "handheld"
+            ],
+            "sanity": []
+          }
+        },
+        {
+          "label": "after-20-settings-cycles-rested",
+          "pss": {
+            "median": 397.451171875,
+            "min": 391.982421875,
+            "max": 402.087890625
+          },
+          "rss": {
+            "median": 727.96484375,
+            "min": 722.49609375,
+            "max": 732.6015625
+          },
+          "private": {
+            "median": 249.9140625,
+            "min": 244.4453125,
+            "max": 254.55078125
+          },
+          "swap": {
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "processCount": 6,
+          "scene": {
+            "figures": 5,
+            "props": 12,
+            "items": 31,
+            "skills": [
+              null,
+              null,
+              "idle",
+              "read",
+              null
+            ],
+            "sanity": []
+          }
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "platform": "mac",
+      "file": "Mallow-Desk-Buddies-1.0.0-rc.1-darwin-arm64.zip",
+      "bytes": 130620288,
+      "sha256": "4485c3819e432907a8032161e3bdc8ca4e001269dda92e6054701a4326a400eb",
+      "source": {
+        "commit": "2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0",
+        "dirty": false,
+        "platform": "darwin",
+        "arch": "arm64",
+        "version": "1.0.0-rc.1",
+        "nativeAcceptance": "pending",
+        "status": "release candidate; not approved for sale"
+      },
+      "nativeSmoke": {
+        "platform": "darwin",
+        "result": "passed",
+        "source": {
+          "commit": "2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0",
+          "dirty": false,
+          "platform": "darwin",
+          "arch": "arm64",
+          "version": "1.0.0-rc.1",
+          "nativeAcceptance": "pending",
+          "status": "release candidate; not approved for sale"
+        },
+        "extractedPathWithSpaces": true,
+        "helper": "real; reported windows",
+        "normalQuitAndRestart": true,
+        "limits": "CI runner smoke only; physical focus/input/permissions/DPI/sleep/resources gates remain"
+      }
+    },
+    {
+      "platform": "windows",
+      "file": "Mallow-Desk-Buddies-1.0.0-rc.1-win32-x64.zip",
+      "bytes": 158698312,
+      "sha256": "34ff7d7b3a923edfc6823151736ac97f17a6b2a236b193c5302254ba63182f4a",
+      "source": {
+        "commit": "2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0",
+        "dirty": false,
+        "platform": "win32",
+        "arch": "x64",
+        "version": "1.0.0-rc.1",
+        "nativeAcceptance": "pending",
+        "status": "release candidate; not approved for sale"
+      },
+      "nativeSmoke": {
+        "platform": "win32",
+        "result": "passed",
+        "source": {
+          "commit": "2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0",
+          "dirty": false,
+          "platform": "win32",
+          "arch": "x64",
+          "version": "1.0.0-rc.1",
+          "nativeAcceptance": "pending",
+          "status": "release candidate; not approved for sale"
+        },
+        "extractedPathWithSpaces": true,
+        "helper": "real; reported windows",
+        "normalQuitAndRestart": true,
+        "limits": "CI runner smoke only; physical focus/input/permissions/DPI/sleep/resources gates remain"
+      }
+    }
+  ],
+  "audit": {
+    "vulnerabilities": 0,
+    "electron": "44.9.1"
+  },
+  "remaining": [
+    "Physical Mac and Windows acceptance in docs/release/ACCEPTANCE.md",
+    "Native long-term resource/focus/input/permissions/DPI/sleep-wake checks",
+    "Authenticated seller identity/payout/tax verification and entitlement testing",
+    "Stable version/public paid launch only after release gates pass"
+  ]
+}

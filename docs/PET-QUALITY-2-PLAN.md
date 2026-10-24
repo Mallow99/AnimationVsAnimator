@@ -108,6 +108,6 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
     - [x] Crowded speech layout and rotating modeled-book collision repair/regression.
     - [x] Native packaging scripts, bundled Mac helper build, archive audits/checksums and CI.
     - [x] Honest installation/privacy/recovery/license/store materials.
-    - [ ] Final extended soaks, resource/evidence log and native CI candidates.
+    - [x] Final extended soaks, resource/evidence log and native CI candidates.
     - [ ] Physical Mac/Windows acceptance, seller setup and actual store entitlement test.
     - [ ] Stable paid release only after acceptance; no revenue claim before sales.

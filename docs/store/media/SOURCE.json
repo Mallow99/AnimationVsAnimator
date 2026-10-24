@@ -1,9 +1,10 @@
 {
-  "source": "a82b6f43a2cedce0543feaaba6b24cabec25fcdd",
+  "source": "2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0",
   "platform": "Linux Electron/Xvfb",
   "nativeWindows": "simulated; no OS desktop claims",
   "background": "plain cream backdrop",
-  "cover": "typographic header added in DOM above actual runtime figures",
-  "demo": "15 seconds, 12fps actual wall-time frames; no audio or speed-up",
+  "cover": "typographic header/footer in DOM; actual runtime figures above a 32px footer, scale 1.6 (available in Settings)",
+  "demo": "180 actual runtime frames sampled at a target of 12fps; 15-second output; no audio",
+  "captureWallSeconds": 15.033,
   "publish": "only after native acceptance"
 }

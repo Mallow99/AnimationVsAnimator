@@ -366,3 +366,14 @@ remaining issues here. Entries describe shipped behavior; unverified hardware be
   397MiB after rest. Six processes; this does not prove settled long-term memory.
 - Seed 7 passed 7,200 simulated seconds / 7,220 live audits / 35 feature phases.
   Final seed 32, candidate preservation and release record are in progress.
+
+### Final local acceptance and runtime media
+
+- Seed 32 also passed 7,200 simulated seconds, 7,220 live audits and 35 phases.
+  Both final archives at 2a78d2b pass native smoke checks and local checksum/content audit.
+- Updated source-labelled runtime cover/screenshots and 15-second demo, with measured
+  wall-time capture (about 15 seconds). The capture recipe passes Node syntax checks.
+- Recorded focused test totals, both full soaks, isolated core profile, whole-process-tree
+  memory samples and exact final ZIP hashes in docs/verification/mallow-release.json.
+- Final CI soak repetition and draft preservation are in progress. Physical native QA,
+  seller/payout access, store entitlement testing and stable public sale remain open.

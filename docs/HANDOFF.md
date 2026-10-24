@@ -23,8 +23,12 @@ keeps hand-back available while window scanning is off. Real hardware behavior i
 
 The extended soak exposed a rotating-book crash in platform contact. Convex hull counts/order
 are unstable under rotation; stable model vertices now pair current/previous material points.
-A 72-orientation landing regression passes. Restarted seed-7/32 two-hour simulated soaks and
-aggregate verification; resource results and CI status will be added to the implementation log.
+A 72-orientation landing regression passes. Both seed-7/32 two-hour simulated soaks passed
+(7,220 audits and 35 phases each). All 218 core checks, five release groups, simulation,
+Chromium and patched Electron customer/export flow pass. Native Mac/Windows CI archives
+from 2a78d2b pass extraction/real-helper/quit/restart; full CI repetition and draft archive
+preservation are finishing in run 40046018836. Resource figures and exact SHA-256s are
+in release/IMPLEMENTATION.md and verification/mallow-release.json. No physical QA is claimed.
 
 No authenticated itch.io session is available. Store copy, support/privacy/install/recovery
 and licensing documents are prepared. Seller verification/payout/tax setup must be completed
