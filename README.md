@@ -4,7 +4,13 @@ The commercial edition is a $5 offline desktop toy for Apple Silicon Macs and Wi
 It has a customer interface, quiet defaults, local conversations, save recovery and native
 packaging. It is **not approved for sale yet**: real Mac/Windows acceptance and storefront
 setup remain. [Release checklist](docs/release/ACCEPTANCE.md) ·
-[Features and customization](docs/release/FEATURES.md) · [Install guide](docs/release/INSTALL.md) · [Store draft](docs/store/LISTING.md).
+[Features and customization](docs/release/FEATURES.md) · [Install guide](docs/release/INSTALL.md) · [itch.io page copy](docs/store/ITCH-PAGE.md).
+
+![Colour and appearance controls](docs/store/media/customization.png)
+
+The candidate uses paper/linen controls, textured stock furniture and books, any-colour
+HSL/hex controls and separate appearance/movement sliders. Existing saved looks stay
+intact. [Runtime demo](docs/store/media/runtime-demo.mp4) · [Store setup notes](docs/store/LISTING.md).
 
 Develop the customer edition with `npm run start:release`. Build a candidate on the target OS
 with `npm run package:release -- darwin` or `npm run package:release -- win32`. CI packages

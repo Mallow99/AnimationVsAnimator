@@ -27,7 +27,12 @@ and simulation/browser ran independently. Full aggregate/native/extended CI foll
 
 Complete store description: store/ITCH-PAGE.md and store/itch-page.html. Internal
 listing/settings/media notes: store/LISTING.md. Keep unpublished until native/store
-acceptance. Refreshed media and exact rc.3 CI/archive evidence are the next step.
+acceptance. Refreshed media and a stock-material atlas are prepared. CI run 40139716478 passed
+both native archives and all core groups/simulation, but Chrome launch timed out in
+both attempts before any page loaded. Browser QA now logs bounded startup stderr and
+checks early exit; full CI repeats. Extended checks now compare the last successful
+workflow source, preventing a failed core update from being skipped on a follow-up.
+Exact rc.3 archive/evidence recording remains next.
 
 ## Feature list and customization — 2026-10-24
 

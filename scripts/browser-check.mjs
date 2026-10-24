@@ -24,16 +24,18 @@ const pageUrl = `http://127.0.0.1:${server.address().port}/app/index.html`;
 const profile = mkdtempSync(join(tmpdir(), 'ava-browser-'));
 const browser = spawn(process.env.CHROMIUM_BIN ?? 'chromium', ['--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
   '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--window-size=1280,800', `--user-data-dir=${profile}`,
-  '--no-proxy-server', pageUrl], { env: { ...process.env, XDG_CACHE_HOME: join(profile, 'cache') }, stdio: 'ignore' });
-let launchError, socket;
+  '--no-proxy-server', pageUrl], { env: { ...process.env, XDG_CACHE_HOME: join(profile, 'cache') }, stdio: ['ignore','ignore','pipe'] });
+let launchError, socket, launchLog = '';
+browser.stderr.on('data', chunk => { launchLog = (launchLog + chunk).slice(-64000); });
+browser.on('exit', (code, signal) => { launchError ??= new Error(`Chromium exited (${code ?? signal}).\n${launchLog}`); });
 browser.on('error', (err) => { launchError = err; });
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-async function until(fn) {
-  for (let i = 0; i < 200; i++) { if (launchError) throw launchError; if (await fn()) return; await pause(50); }
+async function until(fn, attempts = 200) {
+  for (let i = 0; i < attempts; i++) { if (launchError) throw launchError; if (await fn()) return; await pause(50); }
   throw new Error('Browser readiness timed out');
 }
 try {
-  await until(() => existsSync(join(profile, 'DevToolsActivePort')));
+  await until(() => existsSync(join(profile, 'DevToolsActivePort')), 600);
   const port = readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0];
   const tabs = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   const page = tabs.find((t) => t.type === 'page'); assert(page);
@@ -782,6 +784,8 @@ try {
   console.log('PASS browser: right-click Open bag with hidden shortcuts, inspect without taking/closing, explicit give/place, safe Cancel, stable panel, activity requirements, instructions, hidden-icon Trash/Undo, Settings take/return, full bag refusal');
   console.log('PASS browser: physical bag art, mouse pull/drop/give, ammo preservation, loose item selection, trash/undo identity, furniture undo, click-to-place, keyboard/Escape, small-screen bag bounds, 5-person couch/workshop rendering, real Pong mouse/keyboard/join/rematch controls');
 } finally {
+  mkdirSync(join(root,'.build/verification'),{recursive:true});
+  writeFileSync(join(root,'.build/verification/browser-launch.log'),launchLog);
   socket?.close(); browser.kill();
   await new Promise((done) => { if (browser.exitCode !== null) done(); else browser.once('close', done); });
   rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

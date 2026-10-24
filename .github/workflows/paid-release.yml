@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: paid-release-${{ github.ref }}
@@ -32,12 +33,13 @@ jobs:
       - name: Select extended core checks
         id: extended
         env:
-          BEFORE_COMMIT: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [[ "$EVENT_NAME" != push || -z "$BEFORE_COMMIT" || "$BEFORE_COMMIT" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE_COMMIT^{commit}" 2>/dev/null; then
+          BASELINE_COMMIT=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/paid-release.yml/runs" -f branch="$GITHUB_REF_NAME" -f status=success -f per_page=1 --jq '.workflow_runs[0].head_sha // empty') || BASELINE_COMMIT=''
+          if [[ "$EVENT_NAME" != push || -z "$BASELINE_COMMIT" ]] || ! git cat-file -e "$BASELINE_COMMIT^{commit}" 2>/dev/null; then
             echo 'run=true' >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "$BEFORE_COMMIT" HEAD -- src/core src/shared scripts/living-soak.ts scripts/build.mjs package.json package-lock.json; then
+          elif git diff --quiet "$BASELINE_COMMIT" HEAD -- src/core src/shared scripts/living-soak.ts scripts/build.mjs package.json package-lock.json; then
             echo 'run=false' >> "$GITHUB_OUTPUT"
           else
             echo 'run=true' >> "$GITHUB_OUTPUT"

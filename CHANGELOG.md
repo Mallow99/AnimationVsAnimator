@@ -3,6 +3,19 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-24 — candidate verification diagnostics and refreshed media
+
+- Refreshed customer screenshots, cover and actual 15-second demo. Capture waits for
+  an open owned book and records the capture recipe hash. Added a stock-material atlas.
+- Both rc.3 native archives passed extraction/helper/save/quit/restart in CI. Aggregate
+  core checks/simulation passed twice, but CI Chrome did not create its debugging port;
+  local Chromium and release Electron passed. Candidate preservation stayed blocked.
+- Browser QA now retains bounded startup stderr, reports early exits and allows up to
+  30 seconds for launch. No interaction assertion is removed or loosened.
+- Extended-check selection now compares the last successful workflow's source, so a
+  follow-up to a failed core update cannot accidentally skip the required soaks.
+- Full verification is being repeated. Hardware/store gates remain open.
+
 ## 2026-10-24 — textured controls and materials (rc.3)
 
 - Replaced customer whole-look/palette labels (including blurple) with hue, saturation,
