@@ -1,3 +1,4 @@
+import { paintMaterial, type Material } from './materials';
 import { convexHull, paddedVertices, polygonDistance, segmentDistance, overlapOffset, sweepConvex } from './geometry';
 import blanketDef from './items/blanket.json';
 import snackDef from './items/snack-box.json';
@@ -869,7 +870,11 @@ export function drawItem(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderin
       const x = pose.at.x + d.x * along * m * sc + ax * acrossView * sc, y = pose.at.y + d.y * along * m * sc + ay * acrossView * sc;
       if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
     });
-    if (st.fill) { ctx.closePath(); ctx.fillStyle = st.fill; ctx.fill(); }
+    if (st.fill) {
+      ctx.closePath();ctx.fillStyle=st.fill;ctx.fill();
+      const material:Material|undefined=it.giftWrap>0?'paper':it.animatedDomestic?(it.def.id==='blanket'?'fabric':'paper'):it.animatedHandheld?'metal':undefined;
+      if(material){const xs=st.pts.map(p=>p[0]),ys=st.pts.map(p=>p[1]),x=Math.min(...xs),y=Math.min(...ys);ctx.save();ctx.clip();ctx.translate(pose.at.x,pose.at.y);const upright=reading||domestic?(Math.sign(d.x)||1):1;ctx.transform(d.x*m*sc,d.y*m*sc,ax*upright*sc,ay*upright*sc,0,0);paintMaterial(ctx,material,x,y,Math.max(...xs)-x,Math.max(...ys)-y);ctx.restore();}
+    }
     if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * sc; ctx.stroke(); }
   }
   if(it.snackAt&&it.animatedDomestic){ctx.fillStyle='#e8c18b';ctx.fillRect(it.snackAt.x-2*sc,it.snackAt.y-2*sc,4*sc,4*sc);}

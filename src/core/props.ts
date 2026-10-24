@@ -1,3 +1,4 @@
+import { paintMaterial, parseMaterial, type Material } from './materials';
 import { convexHull, paddedVertices, polygonDistance, overlapOffset, compoundOffset, sweepConvex } from './geometry';
 // His drawings coming to life, Animator vs. Animation style. A ball he drew turns into a
 // real ball (he kicks it around; you can grab and throw it). Boxes, ramps, ledges and bridges
@@ -142,7 +143,7 @@ export interface PropDef {
  * a polygon (`pts` + `fill`) or a rounded box (`rect` [x, y, w, h] + `radius` + `fill`).
  * A filled piece can have an edge line too (`color` + `width`).
  */
-export interface PropShape { pts: [number, number][]; color: string; width: number; fill?: string; rect?: [number, number, number, number]; radius?: number }
+export interface PropShape { pts: [number, number][]; color: string; width: number; fill?: string; rect?: [number, number, number, number]; radius?: number; material?: Material }
 
 /** The box around its outline, screen and drawing (for painting it as pixel art). */
 function shapeBounds(outline: [number, number][], shape: PropShape[], screen?: [number, number, number, number]): [number, number, number, number] {
@@ -192,10 +193,11 @@ export function parsePropDef(raw: unknown): PropDef | null {
     if (s.fill !== undefined && !fill) return []; // a fill it can't read: leave the piece out rather than guess
     // A filled piece only gets an edge line if it asks for one.
     const width = typeof s.width === 'number' && Number.isFinite(s.width) ? Math.max(0, Math.min(12, s.width)) : fill ? 0 : 3;
+    const material = parseMaterial(s.material);
     const radius = typeof s.radius === 'number' && Number.isFinite(s.radius) ? Math.max(0, Math.min(30, s.radius)) : 0;
-    if (rect) return fill || width ? [{ pts: [], rect, radius, fill, color: color(s.color), width }] : [];
+    if (rect) return fill || width ? [{ pts: [], rect, radius, material, fill, color: color(s.color), width }] : [];
     if (pts.length < (fill ? 3 : 2)) return [];
-    return [{ pts, fill, color: color(s.color), width: fill ? width : Math.max(0.5, width) }];
+    return [{ pts, material, fill, color: color(s.color), width: fill ? width : Math.max(0.5, width) }];
   });
   const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
   const scr = Array.isArray(o.screen) && o.screen.length === 4 && o.screen.every(Number.isFinite) && o.screen[2] > 0 && o.screen[3] > 0
@@ -678,7 +680,8 @@ export class Thing {
       drawSprite(ctx, def.sprite); ctx.restore();
     }
     if (!flat) this.drawScreen(ctx, now, false);
-    for (const st of def.shape) {
+    const materials = propMaterials(def);
+    for (const [index, st] of def.shape.entries()) {
       if (!st.fill && !st.width) continue;
       ctx.beginPath();
       if (st.rect) this.roundRect(ctx, st.rect, st.radius ?? 0);
@@ -686,7 +689,15 @@ export class Thing {
         st.pts.forEach(([x, y], i) => { const q = this.toWorld(x, y); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
         if (st.fill) ctx.closePath();
       }
-      if (st.fill) { ctx.fillStyle = st.fill; ctx.fill(); }
+      if (st.fill) {
+        ctx.fillStyle = st.fill; ctx.fill();
+        const material = materials[index];
+        if (material && material !== 'none') {
+          const box = st.rect ?? [Math.min(...st.pts.map(p=>p[0])),Math.min(...st.pts.map(p=>p[1])),Math.max(...st.pts.map(p=>p[0]))-Math.min(...st.pts.map(p=>p[0])),Math.max(...st.pts.map(p=>p[1]))-Math.min(...st.pts.map(p=>p[1]))];
+          ctx.save();ctx.clip();const origin=this.toWorld(0,0);ctx.translate(origin.x,origin.y);ctx.rotate(this.tilt);ctx.scale(this.scale,this.scale);
+          paintMaterial(ctx,material,box[0],box[1],box[2],box[3]);ctx.restore();
+        }
+      }
       if (st.width) { ctx.strokeStyle = st.color; ctx.lineWidth = st.width * this.scale; ctx.stroke(); }
     }
     if(def.use==='light'&&this.on){
@@ -719,6 +730,8 @@ export class Thing {
     }
     ctx.fillStyle = (propActions(def).includes('paint') || propActions(def).includes('drawhere')) ? '#fff8e8' : this.on ? '#1d2b4a' : '#22232c';
     ctx.fill();
+    ctx.save();ctx.clip();const origin=this.toWorld(sx,sy);ctx.translate(origin.x,origin.y);ctx.rotate(this.tilt);ctx.scale(this.scale,this.scale);
+    paintMaterial(ctx, propActions(def).includes('watch')?'ceramic':'paper',0,0,sw,sh);ctx.restore();
     if (this.on && propActions(def).includes('watch')) {
       ctx.save(); ctx.clip();
       if (this.pong) {
@@ -1249,3 +1262,13 @@ export class Props {
 }
 
 export { platY };
+
+const materialDefaults = new WeakMap<PropDef, (Material | undefined)[]>();
+function artSignature(def: PropDef) { return JSON.stringify(def.shape.map(({material,...shape})=>shape)); }
+export function propMaterials(def: PropDef): (Material | undefined)[] {
+  let values=materialDefaults.get(def);if(values)return values;
+  const stock=BUILTIN_PROPS.find(p=>p.id===def.id);
+  const original=stock && artSignature(stock)===artSignature(def);
+  values=def.shape.map((st,i)=>st.material ?? (original?stock!.shape[i].material:undefined));
+  materialDefaults.set(def,values);return values;
+}

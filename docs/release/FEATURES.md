@@ -1,7 +1,7 @@
 # Mallow Desk Buddies — features and customization
 
 An offline desktop toy with one to five procedural stick-figure companions.
-Current candidate: 1.0.0-rc.2. Target platforms: Apple Silicon Mac and Windows 11 x64.
+Current candidate: 1.0.0-rc.3. Target platforms: Apple Silicon Mac and Windows 11 x64.
 Physical release acceptance remains pending; see the installation guide.
 
 ## What you get
@@ -33,12 +33,11 @@ Changes appear on the desktop immediately and save for that buddy.
 | Change | Controls |
 | --- | --- |
 | Company | Show any combination of one to five buddies; putting someone away preserves them. |
-| Name and colour | Give each buddy a name and choose any colour with the colour picker. |
+| Name and colour | Name each buddy. Use the colour picker, exact six-digit hex code or hue, saturation and lightness sliders. |
 | Size | Set the overall size from 0.6× to 2.5×. |
 | Personality | Inventive, competitive, gentle, mischievous or adventurous; changes activity preferences, motion and local voice. |
-| Whole looks | Blurp, Classic, Retro and Ghost appearance/movement bundles. |
-| Mix-and-match style | Choose stance, walk, colour palette, line/head style and smooth or pixel rendering separately. |
-| Fine details | Expand Fine-tune the details for individual appearance and movement sliders. |
+| Appearance | Continuous line width and head-size sliders; choose smooth rendering or adjust pixel size. Each shows its current value. |
+| Movement | Expand Movement for leg straightness, stance width, step length, foot lift, arm motion, lean and walking bounce. Change each separately. |
 | Activity pace | Activities → Activity pace, from calm to restless. |
 | Desktop and sound | Settings → window climbing, volume, sounds and day/night rhythm. |
 | Slapstick | Settings → Playful mischief: cursor/window play, swipe-to-smack, breakable limbs and sparring style. |
@@ -46,11 +45,22 @@ Changes appear on the desktop immediately and save for that buddy.
 | Your own items | Things → Make your own things opens local definition files, examples and the making guide. Reload definitions after editing. |
 
 Personality changes preserve the buddy's identity, conversation, memories, items
-and friendships. A style bundle changes appearance and movement, including colour;
-individual mix-and-match rows change only their own settings.
+and friendships. Each appearance or movement slider changes only its own setting;
+changing colour preserves the other choices. Existing saved looks are retained.
 Custom items and props currently use local JSON definition files rather than an
 in-app visual editor. Custom character images and third-party character packs
 are outside this candidate.
+
+## Materials and custom art
+
+The controls use paper and linen textures. Stock furniture has wood grain, woven
+upholstery and brushed metal; books have leather covers, paper grain and page ink.
+Textures stay attached as objects move and turn, including in pixel rendering.
+These are lightweight procedural finishes, with no downloaded texture assets.
+
+Custom prop shapes may set `material` to `wood`, `fabric`, `paper`, `metal`,
+`leather`, `rubber`, `ceramic` or `none`. Unmodified older stock definitions receive
+the new finishes automatically; edited artwork keeps its existing appearance.
 
 ## Scope and installation
 

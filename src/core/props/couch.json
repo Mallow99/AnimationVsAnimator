@@ -51,7 +51,8 @@
         40
       ],
       "radius": 10,
-      "fill": "#9a917f"
+      "fill": "#9a917f",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -61,7 +62,8 @@
         32
       ],
       "radius": 7,
-      "fill": "#bdb3a1"
+      "fill": "#bdb3a1",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -71,7 +73,8 @@
         32
       ],
       "radius": 7,
-      "fill": "#bdb3a1"
+      "fill": "#bdb3a1",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -80,7 +83,8 @@
         6.8,
         28
       ],
-      "fill": "#c8bfae"
+      "fill": "#c8bfae",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -89,7 +93,8 @@
         6.8,
         28
       ],
-      "fill": "#c8bfae"
+      "fill": "#c8bfae",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -98,7 +103,8 @@
         6.8,
         28
       ],
-      "fill": "#c8bfae"
+      "fill": "#c8bfae",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -107,7 +113,8 @@
         6.8,
         28
       ],
-      "fill": "#c8bfae"
+      "fill": "#c8bfae",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -116,7 +123,8 @@
         6.8,
         28
       ],
-      "fill": "#c8bfae"
+      "fill": "#c8bfae",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -125,7 +133,8 @@
         6.8,
         28
       ],
-      "fill": "#c8bfae"
+      "fill": "#c8bfae",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -135,7 +144,8 @@
         13
       ],
       "radius": 4,
-      "fill": "#b3a995"
+      "fill": "#b3a995",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -145,7 +155,8 @@
         3
       ],
       "radius": 1.5,
-      "fill": "#c6bdab"
+      "fill": "#c6bdab",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -155,7 +166,8 @@
         12
       ],
       "radius": 3,
-      "fill": "#8e8573"
+      "fill": "#8e8573",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -165,7 +177,8 @@
         36
       ],
       "radius": 8,
-      "fill": "#aca28f"
+      "fill": "#aca28f",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -175,7 +188,8 @@
         36
       ],
       "radius": 8,
-      "fill": "#aca28f"
+      "fill": "#aca28f",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -185,7 +199,8 @@
         5
       ],
       "radius": 2.5,
-      "fill": "#c3baa8"
+      "fill": "#c3baa8",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -195,7 +210,8 @@
         5
       ],
       "radius": 2.5,
-      "fill": "#c3baa8"
+      "fill": "#c3baa8",
+      "material": "fabric"
     },
     {
       "rect": [
@@ -205,7 +221,8 @@
         4
       ],
       "radius": 1,
-      "fill": "#5f4c3b"
+      "fill": "#5f4c3b",
+      "material": "wood"
     },
     {
       "rect": [
@@ -215,7 +232,8 @@
         4
       ],
       "radius": 1,
-      "fill": "#5f4c3b"
+      "fill": "#5f4c3b",
+      "material": "wood"
     }
   ],
   "seats": 5,

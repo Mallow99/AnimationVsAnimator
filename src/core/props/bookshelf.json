@@ -36,7 +36,8 @@
         65
       ],
       "fill": "#70533e",
-      "radius": 2
+      "radius": 2,
+      "material": "wood"
     },
     {
       "rect": [
@@ -45,7 +46,8 @@
         80,
         27
       ],
-      "fill": "#372f32"
+      "fill": "#372f32",
+      "material": "wood"
     },
     {
       "rect": [
@@ -54,7 +56,8 @@
         80,
         21
       ],
-      "fill": "#372f32"
+      "fill": "#372f32",
+      "material": "wood"
     },
     {
       "rect": [
@@ -63,7 +66,8 @@
         84,
         5
       ],
-      "fill": "#aa8058"
+      "fill": "#aa8058",
+      "material": "wood"
     },
     {
       "rect": [
@@ -72,7 +76,8 @@
         84,
         6
       ],
-      "fill": "#aa8058"
+      "fill": "#aa8058",
+      "material": "wood"
     }
   ]
 }

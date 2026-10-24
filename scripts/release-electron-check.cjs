@@ -39,6 +39,16 @@ app.whenReady().then(async () => {
   assert.equal(listens, 0, 'offline build started a loopback service');
   console.log('PASS release: four customer tabs, onboarding, quiet fresh defaults, old identity/colour preserved, integrations forced offline, no loopback service');
 
+  assert(await run(`(()=>{
+    const props=window.pet.props, added=[...props.defs.keys()].map((id,i)=>props.spawn(id,90+i*115,innerHeight-110,1));
+    const originalRandom=Math.random, geometry=JSON.stringify(added.map(t=>t.points));
+    const paint=pixel=>{const c=document.createElement('canvas');c.width=innerWidth;c.height=innerHeight;const g=c.getContext('2d');for(const t of added)t.draw(g,1,0,pixel);return c.toDataURL();};
+    try{Math.random=()=>{throw new Error('Drawing consumed simulation randomness');};
+      return [1,4].every(pixel=>paint(pixel)===paint(pixel)) && geometry===JSON.stringify(added.map(t=>t.points));
+    }finally{Math.random=originalRandom;for(const t of added)props.remove(t);}
+  })()`));
+  console.log('PASS materials: all stock props render deterministically in smooth/pixel modes, with no simulation randomness or geometry mutation');
+
   await ui('document.querySelector("#finishIntro").click()');
   await until(() => ui('document.querySelector("#welcome").hidden'), 'intro acknowledged');
   await ui('document.querySelector("#chatText").value="my name is Sam";document.querySelector("#chatForm").requestSubmit()');
@@ -51,12 +61,25 @@ app.whenReady().then(async () => {
   await ui('document.querySelector("#personalityChoice").value="adventurous";document.querySelector("#personalityChoice").dispatchEvent(new Event("change"))');
   await until(() => run('window.pet.config.personality==="adventurous"'), 'personality choice');
   assert(await ui('document.querySelector("#personality").textContent.includes("explorer")'));
-  for (const [key, value] of [['walk','4'],['line','fine'],['render','px4'],['stance','B']]) {
-    await ui(`document.querySelector("#preset-${key}").value="${value}";document.querySelector("#preset-${key}").dispatchEvent(new Event("change"))`);
-    await pause(50);
+  assert(await ui('!document.querySelector("#presets") && !/blurple|whole.look|ghost|retro/i.test(document.body.innerText)'));
+  for (const [key, value] of [['body-stride',1.45],['look-lineWidth',3.5],['look-pixel',4],['body-stand',0.75]]) {
+    await ui(`document.querySelector("#adjust-${key}").value="${value}";document.querySelector("#adjust-${key}").dispatchEvent(new Event("input"))`);
   }
-  await until(() => run('window.pet.config.body.stride===1.45 && window.pet.config.look.lineWidth===3.5 && window.pet.config.look.pixel===4 && window.pet.config.body.stand===0.75'), 'mixed appearance choices');
+  await until(() => run('window.pet.config.body.stride===1.45 && window.pet.config.look.lineWidth===3.5 && window.pet.config.look.pixel===4 && window.pet.config.body.stand===0.75'), 'independent appearance and movement sliders');
   assert.equal(await run('window.pet.config.look.color'), '#596cb2');
+  await ui('document.querySelector("#colorCode").value="invalid";document.querySelector("#colorCode").dispatchEvent(new Event("change"))');
+  assert(await ui('document.querySelector("#colorCode").getAttribute("aria-invalid")==="true"'));
+  assert.equal(await run('window.pet.config.look.color'), '#596cb2');
+  await ui('document.querySelector("#colorCode").value="#808080";document.querySelector("#colorCode").dispatchEvent(new Event("change"))');
+  await until(() => run('window.pet.config.look.color==="#808080"'), 'exact hex colour');
+  await ui('document.querySelector("#color-h").value="120";document.querySelector("#color-h").dispatchEvent(new Event("input"))');
+  await pause(100);
+  assert.equal(await ui('document.querySelector("#color-h").value'), '120', 'hue lost at zero saturation');
+  await ui('document.querySelector("#color-s").value="100";document.querySelector("#color-s").dispatchEvent(new Event("input"))');
+  await until(() => run('window.pet.config.look.color==="#01ff01"'), 'saturation preserves grey lightness and selected hue');
+  await ui('document.querySelector("#color-l").value="50";document.querySelector("#color-l").dispatchEvent(new Event("input"))');
+  await until(() => run('window.pet.config.look.color==="#00ff00"'), 'lightness slider');
+  assert(await ui('document.querySelector("#color-l-value").value==="50%" && !document.querySelector("#colorCode").hasAttribute("aria-invalid")'));
   assert(await run(`window.pet.items.list.some(i=>i.uid===${bookUid}) && window.pet.brain.log.some(l=>l.text.includes("Sam"))`));
   await ui('document.querySelector("#buddy").value="1";document.querySelector("#buddy").dispatchEvent(new Event("change"));document.querySelector("#personalityChoice").value="gentle";document.querySelector("#personalityChoice").dispatchEvent(new Event("change"))');
   await until(() => run('window.pets[1].config.personality==="gentle"'), 'second personality');
@@ -64,7 +87,7 @@ app.whenReady().then(async () => {
   await ui('document.querySelector("#buddy").value="0";document.querySelector("#buddy").dispatchEvent(new Event("change"))');
   await ui('document.querySelector("[data-tab=settings]").click();document.querySelector("#customizeBuddy").click()');
   assert(await ui('!document.querySelector("#buddies").hidden && document.activeElement.id==="personalityChoice"'));
-  console.log('PASS customization: scoped personality and descriptions, mixed presets preserve color/items/chat, feature guide returns keyboard focus to customization');
+  console.log('PASS customization: scoped personality and descriptions, hue/hex and independent sliders preserve items/chat, feature guide returns keyboard focus to customization');
   await ui('document.querySelector("[data-tab=things]").click();document.querySelector("[data-supply=handheld]").click();document.querySelector("#openBag").click()');
   await until(() => run('window.toolBag.isOpen && window.pet.items.list.some(i=>i.def.id==="handheld")'), 'bag and supply');
   await run('window.toolBag.close()');
@@ -106,7 +129,7 @@ app.whenReady().then(async () => {
   overlay.reload();
   await until(() => !overlay.webContents.isLoading() && run('window.pets?.length===2 && window.pet.config.name==="Clover"'), 'reload restored identity');
   assert.equal(await run('window.pet.props.placed.length'), oldCount, 'starter scene duplicated on reload');
-  assert(await run('window.pet.config.personality==="adventurous" && window.pets[1].config.personality==="gentle" && window.pet.config.look.pixel===4 && window.pet.config.body.stride===1.45'));
+  assert(await run('window.pet.config.personality==="adventurous" && window.pets[1].config.personality==="gentle" && window.pet.config.look.pixel===4 && window.pet.config.body.stride===1.45 && window.pet.config.look.color==="#00ff00"'));
 
   assert(await run('window.pet.items.list.some(i=>i.def.id==="handheld")'));
   assert(await run('window.pet.brain.log.some(l=>l.text.includes("Sam"))'));
@@ -133,6 +156,7 @@ app.whenReady().then(async () => {
   await ui('document.querySelector("[data-tab=settings]").click()'); await pause(100);
   fs.writeFileSync(path.join(output, 'settings.png'), (await settings.webContents.capturePage()).toPNG());
   settings.setSize(380, 640);
+  await ui('document.querySelector("[data-tab=buddies]").click();document.querySelectorAll("#appearancePanel details").forEach(d=>d.open=true)');
   assert(await ui('document.documentElement.scrollWidth<=innerWidth'));
   await ui('document.querySelector("[data-tab=activities]").click()');
   assert(await ui('document.documentElement.scrollWidth<=innerWidth'));

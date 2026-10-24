@@ -3,6 +3,28 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-24 — textured controls and materials (rc.3)
+
+- Replaced customer whole-look/palette labels (including blurple) with hue, saturation,
+  lightness and exact hex controls, plus independent appearance and movement sliders.
+  Existing saved looks and development/lab presets remain available and unchanged.
+- Added paper/linen surfaces, consistent buttons and focus rings in Settings, bags,
+  activities and desktop conversation. Controls reflow at narrow window widths.
+- Added deterministic, bounded procedural wood, fabric, metal, paper, leather, rubber
+  and ceramic finishes to stock furniture, books, handhelds, blankets and wrapping.
+  Geometry, proportions, collision and grips are unchanged. Older unedited stock
+  definitions get the finishes; custom art stays intact, with a material opt-out.
+- Added 4,096-colour conversion checks, legacy/custom material checks and actual
+  Electron smooth/pixel deterministic-render tests with no simulation randomness.
+- Updated the feature/making guides and capture script. Added a complete itch.io
+  page in Markdown and paste-ready HTML, with matching setup, pricing and media notes.
+- Verification: types, all existing core/model/conversation checks, seven release
+  check groups, full simulation and actual Chromium interaction/variant fixtures pass.
+  Real Electron customization, scope/reload, narrow layout, save recovery, backup,
+  offline enforcement and acknowledged quit pass. Native CI and extended soaks follow.
+- Remaining: physical Mac/Windows acceptance, verified store access, payouts and
+  entitlement testing before a public paid release. No income or publication claimed.
+
 ## 2026-10-24 — feature guide and per-buddy customization (rc.2)
 
 - Added a complete feature/customization guide to customer downloads and store/readme links;

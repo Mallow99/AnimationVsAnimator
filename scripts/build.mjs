@@ -29,6 +29,7 @@ if (what === 'lab' || what === 'modellab') {
   rmSync('dist/extension', {recursive:true,force:true});
   if (!commercial) cpSync('extension/chrome','dist/extension/chrome',{recursive:true});
   cpSync('src/electron/native', 'dist/electron/native', { recursive: true });
+  if (commercial) cpSync('src/settings/product.css', 'dist/settings/product.css');
   cpSync(commercial ? 'src/settings/product.html' : 'src/settings/index.html', 'dist/settings/index.html');
   mkdirSync('dist/app', { recursive: true });
   cpSync('src/app/index.html', 'dist/app/index.html');

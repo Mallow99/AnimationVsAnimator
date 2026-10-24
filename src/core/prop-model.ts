@@ -1,3 +1,4 @@
+import { paintMaterial, paintPageText } from './materials';
 // Small renderer-independent solid models. x right, y down, z toward the viewer.
 import { cross3, dot3, norm3, sub3, type V3, type Vec } from './math';
 import { polygonDistance } from './geometry';
@@ -109,6 +110,11 @@ function paintFace(g: Ctx2D, face: ProjectedFace) {
     -0.18 * (1 - Math.max(0, dot3(face.normal, { x: -0.25, y: -0.45, z: 0.857321 }))),
   );
   g.fill();
+  const material=face.surface==='cover'||face.surface==='spine'?'leather':face.surface.startsWith('page')||face.surface==='turning-page'?'paper':undefined;
+  if(material && face.points.length===4){
+    const [a,b,,d]=face.points,w=Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z),h=Math.hypot(d.x-a.x,d.y-a.y,d.z-a.z);
+    if(w>.01 && h>.01){g.save();g.clip();g.transform((b.x-a.x)/w,(b.y-a.y)/w,(d.x-a.x)/h,(d.y-a.y)/h,a.x,a.y);paintMaterial(g,material,0,0,w,h);if(face.surface==='page-surface'||face.surface==='turning-page')paintPageText(g,w,h);g.restore();}
+  }
 }
 export function modelParts(model: PropModel, pose: ModelPose, alpha = 1): DepthPart[] {
   return projectModel(model, pose).map((face) => ({

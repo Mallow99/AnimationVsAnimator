@@ -151,6 +151,10 @@ pixel art to keep in step. Add filled pieces to `shape`:
 
 - `rect` is `[x, y, width, height]`, with rounded corners of `radius`; `pts` + `fill` is any flat shape.
 - Pieces are painted in order, so list what's at the back first.
+- Optional `"material"` adds a procedural finish: `wood`, `fabric`, `paper`, `metal`,
+  `leather`, `rubber` or `ceramic`. Use `none` to keep a plain fill. Grain follows the
+  object as it moves; it does not change collision or grips. Unchanged older stock
+  furniture receives updated finishes automatically; edited art is preserved.
 - Add `"color"` and `"width"` to give a filled piece an edge line (usually you won't).
 - Keep every part at least 4 wide: thinner bits break up or vanish once he's pixelated.
 - A TV's `screen` is painted on top of the body, rounded, and shows his shows, his game, or your Othello board.

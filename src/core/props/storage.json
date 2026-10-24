@@ -30,7 +30,8 @@
         104,
         5
       ],
-      "fill": "#8a735e"
+      "fill": "#8a735e",
+      "material": "wood"
     },
     {
       "rect": [
@@ -39,7 +40,8 @@
         6,
         19
       ],
-      "fill": "#6e5a48"
+      "fill": "#6e5a48",
+      "material": "wood"
     },
     {
       "rect": [
@@ -48,7 +50,8 @@
         6,
         19
       ],
-      "fill": "#6e5a48"
+      "fill": "#6e5a48",
+      "material": "wood"
     },
     {
       "rect": [
@@ -57,7 +60,8 @@
         86,
         5
       ],
-      "fill": "#a08670"
+      "fill": "#a08670",
+      "material": "wood"
     }
   ],
   "actions": [

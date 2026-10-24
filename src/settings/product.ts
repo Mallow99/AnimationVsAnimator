@@ -1,5 +1,5 @@
 import { CHARACTER_PRESETS, RANGES, type PetConfig, type Personality } from '../core/config';
-import { BUNDLES, PRESET_ROWS } from '../core/presets';
+import { hexToHsl, hslToHex, type Hsl } from './color';
 import { conversationKeys, exportConversation, transcriptView } from '../app/conversation-view';
 import { PRODUCT_NAME, type SaveHealth, type SaveResult, type SessionState } from '../shared/product';
 
@@ -58,7 +58,8 @@ function choose(id: number) {
 }
 shell.onSelect(choose);
 shell.onTab(name => { tab(name); if (name === 'chat') $('chatText').focus(); });
-function set(patch: Partial<PetConfig>) { shell.setConfig(patch, selected); }
+type ConfigPatch = Omit<Partial<PetConfig>, 'look' | 'body'> & { look?: Partial<PetConfig['look']>; body?: Partial<PetConfig['body']> };
+function set(patch: ConfigPatch) { shell.setConfig(patch, selected); }
 function render() {
   const c = configs[selected]; if (!c) return;
   const active = activeIds();
@@ -78,7 +79,7 @@ function render() {
   for (const id of ['windows', 'sound', 'sfx', 'dailyRhythm', 'moveWindows', 'knockCursor', 'mischief', 'screenAware', 'smacking', 'destructible'] as const) $<HTMLInputElement>(id).checked = c[id];
   $<HTMLSelectElement>('personalityChoice').value = c.personality;
   $('personality').textContent = CHARACTER_PRESETS.find(p => p.personality === c.personality)?.description ?? '';
-  renderPresetRows();
+  syncColor();
   const enabled = active.includes(selected);
   for (const id of ['chatText', 'sendChat', 'exportChat', 'newChat', 'stopActivity']) $<HTMLButtonElement>(id).disabled = !enabled;
   $('confirmReset').hidden = true;
@@ -94,7 +95,7 @@ shell.onStats(({ id, stats: value }) => { stats.set(id, value); if (id === selec
 shell.onConfig(({ id, config }) => { configs[id] = config; render(); });
 $<HTMLSelectElement>('buddy').onchange = () => choose(Number($<HTMLSelectElement>('buddy').value));
 $<HTMLInputElement>('name').onchange = () => { const name = $<HTMLInputElement>('name').value.trim(); if (name) set({ name }); else render(); };
-$<HTMLInputElement>('color').oninput = () => set({ look: { ...configs[selected].look, color: $<HTMLInputElement>('color').value } });
+$<HTMLInputElement>('color').oninput = () => set({ look: { color: $<HTMLInputElement>('color').value } });
 for (const [id, key] of [['size', 'scale'], ['pace', 'hyperactivity'], ['volume', 'volume']] as const) $<HTMLInputElement>(id).oninput = () => set({ [key]: Number($<HTMLInputElement>(id).value) });
 for (const key of ['windows', 'sound', 'sfx', 'dailyRhythm', 'moveWindows', 'knockCursor', 'mischief', 'screenAware', 'smacking', 'destructible'] as const) $<HTMLInputElement>(key).onchange = () => set({ [key]: $<HTMLInputElement>(key).checked });
 $<HTMLSelectElement>('fightMode').onchange = () => set({ fightMode: $<HTMLSelectElement>('fightMode').value as PetConfig['fightMode'] });
@@ -104,38 +105,49 @@ for (const preset of CHARACTER_PRESETS) {
 }
 $<HTMLSelectElement>('personalityChoice').onchange = () => set({ personality: $<HTMLSelectElement>('personalityChoice').value as Personality });
 $('customizeBuddy').onclick = () => { tab('buddies'); $('personalityChoice').focus(); };
-for (const row of PRESET_ROWS) {
-  const label = document.createElement('label'), select = document.createElement('select'); label.className = 'field';
-  select.id = 'preset-' + row.key; select.title = row.blurb;
-  select.add(new Option('Custom', ''));
-  for (const variant of row.variants) select.add(new Option(variant.name, variant.id));
-  select.onchange = () => {
-    const variant = row.variants.find(v => v.id === select.value); if (!variant) return;
-    const config = configs[selected];
-    set({ look: { ...config.look, ...variant.look }, body: { ...config.body, ...variant.body } });
-  };
-  label.append(document.createTextNode(row.title), select); $('presetRows').append(label);
+const colorDrafts = new Map<number, Hsl & { hex: string }>();
+function sliderControl(id: string, title: string, min: number, max: number, step: number, parent: HTMLElement, hint: string, change: (value: number) => void, format = (value: number) => String(value)) {
+  const label = document.createElement('label'), input = document.createElement('input'), heading = document.createElement('span'), output = document.createElement('output');
+  label.className = 'field slider-field'; input.type = 'range'; input.id = id; input.min = String(min); input.max = String(max); input.step = String(step); input.title = hint;
+  output.setAttribute('for', id); output.id = id + '-value'; heading.className = 'slider-label'; heading.append(document.createTextNode(title), output);
+  input.oninput = () => { output.value = format(Number(input.value)); change(Number(input.value)); };
+  label.append(heading, input); parent.append(label); return input;
 }
-function renderPresetRows() {
-  const config = configs[selected];
-  for (const row of PRESET_ROWS) {
-    const select = $<HTMLSelectElement>('preset-' + row.key);
-    if (document.activeElement === select) continue;
-    const match = row.variants.find(v =>
-      Object.entries(v.look ?? {}).every(([key, value]) => config.look[key as keyof typeof config.look] === value) &&
-      Object.entries(v.body ?? {}).every(([key, value]) => config.body[key as keyof typeof config.body] === value));
-    select.value = match?.id ?? '';
-  }
+for (const [key, title, max, suffix] of [['h','Hue',359,'°'],['s','Saturation',100,'%'],['l','Lightness',100,'%']] as const) {
+  sliderControl('color-'+key,title,0,max,1,$('colorSliders'),'Adjust the selected buddy’s colour',value=>{
+    const current=colorDrafts.get(selected) ?? {...hexToHsl(configs[selected].look.color),hex:configs[selected].look.color};
+    const next={...current,[key]:value};next.hex=hslToHex(next);colorDrafts.set(selected,next);
+    set({look:{color:next.hex}});syncColor(next.hex);
+  },v=>Math.round(v)+suffix);
 }
-for (const preset of BUNDLES) { const button = document.createElement('button'); button.textContent = preset.name; button.onclick = () => set({ look: { ...configs[selected].look, ...preset.look }, body: { ...configs[selected].body, ...preset.body } }); $('presets').append(button); }
-for (const [key, range] of Object.entries(RANGES).filter(([key]) => key.startsWith('body.') || key.startsWith('look.'))) {
-  const label = document.createElement('label'), input = document.createElement('input'); label.className = 'field'; input.type = 'range'; input.min = String(range.min); input.max = String(range.max); input.step = String(range.step); input.title = range.hint;
-  input.dataset.path = key;
-  input.oninput = () => { const [group, field] = key.split('.') as ['body' | 'look', string]; set({ [group]: { ...configs[selected][group], [field]: Number(input.value) } }); };
-  label.append(document.createTextNode(range.label), input); $('fineTune').append(label);
+$<HTMLInputElement>('colorCode').onchange = () => {
+  const input=$<HTMLInputElement>('colorCode'), value=input.value.trim();
+  if(!/^#[0-9a-f]{6}$/i.test(value)){input.setAttribute('aria-invalid','true');$('colorHelp').textContent='Use a six-digit colour code, such as #4450d6.';return;}
+  input.removeAttribute('aria-invalid');$('colorHelp').textContent='Choose any colour. Changes save for this buddy.';set({look:{color:value.toLowerCase()}});
+};
+function syncColor(hex = configs[selected].look.color) {
+  let value=colorDrafts.get(selected);
+  if(!value || value.hex!==hex){const parsed=hexToHsl(hex);value={...parsed,h:parsed.s<0.01?(value?.h??parsed.h):parsed.h,hex};colorDrafts.set(selected,value);}
+  if(document.activeElement!==$('colorCode')){$<HTMLInputElement>('colorCode').value=hex;$('colorCode').removeAttribute('aria-invalid');$('colorHelp').textContent='Choose any colour. Changes save for this buddy.';}
+  for(const [key,suffix]of [['h','°'],['s','%'],['l','%']] as const){const input=$<HTMLInputElement>('color-'+key);if(document.activeElement!==input)input.value=String(Math.round(value[key]));$<HTMLOutputElement>('color-'+key+'-value').value=Math.round(value[key])+suffix;}
+  $('color-s').style.background=`linear-gradient(90deg,hsl(${value.h} 0% 50%),hsl(${value.h} 100% 50%))`;
+  $('color-l').style.background=`linear-gradient(90deg,#101410,hsl(${value.h} ${value.s}% 50%),#fff)`;
+  $<HTMLInputElement>('color').value=hex;
+}
+const controlNames: Record<string,string> = {'look.pixel':'Pixel detail','body.stand':'Leg straightness','body.spread':'Stance width','body.stride':'Step length','body.bob':'Walking bounce'};
+const formatRange=(key:string,value:number)=>key==='look.pixel'?(value===1?'Smooth':value+' px'):key==='look.lineWidth'?value+' px':Number(value.toFixed(2))+'×';
+for(const [key,range]of Object.entries(RANGES).filter(([key])=>key.startsWith('body.')||key.startsWith('look.'))){
+  const input=sliderControl('adjust-'+key.replace('.','-'),controlNames[key]??range.label,range.min,range.max,range.step,$(key.startsWith('body.')?'movementControls':'appearanceControls'),range.hint,value=>{
+    const [group,field]=key.split('.') as ['body'|'look',string];set({[group]:{[field]:value}});
+  },v=>formatRange(key,v));input.dataset.path=key;
 }
 shell.onConfig(() => updateFineTune());
-function updateFineTune() { for (const input of document.querySelectorAll<HTMLInputElement>('[data-path]')) { const [group, key] = input.dataset.path!.split('.'); const values = configs[selected]?.[group as 'body' | 'look'] as unknown as Record<string, number>; if (values && document.activeElement !== input) input.value = String(values[key]); } }
+function updateFineTune() {
+  for(const input of document.querySelectorAll<HTMLInputElement>('[data-path]')){
+    const [group,key]=input.dataset.path!.split('.');const values=configs[selected]?.[group as 'body'|'look'] as unknown as Record<string,number>;
+    if(values){if(document.activeElement!==input)input.value=String(values[key]);$<HTMLOutputElement>(input.id+'-value').value=formatRange(input.dataset.path!,values[key]);}
+  }
+}
 const chat = $<HTMLTextAreaElement>('chatText'), form = $<HTMLFormElement>('chatForm');
 conversationKeys(chat, form);
 form.onsubmit = event => { event.preventDefault(); if (chat.disabled || !chat.value.trim()) return; shell.command('hear:' + chat.value, selected); chat.value = ''; drafts.delete(selected); };

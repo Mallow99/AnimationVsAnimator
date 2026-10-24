@@ -31,7 +31,8 @@
         38
       ],
       "fill": "#6e5a48",
-      "radius": 1
+      "radius": 1,
+      "material": "wood"
     },
     {
       "rect": [
@@ -41,7 +42,8 @@
         38
       ],
       "fill": "#8a735e",
-      "radius": 2
+      "radius": 2,
+      "material": "wood"
     },
     {
       "rect": [
@@ -51,7 +53,8 @@
         13
       ],
       "fill": "#a08670",
-      "radius": 2
+      "radius": 2,
+      "material": "wood"
     },
     {
       "rect": [
@@ -61,7 +64,8 @@
         14
       ],
       "fill": "#a08670",
-      "radius": 2
+      "radius": 2,
+      "material": "wood"
     },
     {
       "rect": [
@@ -71,7 +75,8 @@
         3
       ],
       "fill": "#5f4c3b",
-      "radius": 1
+      "radius": 1,
+      "material": "wood"
     },
     {
       "rect": [
@@ -81,7 +86,8 @@
         3
       ],
       "fill": "#5f4c3b",
-      "radius": 1
+      "radius": 1,
+      "material": "wood"
     },
     {
       "rect": [
@@ -91,7 +97,8 @@
         7
       ],
       "fill": "#a08670",
-      "radius": 2
+      "radius": 2,
+      "material": "wood"
     },
     {
       "rect": [
@@ -101,7 +108,8 @@
         2
       ],
       "fill": "#6e5a48",
-      "radius": 1
+      "radius": 1,
+      "material": "wood"
     }
   ],
   "screen": [

@@ -81,7 +81,8 @@
         6
       ],
       "radius": 3,
-      "fill": "#6c7778"
+      "fill": "#6c7778",
+      "material": "metal"
     },
     {
       "rect": [
@@ -91,7 +92,8 @@
         44
       ],
       "radius": 8,
-      "fill": "#8d9b9a"
+      "fill": "#8d9b9a",
+      "material": "metal"
     },
     {
       "rect": [
@@ -101,7 +103,8 @@
         4
       ],
       "radius": 2,
-      "fill": "#a2afae"
+      "fill": "#a2afae",
+      "material": "metal"
     },
     {
       "rect": [
@@ -111,7 +114,8 @@
         36
       ],
       "radius": 6,
-      "fill": "#4b5355"
+      "fill": "#4b5355",
+      "material": "metal"
     },
     {
       "rect": [
@@ -121,7 +125,8 @@
         24
       ],
       "radius": 3,
-      "fill": "#8a735e"
+      "fill": "#8a735e",
+      "material": "wood"
     },
     {
       "rect": [
@@ -131,7 +136,8 @@
         3
       ],
       "radius": 1.5,
-      "fill": "#9c8570"
+      "fill": "#9c8570",
+      "material": "wood"
     },
     {
       "rect": [
@@ -141,7 +147,8 @@
         13
       ],
       "radius": 2,
-      "fill": "#705a46"
+      "fill": "#705a46",
+      "material": "wood"
     },
     {
       "rect": [
@@ -151,7 +158,8 @@
         10
       ],
       "radius": 1,
-      "fill": "#a28a71"
+      "fill": "#a28a71",
+      "material": "wood"
     },
     {
       "pts": [
@@ -175,7 +183,8 @@
         3
       ],
       "radius": 1,
-      "fill": "#50473f"
+      "fill": "#50473f",
+      "material": "wood"
     }
   ],
   "move": "drag"

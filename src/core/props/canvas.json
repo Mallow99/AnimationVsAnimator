@@ -37,7 +37,8 @@
         17
       ],
       "fill": "#5f4c3b",
-      "radius": 1
+      "radius": 1,
+      "material": "wood"
     },
     {
       "rect": [
@@ -47,7 +48,8 @@
         52
       ],
       "fill": "#8a735e",
-      "radius": 3
+      "radius": 3,
+      "material": "wood"
     },
     {
       "pts": [
@@ -68,7 +70,8 @@
           68
         ]
       ],
-      "fill": "#6e5a48"
+      "fill": "#6e5a48",
+      "material": "wood"
     },
     {
       "pts": [
@@ -89,7 +92,8 @@
           68
         ]
       ],
-      "fill": "#6e5a48"
+      "fill": "#6e5a48",
+      "material": "wood"
     },
     {
       "rect": [
@@ -99,7 +103,8 @@
         5
       ],
       "fill": "#a08670",
-      "radius": 2
+      "radius": 2,
+      "material": "wood"
     },
     {
       "rect": [
@@ -109,7 +114,8 @@
         7
       ],
       "fill": "#6e5a48",
-      "radius": 2
+      "radius": 2,
+      "material": "wood"
     }
   ],
   "move": "carry",

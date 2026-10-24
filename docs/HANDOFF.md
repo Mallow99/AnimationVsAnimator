@@ -2,6 +2,33 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Textured UI and continuous customization — 2026-10-24
+
+The owner requested release cleanup, richer textures and sliders/hue controls in
+place of prototype presets, followed by a complete itch.io page. Metadata is rc.3.
+Customer UI now has HSL/hex colour controls and independent value-labelled look/body
+sliders. Personality remains separate. Saved look values are preserved. Development
+and lab presets are retained. Paper/linen GUI surfaces extend to bags and chat.
+
+Stock furniture and selected handheld/domestic/book surfaces use tiny cached local
+procedural tiles, no new runtime dependencies or downloaded assets. Tiles are bounded;
+per-context patterns use a WeakMap. Materials do not consume simulation randomness or
+modify geometry. Legacy stock art matches receive materials; edited art and explicit
+`material: none` preserve the original finish. MAKING-THINGS and FEATURES document it.
+
+Local verification: typecheck and existing core/model/conversation groups; seven
+release groups (including 4,096 exact colour round-trips and all ten legacy/custom
+prop definitions); full simulation; Chromium controls, activities and all variant/
+facing fixtures; actual release Electron smooth/pixel render determinism, HSL/hex,
+rapid independent slider edits, scope/reload, 380px expanded layout, offline/save/
+backup/quit flow pass. Initial aggregate run stopped at a newly written parser fixture
+missing the required `type: prop`; corrected the fixture, release checks then passed,
+and simulation/browser ran independently. Full aggregate/native/extended CI follows.
+
+Complete store description: store/ITCH-PAGE.md and store/itch-page.html. Internal
+listing/settings/media notes: store/LISTING.md. Keep unpublished until native/store
+acceptance. Refreshed media and exact rc.3 CI/archive evidence are the next step.
+
 ## Feature list and customization — 2026-10-24
 
 The owner requested a feature list and customization. Candidate metadata is now rc.2.

@@ -36,7 +36,7 @@ app.whenReady().then(async () => {
  let settings;await until(()=>{settings=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('/settings/'));return settings&&!settings.webContents.isLoading();});
  settings.setSize(560, 900);await pause(300);
  fs.writeFileSync(path.join(output,'personalize.png'),(await settings.webContents.capturePage()).toPNG());
- await settings.webContents.executeJavaScript(`(()=>{const d=document.querySelector('#presets').closest('details');d.open=true;window.scrollTo(0,d.getBoundingClientRect().top+scrollY-195);})()`);
+ await settings.webContents.executeJavaScript(`(()=>{const d=document.querySelector('#appearancePanel');d.open=true;window.scrollTo(0,d.getBoundingClientRect().top+scrollY-195);})()`);
  settings.webContents.sendInputEvent({type:'mouseMove',x:1,y:1});await pause(200);
  fs.writeFileSync(path.join(output,'customization.png'),(await settings.webContents.capturePage()).toPNG());settings.close();
  // A cover composed in the runtime DOM. The figures/objects remain the actual renderer.

@@ -8,6 +8,10 @@ import { DEFAULT_CONFIG, mergeConfig } from '../src/core/config';
 import { offlineEdition, productDefaults } from '../src/shared/product';
 import { overlaps, placeSpeech } from '../src/core/speech-layout';
 
+import { BUILTIN_PROPS, parsePropDef, propMaterials } from '../src/core/props';
+import { parseMaterial } from '../src/core/materials';
+import { hexToHsl, hslToHex } from '../src/settings/color';
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mallow-storage-'));
 class BrowserStorage implements Storage {
   data = new Map<string, string>();
@@ -59,6 +63,30 @@ try {
   assert.equal(offline.mind, 'offline'); assert.equal(offline.fileHomes, false); assert.equal(offline.browserPlay, false); assert.equal(offline.closeWindows, false);
   assert.equal(custom.mind, 'full');
   console.log('PASS commercial defaults are quiet; imported and patched configs stay offline without changing identity or appearance');
+
+  for (let r=0;r<=255;r+=17) for (let g=0;g<=255;g+=17) for (let b=0;b<=255;b+=17) {
+    const hex='#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+    assert.equal(hslToHex(hexToHsl(hex)),hex);
+  }
+  assert.equal(hslToHex({h:360,s:100,l:50}),'#ff0000');
+  assert.equal(hslToHex({h:-120,s:100,l:50}),'#0000ff');
+  assert.equal(hslToHex({h:NaN,s:Infinity,l:-1}),'#000000');
+  assert.equal(hslToHex({h:120,s:200,l:100}),'#ffffff');
+  console.log('PASS 4,096 RGB colours round-trip exactly; HSL boundaries, wrapping and nonfinite inputs stay safe');
+
+  for(const stock of BUILTIN_PROPS){
+    const legacy=structuredClone(stock);for(const shape of legacy.shape)delete shape.material;
+    assert.deepEqual(propMaterials(legacy),propMaterials(stock));
+    const custom=structuredClone(legacy);custom.shape[0].color='#ab1234';
+    assert(propMaterials(custom).every(value=>value===undefined),'custom artwork was retextured');
+    const optOut=structuredClone(legacy);optOut.shape[0].material='none';
+    assert.equal(propMaterials(optOut)[0],'none');
+    const parsed=parsePropDef({...stock,type:'prop',shape:stock.shape.map(shape=>({...shape,material:'invalid'}))})!;
+    assert(parsed.shape.every(shape=>shape.material===undefined));
+    assert.deepEqual(legacy.shape.map(({material,...shape})=>shape),stock.shape.map(({material,...shape})=>shape));
+  }
+  assert.equal(parseMaterial('wood'),'wood');assert.equal(parseMaterial({} ),undefined);
+  console.log('PASS all ten stock props retain geometry, upgrade legacy materials, preserve custom art and honor explicit texture opt-out');
 
   for (const [width, height] of [[1280, 800], [380, 600]]) {
     const input = Array.from({ length: 5 }, (_, i) => ({ x: width / 2 - 100 + i * 8, y: height - 180, w: 200, h: 70 }));

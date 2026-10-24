@@ -56,7 +56,8 @@
           1
         ]
       ],
-      "fill": "#8d9b9a"
+      "fill": "#8d9b9a",
+      "material": "metal"
     },
     {
       "rect": [
@@ -66,7 +67,8 @@
         6
       ],
       "fill": "#5d7f9e",
-      "radius": 3
+      "radius": 3,
+      "material": "metal"
     },
     {
       "rect": [
@@ -76,7 +78,8 @@
         2
       ],
       "fill": "#3f5163",
-      "radius": 1
+      "radius": 1,
+      "material": "metal"
     },
     {
       "rect": [
@@ -86,7 +89,8 @@
         5
       ],
       "fill": "#4b5355",
-      "radius": 2.5
+      "radius": 2.5,
+      "material": "rubber"
     },
     {
       "rect": [
@@ -96,7 +100,8 @@
         9
       ],
       "fill": "#3b3f4f",
-      "radius": 4.5
+      "radius": 4.5,
+      "material": "rubber"
     },
     {
       "rect": [
@@ -106,7 +111,8 @@
         9
       ],
       "fill": "#3b3f4f",
-      "radius": 4.5
+      "radius": 4.5,
+      "material": "rubber"
     },
     {
       "rect": [
@@ -116,7 +122,8 @@
         4
       ],
       "fill": "#9aa3b8",
-      "radius": 2
+      "radius": 2,
+      "material": "metal"
     },
     {
       "rect": [
@@ -126,7 +133,8 @@
         4
       ],
       "fill": "#9aa3b8",
-      "radius": 2
+      "radius": 2,
+      "material": "metal"
     }
   ],
   "move": "drag"

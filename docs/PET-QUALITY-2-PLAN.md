@@ -116,3 +116,11 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
     - [x] Buyer-facing feature/customization guide included in downloads.
     - [x] Scoped personality chooser and readable mix-and-match appearance controls.
     - [x] Verify persistence/scope, preserve rc.2 draft candidates and update evidence.
+
+13. **Release polish and itch.io page — owner request 2026-10-24**
+    - [x] Replace customer prototype presets with HSL/hex and independent value sliders.
+    - [x] Apply textured GUI surfaces and stock materials without geometry changes.
+    - [x] Preserve saved looks/custom art; verify scope, recovery and small layouts.
+    - [x] Write complete itch.io page, matching HTML and listing/media instructions.
+    - [ ] Refresh actual runtime media and record rc.3 native/extended CI evidence.
+    - [ ] Physical/store acceptance remains required before public paid publication.
