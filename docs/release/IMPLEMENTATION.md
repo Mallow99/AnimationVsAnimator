@@ -15,10 +15,13 @@ The actual runtime media and capture recipe are in ../store/media; the stock fin
 atlas is ../verification/mallow-material-atlas.png. Physical/store acceptance stays open.
 
 The core/material candidate source is cf23c00. Its Mac/Windows extracted-app smokes,
-aggregate checks and release Electron flow passed in run 40140358177; extended tests
-are running. A final customer CSS correction wraps maximum-length names at 380px;
+aggregate checks, release Electron, both 7,200-second extended soaks, performance
+and draft preservation passed in run 40140358177. Exact evidence is recorded in
+../verification/mallow-material-core.json. A final customer CSS correction wraps maximum-length names at 380px;
 local release Electron verifies five long names, then restores the original names.
-That UI-only correction will repeat customer/native CI against the verified core.
+That UI-only correction is source 09fd9eb; all four jobs in customer/native CI run 40141842676 passed
+against the verified core. Final ZIP digests/bytes match the native logs for 09fd9eb;
+see ../verification/mallow-materials.json and the rc.3 draft release.
 
 Isolated Linux/Xvfb rich five-figure memory: 407.9 / 407.0 / 404.2 MiB median PSS
 before / after 20 Settings cycles / rested. Six processes and clean live audits.

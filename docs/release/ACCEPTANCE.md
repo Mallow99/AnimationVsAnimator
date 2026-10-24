@@ -1,12 +1,16 @@
 # Release acceptance — commercial candidates
 
-Latest candidate: rc.2; UI/customization checks and both native package smokes passed
-in CI run 40048614400. The core baseline below is unchanged.
+Latest candidate: **rc.3**, app source **09fd9eb**. All four UI/native jobs passed
+in [40141842676](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40141842676).
+Its core/material baseline **cf23c00** passed both 7,200-second seed-7/32 soaks,
+aggregate/customer/native checks and draft preservation in
+[40140358177](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40140358177).
+Exact source/archive/results: [../verification/mallow-materials.json](../verification/mallow-materials.json).
 
 Status: **candidate; not approved for sale**. Automated CI produces downloadable test
 archives. A successful package job does not complete native or commercial acceptance.
 
-Recorded automated baseline: source `2a78d2b`, CI run [40046018836](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40046018836).
+Prior recorded automated baseline: source `2a78d2b`, CI run [40046018836](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40046018836).
 All 218 core regressions, five release groups, simulation, Chromium/customer Electron,
 two 7,200-second simulated soaks and performance gate passed. Both real native candidate
 smoke checks and draft preservation passed. Exact ZIPs/hashes and results are in
@@ -62,7 +66,7 @@ because a simulated adapter or another OS passed.
 - [ ] Owner's seller identity, payout and tax setup completed directly with itch.io.
 - [ ] Download entitlement and full archive verified with a test download key.
 - [ ] Cover/demo/screenshots show this exact product; AI assistance disclosed accurately.
-- [ ] Final stable version and checksums published; rc.1 is not advertised as finished.
+- [ ] Final stable version and checksums published; no candidate is advertised as finished.
 
 No spend, signing certificate purchase or public store publication is automated here.
 The current budget is $0; signed/notarized distribution is a separate future decision.

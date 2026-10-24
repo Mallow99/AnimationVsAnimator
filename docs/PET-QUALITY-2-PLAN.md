@@ -122,5 +122,6 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
     - [x] Apply textured GUI surfaces and stock materials without geometry changes.
     - [x] Preserve saved looks/custom art; verify scope, recovery and small layouts.
     - [x] Write complete itch.io page, matching HTML and listing/media instructions.
-    - [ ] Refresh actual runtime media and record rc.3 native/extended CI evidence.
+    - [x] Refresh actual runtime media and record rc.3 native/extended CI evidence.
+    - [x] Verify maximum-length names and expanded controls at 380px; preserve exact final ZIPs.
     - [ ] Physical/store acceptance remains required before public paid publication.

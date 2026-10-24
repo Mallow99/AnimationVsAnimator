@@ -1,0 +1,94 @@
+{
+  "version": "1.0.0-rc.3",
+  "source": "09fd9eb9ce252f0b33d541f648734d23a8338de1",
+  "coreSource": "cf23c00e99377d92dee1e1e686421ad9ece1f1d9",
+  "ci": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40141842676",
+  "coreCi": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40140358177",
+  "jobs": [
+    {
+      "name": "checks",
+      "result": "success"
+    },
+    {
+      "name": "packages (macos-14, darwin)",
+      "result": "success"
+    },
+    {
+      "name": "packages (windows-latest, win32)",
+      "result": "success"
+    },
+    {
+      "name": "preserve-draft",
+      "result": "success"
+    }
+  ],
+  "nativeBuilds": [
+    {
+      "platform": "darwin",
+      "job": 121015041033,
+      "bytes": 130628286,
+      "sha256": "ce2e25fe9a2ca28e4015e8680bec176b8451486ccfc42800edbb4b7749645537",
+      "commit": "09fd9eb9ce252f0b33d541f648734d23a8338de1",
+      "result": "success"
+    },
+    {
+      "platform": "win32",
+      "job": 121015041027,
+      "bytes": 158706086,
+      "sha256": "6a118292e629722d317d8b6687b224705b0a93f281b0016389369cbd8a0bf7f6",
+      "commit": "09fd9eb9ce252f0b33d541f648734d23a8338de1",
+      "result": "success"
+    }
+  ],
+  "release": "https://github.com/Mallow99/AnimationVsAnimator/releases/tag/untagged-51f75ab71a059bcef180",
+  "draft": true,
+  "aggregateGroups": 12,
+  "releaseGroups": 7,
+  "coreRegressions": 218,
+  "coverage": [
+    "4096 exact RGB/HSL round trips and boundary cases",
+    "ten stock/legacy/custom material definitions and opt-out",
+    "smooth/pixel stock rendering: deterministic, no simulation randomness or geometry mutation",
+    "scoped HSL/hex, rapid independent sliders, personality and reload",
+    "five maximum-length names, expanded controls and 380px layout",
+    "offline enforcement, zero outgoing requests/listeners, quota/disk recovery, backup and quit",
+    "native extracted package, real helper, pause/resume/save/quit/restart"
+  ],
+  "extendedSoaks": [
+    {
+      "seed": 7,
+      "simulatedSeconds": 7200,
+      "audits": 7220,
+      "featurePhases": 35,
+      "result": "success",
+      "source": "cf23c00e99377d92dee1e1e686421ad9ece1f1d9"
+    },
+    {
+      "seed": 32,
+      "simulatedSeconds": 7200,
+      "audits": 7220,
+      "featurePhases": 35,
+      "result": "success",
+      "source": "cf23c00e99377d92dee1e1e686421ad9ece1f1d9"
+    }
+  ],
+  "coreP95Ms": {
+    "twoFigures": 0.297,
+    "fiveFigures": 0.788,
+    "budget": 8.33,
+    "platform": "Linux CI core-only; no native FPS claim"
+  },
+  "memoryEvidence": "mallow-material-memory.json (f659c2f rich material baseline; Linux/Xvfb short isolated test)",
+  "remoteAssetVerification": "Final draft ZIP digest and byte count match native CI package logs for exact source 09fd9eb",
+  "nativeAcceptance": "physical desktop gates remain open",
+  "store": {
+    "markdown": "../store/ITCH-PAGE.md",
+    "html": "../store/itch-page.html",
+    "status": "complete copy package, unpublished; authenticated seller/payout/entitlement checks remain"
+  },
+  "media": {
+    "source": "09fd9eb9ce252f0b33d541f648734d23a8338de1",
+    "path": "../store/media/SOURCE.json",
+    "demoSeconds": 15
+  }
+}

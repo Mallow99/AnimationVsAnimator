@@ -3,6 +3,25 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-24 — rc.3 verified delivery and itch.io page
+
+- Final app source 09fd9eb passed all four jobs in CI 40141842676: aggregate/types,
+  core checks, seven release groups, simulation, Chromium, actual release Electron,
+  narrow-name customization/save/offline/backup/quit, both native packages and profile.
+- Core/material baseline cf23c00 passed CI 40140358177, including both seed-7/32
+  7,200-second soaks (7,220 audits/35 phases each). Final UI-only CI correctly retained
+  that core result and repeated the remaining checks. Local repeats also passed.
+- Preserved exact final ZIPs/checksums in rc.3 draft; remote digests/byte counts match
+  native CI logs for 09fd9eb. Recorded complete evidence and updated release acceptance.
+- Refreshed actual media against final source, including the 15-second demo, customization
+  preview and long-name fixture. Complete itch.io description and paste-ready HTML are
+  in docs/store, with feature/material/customization and setup instructions.
+- Core p95 in final Linux CI: 0.297/0.788 ms for two/five figures (8.33 ms budget).
+  The isolated material-baseline memory test remains 407.9/407.0/404.2 MiB PSS over
+  20 Settings cycles/rest. Native physical resource/desktop acceptance remains open.
+- No public store launch, payment setup or revenue claimed. Physical and authenticated
+  seller/payout/entitlement gates remain in release/ACCEPTANCE.md.
+
 ## 2026-10-24 — narrow customization layout and final previews
 
 - Fixed maximum-length buddy names expanding the customer panel at 380px. Roster

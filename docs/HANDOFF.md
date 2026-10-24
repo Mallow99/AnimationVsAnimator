@@ -2,18 +2,40 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Validated rc.3 delivery — 2026-10-24
+
+Latest tested app source: **09fd9eb**. All four jobs in UI/native run
+[40141842676](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40141842676)
+passed. The core/material baseline **cf23c00** passed full aggregate/customer/native,
+both seed-7/32 extended soaks and draft preservation in run
+[40140358177](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40140358177).
+Each soak: 7,200 simulated seconds, 7,220 audits, 35 phases, no issues. Final UI run
+correctly skipped redoing the unchanged core's soaks; all other checks repeated.
+Core combined p95: 0.297 ms (two figures), 0.788 ms (five), within 8.33 ms.
+
+Both exact final ZIPs/checksums are in the [rc.3 draft](https://github.com/Mallow99/AnimationVsAnimator/releases/tag/untagged-51f75ab71a059bcef180).
+Remote asset digests/bytes match native package logs for 09fd9eb. Full results:
+verification/mallow-materials.json; core evidence: verification/mallow-material-core.json.
+Customer features/material/customization and making guides are packaged. Final media
+source is 09fd9eb, including an actual 15-second demo; see store/media/SOURCE.json.
+Complete itch.io copy: store/ITCH-PAGE.md and store/itch-page.html; setup: store/LISTING.md.
+
+Next: physical Mac/Windows acceptance and authenticated seller/payout/download-entitlement
+checks in release/ACCEPTANCE.md. The listing is written but unpublished, and the release
+stays in draft. No paid launch or income is claimed. No new Chrome/Finder feature work.
+
 ## Final narrow-window correction — 2026-10-24
 
 Maximum-length unbroken names previously expanded the 380px customer window to 854px.
 Roster and status now wrap (365px content with the 15px scrollbar). Five simultaneous
 40-character names, usable checkbox/swatch sizes and name restoration are verified in
 release Electron; see verification/mallow-custom-names-small.png. Only customer CSS and
-its QA change; core remains cf23c00. Push this correction after run 40140358177 completes,
-so extended-check selection retains its successful core baseline rather than cancelling it.
+its QA change; core remains cf23c00. The correction was pushed after run 40140358177 passed; final UI CI correctly retained
+its successful core baseline.
 
 Both independent local cf23c00 soaks passed 7,200 seconds, 7,220 audits and 35 phases;
 combined source/bundle evidence: verification/mallow-material-soak-local.json. Store copy,
-HTML and all media are complete. Final CI/archive recording remains to be completed.
+HTML and all media are complete. Final CI/archive recording is complete; see the delivery entry above.
 
 ## Verification continuation — 2026-10-24
 
