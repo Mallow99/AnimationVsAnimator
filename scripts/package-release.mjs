@@ -21,7 +21,7 @@ if (platform === 'darwin') copyFileSync('.build/native/windows-mac-arm64', 'dist
 const destination = resolve('out', `Mallow-Desk-Buddies-${platform}-${arch}`);
 if (existsSync(destination)) throw new Error('Candidate already exists: ' + destination + '. Move it aside before producing another version.');
 const stage = resolve('.build/release-stage', platform); rmSync(stage, { recursive: true, force: true }); mkdirSync(stage, { recursive: true });
-cpSync('dist', join(stage, 'dist'), { recursive: true, filter: file => !file.endsWith('.map') && !file.includes('/lab/') && !file.includes('/extension/') });
+cpSync('dist', join(stage, 'dist'), { recursive: true, filter: file => !file.endsWith('.map') && !/\/(?:lab|extension)(?:\/|$)/.test(file.replaceAll('\\', '/')) });
 mkdirSync(join(stage, 'assets')); for (const file of ['trayTemplate.png', 'trayTemplate@2x.png', 'builtin-history.json']) copyFileSync(join('assets', file), join(stage, 'assets', file));
 writeFileSync(join(stage, 'package.json'), JSON.stringify({ name: 'mallow-desk-buddies', productName: meta.name, version: meta.version, description: 'Expressive offline desktop companions.', main: 'dist/electron/main.js', private: true }, null, 2));
 copyFileSync('product.json', join(stage, 'product.json'));

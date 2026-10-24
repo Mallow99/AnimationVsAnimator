@@ -48,10 +48,26 @@ desktop toy; no affiliation with animation franchises or other companion apps.
 ## Upload checklist
 
 Use `docs/release/ACCEPTANCE.md`. Keep this listing in draft until its gates pass.
-Add a cover, 3–5 actual screenshots and a short actual-runtime demonstration. Include
+Prepared media is in `docs/store/media/`: cover, three actual screenshots and a
+15-second runtime demo. `SOURCE.json` records the source and capture conditions. Include
 the version, tested systems, ZIP checksums and a link to the repository's issue tracker.
 Use itch.io's “Collected by itch.io” payout mode, default 10% revenue share, and the
 owner's own verified payout information. Do not create fake reviews or self-purchases.
 
 No authenticated itch.io session is available in this workspace. This document is an
 upload-ready copy package, not evidence of a published store or generated revenue.
+
+## First-week launch experiment
+
+Launch only the systems that pass native acceptance. Keep the initial $5 price and
+one plain page; no hosting/subscription costs are needed. Add the actual runtime
+media, tested OS versions, limitations and the issue tracker to the listing. Post
+one honest release announcement from the owner's own account only when they choose
+to do so; no automated outreach has been sent.
+
+After the first week, review real page views, downloads, refund/support requests
+and paid purchases. A first target is one legitimate purchase per week, roughly
+$4 before additional taxes/fees at the proposed price. This is a target, not a forecast.
+If there are views but no purchases, improve the demo/listing clarity before adding
+features. If there are no views, test one relevant, permitted discovery channel.
+Do not buy traffic, add services or create recurring costs for this experiment.

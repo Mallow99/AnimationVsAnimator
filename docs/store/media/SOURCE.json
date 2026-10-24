@@ -1,0 +1,9 @@
+{
+  "source": "a82b6f43a2cedce0543feaaba6b24cabec25fcdd",
+  "platform": "Linux Electron/Xvfb",
+  "nativeWindows": "simulated; no OS desktop claims",
+  "background": "plain cream backdrop",
+  "cover": "typographic header added in DOM above actual runtime figures",
+  "demo": "15 seconds, 12fps actual wall-time frames; no audio or speed-up",
+  "publish": "only after native acceptance"
+}

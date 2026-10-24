@@ -1,5 +1,5 @@
 // Real Electron/preload/renderer checks. Native windows are explicitly simulated on Linux.
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, dialog } = require('electron');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const http = require('node:http');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mallow-release-'));
@@ -91,6 +91,21 @@ app.whenReady().then(async () => {
   assert(await run('window.pet.items.list.some(i=>i.def.id==="handheld")'));
   assert(await run('window.pet.brain.log.some(l=>l.text.includes("Sam"))'));
   console.log('PASS release: reload retains name, dialogue, owned items and exact furniture count without reseeding');
+
+  const saveDialog = dialog.showSaveDialog;
+  try {
+    const backupPath = path.join(dir, 'exported-backup.json');
+    fs.writeFileSync(path.join(dir, 'ai-keys.bin'), 'do-not-export-credential');
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: backupPath });
+    assert.equal((await ui('window.petShell.exportBackup()')).ok, true);
+    const text = fs.readFileSync(backupPath, 'utf8'), backup = JSON.parse(text);
+    assert.equal(backup.format, 'mallow-desk-buddies');assert.equal(backup.configs[0].name, 'Clover');
+    assert(backup.worlds.length === 5 && backup.memories.length === 5);
+    assert(!text.includes('do-not-export-credential'));
+    dialog.showSaveDialog = async () => ({ canceled: true });
+    assert.equal((await ui('window.petShell.exportBackup()')).ok, false);
+  } finally { dialog.showSaveDialog = saveDialog; }
+  console.log('PASS release: full JSON backup contains every stable identity, excludes credential files and respects cancellation');
 
   settings.setSize(560, 900);
   await ui('document.querySelector("[data-tab=buddies]").click();window.scrollTo(0,0)'); await pause(200);

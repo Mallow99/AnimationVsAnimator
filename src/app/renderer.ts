@@ -497,10 +497,14 @@ let last = { x: 0, y: 0, t: performance.now() };
 let vel = { x: 0, y: 0 };
 const toolBag = new ToolBag(activePets, save, on => { toolsTyping = on; syncTyping(); }, () => !cursorWeapon.active);
 Object.assign(window, { toolBag, checkSanity:()=>audit() });
-Object.assign(window, { exportBackupSnapshot: () => ({
-  worlds: figures.map((p, id) => { const value = JSON.parse(p.save()); if (id === 0) value.props = figures[0].props.savePlaced(); else delete value.props; return value; }),
-  memories: figures.map(p => JSON.parse(p.memory.save())),
-}) });
+Object.assign(window, { exportBackupSnapshot: async () => {
+  await Promise.allSettled(memoryLoads);
+  if (blockedLocalSaves.size || figures.some((_, id) => !memoryLoaded[id])) throw new Error('Recover unread saves before exporting.');
+  return {
+    worlds: figures.map((p, id) => { const value = JSON.parse(p.save()); if (id === 0) value.props = figures[0].props.savePlaced(); else delete value.props; return value; }),
+    memories: figures.map(p => JSON.parse(p.memory.save())),
+  };
+} });
 let welcomePrepared = false;
 async function prepareWelcomeScene() {
   if (!COMMERCIAL || welcomePrepared || !pets.length) return;

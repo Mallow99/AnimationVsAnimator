@@ -23,5 +23,7 @@ for(const count of [2,5]) {
     const at=performance.now();for(const p of pets)p.update(dt);samples.push(performance.now()-at);
   }
   const elapsed=performance.now()-begin;samples.sort((a,b)=>a-b);
+  const p95 = samples[Math.floor(samples.length * 0.95)];
+  if (p95 > 8.33) throw new Error(`${count}-figure p95 exceeds the 8.33ms update budget: ${p95}`);
   console.log(`${count} figures + ${count*2} loose items + couch/bookshelf: 60 simulated seconds in ${(elapsed/1000).toFixed(2)}s; mean ${(elapsed/7200).toFixed(3)}ms, p95 ${samples[Math.floor(samples.length*0.95)].toFixed(3)}ms per combined 120Hz update (8.33ms budget)`);
 }

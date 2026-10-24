@@ -19,16 +19,28 @@ These ignored working outputs are not bundled into the customer download.
 
 ## Evidence at the first implementation checkpoint
 
-- Full original 217 regressions, release storage/layout checks, simulation and Chromium
-  passed before the long-soak repair. Final aggregate verification is in progress.
+- All 218 focused core regressions, five release storage/layout checks, simulation and
+  actual Chromium controls passed after the long-soak repair. Typecheck also passes.
 - Real Linux Electron customer flow passed: onboarding, migration, activity/supply IPC,
   pause/hide/resume, local chat, failed quota/write+retry, exact reload and quit flush.
   Native windows were simulated; no HTTP requests or loopback listener were observed.
 - Development Electron flow passed, including optional-provider controls with mocks.
 - 10 model checks passed after the book collision repair. The new case drops rotating
   books on a one-way platform across 72 orientations with changing hull topology.
-- Extended seed-7/32 simulation soaks and isolated final resource profiles are pending.
-- Mac and Windows package jobs and actual native acceptance are pending.
+- Seed 7 passed 7,200 simulated seconds, 7,220 live audits and 35 feature phases. Seed 32
+  is running. This is simulated time, not two hours of hardware battery/focus testing.
+- Isolated core p95 combined update: two figures 0.337ms, five 0.958ms (8.33ms target).
+  Linux software-rendered whole-process-tree PSS medians: ordinary two 315MiB, five 319MiB;
+  rich five 381MiB, after 20 Settings cycles 389MiB, after rest 397MiB; six processes.
+  No long-term leak exclusion or native battery/60fps claim follows from those samples.
+- Mac ARM64 and Windows x64 archives built and passed native CI extraction, real helper,
+  Pause/Resume, save/normal quit/restart, with a path containing spaces. Run 40045300981,
+  PR merge 603d06a (tree identical to a82b6f4). Both ZIP checksums/content verified locally.
+- CI is being extended to preserve the final validated archives in a draft GitHub release.
+  Workspace credentials could create the draft but were refused by the upload endpoint;
+  the workflow uses its own scoped token. Physical native acceptance remains pending.
+- Runtime media and reproducible capture recipe are in `docs/store/media` and
+  `scripts/capture-product.cjs`; SOURCE.json records the source and capture conditions.
 
 ## Work that requires access outside this cloud workspace
 

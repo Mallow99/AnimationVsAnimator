@@ -348,3 +348,21 @@ remaining issues here. Entries describe shipped behavior; unverified hardware be
 - Added pointer/keyboard interaction and ownership/restore regression coverage.
 - Linux simulation/browser/Electron checks are recorded in the handoff; Mac desktop behavior
   was not verified.
+
+### Candidate evidence and preservation follow-up
+
+- Mac ARM64 and Windows x64 candidates passed native CI extraction, real helper,
+  Pause/Resume, save/normal quit/restart checks. Downloaded ZIP hashes and packaged
+  contents were independently verified; the PR test-merge tree matches a82b6f4.
+- Added actual runtime store media/capture recipe and draft release notes. Direct
+  release asset uploads were refused by the workspace upload credential; the CI
+  preservation job uses its own scoped token after all tests and keeps releases draft.
+- Backup export now waits for every memory load, refuses unread/corrupt state, and
+  passes real Electron full-identity export, credential-exclusion and cancel checks.
+- Fixed Windows path normalization in package exclusions and made the existing
+  8.33ms core p95 target fail CI when exceeded. Removed duplicate PR/push runs.
+- Isolated Linux core p95: 0.337ms (two) / 0.958ms (five). Whole-tree PSS medians:
+  315/319MiB ordinary two/five; rich five 381MiB, 389MiB after 20 Settings cycles,
+  397MiB after rest. Six processes; this does not prove settled long-term memory.
+- Seed 7 passed 7,200 simulated seconds / 7,220 live audits / 35 feature phases.
+  Final seed 32, candidate preservation and release record are in progress.
