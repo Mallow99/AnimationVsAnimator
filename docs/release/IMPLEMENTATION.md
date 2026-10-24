@@ -37,11 +37,12 @@ These ignored working outputs are not bundled into the customer download.
   Pause/Resume, save/normal quit/restart, with a path containing spaces. Run 40045300981,
   PR merge 603d06a (tree identical to a82b6f4). Both ZIP checksums/content verified locally.
 - Final source 2a78d2b built and passed native smoke checks on both target OS runners
-  in CI run 40046018836. Full checks/customer Electron passed; extended CI repetition and
-  automatic draft preservation are running. Final archive hashes and detailed results
+  in CI run 40046018836. All checks/customer Electron, both full soaks and the performance gate passed. Both
+  archives and their SHA-256 files are preserved in the draft release; remote asset digests
+  match the locally validated files. Final archive hashes and detailed results
   are in [../verification/mallow-release.json](../verification/mallow-release.json).
   Workspace credentials could create the draft but were refused by the upload endpoint;
-  the workflow uses its own scoped token. Physical native acceptance remains pending.
+  the workflow successfully used its own scoped token. Physical native acceptance remains pending.
 - Runtime media and reproducible capture recipe are in `docs/store/media` and
   `scripts/capture-product.cjs`; SOURCE.json records the source and capture conditions.
 
@@ -55,3 +56,11 @@ in [../store/LISTING.md](../store/LISTING.md); do not publish this candidate as 
 
 No purchases, reviews or income have been generated. A finished download alone does
 not establish buyer demand; the $5 price is an initial experiment after acceptance.
+
+Final CI proof: [../verification/mallow-ci-checks.txt](../verification/mallow-ci-checks.txt).
+The combined CI evidence artifact was skipped because its `.build` paths were hidden.
+The upload setting now explicitly includes the allowlisted hidden paths and fails if
+no files are found. Actual CI results are retained in the repository; both native
+evidence artifacts and all four draft download assets uploaded successfully.
+
+Draft downloads: https://github.com/Mallow99/AnimationVsAnimator/releases/tag/untagged-8def72f382f8ae846806

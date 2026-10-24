@@ -49,6 +49,8 @@ jobs:
         if: always()
         with:
           name: automated-evidence
+          include-hidden-files: true
+          if-no-files-found: error
           path: |
             .build/verification/
             .build/release/

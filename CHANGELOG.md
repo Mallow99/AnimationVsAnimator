@@ -377,3 +377,17 @@ remaining issues here. Entries describe shipped behavior; unverified hardware be
   memory samples and exact final ZIP hashes in docs/verification/mallow-release.json.
 - Final CI soak repetition and draft preservation are in progress. Physical native QA,
   seller/payout access, store entitlement testing and stable public sale remain open.
+
+### Final CI and draft delivery
+
+- CI run 40046018836 passed aggregate checks, patched Electron/export flow, both full
+  seeded soaks, the core performance gate, both native packages/smokes and draft preservation.
+- Both final ZIPs and checksum files are uploaded in the draft release. GitHub asset
+  digests match the locally validated files; source is 2a78d2b. CI core p95 was
+  0.308ms / 0.777ms for two/five figures, separately from the earlier local measurements.
+- The combined evidence artifact was skipped by GitHub's hidden-directory default.
+  Saved the actual completed CI result lines in the repository, explicitly enabled
+  the allowlisted hidden paths and made future missing-evidence uploads fail. Workflow
+  YAML parses; this reporting-only correction does not change the tested app archives.
+- Updated handoff/checklist and complete machine-readable verification. Physical
+  desktop acceptance and authenticated store/seller verification remain open. No public sale.

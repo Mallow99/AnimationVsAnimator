@@ -3,6 +3,12 @@
 Status: **candidate; not approved for sale**. Automated CI produces downloadable test
 archives. A successful package job does not complete native or commercial acceptance.
 
+Recorded automated baseline: source `2a78d2b`, CI run [40046018836](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40046018836).
+All 218 core regressions, five release groups, simulation, Chromium/customer Electron,
+two 7,200-second simulated soaks and performance gate passed. Both real native candidate
+smoke checks and draft preservation passed. Exact ZIPs/hashes and results are in
+[../verification/mallow-release.json](../verification/mallow-release.json).
+
 ## Repeatable automated checks
 
 - `npm ci`, `npm run verify`: types, all existing focused checks, storage/release tests,

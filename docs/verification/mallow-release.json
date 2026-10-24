@@ -3,7 +3,7 @@
   "status": "candidate; not approved for sale",
   "source": "2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0",
   "ciRun": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40046018836",
-  "ciStatus": "native packages/customer flow/aggregate checks passed; extended CI repetition and draft preservation in progress",
+  "ciStatus": "all four jobs passed: checks, both native packages, draft preservation",
   "localVerification": {
     "method": "pre-commit workspace verification; final committed source is independently repeated in CI",
     "coreRegressions": 218,
@@ -726,5 +726,43 @@
     "Native long-term resource/focus/input/permissions/DPI/sleep-wake checks",
     "Authenticated seller identity/payout/tax verification and entitlement testing",
     "Stable version/public paid launch only after release gates pass"
-  ]
+  ],
+  "ciCoreProfile": {
+    "twoFigureP95Ms": 0.308,
+    "fiveFigureP95Ms": 0.777,
+    "combinedUpdateBudgetMs": 8.33
+  },
+  "draftRelease": {
+    "url": "https://github.com/Mallow99/AnimationVsAnimator/releases/tag/untagged-8def72f382f8ae846806",
+    "draft": true,
+    "source": "2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0",
+    "assets": [
+      {
+        "name": "Mallow-Desk-Buddies-1.0.0-rc.1-darwin-arm64.zip",
+        "bytes": 130620288,
+        "sha256": "4485c3819e432907a8032161e3bdc8ca4e001269dda92e6054701a4326a400eb"
+      },
+      {
+        "name": "Mallow-Desk-Buddies-1.0.0-rc.1-darwin-arm64.zip.sha256",
+        "bytes": 114,
+        "sha256": "e486ed5138b37560f45e88f136e38a0705270c4d1009fac4c9be3227a204d762"
+      },
+      {
+        "name": "Mallow-Desk-Buddies-1.0.0-rc.1-win32-x64.zip",
+        "bytes": 158698312,
+        "sha256": "34ff7d7b3a923edfc6823151736ac97f17a6b2a236b193c5302254ba63182f4a"
+      },
+      {
+        "name": "Mallow-Desk-Buddies-1.0.0-rc.1-win32-x64.zip.sha256",
+        "bytes": 111,
+        "sha256": "80a53d337f5fa1c20e7e9cd5f309370f54bcfb9e1b4718c753a60730af48b840"
+      }
+    ],
+    "remoteDigestsMatchValidatedArchives": true
+  },
+  "ciReporting": {
+    "summary": "docs/verification/mallow-ci-checks.txt",
+    "combinedArtifact": "skipped by hidden-directory default in the validated run; include-hidden-files and fail-on-missing corrected for future runs",
+    "nativeArtifacts": "both uploaded successfully"
+  }
 }

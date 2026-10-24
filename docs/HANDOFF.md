@@ -27,7 +27,7 @@ A 72-orientation landing regression passes. Both seed-7/32 two-hour simulated so
 (7,220 audits and 35 phases each). All 218 core checks, five release groups, simulation,
 Chromium and patched Electron customer/export flow pass. Native Mac/Windows CI archives
 from 2a78d2b pass extraction/real-helper/quit/restart; full CI repetition and draft archive
-preservation are finishing in run 40046018836. Resource figures and exact SHA-256s are
+preservation passed in run 40046018836. Both ZIPs and checksums are in the draft release. Resource figures and exact SHA-256s are
 in release/IMPLEMENTATION.md and verification/mallow-release.json. No physical QA is claimed.
 
 No authenticated itch.io session is available. Store copy, support/privacy/install/recovery
