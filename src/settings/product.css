@@ -33,7 +33,7 @@ h3,summary { font-size:14px; font-weight:700; margin:0 }
 p { margin:0 }
 small,.note { font-size:12px; color:var(--muted) }
 .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap }
-.row>* { flex:1 }
+.row>* { flex:1; min-width:0; overflow-wrap:anywhere }
 .actions { display:flex; gap:8px; flex-wrap:wrap }
 .field { display:grid; gap:6px; font-size:13px; font-weight:600; min-width:0 }
 input[type=text],select,textarea { width:100%; min-width:0; color:var(--ink); background:linear-gradient(#f8f7ef,#fffef9); border:1px solid #ccd2c2; border-radius:8px; padding:10px; box-shadow:inset 0 1px 2px #293a3207 }
@@ -54,8 +54,8 @@ output { color:var(--green); font-size:12px; font-weight:600; font-variant-numer
 #color-h::-webkit-slider-thumb,#color-s::-webkit-slider-thumb,#color-l::-webkit-slider-thumb { appearance:none; width:22px; height:22px; border:3px solid #fffdf5; background:var(--green); border-radius:50%; box-shadow:0 0 0 1px #52674a,0 1px 3px #0003 }
 .toggle { display:flex; align-items:center; justify-content:space-between; gap:14px; font-size:13px }
 .toggle span { flex:1 }.toggle small { display:block }
-#roster { display:grid; grid-template-columns:1fr 1fr; gap:8px }
-#roster label { padding:9px 10px; border:1px solid #d6dbc9; border-radius:9px; display:flex; align-items:center; gap:8px; font-size:13px; background:linear-gradient(#fffef7,#f3f2e7) }
+#roster { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px }
+#roster label { min-width:0; overflow-wrap:anywhere; padding:9px 10px; border:1px solid #d6dbc9; border-radius:9px; display:flex; align-items:center; gap:8px; font-size:13px; background:linear-gradient(#fffef7,#f3f2e7) }
 .swatch { width:10px; height:10px; border-radius:50%; display:inline-block; box-shadow:inset 0 1px #fff6,0 0 0 1px #0001 }
 .status { font-size:13px; color:var(--green) }.divider { border-top:1px solid var(--line); padding-top:12px }
 details>div { display:grid; gap:14px; margin-top:14px }
@@ -75,3 +75,5 @@ footer { padding:8px 0 20px; text-align:center; color:var(--muted); font-size:11
 @media(prefers-reduced-motion:no-preference) { button { transition:background .12s,box-shadow .12s } }
 @media(max-width:440px) { .slider-grid,#activityList { grid-template-columns:1fr } }
 @media(max-width:400px) { header,main { padding-left:15px; padding-right:15px }h1 { font-size:23px }.card { padding:15px } }
+
+#roster input,#roster .swatch { flex:none }

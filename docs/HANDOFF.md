@@ -2,14 +2,29 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Final narrow-window correction — 2026-10-24
+
+Maximum-length unbroken names previously expanded the 380px customer window to 854px.
+Roster and status now wrap (365px content with the 15px scrollbar). Five simultaneous
+40-character names, usable checkbox/swatch sizes and name restoration are verified in
+release Electron; see verification/mallow-custom-names-small.png. Only customer CSS and
+its QA change; core remains cf23c00. Push this correction after run 40140358177 completes,
+so extended-check selection retains its successful core baseline rather than cancelling it.
+
+Both independent local cf23c00 soaks passed 7,200 seconds, 7,220 audits and 35 phases;
+combined source/bundle evidence: verification/mallow-material-soak-local.json. Store copy,
+HTML and all media are complete. Final CI/archive recording remains to be completed.
+
 ## Verification continuation — 2026-10-24
 
 The browser diagnostic listener exposed a QA cleanup bug: signal-exited children have
 null exitCode but a nonnull signalCode. Waiting for a close event that already fired
 hung verification. An injected SIGTERM reproduced it (timeout 124); cleanup now checks
-both properties and reports the failure immediately (exit 1 with stderr). The stalled
-CI attempt was cancelled to retrieve its launch evidence. Local Chromium passed with
-diagnostics enabled. Desktop chat CSS precedence is also fixed and computed-style
+both properties and reports the failure immediately (exit 1 with stderr). CI attempt a9a3859 actually passed the aggregate (including browser) and release
+Electron, as its retrieved artifact confirms. It was cancelled during extended soak
+while the connector still reported verify as active. Do not describe it as a failed
+browser run. The final cf23c00 run includes the chat CSS and signal-cleanup corrections.
+Local Chromium passed with diagnostics enabled. Desktop chat CSS precedence is also fixed and computed-style
 asserted in actual release Electron, alongside the existing flow (passed).
 
 Isolated release rich five-figure RAM evidence is verification/mallow-material-memory.json:

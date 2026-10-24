@@ -3,6 +3,20 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-24 — narrow customization layout and final previews
+
+- Fixed maximum-length buddy names expanding the customer panel at 380px. Roster
+  labels and live status wrap; checkboxes and colour swatches retain usable sizes.
+  Reproduced the original 854px overflow; corrected layout measures 365px within a
+  380px window. Added five-name release Electron regression and restored all names.
+- Both local final-core endurance runs passed 7,200 simulated seconds, 7,220 audits
+  and 35 phases each. Stored exact reports and the narrow-name visual fixture.
+- Refreshed actual media against cf23c00, centered the material atlas and updated store
+  notes. The itch.io copy and HTML are complete. The full core CI repeat is running;
+  this UI-only correction will repeat aggregate/customer/native checks after it passes.
+- Remaining release gates are unchanged: physical Mac/Windows and authenticated seller,
+  payout and download-entitlement acceptance before any public paid release.
+
 ## 2026-10-24 — final surface and browser cleanup
 
 - Fixed desktop chat stylesheet precedence; retained buddy-coloured borders and

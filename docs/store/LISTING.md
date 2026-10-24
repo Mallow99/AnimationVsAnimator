@@ -25,6 +25,8 @@ store accepts that upload format (otherwise use a supported video host/embed),
 then reading-and-games.png, customization.png, personalize.png and
 a-little-company.png in the screenshot gallery. All images show the actual runtime;
 the cream backdrop and cover lettering are presentation elements, not an OS desktop.
+The optional stock-material atlas is in `docs/verification/mallow-material-atlas.png`;
+it shows all ten furniture definitions in the actual renderer at 2× smooth size.
 Use the paper/forest-green palette to match the app, with readable dark body text.
 
 The page discloses AI assistance. Complete any platform AI-content fields truthfully

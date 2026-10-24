@@ -157,6 +157,16 @@ app.whenReady().then(async () => {
   await ui('document.querySelector("[data-tab=settings]").click()'); await pause(100);
   fs.writeFileSync(path.join(output, 'settings.png'), (await settings.webContents.capturePage()).toPNG());
   settings.setSize(380, 640);
+  const savedNames=await ui('window.petShell.getConfigs().then(cs=>cs.map(c=>c.name))');
+  await ui('for(let i=0;i<5;i++)window.petShell.setConfig({name:"ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMN"},i)');
+  await until(()=>ui('[...document.querySelectorAll("#roster label")].every(l=>l.textContent.includes("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))'),'maximum-length names');
+  await ui('document.querySelector("[data-tab=buddies]").click()');
+  assert(await ui('document.documentElement.scrollWidth<=innerWidth'),'long names overflowed narrow customer UI');
+  await pause(150);
+  fs.writeFileSync(path.join(output,'small-long-name.png'),(await settings.webContents.capturePage()).toPNG());
+  await ui(`(${JSON.stringify(savedNames)}).forEach((name,id)=>window.petShell.setConfig({name},id))`);
+  await until(()=>run('window.pet.config.name==="Clover"'),'restore names after narrow layout check');
+
   await ui('document.querySelector("[data-tab=buddies]").click();document.querySelectorAll("#appearancePanel details").forEach(d=>d.open=true)');
   assert(await ui('document.documentElement.scrollWidth<=innerWidth'));
   await ui('document.querySelector("[data-tab=activities]").click()');

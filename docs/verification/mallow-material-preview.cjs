@@ -16,7 +16,7 @@ app.whenReady().then(async()=>{
  const props=window.pet.props;
  for(const [i,id]of [...props.defs.keys()].entries()){
  const x=240+(i%3)*480,y=200+Math.floor(i/3)*220;
- const t=props.spawn(id,x,y,2);t.draw(g,1,0,1);props.remove(t);
+ const t=props.spawn(id,0,0,2),b=t.def.bounds,a=t.toWorld(b[0],b[1]),z=t.toWorld(b[2],b[3]);g.save();g.translate(x-(a.x+z.x)/2,y-(a.y+z.y)/2);t.draw(g,1,0,1);g.restore();props.remove(t);
  g.fillStyle='#42664e';g.font='600 16px system-ui';g.fillText(id,x-70,y+105);
  }
  return c.toDataURL();})()`);

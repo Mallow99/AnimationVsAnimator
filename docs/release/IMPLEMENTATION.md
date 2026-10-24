@@ -1,5 +1,31 @@
 # Commercial candidate implementation
 
+## Current material and GUI polish candidate
+
+The rc.3 pass replaces customer whole-look/palette buttons with hue, saturation,
+lightness and hex colour controls plus independent appearance/movement sliders.
+It adds paper/linen controls, deterministic stock prop/book/handheld materials and
+preserves custom artwork and saved look values. All ten prop JSON files are unchanged
+from rc.2 after removing the new material annotations; silhouettes/physics/grips remain.
+
+Complete itch.io copy: [Markdown](../store/ITCH-PAGE.md) and
+[paste-ready HTML](../store/itch-page.html). [Store setup](../store/LISTING.md)
+records pricing, upload layout, platform disclosures and remaining seller gates.
+The actual runtime media and capture recipe are in ../store/media; the stock finish
+atlas is ../verification/mallow-material-atlas.png. Physical/store acceptance stays open.
+
+The core/material candidate source is cf23c00. Its Mac/Windows extracted-app smokes,
+aggregate checks and release Electron flow passed in run 40140358177; extended tests
+are running. A final customer CSS correction wraps maximum-length names at 380px;
+local release Electron verifies five long names, then restores the original names.
+That UI-only correction will repeat customer/native CI against the verified core.
+
+Isolated Linux/Xvfb rich five-figure memory: 407.9 / 407.0 / 404.2 MiB median PSS
+before / after 20 Settings cycles / rested. Six processes and clean live audits.
+Raw evidence: ../verification/mallow-material-memory.json. No native performance
+claim follows from this short software-rendered measurement.
+
+
 Latest UI candidate: **1.0.0-rc.2**, source `9e166bc`. Adds the feature/customization guide,
 per-buddy personality selection, readable mixed presets and an in-app feature list.
 CI run [40048614400](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40048614400)
