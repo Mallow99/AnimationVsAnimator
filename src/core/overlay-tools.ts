@@ -3,15 +3,29 @@ import type { Item } from './items';
 import type { Ball, Thing } from './props';
 import type { Vec } from './math';
 import { wipeDoodles } from './sponge';
+import { compoundOffset, polygonDistance } from './geometry';
 
 type HeldObject = { kind: 'item'; owner: Pet; object: Item }
   | { kind: 'thing'; owner: Pet; object: Thing }
   | { kind: 'ball'; owner: Pet; object: Ball };
 
+/** A floor guide for a new supply, based on the actual transformed collision contours. */
+export interface FurniturePlacementPreview {
+  hull: Vec[];
+  floorHull: Vec[];
+  floor: number;
+  floorCenter: Vec;
+  nearFloor: boolean;
+  blocked: boolean;
+  snap: boolean;
+}
+
 /** Direct overlay transfers and one reversible trash slot. Only in-app objects enter this API. */
 export class OverlayTools {
   held: HeldObject | null = null;
   using = false;
+  /** Only new furniture supplies use this optional placement aid. Existing drags stay physical. */
+  snapToFloor = true;
   private origin: { created: boolean; state?: Pick<Item, 'where' | 'slot' | 'hand' | 'at' | 'dir' | 'shelf'> } | null = null;
   private wipeFrom: Vec | null = null;
   private lastTrash: { entry: HeldObject; born: number; at: number } | null = null;
@@ -21,6 +35,26 @@ export class OverlayTools {
   get trashedName() {
     const e = this.lastTrash?.entry;
     return e?.kind === 'item' ? e.object.def.name : e?.kind === 'thing' ? (e.object.def?.name ?? e.object.kind) : e ? 'drawn ball' : null;
+  }
+
+  get placementPreview(): FurniturePlacementPreview | null {
+    const e = this.held;
+    if (!this.origin?.created || e?.kind !== 'thing' || !e.object.def || !e.owner.props.things.includes(e.object)) return null;
+    const object = e.object, bounds = e.owner.ctx.world.bounds, hull = object.collisionHull;
+    if (!hull.length) return null;
+    // The physics solver keeps a 1.5-point contact margin around the visible contour.
+    const bottom = Math.max(...hull.map(p => p.y)), dy = bounds.floor - 1.5 - bottom;
+    const floorHull = hull.map(p => ({ x: p.x, y: p.y + dy }));
+    const floorParts = object.collisionHulls.map(part => part.map(p => ({ x: p.x, y: p.y + dy })));
+    const outside = floorHull.some(p => p.x < bounds.left + 1.49 || p.x > bounds.right - 1.49 || p.y < bounds.top + 1.49);
+    const currentPets = this.pets();
+    const blocked = outside
+      || e.owner.props.things.some(other => other !== object && !!compoundOffset(floorParts, other.collisionHulls))
+      || currentPets.some(p => p.items.list.some(item => item.where === 'world' && !!compoundOffset(floorParts, [item.collisionHull])))
+      || e.owner.props.balls.some(ball => floorParts.some(part => polygonDistance(ball.p, part) < ball.r + 1.5))
+      || currentPets.some(p => Object.entries(p.char.body.j).some(([joint, point]) => !p.char.body.ghost.has(joint as keyof typeof p.char.body.j) && floorParts.some(part => polygonDistance(point, part) < point.r + 1.5)));
+    const nearFloor = Math.abs(dy) <= Math.max(12, Math.min(32, 18 * object.scale));
+    return { hull, floorHull, floor: bounds.floor, floorCenter: { x: object.center.x, y: object.center.y + dy }, nearFloor, blocked, snap: this.snapToFloor && nearFloor && !blocked };
   }
 
   beginItem(owner: Pet, object: Item, at: Vec) {
@@ -108,6 +142,7 @@ export class OverlayTools {
     const e = this.held;
     this.using = false;
     this.move(at, velocity);
+    const placement = this.placementPreview;
     this.held = null;
     this.origin = null;
     if (!e) return false;
@@ -128,7 +163,14 @@ export class OverlayTools {
         e.object.thrownBy = 'you';
         e.object.thrownAt = e.owner.ctx.world.time;
       }
-    } else e.object.release();
+    } else {
+      if (e.kind === 'thing' && placement?.snap) {
+        // Place the exact preview pose, then release all hold constraints. No scene is frozen.
+        e.object.place(placement.floorCenter, e.object.tilt);
+        if (e.object.held) { e.object.held.vx = 0; e.object.held.vy = 0; }
+      }
+      e.object.release();
+    }
     if(e.kind==='item'&&e.object.def.use==='connect'&&!recipient){
       const tv=e.owner.props.placed.find(t=>t.def?.use==='tv'&&Math.abs(t.center.x-at.x)<100*e.object.scale);
       if(tv){tv.consoleConnected=true;e.owner.ctx.say('Console connected.',1.4);}

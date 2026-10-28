@@ -8,6 +8,8 @@ import { drawPixelText, FONT_HEIGHT, textWidth, wrapPixelText } from './pixelfon
 /** How he looks. Edited from the settings / presets. */
 export interface Look {
   color: string;
+  /** Built-in cosmetic, anchored to the left upper arm. */
+  tattoo?: 'none' | 'jt';
   lineWidth: number;  // limb thickness (before scaling)
   headSize: number;   // 1 = normal
   pixel: number;      // 1 = smooth; 2+ = pixel-art with pixels this many screen points wide
@@ -16,7 +18,7 @@ export interface Look {
   outline: boolean;
 }
 
-export const DEFAULT_LOOK: Look = { color: '#4450d6', lineWidth: 7, headSize: 1.25, pixel: 2, showJoints: false, outline: false };
+export const DEFAULT_LOOK: Look = { color: '#4450d6', tattoo: 'none', lineWidth: 7, headSize: 1.25, pixel: 2, showJoints: false, outline: false };
 
 /** Darken (amount < 0) or lighten a #rrggbb color. */
 export function shade(hex: string, amount: number) {
@@ -33,7 +35,7 @@ export interface DepthPart { z: number; draw: (g: Ctx2D) => void; pts?: { x: num
 
 export function drawCharacter(ctx: Ctx2D, c: Character, look: Look, extras: DepthPart[] = []) {
   // Smooth style with an outline: draw him once fatter and darker underneath.
-  if (look.outline && look.pixel <= 1) drawCharacter(ctx, c, { ...look, outline: false, color: shade(look.color, -0.7), lineWidth: look.lineWidth + 3 });
+  if (look.outline && look.pixel <= 1) drawCharacter(ctx, c, { ...look, tattoo: 'none', outline: false, color: shade(look.color, -0.7), lineWidth: look.lineWidth + 3 });
   const j = c.body.j, sc = c.scale;
   ctx.save();
   ctx.lineCap = 'round';
@@ -52,14 +54,14 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look, extras: Dept
   const colorAt = (z: number) => shade(look.color, -0.22 * Math.min(1, Math.max(0, (torsoZ - z) / depthRange)));
   const parts: { z: number; draw: () => void }[] = [];
   const ghost = c.body.ghost;
-  const limb = (pts: { x: number; y: number; z: number }[]) => {
+  const limb = (pts: { x: number; y: number; z: number }[], tattoo = false) => {
     if (pts.some((p) => ghost.has(nameOf(c, p)))) return; // that limb came off
     const z = pts.slice(1).reduce((a, p) => a + p.z, 0) / (pts.length - 1);
-    parts.push({ z, draw: () => { ctx.strokeStyle = colorAt(z); path(pts); } });
+    parts.push({ z, draw: () => { ctx.strokeStyle = colorAt(z); path(pts); if (tattoo && look.tattoo === 'jt') drawJTTattoo(ctx, pts[0], pts[1], look, sc); } });
   };
   limb([j.hip, j.kneeL, j.footL]);
   limb([j.hip, j.kneeR, j.footR]);
-  limb([j.neck, j.elbowL, j.handL]);
+  limb([j.neck, j.elbowL, j.handL], true);
   limb([j.neck, j.elbowR, j.handR]);
   parts.push({ z: torsoZ, draw: () => { ctx.strokeStyle = look.color; path([j.head, j.neck, j.hip]); } });
   parts.push({ z: j.head.z + 0.01, draw: () => {
@@ -98,6 +100,28 @@ export function drawLooseLimb(ctx: Ctx2D, piece: LooseLimb, look: Look, scale: n
   ctx.lineWidth = look.lineWidth * scale;
   ctx.strokeStyle = shade(look.color, -0.22 * Math.min(1, Math.max(0, -((a.z + b.z + c.z) / 3) / (5 * scale))));
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+  if (piece.limb === 'armL' && look.tattoo === 'jt') drawJTTattoo(ctx, a, b, look, scale);
+  ctx.restore();
+}
+
+/** JT is ink on the limb, not a screen-space badge; it turns and detaches with the arm. */
+export function drawJTTattoo(ctx: Ctx2D, a: {x:number;y:number}, b: {x:number;y:number}, look: Look, scale: number) {
+  const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
+  if(length<2*scale)return;
+  const width=look.lineWidth*scale;
+  // Seven columns: the J, a one-column gap, then the T. No platform fonts or images.
+  const rows=['1110111','0100010','0100010','0100010','1100010'];
+  const unit=Math.min(Math.max(.35*scale,(width-1*scale)/7),length*.48/5);
+  const n=parseInt(look.color.slice(1),16),luma=.2126*(n>>16)+.7152*((n>>8)&255)+.0722*(n&255);
+  ctx.save();
+  // Clip to the real upper-arm stroke, retaining the character's original silhouette.
+  ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineWidth=width;ctx.lineCap='round';
+  // A narrow polygon provides a filled clip without widening the arm.
+  const nx=-dy/length*width/2,ny=dx/length*width/2;
+  ctx.beginPath();ctx.moveTo(a.x+nx,a.y+ny);ctx.lineTo(b.x+nx,b.y+ny);ctx.lineTo(b.x-nx,b.y-ny);ctx.lineTo(a.x-nx,a.y-ny);ctx.closePath();ctx.clip();
+  ctx.translate(a.x+dx*.54,a.y+dy*.54);ctx.rotate(Math.atan2(dy,dx)-Math.PI/2);
+  ctx.fillStyle=luma<95?'#fff1d6':'#292a27';
+  for(let y=0;y<rows.length;y++)for(let x=0;x<7;x++)if(rows[y][x]==='1')ctx.fillRect((x-3.5)*unit,(y-2.5)*unit,unit,unit);
   ctx.restore();
 }
 

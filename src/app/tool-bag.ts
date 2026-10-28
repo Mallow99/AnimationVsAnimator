@@ -54,6 +54,8 @@ export class ToolBag {
   private transport = document.createElement("div");
   private transportHint = document.createElement("span");
   private transportUse = document.createElement("button");
+  private placementOption = document.createElement("label");
+  private floorSnap = document.createElement("input");
   private help = document.createElement("details");
   private hint = document.createElement("div");
   private hoverOwner: Pet | null = null;
@@ -87,6 +89,7 @@ export class ToolBag {
     private canPull: () => boolean,
   ) {
     this.tools = new OverlayTools(pets);
+    try { this.tools.snapToFloor = localStorage.getItem("furniture-floor-snap") !== "false"; } catch { /* Default on when preferences are unavailable. */ }
     try {
       const saved = JSON.parse(
         localStorage.getItem("overlay-tools-placement") ?? "null",
@@ -217,7 +220,16 @@ export class ToolBag {
       }
       this.keyboard = false; this.typing(false); this.changed(); this.refresh();
     };
-    this.transport.append(this.transportHint, this.transportUse, cancel);
+    this.placementOption.className = "placement-option"; this.placementOption.hidden = true;
+    this.floorSnap.id = "furnitureFloorSnap"; this.floorSnap.type = "checkbox"; this.floorSnap.checked = this.tools.snapToFloor;
+    this.floorSnap.onchange = () => {
+      this.tools.snapToFloor = this.floorSnap.checked;
+      try { localStorage.setItem("furniture-floor-snap", String(this.tools.snapToFloor)); } catch { /* The choice still works for this session. */ }
+      this.refresh();
+    };
+    this.floorSnap.onfocus = () => { this.keyboard = true; this.typing(true); };
+    this.placementOption.append(this.floorSnap, document.createTextNode("Snap to floor"));
+    this.transport.append(this.transportHint, this.placementOption, this.transportUse, cancel);
     this.root.append(this.bag, this.bin, this.undo, this.panel, this.transport);
     document.body.append(this.root);
     this.hint.id = "figureHint"; this.hint.hidden = true;
@@ -405,6 +417,8 @@ export class ToolBag {
     this.bin.classList.toggle("receiving", this.dragging);
     this.transport.hidden = !this.dragging;
     const held = this.tools.held;
+    this.placementOption.hidden = !this.tools.placementPreview;
+    this.floorSnap.checked = this.tools.snapToFloor;
     this.transportUse.hidden = held?.kind !== "item" || !(isWeapon(held.object.def) || ["wipe", "erase", "color"].includes(held.object.def.use));
     this.transportUse.textContent = this.tools.using ? "Stop using" : "Use with cursor";
     this.transportHint.textContent = held ? `${held.kind === "item" ? held.object.def.name : held.kind === "thing" ? held.object.def?.name ?? "Object" : "Ball"} · Drop on the desktop${held.kind === "item" ? " or a figure" : ""}.` : "";
@@ -443,6 +457,35 @@ export class ToolBag {
     }
     this.layout();
   }
+  /** A passive guide behind the figures. It never intercepts pointer input or mutates the scene. */
+  drawPlacement(ctx: CanvasRenderingContext2D) {
+    const preview = this.tools.placementPreview;
+    if (this.placementOption.hidden !== !preview) this.placementOption.hidden = !preview;
+    if (!preview) return;
+    const { hull, floorHull, floor, nearFloor, blocked, snap } = preview;
+    const bounds = this.tools.held!.owner.ctx.world.bounds;
+    const points = snap ? floorHull : hull;
+    const color = blocked && nearFloor && this.tools.snapToFloor ? "#94643b" : snap ? "#42664e" : "#677568";
+    const left = Math.min(...floorHull.map(p => p.x)), right = Math.max(...floorHull.map(p => p.x));
+    ctx.save();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = color; ctx.fillStyle = color;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath();
+    ctx.globalAlpha = .09; ctx.fill(); ctx.globalAlpha = .85; ctx.stroke();
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(Math.max(bounds.left + 2, left - 8), floor - 1); ctx.lineTo(Math.min(bounds.right - 2, right + 8), floor - 1); ctx.stroke();
+    ctx.setLineDash([]);
+    const text = !this.tools.snapToFloor ? "Free placement" : blocked && nearFloor ? "Move clear to snap" : snap ? "Floor aligned" : "Move near the floor to snap";
+    ctx.font = "12px system-ui, sans-serif";
+    const width = ctx.measureText(text).width + 18;
+    const x = Math.max(bounds.left + 6, Math.min(bounds.right - width - 6, (left + right - width) / 2));
+    const y = Math.max(bounds.top + 8, Math.min(floor - 31, Math.min(...points.map(p => p.y)) - 28));
+    ctx.globalAlpha = .96; ctx.fillStyle = "#fffaf0"; ctx.strokeStyle = color;
+    ctx.beginPath(); ctx.roundRect(x, y, width, 23, 6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = color; ctx.fillText(text, x + 9, y + 16);
+    ctx.restore();
+  }
+
   private renderChoices() {
     const owner = this.current();
     this.choices.replaceChildren();

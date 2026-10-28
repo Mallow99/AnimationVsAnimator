@@ -19,6 +19,7 @@ import { createGamePanel } from './game-panel';
 import {FileHabitats} from './file-habitats';
 import {PageCutouts} from './page-cutouts';
 import type {FileWindow,FileVisitStatus,DesktopAction,DesktopResult,DesktopState,PageCutout} from '../shared/desktop';
+import { activitySnapshot, requestActivity } from './activity-requests';
 import { companionConfig, activeFigureIds } from '../core/config';
 import { CursorWeapon, type CursorWeaponKind } from '../core/combat/cursor-weapon';
 import { SwordMove, MOVES, STANCES, guardPose } from '../core/skills/swordplay';
@@ -31,6 +32,7 @@ import { COMMERCIAL, PRODUCT_NAME, productDefaults, offlineEdition, type SaveRes
 interface PetShell {
   setClickThrough(ignore: boolean): void;
   getConfigs(): Promise<PetConfig[]>;
+  onRoster?(cb: (configs: PetConfig[]) => void): void;
   onConfig(cb: (c: { id: number; config: PetConfig }) => void): void;
   sendStats(id: number, stats: unknown): void;
   reportSanity(issues:string[]):void;
@@ -223,9 +225,9 @@ function wirePet(id: number, p: Pet) {
 /** Apply a selected roster without reassigning identity, possessions or save slots. */
 function applyConfigs(configs: PetConfig[]) {
   if (COMMERCIAL) configs = configs.map(offlineEdition);
-  const ids = activeFigureIds(configs[0]), previous = new Set(pets);
+  const ids = activeFigureIds(configs[0],configs.map((_,id)=>id)), previous = new Set(pets);
   const time = Math.max(0,...figures.map(p=>p.ctx.world.time));
-  for (let id=0;id<5;id++) {
+  for (let id=0;id<configs.length;id++) {
     if (!figures[id]) figures[id]=makePet(id,configs[id] ?? companionConfig(configs[0],id));
     else figures[id].applyConfig(configs[id] ?? companionConfig(configs[0],id));
   }
@@ -267,6 +269,7 @@ const setWindowsAll = (wins: WinRect[]) => { lastWins = wins; for (const p of fi
 // Settings live in the desktop shell (pet.json, pet-2.json). Get them now, and whenever they change.
 if (shell) {
   shell.getConfigs().then((cs) => { cs.forEach((c, i) => (configs[i] = c)); applyConfigs(configs); });
+  shell.onRoster?.(cs=>{configs.splice(0,configs.length,...cs);applyConfigs(configs);});
   shell.onConfig(({ id, config }) => { configs[id] = config; applyConfigs(configs); });
   shell.onCommand(({id,cmd}) => {
     if (cmd === 'sanity') { shell.reportSanity(audit()); return; }
@@ -310,7 +313,7 @@ if (shell) {
   shell.onWindows((wins) => setWindowsAll(wins)); // other apps' windows become platforms
   shell.onUi((ui) => { for (const p of pets) p.setScreen(ui); }); // what you're doing: they comment on it, and sit on things in your window
   shell.onWindowsLog((line) => { if (line.startsWith('move:')) for (const p of pets) p.moveNote = line.slice(5).trim(); }); // how moving windows is going
-  setInterval(() => figures.forEach((p, id) => shell.sendStats(id,(habitats.petFor(id)??p).stats())), 400);
+  setInterval(() => figures.forEach((p, id) => shell.sendStats(id,{...(habitats.petFor(id)??p).stats(),activity:activitySnapshot(habitats.petFor(id)??p)})), 400);
   // Item definition files (yours, from the items folder) on top of the ones they come with.
   shell.getItemDefs().then((d) => { lastDefs = d; for (const p of [...figures,...habitats.allPets]) p.addDefs(d); }, () => {});
   shell.onItemDefs((d) => { lastDefs = d; for (const p of [...figures,...habitats.allPets]) p.addDefs(d); });
@@ -318,7 +321,7 @@ if (shell) {
 Object.defineProperty(window,'pet',{get:()=>pets[0]}); // handy for poking at from DevTools
 Object.defineProperty(window, 'friend', { get: () => pets[1] ?? null }); // the second one, the same way
 Object.defineProperty(window, 'pets', { get: () => pets });
-Object.assign(window,{setRoster:(ids:number[])=>{const order=[...ids,...[0,1,2,3,4].filter(id=>!ids.includes(id))];for(const c of configs){c.spawnOrder=order;c.figureCount=ids.length;c.friend.on=ids.length>1;}applyConfigs(configs);},figurePool:figures});
+Object.assign(window,{requestBuddyActivity:(id:number,command:string)=>{const p=pets.find(p=>p===figures[id]);return p?requestActivity(p,command):{accepted:false,message:'Bring this buddy onto the desktop first.'};},setRoster:(ids:number[])=>{const order=[...ids,...configs.map((_,id)=>id).filter(id=>!ids.includes(id))];for(const c of configs){c.spawnOrder=order;c.figureCount=ids.length;c.friend.on=ids.length>1;}applyConfigs(configs);},figurePool:figures});
 (window as unknown as { swordplay: unknown }).swordplay = { SwordMove, MOVES, STANCES, guardPose }; // for trying sword moves from DevTools
 
 if (!shell) {
@@ -727,6 +730,7 @@ function frame(now: number) {
   if (fakeWins.length && pets[0]?.config.windows) drawFakeWindows();
   // Furniture first (behind both of them), then whoever's nearer to you in front (a dash passes in front of the other one).
   pets[0]?.drawProps(ctx);
+  toolBag.drawPlacement(ctx);
   for (const p of [...desktopPets()].sort(
     (a, b) => a.char.body.j.hip.z - b.char.body.j.hip.z,
   ))

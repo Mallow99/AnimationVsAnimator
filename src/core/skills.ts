@@ -586,15 +586,13 @@ export class PuppetMove extends Skill {
 export class Tool {
   item: Item | null = null;
   /** Why he couldn't get it: you have it, it's lying around, he has no hands, he doesn't own one. */
-  why: 'gone' | 'lying' | 'nohands' | 'none' | '' = '';
-  private t = 0;
+  why: 'gone' | 'lying' | 'nohands' | 'none' | 'unreachable' | '' = '';
   private taking = new Handling();
   private storing = new Handling();
   constructor(private use: ItemUse) {}
 
   fetch(c: Ctx, dt: number): 'working' | 'ready' | 'none' {
     const ch = c.char, hand = ch.useHand;
-    this.t += dt;
     if (!hand) { this.why = 'nohands'; return 'none'; }
     const it = this.item ??= c.items.find(this.use);
     if (!it) { this.why = 'none'; return 'none'; }
@@ -610,20 +608,18 @@ export class Tool {
       c.sound?.('pickup');
       return 'ready';
     }
+    if (this.taking.failed) { this.why = 'unreachable'; return 'none'; }
     return 'working';
   }
 
-  private stowT = 0;
   /** Put it back on his belt. Returns true when done. */
   stow(c: Ctx, dt: number): boolean {
     const it = this.item, ch = c.char;
     if (!it || it.where !== 'hand') { ch.handTarget = null; return true; }
-    this.stowT += dt;
     it.aim = null;
     if (it.def.wear) {
       const at = ch.body.j[it.def.wear === 'head' ? 'head' : 'hip'];
-      ch.handTarget = { x: at.x, y: at.y };
-      if (this.stowT < 0.4) return false;
+      if (!this.storing.reach(c, at, dt)) return this.storing.failed;
       c.items.stow(it); ch.handTarget = null; c.sound?.('pickup'); return true;
     }
     const slot = preferredSlots(it.def).find((s) => !c.items.belt[s]);
@@ -635,7 +631,8 @@ export class Tool {
       c.sound?.('pickup');
       return true;
     }
-    return false;
+    // A missed reach is a completed attempt, with the same original still safely in hand.
+    return this.storing.failed;
   }
 }
 
@@ -644,6 +641,7 @@ function missingTool(c: Ctx, tool: Tool, what: string) {
   if (tool.why === 'gone') c.say(pick([`hey. you have my ${what}`, `my ${what}! give it back`, `can't. YOU have my ${what}`]), 2);
   else if (tool.why === 'nohands') c.say(pick(['with what hands?', 'no hands. can\'t.']), 1.6);
   else if (tool.why === 'none') c.say(pick([`I don't have a ${what}`, `no ${what}...`]), 1.6);
+  else if (tool.why === 'unreachable') c.say(`I can't reach my ${what} right now.`, 1.6);
 }
 
 /**
@@ -932,13 +930,14 @@ export class FetchItem extends Skill {
   private tool: Tool;
   private next = 0;
   private handling = new Handling();
+  private attempts = 0;
   constructor(private item: Item, private comment = true) { super(); this.tool = new Tool(item.def.use); this.tool.item = item; }
   start(c: Ctx) { c.look = 'target'; }
   update(c: Ctx, dt: number) {
     const ch = c.char, it = this.item, hand = ch.useHand;
     c.lookTarget = { x: it.at.x, y: it.at.y };
     if (it.where === 'belt' || it.where === 'worn') return true;
-    if (it.where === 'cursor' || !hand) return true;
+    if (!c.items.list.includes(it) || it.where === 'cursor' || !hand) return true;
     if (this.phase === 'stow') return this.tool.stow(c, dt) || this.t > 15;
     if (it.where === 'hand') { this.phase = 'stow'; return false; }
     const feet = Math.max(ch.body.j.footL.y, ch.body.j.footR.y);
@@ -955,13 +954,23 @@ export class FetchItem extends Skill {
       return false;
     }
     // Bend down and grab it by the handle.
+    // The general stoop leans the torso forward, but thick/deep floor objects can
+    // still need a little knee bend before the real hand reaches their grip.
+    ch.bendForReach(it.at);
     if (this.handling.reach(c,it.at,dt)) {
       c.items.toHand(it, hand);
       ch.handTarget = null;
       c.sound?.('pickup');
       if (this.comment && chance(0.5)) c.say(pick(['mine.', 'got it', 'there you are']), 1.2);
       this.phase = 'stow';
-    } else if (this.t - this.next > 3) { ch.handTarget = null; this.phase = 'go'; this.handling=new Handling(); }
+    } else if (this.handling.failed || this.t - this.next > 3) {
+      ch.handTarget = null;
+      if (++this.attempts >= 2) {
+        if (this.comment) c.say("I can't quite reach it.", 1.4);
+        return true;
+      }
+      this.phase = 'go'; this.handling = new Handling();
+    }
     return false;
   }
   stop(c: Ctx) { c.char.handTarget = null; }

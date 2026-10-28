@@ -34,6 +34,12 @@ try {
  launch();await connect();
  assert.equal((await run('window.petShell.productInfo()')).commercial,true);
  assert.deepEqual(await run('window.petShell.getSaveHealth()'),{issues:[]});
+ assert.equal(await run('window.petShell.getConfigs().then(cs=>cs.length)'),5);
+ const unlocked=await run('window.petShell.redeemCode("  aRnOlD  ")');
+ assert(unlocked.ok&&!unlocked.alreadyUnlocked);assert.equal(unlocked.configs.length,6);assert.equal(unlocked.configs[5].look.tattoo,'jt');
+ await until(()=>run('window.figurePool?.length===6 && window.figurePool[5]?.config.name==="Arnold"'),'unlocked sixth saved profile');
+ await run('window.exportBackupSnapshot().then(()=>true)'); // Wait for actual memory loads before editing.
+ await run('(()=>{const p=window.figurePool[5];const b=p.items.list.find(i=>i.def.id==="book")??p.items.give("book",p.char);b.bookmark=23;p.memory.add("Native Arnold restart memory","event","you",2);})()');
  await run('window.petShell.setConfig({name:"Native restart check",windows:true});window.petShell.productSetup({introDone:true})');
  await until(()=>logs.some(l=>l.includes('helper running: sees')),'real native window helper');
  await run('window.petShell.setSession({paused:true})');await pause(200);const time=await run('window.pet.ctx.world.time');await pause(300);assert.equal(await run('window.pet.ctx.world.time'),time);
@@ -43,10 +49,19 @@ try {
  await run('window.petShell.quit()').catch(()=>{});await until(()=>proc.exitCode!==null,'normal quit');socket.close();
  assert.equal(JSON.parse(readFileSync(join(data,'pet.json'),'utf8')).name,'Native restart check');
  assert(JSON.parse(readFileSync(join(data,'memory.json'),'utf8')));
+ assert.equal(JSON.parse(readFileSync(join(data,'pet-6.json'),'utf8')).look.tattoo,'jt');
+ assert.deepEqual(JSON.parse(readFileSync(join(data,'product-state.json'),'utf8')).unlockedCharacters,['arnold']);
+ assert(JSON.parse(readFileSync(join(data,'memory-6.json'),'utf8')).notes.some(n=>n.text==='Native Arnold restart memory'));
  rmSync(join(data,'DevToolsActivePort'),{force:true});launch();await connect();
  assert.equal(await run('window.pet.config.name'),'Native restart check');
+ assert.equal(await run('window.petShell.getConfigs().then(cs=>cs.length)'),6);
+ await until(()=>run('window.figurePool[5]?.items.list.some(i=>i.def.id==="book"&&i.bookmark===23)'),'Arnold book restored');
+ await until(()=>run('window.figurePool[5].memory.notes.some(n=>n.text==="Native Arnold restart memory")'),'Arnold memory restored');
+ assert.equal(await run('window.figurePool[5].config.look.tattoo'),'jt');
+ assert.deepEqual((await run('window.petShell.productInfo()')).state.unlockedCharacters,['arnold']);
+ assert.equal((await run('window.petShell.redeemCode("ARNOLD")')).alreadyUnlocked,true);
  await run('window.petShell.quit()').catch(()=>{});await until(()=>proc.exitCode!==null,'restart quit');
  assert.deepEqual(errors,[]);
- writeFileSync(join(output,`native-${platform}.json`),JSON.stringify({platform,result:'passed',source:JSON.parse(readFileSync(join(folder,'release-source.json'),'utf8')),extractedPathWithSpaces:true,helper:'real; reported windows',normalQuitAndRestart:true,limits:'CI runner smoke only; physical focus/input/permissions/DPI/sleep/resources gates remain'},null,2));
- console.log('PASS extracted native candidate: real helper, UI, pause/resume, saves, normal quit and restart');
+ writeFileSync(join(output,`native-${platform}.json`),JSON.stringify({platform,result:'passed',source:JSON.parse(readFileSync(join(folder,'release-source.json'),'utf8')),extractedPathWithSpaces:true,helper:'real; reported windows',normalQuitAndRestart:true,arnoldUnlockAndSixthProfileRestart:true,limits:'CI runner smoke only; physical focus/input/permissions/DPI/sleep/resources gates remain'},null,2));
+ console.log('PASS extracted native candidate: real helper, UI, pause/resume, saves, Arnold unlock/book/memory, normal quit and restart');
 } finally {socket?.close();if(proc&&proc.exitCode===null)proc.kill();writeFileSync(join(output,`native-${platform}.log`),logs.join(''));rmSync(data,{recursive:true,force:true});rmSync(extract,{recursive:true,force:true});}

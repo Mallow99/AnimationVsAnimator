@@ -4,6 +4,7 @@
 
 import { DEFAULT_BODY, type BodyStyle } from './character';
 import { DEFAULT_LOOK, type Look } from './render';
+import { ALL_PROFILE_IDS, BASE_PROFILE_IDS, ARNOLD_ID, MAX_ACTIVE_FIGURES } from './profiles';
 
 export type MindMode = 'offline' | 'chat' | 'full';
 
@@ -129,6 +130,7 @@ export const DEFAULT_CONFIG: PetConfig = {
 export function friendConfig(main: PetConfig): PetConfig {
   const c = structuredClone(main);
   c.name = main.friend.name;
+  c.look.tattoo = 'none';
   c.look.color = main.friend.color;
   c.persona = `${main.friend.name}, ${main.name}'s best friend and sparring partner. Competitive, loud, always up for a fight, terrible loser.`;
   c.biases = {};
@@ -191,13 +193,14 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
     }
   }
   merge(out.look as unknown as Record<string, unknown>, p.look, 'look.');
+  if (out.look.tattoo !== 'jt') out.look.tattoo = 'none';
   merge(out.friend as unknown as Record<string, unknown>, p.friend, 'friend.');
   if (!/^#[0-9a-f]{6}$/i.test(out.friend.color)) out.friend.color = base.friend.color;
   if (!out.friend.name.trim()) out.friend.name = base.friend.name;
   out.figureCount = Math.round(out.figureCount);
   if (Array.isArray(p.spawnOrder)) {
-    const ids = [...new Set(p.spawnOrder.filter((id): id is number => Number.isInteger(id) && id >= 0 && id < 5))];
-    out.spawnOrder = [...ids, ...[0,1,2,3,4].filter(id=>!ids.includes(id))];
+    const ids = [...new Set(p.spawnOrder.filter((id): id is number => Number.isInteger(id) && ALL_PROFILE_IDS.includes(id as typeof ALL_PROFILE_IDS[number])))];
+    out.spawnOrder = [...ids, ...BASE_PROFILE_IDS.filter(id=>!ids.includes(id))];
   }
   // Old installs used an independent second-figure toggle. Migrate that intent once.
   if (!Array.isArray(p.spawnOrder) && p.friend && typeof p.friend === 'object' && (p.friend as {on?:boolean}).on === false) out.figureCount = 1;
@@ -223,6 +226,11 @@ export function mergeConfig(base: PetConfig, patch: unknown): PetConfig {
 export function companionConfig(main: PetConfig, id: number): PetConfig {
   if (id === 0) return structuredClone(main);
   if (id === 1) return friendConfig(main);
+  if (id === ARNOLD_ID) return mergeConfig(main, {
+    name: 'Arnold', personality: 'competitive', biases: {},
+    persona: 'A friendly, confident trainer. Enjoys fair challenges, exercise and encouraging friends. Proud of his JT arm tattoo.',
+    look: { color: '#c47d48', tattoo: 'jt' },
+  });
   const c = structuredClone(main);
   const profiles = [
     { name: 'Moss', color: '#48a879', personality: 'gentle' as const, persona: 'Patient, warm, and quietly funny. Likes keeping the peace, shared games and comforting friends. Can defend himself without picking fights.' },
@@ -230,6 +238,7 @@ export function companionConfig(main: PetConfig, id: number): PetConfig {
     { name: 'Ruby', color: '#e46d67', personality: 'adventurous' as const, persona: 'An energetic explorer. Loves parkour, challenges, and inviting friends along. Encourages others rather than showing them up.' },
   ];
   const p = profiles[Math.max(0, Math.min(2, id - 2))];
+  c.look.tattoo = 'none';
   c.name = p.name; c.look.color = p.color; c.personality = p.personality; c.persona = p.persona; c.biases = {};
   return c;
 }
@@ -243,7 +252,8 @@ export const CHARACTER_PRESETS = [
   {id:4,name:'Ruby',personality:'adventurous',description:'Enthusiastic explorer. Parkour, games and bringing friends along.'},
 ] as const;
 
-export function activeFigureIds(c: PetConfig): number[] {
-  const order = [...new Set([...(c.spawnOrder ?? []),0,1,2,3,4])].filter(id=>Number.isInteger(id)&&id>=0&&id<5);
-  return order.slice(0,c.friend.on ? Math.max(1,Math.min(5,c.figureCount)) : 1);
+export function activeFigureIds(c: PetConfig, available: readonly number[] = BASE_PROFILE_IDS): number[] {
+  const allowed = available.filter(id => ALL_PROFILE_IDS.includes(id as typeof ALL_PROFILE_IDS[number]));
+  const order = [...new Set([...(c.spawnOrder ?? []), ...allowed])].filter(id=>allowed.includes(id));
+  return order.slice(0,c.friend.on ? Math.max(1,Math.min(MAX_ACTIVE_FIGURES,c.figureCount)) : 1);
 }

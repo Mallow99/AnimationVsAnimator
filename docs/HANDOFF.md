@@ -2,6 +2,70 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Arnold and release-quality continuation — 2026-10-28
+
+The owner approved the quality plan and specified **JT letters on Arnold's arm**,
+then asked to continue after the usage limit reset. Product metadata is **1.0.0-rc.4**.
+The following implementation is current; the rc.3 evidence below remains historical.
+
+**Internal bonus setup:** Settings → Settings → Bonus code accepts `ARNOLD`
+(case-insensitive, with surrounding whitespace ignored). Unlocking persists the known
+`arnold` flag in product-state.json before announcing success, adds stable profile id 5
+(pet-6.json / memory-6.json), and sends one roster update. Reusing the code does not
+add another buddy. Failed writes and unread damaged setup saves do not grant an unlock.
+Do not put the actual code in public store copy; recipients can enter their bonus code.
+
+Arnold starts copper (`#c47d48`), with the existing competitive personality and a friendly
+trainer persona. His proportions and movement presets are unchanged. JT is drawn on his
+left upper arm, including a detached arm, in smooth or pixel rendering. The Arnold-only
+JT arm tattoo toggle can hide it; name, colour and other usual controls remain editable.
+There are now six saved profiles after redemption, but **at most five active**. Redemption
+does not activate him or replace anyone. Meet Arnold selects his controls; when five are
+out it asks the user to put one away first. Original five ids and saves stay intact.
+Each profile keeps its own original items, book progress, chat, memory and friendships.
+The development UI also reads the dynamic saved roster; it does not gain a second code form.
+
+Customer Settings, bag, activities, conversation and Pong surfaces now use embedded paper
+fibres, woven linen and quiet wood grain with clearer inset/selected/focus states. All are
+local; the overlay remains transparent outside controls. Reduced-motion and narrow-name
+layouts are retained. New furniture supplies show their actual footprint and a floor guide.
+Snap to floor is a visible saved option: it only aligns clear near-floor drops, checks
+furniture, loose items, balls, active figures and edges, then releases normal physics.
+Existing furniture drags retain their previous physical behaviour. Cancel removes a newly
+pulled supply. This is placement assistance, not a general collision/stacking overhaul.
+
+Handling no longer succeeds after a timeout. Actual hand distance gates pickup, stow,
+gifts, lamps and furniture claims. Unreachable attempts reposition within a bounded budget
+or abort without transferring ownership or claiming an action happened. Floor pickup uses
+a bounded knee bend; shelf return approaches the real free slot. Preserve these geometry
+repairs and the unchanged regression assertions rather than restoring timed success.
+Settings quick activities share the bag's availability rules, show current friendly labels,
+explain blockers and receive an acceptance result. An accepted request is queued/running
+work, not proof of completion. Shared activities still use the existing peer interface.
+
+Backup export format is now **2**, adding `productState` (including known unlocks) to the
+existing configs/worlds/memories/definitions allowlist. It still excludes credentials and
+still has no one-click importer. Preserve product-state.json in whole-folder recovery;
+older version-1 JSON exports contain no unlock field.
+
+Focused bonus/contact/placement/activity-request checks and working-tree release Electron
+checks have passed locally, including failed-write/retry, repeat redemption, cap handling,
+private sixth-book/chat/memory state, JT attached/detached render differences, reload and
+backup. These are Linux/Xvfb checks with simulated desktop reports, not native physical QA.
+The tests ran before a new source commit; refresh their source evidence after commit.
+Actual working-tree GUI and Arnold/JT captures have been visually reviewed. An initial
+aggregate run exposed the legacy base-five spawn-order default assertion; merge now
+appends only base ids while preserving an explicitly supplied bonus id. The test was
+not weakened. Final aggregate verification, both seed-7/32 7,200-second soaks, native
+Mac/Windows packages and exact draft archives are being repeated. Record their committed source/results before
+calling rc.4 a verified delivered candidate. Real native smoke checks must also retain the
+sixth profile/unlock on process restart.
+
+Next: finish those checks and visual inspection, preserve rc.4 as a separate draft candidate,
+refresh media/evidence and update draft PR #4. **Do not publish a paid release** until physical
+Mac/Windows and authenticated seller/payout/download-entitlement acceptance in
+[release/ACCEPTANCE.md](release/ACCEPTANCE.md) passes. No new Chrome/Finder feature work.
+
 ## Validated rc.3 delivery — 2026-10-24
 
 Latest tested app source: **09fd9eb**. All four jobs in UI/native run

@@ -299,6 +299,12 @@ export class Character {
     const dx=x-this.x;this.body.translate(dx,0);this.rootX+=dx;this.goalX=null;this.rootVX=0;
     for(const f of [this.feet.L,this.feet.R]){f.x+=dx;f.fromX+=dx;f.toX+=dx;}
   }
+  /** Add a bounded knee bend for a low pickup; normal recovery eases it away afterwards. */
+  bendForReach(target: Vec) {
+    if (this.mode !== 'ground' || !this.legCount || !Number.isFinite(target.y)) return;
+    const belowReach = target.y - (this.body.j.neck.y + (this.d.upperArm + this.d.foreArm) * 0.85);
+    if (belowReach > 0) this.crouch = Math.max(this.crouch, Math.min(12 * this.scale, belowReach));
+  }
   /** Move a visiting room's frame without adding velocity or leaving planted feet behind. */
   translateWorld(dx: number, dy: number) {
     this.body.translate(dx, dy); this.rootX += dx;

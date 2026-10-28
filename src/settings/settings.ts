@@ -29,6 +29,7 @@ interface Shell {
   getConfigs():Promise<PetConfig[]>;
   onSanity?(cb:(issues:string[])=>void):void;
   onSelect?(cb:(id:number)=>void):void;
+  onRoster?(cb:(configs:PetConfig[])=>void):void;
   onConfig(cb: (c: { id: number; config: PetConfig }) => void): void;
   setConfig(patch: unknown,id?:number): void;
   resetConfig(id?:number): void;
@@ -50,7 +51,7 @@ interface Shell {
 const source = (window as unknown as { petShell: Shell }).petShell;
 let target: number | null = source.petId ?? 0;
 let allConfigs:PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(DEFAULT_CONFIG,id));
-const targets = () => target === null ? activeFigureIds(allConfigs[0]) : [target];
+const targets = () => target === null ? activeFigureIds(allConfigs[0],allConfigs.map((_,id)=>id)) : [target];
 const statsCache=new Map<number,Stats>(), collectionsCache=new Map<number,Collections>();
 const statsListeners:((s:Stats)=>void)[]=[], collectionListeners:((c:Collections)=>void)[]=[];
 function publishStats() {
@@ -79,7 +80,7 @@ let fileDesktopInfo: DesktopInfo | undefined;
 let choosingFileVisit = false;
 function renderFileVisits() {
   if (!fileDesktopInfo) return;
-  const view = fileVisitView(fileDesktopInfo, allConfigs.map(c => c.name), target, activeFigureIds(allConfigs[0]));
+  const view = fileVisitView(fileDesktopInfo, allConfigs.map(c => c.name), target, activeFigureIds(allConfigs[0],allConfigs.map((_,id)=>id)));
   $<HTMLButtonElement>('chooseHabitat').disabled = choosingFileVisit || !view.chooseFolder;
   $<HTMLButtonElement>('chooseFile').disabled = choosingFileVisit || !view.chooseFile;
   $<HTMLButtonElement>('returnHome').disabled = !view.returnIds.length;
@@ -96,21 +97,22 @@ $<HTMLSelectElement>('figureTarget').onchange=()=>chooseTarget($<HTMLSelectEleme
 source.onSelect?.(id=>chooseTarget(String(id)));
 function renderRoster(){
  updateChatControls();
- const active=activeFigureIds(allConfigs[0]),select=$<HTMLSelectElement>('figureTarget');
+ const active=activeFigureIds(allConfigs[0],allConfigs.map((_,id)=>id)),select=$<HTMLSelectElement>('figureTarget');
  const options=[new Option('All figures on the desktop','all'),...allConfigs.map((c,id)=>new Option(c.name+(active.includes(id)?'':' (not on desktop)'),String(id)))];
  const signature=options.map(o=>o.textContent).join('|');if(select.dataset.signature!==signature){select.replaceChildren(...options);select.dataset.signature=signature;}
  select.value=target===null?'all':String(target);
  const host=$('spawnRoster');
- if(!host.querySelector('input'))for(const profile of CHARACTER_PRESETS){
+ if(host.querySelectorAll('input').length!==allConfigs.length){host.replaceChildren();for(const profile of allConfigs.map((c,id)=>({id,personality:c.personality}))){
   const label=document.createElement('label');label.className='switch';
   const text=document.createElement('span'),input=document.createElement('input');input.type='checkbox';input.dataset.figure=String(profile.id);
-  input.onchange=()=>{const ids=activeFigureIds(allConfigs[0]);const next=input.checked?[...ids,profile.id]:ids.filter(id=>id!==profile.id);if(!next.length){input.checked=true;return;}
-    source.setConfig({figureCount:next.length,spawnOrder:[...new Set([...next,0,1,2,3,4])],friend:{...allConfigs[0].friend,on:next.length>1}},0);};
+  input.onchange=()=>{const ids=activeFigureIds(allConfigs[0],allConfigs.map((_,id)=>id));const next=input.checked?[...ids,profile.id]:ids.filter(id=>id!==profile.id);if(!next.length||next.length>5){input.checked=ids.includes(profile.id);return;}
+    source.setConfig({figureCount:next.length,spawnOrder:[...new Set([...next,...allConfigs.map((_,id)=>id)])],friend:{...allConfigs[0].friend,on:next.length>1}},0);};
   label.append(text,input);host.append(label);
- }
- for(const input of host.querySelectorAll<HTMLInputElement>('input')){const id=Number(input.dataset.figure);input.checked=active.includes(id);input.previousElementSibling!.textContent=allConfigs[id].name+' · '+CHARACTER_PRESETS[id].personality;}
+ }}
+ for(const input of host.querySelectorAll<HTMLInputElement>('input')){const id=Number(input.dataset.figure);input.checked=active.includes(id);input.disabled=!input.checked&&active.length>=5;input.previousElementSibling!.textContent=allConfigs[id].name+' · '+allConfigs[id].personality;}
  $<HTMLSelectElement>('figureCount').value=String(active.length);
 }
+source.onRoster?.(cs=>{allConfigs=cs;renderRoster();});
 source.getConfigs().then(cs=>{allConfigs=cs;render(allConfigs[target??targets()[0]]);});
 
 $('sanityCheck').onclick=()=>source.command('sanity');
@@ -171,7 +173,7 @@ const talkInput = $<HTMLTextAreaElement>('talkText');
 const chatForm = $<HTMLFormElement>('talkForm');
 const showTranscript = transcriptView($('chat'));
 let currentLog: LogLine[] = [];
-const canChat = () => target !== null && activeFigureIds(allConfigs[0]).includes(target);
+const canChat = () => target !== null && activeFigureIds(allConfigs[0],allConfigs.map((_,id)=>id)).includes(target);
 function updateChatControls() {
   const enabled = canChat();
   talkInput.disabled = !enabled;

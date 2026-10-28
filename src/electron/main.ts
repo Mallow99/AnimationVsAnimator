@@ -9,6 +9,7 @@
 import { app, powerMonitor, BrowserWindow, ipcMain, Menu, screen, shell, Tray, dialog } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import { availableProfileIds, knownUnlocks, isArnoldCode, ARNOLD_ID } from '../core/profiles';
 import { DEFAULT_CONFIG, friendConfig, companionConfig, activeFigureIds, mergeConfig, PROVIDERS, type PetConfig, type ProviderId } from '../core/config';
 import type { WinRect } from '../core/world';
 import { watchWindows, type UiReport, type WindowWatcher } from './windows';
@@ -64,9 +65,11 @@ function saveProductState(patch: Partial<ProductState>): SaveResult {
   const next = { ...productState };
   if (typeof patch.introDone === 'boolean') next.introDone = patch.introDone;
   if (typeof patch.sceneReady === 'boolean') next.sceneReady = patch.sceneReady;
+  // Unlocks are only written by the validated redemption handler.
+  if (patch.unlockedCharacters) next.unlockedCharacters = knownUnlocks(patch.unlockedCharacters);
   pendingProductState = next;
   try { writeAtomic(productStatePath(), JSON.stringify(next)); productState = next; pendingProductState = null; return saved('setup', { ok: true }); }
-  catch { return saved('setup', { ok: false, message: 'The welcome setup could not be saved. Free some disk space and retry.' }); }
+  catch { return saved('setup', { ok: false, message: 'The app setup could not be saved. Free some disk space and retry.' }); }
 }
 
 let win: BrowserWindow | null = null;
@@ -105,23 +108,27 @@ function saveConfig() {
 }
 
 function loadConfig() {
+  configs.splice(0, configs.length, ...availableProfileIds(productState.unlockedCharacters).map(id=>companionConfig(editionDefaults,id)));
   try { const text = readSave(configPath(0), 'read:config:0'); configs[0] = editionConfig(mergeConfig(editionDefaults, text ? JSON.parse(text) : null)); }
   catch { configs[0] = structuredClone(editionDefaults); }
   // The second one: their own file, or (first time) made from the first one's, with their own name and color.
   const second = mergeConfig(editionDefaults, { ...friendConfig(configs[0]), name: configs[0].friend.name, look: { ...configs[0].look, color: configs[0].friend.color } });
   try { const text = readSave(configPath(1), 'read:config:1'); configs[1] = editionConfig(mergeConfig(second, text ? JSON.parse(text) : null)); }
   catch { configs[1] = second; }
-  for(let id=2;id<5;id++) {
+  for(let id=2;id<configs.length;id++) {
     const defaults=companionConfig(configs[0],id);
     try { const text = readSave(configPath(id), `read:config:${id}`); configs[id] = editionConfig(mergeConfig(defaults, text ? JSON.parse(text) : null)); } catch { configs[id]=defaults; }
   }
-  for(let id=1;id<5;id++)for (const k of SHARED) (configs[id] as unknown as Record<string, unknown>)[k] = structuredClone(configs[0][k]);
+  for(let id=1;id<configs.length;id++)for (const k of SHARED) (configs[id] as unknown as Record<string, unknown>)[k] = structuredClone(configs[0][k]);
+  for(const [id,c]of configs.entries()){c.spawnOrder=[...new Set([...c.spawnOrder.filter(i=>i<configs.length),...configs.map((_,i)=>i)])];if(id!==ARNOLD_ID)c.look.tattoo='none';}
   config = configs[0];
 }
 
 function setConfig(id: number, patch: unknown) {
   if (!Number.isInteger(id) || id<0 || id>=configs.length) return;
   configs[id] = editionConfig(mergeConfig(configs[id], patch));
+  if (id !== ARNOLD_ID) configs[id].look.tattoo = 'none';
+  configs[id].spawnOrder = [...new Set([...configs[id].spawnOrder.filter(i=>i<configs.length), ...configs.map((_,i)=>i)])];
   dirty.add(id);
   // App-wide settings changed in either window: the other one gets them too.
   const p = (patch && typeof patch === 'object' ? patch : {}) as Record<string, unknown>;
@@ -296,7 +303,7 @@ function normalizedPath(file: string) {
   return process.platform === 'win32' ? full.toLowerCase() : full;
 }
 async function chooseHabitat(id: number, kind: 'folder' | 'file' = 'folder') {
-  if (!activeFigureIds(config).includes(id))
+  if (!activeFigureIds(config, configs.map((_,id)=>id)).includes(id))
     return { ok: false, message: 'Select a figure in the current roster first.' };
   if (!['darwin', 'win32'].includes(process.platform) || (kind === 'file' && process.platform !== 'darwin'))
     return { ok: false, message: kind === 'file'
@@ -308,7 +315,7 @@ async function chooseHabitat(id: number, kind: 'folder' | 'file' = 'folder') {
   });
   if (result.canceled || !result.filePaths[0])
     return { ok: false, message: 'No place selected.' };
-  if (!activeFigureIds(config).includes(id))
+  if (!activeFigureIds(config, configs.map((_,id)=>id)).includes(id))
     return { ok: false, message: 'That figure left the roster while you were choosing. Select an active figure.' };
   let target: string;
   try { target = normalizedPath(fs.realpathSync(result.filePaths[0])); }
@@ -407,7 +414,7 @@ function openSettings(id = 0, tab?: string) {
 
 function buildTrayMenu() {
   if (!tray) return;
-  const both = activeFigureIds(config);
+  const both = activeFigureIds(config, configs.map((_,id)=>id));
   tray.setToolTip(both.map((i) => configs[i].name).join(' & '));
   const all = (patch: Partial<PetConfig>) => { for (const i of both) setConfig(i, patch); };
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -445,21 +452,23 @@ function createTray() {
 // ───────────── messages between windows ─────────────
 
 ipcMain.on('pet:clickThrough', (_e, ignore: boolean) => win?.setIgnoreMouseEvents(ignore, { forward: true }));
+const validProfile = (id: unknown): id is number => typeof id==='number' && Number.isInteger(id) && id>=0 && id<configs.length;
 const petIndex = (id: unknown) => typeof id==='number' && Number.isInteger(id) && id>=0 && id<configs.length ? id : 0;
 ipcMain.handle('config:all', () => configs);
 ipcMain.handle('config:get', (_e, id: unknown) => configs[petIndex(id)]);
-ipcMain.on('config:set', (_e, id: unknown, patch: unknown) => setConfig(petIndex(id), patch));
+ipcMain.on('config:set', (_e, id: unknown, patch: unknown) => { if(validProfile(id))setConfig(id,patch); });
 // Reset: back to defaults (keeping who they are: the second one keeps their own name and color).
 ipcMain.on('config:reset', (_e, id: unknown) => {
+  if(!validProfile(id))return;
   const i = petIndex(id);
-  setConfig(i, { ...DEFAULT_CONFIG, name: configs[i].name, personality:configs[i].personality, persona:configs[i].persona, figureCount:configs[0].figureCount, spawnOrder:configs[0].spawnOrder, friend:configs[0].friend, look: { ...DEFAULT_CONFIG.look, color: configs[i].look.color } });
+  setConfig(i, { ...companionConfig(editionDefaults,i), name: configs[i].name, personality:configs[i].personality, persona:configs[i].persona, figureCount:configs[0].figureCount, spawnOrder:configs[0].spawnOrder, friend:configs[0].friend, look: { ...companionConfig(editionDefaults,i).look, color: configs[i].look.color } });
 });
 ipcMain.on('pet:sanity',(_e,issues:unknown)=>{if(Array.isArray(issues))settingsWins.get(0)?.webContents.send('pet:sanity',issues.filter(x=>typeof x==='string').slice(0,30));});
 ipcMain.on('pet:stats', (_e, id: unknown, stats: unknown) => settingsWins.get(0)?.webContents.send('pet:stats', {id:petIndex(id),stats}));
 ipcMain.on('pet:collections', (_e, id: unknown, data: unknown) => settingsWins.get(0)?.webContents.send('pet:collections', {id:petIndex(id),data}));
-ipcMain.on('pet:command',(_e,id:unknown,cmd:string)=>{if(cmd==='returnHome')homes=homes.filter(h=>h.id!==petIndex(id));win?.webContents.send('pet:command',{id:petIndex(id),cmd});});
+ipcMain.on('pet:command',(_e,id:unknown,cmd:string)=>{if(!validProfile(id))return;if(cmd==='returnHome')homes=homes.filter(h=>h.id!==petIndex(id));win?.webContents.send('pet:command',{id:petIndex(id),cmd});});
 ipcMain.on('settings:open', (_e, id: unknown, tab?: string) => openSettings(petIndex(id), typeof tab === 'string' ? tab : undefined));
-ipcMain.handle('memory:load', (_e, id: unknown) => readSave(memoryPath(petIndex(id)), `read:memory:${petIndex(id)}`));
+ipcMain.handle('memory:load', (_e, id: unknown) => validProfile(id) ? readSave(memoryPath(id), `read:memory:${id}`) : null);
 ipcMain.handle('items:defs', () => readItemDefs());
 ipcMain.on('items:reload', () => win?.webContents.send('items:defs', readItemDefs()));
 ipcMain.on('items:openFolder', () => { readItemDefs(); shell.openPath(itemsDir()); });
@@ -477,11 +486,37 @@ ipcMain.on('pet:typing', (_e, on: boolean) => {
     if (process.platform === 'darwin') watcher?.refocus();
   }
 });
-ipcMain.on('memory:save', (_e, id: unknown, json: string) => saveMemory(petIndex(id), json));
-ipcMain.handle('memory:save', (_e, id: unknown, json: string) => saveMemory(petIndex(id), json));
+ipcMain.on('memory:save', (_e, id: unknown, json: string) => {if(validProfile(id))saveMemory(id,json);});
+ipcMain.handle('memory:save', (_e, id: unknown, json: string) => validProfile(id)?saveMemory(id,json):{ok:false,message:'That buddy is unavailable.'});
 ipcMain.handle('save:status', () => saveHealth());
 ipcMain.handle('product:info', () => ({ name: PRODUCT_NAME, version: PRODUCT_VERSION, commercial: COMMERCIAL, state: productState, recovered: [...recoveredSaves] }));
-ipcMain.handle('product:setup', (_e, patch: Partial<ProductState>) => saveProductState(patch ?? {}));
+ipcMain.handle('product:setup', (_e, patch: Partial<ProductState>) => saveProductState({introDone:patch?.introDone,sceneReady:patch?.sceneReady}));
+
+ipcMain.handle('product:redeem', (_e, code: unknown) => {
+  if (!isArnoldCode(code)) return { ok:false, message:'That code was not recognised. Check it and try again.' };
+  if (productState.unlockedCharacters?.includes('arnold')) return {ok:true,alreadyUnlocked:true,characterId:ARNOLD_ID,configs};
+  if(saveIssues.has('read:setup'))return {ok:false,message:'Recover the setup save before unlocking Arnold. Your existing buddies are kept.'};
+  const previousPending=pendingProductState;
+  const result=saveProductState({unlockedCharacters:['arnold']});
+  // Retry may rewrite the last accepted state to clear a disk warning, never the failed unlock.
+  if(!result.ok){pendingProductState=previousPending??structuredClone(productState);return result;}
+  const fresh=editionConfig(companionConfig(configs[0],ARNOLD_ID));
+  try{const text=readSave(configPath(ARNOLD_ID),'read:config:5');configs[ARNOLD_ID]=editionConfig(mergeConfig(fresh,text?JSON.parse(text):null));}
+  catch{configs[ARNOLD_ID]=fresh;}
+  for(const k of SHARED)(configs[ARNOLD_ID] as unknown as Record<string,unknown>)[k]=structuredClone(configs[0][k]);
+  dirty.add(ARNOLD_ID);saveConfig();
+  for(const w of BrowserWindow.getAllWindows())w.webContents.send('roster:changed',configs);
+  buildTrayMenu();
+  return {ok:true,alreadyUnlocked:false,characterId:ARNOLD_ID,configs};
+});
+ipcMain.handle('activity:request', async (_e, id: unknown, command: unknown) => {
+  if(!validProfile(id)||!activeFigureIds(config,configs.map((_,i)=>i)).includes(id))return {accepted:false,message:'Bring this buddy onto the desktop first.'};
+  if(session.paused||session.hidden)return {accepted:false,message:session.paused?'Resume buddies before starting an activity.':'Show buddies before starting an activity.'};
+  if(typeof command!=='string'||command.length>40||!win||win.isDestroyed()||win.webContents.isLoading())return {accepted:false,message:'The desktop is unavailable. Try again once it is ready.'};
+  try{return await win.webContents.executeJavaScript(`window.requestBuddyActivity(${id},${JSON.stringify(command)})`);}
+  catch{return {accepted:false,message:'The activity could not be requested. Your existing saves are kept.'};}
+});
+
 ipcMain.on('product:openData', () => { void shell.openPath(app.getPath('userData')); });
 ipcMain.handle('product:exportBackup', async (): Promise<SaveResult> => {
   if (!win || win.isDestroyed()) return { ok: false, message: 'The desktop is unavailable. Try again once the buddies are ready.' };
@@ -491,7 +526,7 @@ ipcMain.handle('product:exportBackup', async (): Promise<SaveResult> => {
       defaultPath: `Mallow-backup-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'Buddy backup', extensions: ['json'] }] });
     if (canceled || !filePath) return { ok: false, message: 'Export cancelled.' };
     // Explicit allowlist: never export provider credentials, browser pairing secrets or OS key stores.
-    const backup = { format: 'mallow-desk-buddies', version: 1, exportedAt: new Date().toISOString(),
+    const backup = { format: 'mallow-desk-buddies', version: 2, productState, exportedAt: new Date().toISOString(),
       configs: configs.map(offlineEdition), worlds: snapshot.worlds, memories: snapshot.memories, definitions: readItemDefs() };
     writeAtomic(filePath, JSON.stringify(backup, null, 2)); return { ok: true };
   } catch { return { ok: false, message: 'The backup could not be exported. Your existing saves have not been changed.' }; }
@@ -551,7 +586,7 @@ ipcMain.on('desktop:fileHomes', (_e, value: unknown) => {
           h &&
           Number.isInteger(h.id) &&
           h.id >= 0 &&
-          h.id < 5 &&
+          h.id < configs.length &&
           typeof h.path === 'string' &&
           h.path.length < 4096,
       ).map(h => ({id:h.id, path:h.path, kind:h.kind==='file'?'file':'folder', visible:h.visible===true}));
@@ -596,12 +631,12 @@ app.whenReady().then(() => {
   if (COMMERCIAL) app.on('second-instance', () => { setSession({ hidden: false }); openSettings(); });
   const life = () => win?.webContents.send('world:life', {hour:new Date().getHours(),idleSeconds:powerMonitor.getSystemIdleTime()});
   setInterval(life,10000).unref();
-  loadConfig();
-  if (COMMERCIAL) {
+  {
     try { const text = readSave(productStatePath(), 'read:setup'); if (text) {
-      const value = JSON.parse(text); productState = { introDone: value.introDone === true, sceneReady: value.sceneReady === true };
+      const value = JSON.parse(text); productState = { introDone: value.introDone === true, sceneReady: value.sceneReady === true, unlockedCharacters: knownUnlocks(value.unlockedCharacters) };
     } } catch { /* Original retained; the save-health panel explains recovery. */ }
   }
+  loadConfig();
   // He lives in the menu bar, not the Dock. Keep an Edit menu so copy/paste
   // shortcuts work in the settings window's text boxes.
   if (process.platform === 'darwin') app.dock?.hide();

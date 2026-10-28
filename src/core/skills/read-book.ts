@@ -25,6 +25,8 @@ export class ReadBook extends Skill {
   private pageTime = -1;
   private reachTime = 0;
   private returning = new Handling();
+  private returnSide: -1 | 1 | null = null;
+  private returnSlot: number | undefined;
   private light = new ReadingLight();
   constructor(
     private original: Item | null = null,
@@ -145,10 +147,22 @@ export class ReadBook extends Skill {
         Math.abs(this.shelf.tilt) > 0.35
       )
         return true;
-      if (!arrive(c, this.shelf.center.x, 10)) return this.phaseTime > 18;
+      const slot = this.nextReturnSlot(c);
+      if (slot === undefined) return true;
+      const target = this.shelf.toWorld(10 + slot * 15, 35);
+      this.returnSide ??= ch.x < target.x ? -1 : 1;
+      if (this.returnSlot !== slot) { this.returnSlot = slot; this.returning = new Handling(); }
+      // Approach the chosen slot, leaving room for the torso's natural forward
+      // bend. The old shelf-centre destination could leave it behind his hand.
+      if (!arrive(c, target.x + this.returnSide * 16 * ch.scale, 6)) return this.phaseTime > 18;
+      ch.facing = -this.returnSide;
       this.reachTime += dt;
-      if (!this.returning.reach(c, this.shelf.toWorld(22, 35), dt)) return false;
-      this.returnBook(c);
+      if (!this.returning.reach(c, target, dt)) {
+        // Keep the original/bookmark and let normal cleanup stow it locally instead of
+        // teleporting it to a shelf that the hand could not touch.
+        return this.returning.failed || this.phaseTime > 18;
+      }
+      this.returnBook(c, slot);
       return true;
     }
     if (book.where !== 'hand') return true;
@@ -229,9 +243,8 @@ export class ReadBook extends Skill {
     }
     return false;
   }
-  private returnBook(c: Ctx) {
-    if (!this.shelf || !this.book || this.shelf.held || Math.abs(this.shelf.tilt) > 0.35)
-      return false;
+  private nextReturnSlot(c: Ctx) {
+    if (!this.shelf) return undefined;
     const used = [
       ...c.items.list
         .filter((i) => i !== this.book && i.shelf?.key === this.shelf!.storageKey)
@@ -241,8 +254,12 @@ export class ReadBook extends Skill {
         .filter((s) => s.key === this.shelf!.storageKey)
         .map((s) => s.slot),
     ];
-    const slot = [0, 1, 2, 3, 4].find((i) => !used.includes(i));
-    if (slot === undefined) return false;
+    return [0, 1, 2, 3, 4].find((i) => !used.includes(i));
+  }
+  private returnBook(c: Ctx, slot: number) {
+    if (!this.shelf || !this.book || this.shelf.held || Math.abs(this.shelf.tilt) > 0.35)
+      return false;
+    if (this.nextReturnSlot(c) !== slot) return false;
     const at = this.shelf.toWorld(10 + slot * 15, 35);
     this.book.at = { ...at, z: 6 };
     this.book.dir = { x: 1, y: 0, z: 0 };

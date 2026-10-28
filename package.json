@@ -36,7 +36,11 @@
     "package:release": "node scripts/package-release.mjs",
     "native:mac": "node scripts/build-native-mac.mjs",
     "verify": "node scripts/verify.mjs",
-    "releaseui": "node scripts/build.mjs release && electron scripts/release-electron-check.cjs"
+    "releaseui": "node scripts/build.mjs release && electron scripts/release-electron-check.cjs",
+    "bonuscheck": "node scripts/build.mjs bonus-checks && node .build/bonus-checks.mjs",
+    "contactcheck": "node scripts/build.mjs contact-checks && node .build/contact-checks.mjs",
+    "placementcheck": "node scripts/build.mjs placement-checks && node .build/placement-checks.mjs",
+    "activityrequestcheck": "node scripts/build.mjs activity-request-checks && node .build/activity-request-checks.mjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

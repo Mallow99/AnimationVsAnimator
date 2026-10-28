@@ -56,6 +56,8 @@ jobs:
         run: |
           npm run build:release
           xvfb-run -a node_modules/.bin/electron --no-sandbox scripts/release-electron-check.cjs
+          xvfb-run -a node_modules/.bin/electron --no-sandbox scripts/bonus-electron-check.cjs
+          xvfb-run -a node_modules/.bin/electron --no-sandbox scripts/placement-electron-check.cjs
       - name: Feature and lifecycle soak
         if: steps.extended.outputs.run == 'true'
         run: |

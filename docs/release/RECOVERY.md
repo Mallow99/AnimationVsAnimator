@@ -18,8 +18,13 @@ problem. Quit, make a separate copy of the save folder, then replace the affecte
 JSON file with a known-good copy and restart. Do not replace files while the app is open.
 Do not hand-edit Chromium's LevelDB files or delete the data folder as a first step.
 
-Full JSON exports contain versioned `configs`, `worlds`, `memories` and `definitions`.
-They are an additional recovery format; this release does not provide a one-click
+Full JSON exports use format version 2 and contain `configs`, `worlds`, `memories`,
+`definitions` and `productState`. The latter includes saved bonus-buddy unlocks.
+Older version-1 exports do not include unlock state. Keep product-state.json when
+copying or restoring the full save folder; each buddy also has separate configuration
+and memory files. Do not replace existing buddy files to add a bonus buddy.
+
+JSON exports are an additional recovery format; this release does not provide a one-click
 importer. Whole-folder backups can be restored with the app closed. Keep the backup
 and damaged folder until you have checked names, belongings and conversations.
 

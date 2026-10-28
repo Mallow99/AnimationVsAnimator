@@ -37,7 +37,10 @@ export class ReadingLight {
     if (!t.on) {
       if (!arrive(c, t.center.x + (c.char.x < t.center.x ? -25 : 25) * c.char.scale, 8))
         return false;
-      if (!this.reach.reach(c, t.toWorld(18, 35), dt)) return false;
+      if (!this.reach.reach(c, t.toWorld(18, 35), dt)) {
+        // Light is optional: an unreachable switch must not hold the reading activity forever.
+        return this.reach.failed;
+      }
     }
     t.lightUsers.add(c.who);
     t.syncLight();
@@ -72,7 +75,10 @@ export class SwitchLamp extends Skill {
       return true;
     if (!arrive(c, t.center.x + (c.char.x < t.center.x ? -25 : 25) * c.char.scale, 8)) return false;
     if (!this.done) {
-      if (!this.reach.reach(c, t.toWorld(18, 35), dt)) return false;
+      if (!this.reach.reach(c, t.toWorld(18, 35), dt)) {
+        if (this.reach.failed) c.say("I can't reach the switch from here.", 1.5);
+        return this.reach.failed;
+      }
       t.manualLight = this.desiredOn!;
       t.syncLight();
       this.done = true;

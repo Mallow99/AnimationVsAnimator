@@ -163,12 +163,21 @@ export class GiveGift extends Skill {
       const result = this.tool.fetch(c, dt);
       if (result !== 'ready') return result === 'none';
     }
-    if (!arrive(c, peer.x + (ch.x < peer.x ? -35 : 35) * ch.scale, 9)) return false;
+    // Walking stops within its own tolerance. Aim close enough that the receiver's
+    // resting hand is genuinely reachable instead of accepting a timed-out offer.
+    if (!arrive(c, peer.x + (ch.x < peer.x ? -22 : 22) * ch.scale, 6)) return false;
     ch.facing = ch.x < peer.x ? 1 : -1;
     c.look = 'target';
     c.lookTarget = peer.joints.head ?? null;
-    const hand = peer.joints.handL ?? { x: peer.x, y: ch.body.j.neck.y + 25 };
-    if (!this.reach.reach(c, hand, dt)) return false;
+    const actual = ch.body.j[ch.useHand === 'L' ? 'handL' : 'handR'];
+    const hand = [peer.joints.handL, peer.joints.handR]
+      .filter((p): p is NonNullable<typeof p> => !!p)
+      .sort((a,b)=>Math.hypot(a.x-actual.x,a.y-actual.y)-Math.hypot(b.x-actual.x,b.y-actual.y))[0]
+      ?? { x: peer.x, y: ch.body.j.neck.y + 25 };
+    if (!this.reach.reach(c, hand, dt)) {
+      if (this.reach.failed) c.say("Come a little closer? I'll keep this safe.", 1.5);
+      return this.reach.failed;
+    }
     it.working = true;
     c.say(
       this.wrapped

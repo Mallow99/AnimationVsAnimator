@@ -1,7 +1,8 @@
 # Mallow Desk Buddies — features and customization
 
-An offline desktop toy with one to five procedural stick-figure companions.
-Current candidate: 1.0.0-rc.3. Target platforms: Apple Silicon Mac and Windows 11 x64.
+An offline desktop toy with up to five procedural stick-figure companions on screen.
+Five saved buddies are included, with a sixth available through a bonus code.
+Current candidate: 1.0.0-rc.4. Target platforms: Apple Silicon Mac and Windows 11 x64.
 Physical release acceptance remains pending; see the installation guide.
 
 ## What you get
@@ -13,9 +14,12 @@ Physical release acceptance remains pending; see the installation guide.
 - **Things to do:** reading with persistent bookmarks, drawing, exercise, dancing,
   drinks, catch, shared activities and cartoon sparring.
 - **Games:** handheld play and shared handheld games; TV runner games, Pong and Othello.
-  Activities show their required supplies and available companions.
+  Activities show their required supplies and available companions. Quick actions explain
+  what is missing and show the selected buddy's current activity.
 - **A furnished desktop:** place chairs, a couch, TV, lamp, canvas, scooter, desk,
   workbench, storage and a bookshelf. Move furniture and give, carry or store items.
+  New furniture supplies show a footprint and floor guide; optional Snap to floor
+  aligns a clear near-floor placement before releasing normal physics.
 - **Local conversation:** familiar topics, remembered details and branching stories.
   Saved transcripts can be exported or cleared for one buddy. No general-purpose
   AI answers, account, API key, model download or subscription is required.
@@ -32,11 +36,11 @@ Changes appear on the desktop immediately and save for that buddy.
 
 | Change | Controls |
 | --- | --- |
-| Company | Show any combination of one to five buddies; putting someone away preserves them. |
+| Company | Show up to five buddies at once from the saved roster; putting someone away preserves them. Unlocking a bonus buddy never replaces another. |
 | Name and colour | Name each buddy. Use the colour picker, exact six-digit hex code or hue, saturation and lightness sliders. |
 | Size | Set the overall size from 0.6× to 2.5×. |
 | Personality | Inventive, competitive, gentle, mischievous or adventurous; changes activity preferences, motion and local voice. |
-| Appearance | Continuous line width and head-size sliders; choose smooth rendering or adjust pixel size. Each shows its current value. |
+| Appearance | Continuous line width and head-size sliders; choose smooth rendering or adjust pixel size. Each shows its current value. Arnold also has a JT arm tattoo toggle. |
 | Movement | Expand Movement for leg straightness, stance width, step length, foot lift, arm motion, lean and walking bounce. Change each separately. |
 | Activity pace | Activities → Activity pace, from calm to restless. |
 | Desktop and sound | Settings → window climbing, volume, sounds and day/night rhythm. |
@@ -51,10 +55,23 @@ Custom items and props currently use local JSON definition files rather than an
 in-app visual editor. Custom character images and third-party character packs
 are outside this candidate.
 
+## Bonus buddy
+
+Have a bonus buddy code? Open **Settings → Settings**, enter it in **Bonus code**
+and choose **Unlock buddy**. This works offline and stays saved on that computer.
+A repeated code does not create duplicate buddies. **Meet Arnold** opens his controls;
+if five buddies are already out, put one away before bringing him onto the desktop.
+
+Arnold has a JT tattoo on his arm and a friendly, competitive personality. His name,
+colour and usual look/movement settings are editable. He has his own belongings,
+book progress, conversation and memories, just like the original five buddies.
+
 ## Materials and custom art
 
-The controls use paper and linen textures. Stock furniture has wood grain, woven
-upholstery and brushed metal; books have leather covers, paper grain and page ink.
+Settings, bags, activities and chat use paper-fibre and woven-linen textures, with
+inset fields, clear focus and selected states. Pong controls share the same finish.
+Stock furniture has wood grain, woven upholstery and brushed metal; books have
+leather covers, paper grain and page ink.
 Textures stay attached as objects move and turn, including in pixel rendering.
 These are lightweight procedural finishes, with no downloaded texture assets.
 

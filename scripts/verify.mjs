@@ -1,7 +1,7 @@
 import { spawnSync, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const directory = '.build/verification'; mkdirSync(directory, { recursive: true });
-const commands = ['typecheck', 'checks', 'roadmapcheck', 'qualitycheck', 'sanitycheck', 'quality2check', 'polishcheck', 'conversationcheck', 'modelcheck', 'releasecheck', 'sim', 'browsercheck'];
+const commands = ['typecheck', 'checks', 'roadmapcheck', 'qualitycheck', 'sanitycheck', 'quality2check', 'polishcheck', 'conversationcheck', 'modelcheck', 'releasecheck', 'bonuscheck', 'contactcheck', 'placementcheck', 'activityrequestcheck', 'sim', 'browsercheck'];
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), platform: process.platform, steps: [] };
 for (const command of commands) {
   console.log('Checking ' + command + '…');

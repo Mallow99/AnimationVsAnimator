@@ -1,4 +1,7 @@
-# Pet Quality Update 2 — completed checklist
+# Pet Quality Update 2 — release continuation checklist
+
+**The 2026-10-28 owner request adds Arnold, better GUI textures and the approved quality plan.**
+Current rc.4 acceptance is item 14; earlier completed entries remain historical.
 
 **The 2026-10-24 owner request resumes product and release quality work.** Follow
 [release/ACCEPTANCE.md](release/ACCEPTANCE.md) and [release/IMPLEMENTATION.md](release/IMPLEMENTATION.md).
@@ -125,3 +128,17 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
     - [x] Refresh actual runtime media and record rc.3 native/extended CI evidence.
     - [x] Verify maximum-length names and expanded controls at 380px; preserve exact final ZIPs.
     - [ ] Physical/store acceptance remains required before public paid publication.
+
+14. **Arnold and release-quality interactions — owner request 2026-10-28**
+    - [x] Offline reusable bonus code, sixth saved identity and explicit five-active cap.
+    - [x] JT arm tattoo, attached/detached rendering and Arnold-only tattoo toggle.
+    - [x] Preserve original ids, individual belongings/book progress/chat/memory and repeat unlocks.
+    - [x] Add proper paper/linen/wood GUI textures, inset controls, focus and reduced-motion states.
+    - [x] Require actual hand contact; bounded retry/cancel for pickup, stow, gifts, lamps and furniture.
+    - [x] Show truthful quick-activity requirements, request acceptance and current activity.
+    - [x] New-supply furniture footprint/floor preview and optional saved clear-floor snapping.
+    - [x] Update features, backup recovery and matching itch.io Markdown/HTML without public bonus code.
+    - [ ] Repeat final committed-source aggregate/customer/native tests and two-seed extended soaks.
+    - [ ] Inspect actual GUI/tattoo/placement captures; refresh media, source evidence and rc.4 draft ZIPs.
+    - [ ] Commit/changelog, push and update draft PR #4 with final results and remaining gates.
+    - [ ] Physical Mac/Windows and authenticated store acceptance before public paid publication.

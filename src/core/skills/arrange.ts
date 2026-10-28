@@ -115,7 +115,10 @@ export class MoveFurniture extends Skill {
       if (!arrive(c, o.center.x - dir * (width / 2 + 18 * ch.scale), 10))
         return false;
       ch.posture.hunch=Math.max(ch.posture.hunch,.12);
-      if(!this.preparing.reach(c,{x:o.center.x-dir*width/2,y:Math.min(o.center.y,ch.body.j.neck.y+14*ch.scale)},dt,true))return false;
+      if(!this.preparing.reach(c,{x:o.center.x-dir*width/2,y:Math.min(o.center.y,ch.body.j.neck.y+14*ch.scale)},dt,true)) {
+        if (this.preparing.failed) c.say("I can't get a grip from here.", 1.5);
+        return this.preparing.failed;
+      }
       ch.handTarget=null;
       this.phase = "move";
       o.movingBy = c.who;

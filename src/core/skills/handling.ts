@@ -6,9 +6,16 @@ import { clamp, smooth } from '../math';
 export class Handling {
   private elapsed = 0;
   private from: Vec | null = null;
+  private exhausted = false;
+  /** A failed reach must be retried from an approach, or cancelled; it is never contact. */
+  get failed() { return this.exhausted; }
   reach(c: Ctx, target: Vec, dt: number, heavy = false): boolean {
     const hand = c.char.useHand;
-    if (!hand) return false;
+    if (this.exhausted || !hand || !Number.isFinite(target.x + target.y)) {
+      this.exhausted = true;
+      c.char.handTarget = null;
+      return false;
+    }
     const actual = c.char.body.j[hand === 'L' ? 'handL' : 'handR'];
     this.from ??= { x: actual.x, y: actual.y };
     this.elapsed += dt;
@@ -25,10 +32,12 @@ export class Handling {
       x: this.from.x + (target.x - this.from.x) * u,
       y: this.from.y + (target.y - this.from.y) * u - Math.sin(u * Math.PI) * 4 * c.char.scale,
     };
-    return (
-      this.elapsed >= notice + duration + 0.06 &&
-      (Math.hypot(actual.x - target.x, actual.y - target.y) < 7 * c.char.scale ||
-        this.elapsed > 1.25)
-    );
+    const contact = this.elapsed >= notice + duration + 0.06 &&
+      Math.hypot(actual.x - target.x, actual.y - target.y) < 7 * c.char.scale;
+    if (!contact && this.elapsed >= 2) {
+      this.exhausted = true;
+      c.char.handTarget = null;
+    }
+    return contact;
   }
 }

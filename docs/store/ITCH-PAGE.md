@@ -5,7 +5,7 @@
 Make room for a few tiny housemates. Give them a book, a ball or a comfortable
 place to sit, then let them find their own fun on your desktop.
 
-Start with one buddy or invite all five. They wander, read, draw, play, rest and
+Start with one buddy or invite up to five at once. They wander, read, draw, play, rest and
 spend time together. Join in when you feel like it. They can keep themselves busy
 when you don't.
 
@@ -16,9 +16,11 @@ when you don't.
 - **Give them something to do.** Reading with saved bookmarks, drawing, dancing,
   catch, shared activities and cartoon sparring.
 - **Make a little home.** Place a couch, chairs, lamp, TV, desk, bookshelf and more.
-  Move the furniture and give each buddy their own belongings.
+  A footprint and optional floor snap help place new furniture. Move it around
+  and give each buddy their own belongings.
 - **Let them play.** Pocket games, shared handheld sessions, TV runner games,
-  Pong and Othello. The activity menu shows what each activity needs.
+  Pong and Othello. Activity controls show what is ready, what is needed and what
+  the selected buddy is doing.
 - **Say hello.** Built-in conversations cover familiar topics, remembered details
   and branching stories. Export a conversation or start a new one for one buddy.
 - **Keep their progress.** Names, belongings, memories and friendships stay saved,
@@ -34,8 +36,14 @@ lightness controls. Adjust line thickness, head size and smooth or pixel renderi
 Movement has separate controls for stance, leg straightness, step length, foot
 lift, arm motion, lean and bounce. Changes appear immediately and save per buddy.
 
+Five saved buddies are included. A bonus buddy code can unlock Arnold, a friendly
+competitor with a JT arm tattoo and his own belongings, memories and conversation.
+You can keep six saved buddies and choose up to five to bring onto the desktop;
+unlocking him never replaces anyone.
+
 Furniture has wood grain, woven upholstery and metal finishes. Books have textured
-covers and paper pages. The controls use a quiet paper-and-linen finish.
+covers and paper pages. Settings, bags and chat have paper-fibre and woven-linen
+surfaces, with clear inset controls and keyboard focus.
 You can also make custom items and furniture with local JSON definition files;
 examples and a guide are included.
 

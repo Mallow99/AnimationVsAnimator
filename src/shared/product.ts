@@ -28,5 +28,6 @@ export function offlineEdition(config: PetConfig): PetConfig {
 export interface SaveIssue { key: string; message: string }
 export interface SaveHealth { issues: SaveIssue[] }
 export type SaveResult = { ok: true } | { ok: false; message: string };
-export interface ProductState { introDone: boolean; sceneReady: boolean }
+export interface ProductState { introDone: boolean; sceneReady: boolean; unlockedCharacters?: string[] }
+export type RedeemResult = { ok: true; alreadyUnlocked: boolean; characterId: number; configs: PetConfig[] } | { ok: false; message: string };
 export interface SessionState { paused: boolean; hidden: boolean }

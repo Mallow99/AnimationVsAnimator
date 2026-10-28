@@ -53,6 +53,9 @@ contextBridge.exposeInMainWorld('petShell', {
   openSettings: (id = petId, tab?: string) => ipcRenderer.send('settings:open', id, tab),
   // shared: config changes arrive as { id, config } for either stick figure
   onConfig: on('config:changed'),
+  onRoster: on('roster:changed'),
+  redeemCode: (code: string) => ipcRenderer.invoke('product:redeem',code),
+  requestActivity: (id:number,command:string) => ipcRenderer.invoke('activity:request',id,command),
   // settings window (for the stick figure in its address)
   petId,
   getConfig: (id=petId) => ipcRenderer.invoke('config:get', id),

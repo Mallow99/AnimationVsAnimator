@@ -2,6 +2,7 @@ import { giftCandidates, giftReady } from '../core/skills/gift';
 import type { Pet } from '../core/pet';
 import { propActions, type PropAction } from '../core/capabilities';
 import { availableForGroup } from '../core/skills/group';
+import { isBookItem } from '../core/items';
 
 export interface ActivityChoice { group: string; label: string; command: string; hint: string; needs?: string }
 
@@ -12,18 +13,24 @@ export function activitiesFor(p: Pet): ActivityChoice[] {
   const has = (id: string) => props.some(t => t.def?.id === id || t.ink?.source === id);
   const capability = (action: PropAction) => props.some(t => t.def && propActions(t.def).includes(action));
   const friends = (p.ctx.peers?.() ?? []).filter(availableForGroup).length;
+  const onWindow = p.char.support >= 0 && !p.props.thingOf(p.char.support);
+  const floor = onWindow ? 'Bring this figure down to the desktop floor.' : undefined;
+  const foe = p.ctx.foe?.();
+  const ready = p.mood.asleep ? 'Wake the figure first.' : !p.char.whole ? 'Repair the figure first.' : p.char.isHeld() ? 'Put this figure down first.' : !['ground', 'sit'].includes(p.char.mode) ? 'Wait for the figure to stand or sit.' : undefined;
   const pen = p.items.list.some(i => i.def.use === 'draw' && i.where !== 'cursor');
-  const add = (group: string, label: string, command: string, hint: string, needs?: string) => choices.push({ group, label, command, hint, needs: p.mood.asleep ? 'Wake the figure first.' : !p.char.whole ? 'Repair the figure first.' : needs });
+  const add = (group: string, label: string, command: string, hint: string, needs?: string) => choices.push({ group, label, command, hint, needs: ready && needs ? `${ready} ${needs}` : ready ?? needs });
   const owns = (use: string) => p.items.list.some(i => i.def.use === use && i.where !== 'cursor');
+  add('Everyday', 'Have a dance', 'dance', 'A little room to move.');
   add('Everyday', 'Have a drink', 'sip', 'Sip, pause and put the cup away.', !owns('sip') ? 'Give this figure a cup from Supplies.' : undefined);
   add('Everyday', 'Train with a dumbbell', 'exercise', 'Slow curls and a break between sets.', !owns('exercise') ? 'Give this figure a dumbbell from Supplies.' : undefined);
   add('Everyday', 'Play with a yo-yo', 'yoyo', 'Try a few tricks, catch and rest.', !owns('play') ? 'Give this figure a yo-yo from Supplies.' : undefined);
   add('Everyday','Rest under a blanket','blanket','Fetch, unfold, rest quietly, fold and put away.', !owns('rest')?'Give this figure a blanket from Supplies.':undefined);
   add('Everyday','Have a snack','snack','Open the box, take a snack and put it away.', !owns('snack')?'Give this figure a snack box from Supplies.':undefined);
   add('Everyday','Switch a lamp','lamp','Reach for the switch. Your choice overrides automatic reading light.', !capability('switch')?'Place a lamp from Supplies.':undefined);
-  add('Everyday', 'Read a book' , 'read', 'Settle down with a book.');
+  const books = p.items.list.filter(isBookItem);
+  add('Everyday', 'Read a book', 'read', 'Fetch a book, settle in and return the same one.', books.length && books.every(i => i.where === 'cursor') ? 'Give the figure back its book first.' : undefined);
   add('Everyday', 'Sit down', 'sitdown', 'Use a free chair or couch.', !capability('sit') ? 'Place a chair or couch from Supplies.' : undefined);
-  add('Everyday', 'Watch TV', 'watchtv', 'Relax and watch a show.', !capability('watch') ? 'Place a TV from Supplies.' : undefined);
+  add('Everyday', 'Watch TV', 'watchtv', 'Relax and watch a show.', floor ?? (!capability('watch') ? 'Place a TV from Supplies.' : undefined));
   add('Everyday', 'Doodle', 'doodle', 'Draw with the figure’s pen.', !pen ? 'Give this figure a pen from Supplies.' : undefined);
   add('Everyday', 'Paint on a canvas', 'paint', 'Make a picture on the canvas.', !capability('paint') ? 'Place a canvas from Supplies.' : !pen ? 'Give this figure a pen.' : undefined);
   add('Workshop', 'Make a desk blueprint', 'deskwork', 'Trace a katana on paper and keep a copy.', !has('desk') ? 'Place a desk from Supplies.' : !pen ? 'Give this figure a pen.' : undefined);
@@ -42,7 +49,7 @@ export function activitiesFor(p: Pet): ActivityChoice[] {
     const needs = friends < count - 1 ? `Needs ${count} free, awake figures on the floor.` : act === 'couch' && !props.some(t => t.seatRoom >= Math.min(5, friends + 1) && !t.sitters.size) ? 'Place a free couch from Supplies.' : act === 'watch' && !capability('watch') ? 'Place a TV from Supplies.' : !['ground', 'sit'].includes(p.char.mode) ? 'Bring this figure down to the floor.' : undefined;
     add('Together', label, `group:${act}`, hint, needs);
   }
-  const tv = !capability('watch') ? 'Place a TV from Supplies.' : undefined;
+  const tv = floor ?? (!capability('watch') ? 'Place a TV from Supplies.' : undefined);
   const tvGame=tv??(p.config.consoleRequired&&!props.some(t=>t.def?.use==='tv'&&t.consoleConnected)?'Attach a console beside the TV from Bag.':undefined);
   add('Games','Play catch','catch','Two friends pass one actual ball; a missed catch leaves it on the desktop.', !p.items.list.some(i=>i.def.id==='bouncy-ball'&&i.where!=='cursor')?'Give this figure a bouncy ball from Supplies.':friends<1?'Needs two free, awake figures on the floor.':!['ground','sit'].includes(p.char.mode)?'Bring this figure down to the floor.':undefined);
   add('Games', 'Play Pong', 'pong', 'Two players, spectators and a paddle you can join.', tv ?? (friends < 1 ? 'Needs two free, awake figures on the floor.' : !['ground', 'sit'].includes(p.char.mode) ? 'Bring this figure down to the floor.' : p.config.consoleRequired && !props.some(t => t.def?.use === 'tv' && t.consoleConnected) ? 'Attach a console beside the TV from Bag.' : undefined));
@@ -54,6 +61,7 @@ export function activitiesFor(p: Pet): ActivityChoice[] {
   add('Arrange furniture', 'Carry TV together', 'carrytogether', 'Two figures carry the TV to the couch.', !has('tv') || !has('couch') ? 'Place a TV and couch from Supplies.' : friends < 1 ? 'Needs two free, awake figures on the floor.' : undefined);
   add('Arrange furniture', 'Make a reading corner', 'readingcorner', 'Move a chair beside a bookshelf or tool shelf.', !has('chair') || !(has('storage') || has('bookshelf')) ? 'Place a chair and bookshelf or tool shelf from Supplies.' : undefined);
   add('Arrange furniture', 'Make a work corner', 'workcorner', 'Move the workbench beside the desk.', !has('workbench') || !has('desk') ? 'Place a workbench and desk from Supplies.' : undefined);
+  add('Friends', p.config.fightMode === 'real' ? 'Rough spar' : 'Friendly spar', 'duel', 'Invite an available friend; uses the selected sparring setting.', floor ?? (!foe ? 'Bring another figure onto the desktop first.' : !availableForGroup(foe) ? `Wait until ${foe.name} is free and awake.` : undefined));
   add('Friends','Give a thoughtful gift','gift','Choose an owned gift they might like; draw wrapping with a pen, or offer it directly.',!giftCandidates(p.ctx).length?'Give this figure a spare gift (books, flowers, games or tools) from Supplies.':!(p.ctx.peers?.()??[]).some(giftReady)?'Needs a free, awake friend with room in their bag.':undefined);
   add('Friends', 'Pass a spare tool', 'passtool', 'Give a spare tool to a companion.', !giftCandidates(p.ctx,false).length ? 'Give this figure a spare tool from Supplies.' : !(p.ctx.peers?.()??[]).some(giftReady) ? 'Needs a free, awake friend with room in their bag.' : undefined);
   add('Friends', 'Compare drawings', 'comparedrawings', 'Ask a companion for feedback.', friends < 1 ? 'Needs a free companion.' : undefined);

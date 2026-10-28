@@ -1,13 +1,18 @@
-import { CHARACTER_PRESETS, RANGES, type PetConfig, type Personality } from '../core/config';
+import { activeFigureIds, CHARACTER_PRESETS, RANGES, type PetConfig, type Personality } from '../core/config';
 import { hexToHsl, hslToHex, type Hsl } from './color';
 import { conversationKeys, exportConversation, transcriptView } from '../app/conversation-view';
-import { PRODUCT_NAME, type SaveHealth, type SaveResult, type SessionState } from '../shared/product';
+import { ARNOLD_ID, MAX_ACTIVE_FIGURES } from '../core/profiles';
+import { type ActivitySnapshot, type ActivityRequestResult } from '../shared/activity';
+import { PRODUCT_NAME, type RedeemResult, type SaveHealth, type SaveResult, type SessionState } from '../shared/product';
 
-interface Stats { name: string; label: string; doing: string; windows: number; moveNote?: string; brain: { log: Parameters<typeof exportConversation>[0] } }
+interface Stats { activity?: ActivitySnapshot; name: string; label: string; doing: string; windows: number; moveNote?: string; brain: { log: Parameters<typeof exportConversation>[0] } }
 interface Shell {
   quit(): void;
   getConfigs(): Promise<PetConfig[]>;
   setConfig(patch: unknown, id?: number): void;
+  onRoster(cb: (configs: PetConfig[]) => void): void;
+  redeemCode(code: string): Promise<RedeemResult>;
+  requestActivity(id:number, command:string): Promise<ActivityRequestResult>;
   onConfig(cb: (value: { id: number; config: PetConfig }) => void): void;
   onStats(cb: (value: { id: number; stats: Stats }) => void): void;
   command(cmd: string, id?: number): void;
@@ -48,9 +53,9 @@ for (const [i, button] of tabs.entries()) {
   };
 }
 tab('buddies');
-const activeIds = () => configs[0]?.spawnOrder.slice(0, configs[0].figureCount) ?? [];
+const activeIds = () => configs[0] ? activeFigureIds(configs[0],configs.map((_,id)=>id)) : [];
 function choose(id: number) {
-  if (!Number.isInteger(id) || id < 0 || id > 4) return;
+  if (!Number.isInteger(id) || id < 0 || id >= configs.length) return;
   if (!configs[id]) { selected = id; return; }
   drafts.set(selected, $<HTMLTextAreaElement>('chatText').value);
   selected = id; $<HTMLTextAreaElement>('chatText').value = drafts.get(id) ?? '';
@@ -65,12 +70,15 @@ function render() {
   const active = activeIds();
   $('roster').replaceChildren(...configs.map((c, id) => {
     const label = document.createElement('label'), input = document.createElement('input'), swatch = document.createElement('span');
-    input.type = 'checkbox'; input.checked = active.includes(id); input.setAttribute('aria-label', `Show ${c.name}`);
+    input.type = 'checkbox'; input.checked = active.includes(id); input.disabled=!input.checked&&active.length>=MAX_ACTIVE_FIGURES; input.setAttribute('aria-label', `Show ${c.name}`);
     swatch.className = 'swatch'; swatch.style.background = c.look.color;
-    input.onchange = () => { const next = input.checked ? [...activeIds(), id] : activeIds().filter(i => i !== id); if (!next.length) { input.checked = true; return; }
-      shell.setConfig({ figureCount: next.length, spawnOrder: [...new Set([...next, 0, 1, 2, 3, 4])] }, 0); };
+    input.onchange = () => { const next = input.checked ? [...activeIds(), id] : activeIds().filter(i => i !== id); if (!next.length || next.length>MAX_ACTIVE_FIGURES) { input.checked = activeIds().includes(id); return; }
+      shell.setConfig({ figureCount: next.length, spawnOrder: [...new Set([...next, ...configs.map((_,i)=>i)])] }, 0); };
     label.append(input, swatch, document.createTextNode(c.name)); return label;
   }));
+  $('rosterHelp').textContent=active.length>=MAX_ACTIVE_FIGURES?'Five buddies are on the desktop. Put someone away before bringing another out.':'Up to five buddies on the desktop. Their belongings and friendships stay when you put them away.';
+  $('tattooOption').hidden=selected!==ARNOLD_ID;
+  $<HTMLInputElement>('tattoo').checked=c.look.tattoo==='jt';
   const chooser = $<HTMLSelectElement>('buddy');
   chooser.replaceChildren(...configs.map((c, id) => new Option(c.name + (active.includes(id) ? '' : ' · resting away'), String(id)))); chooser.value = String(selected);
   for (const [id, value] of [['name', c.name], ['color', c.look.color], ['size', c.scale], ['pace', c.hyperactivity], ['volume', c.volume], ['fightMode', c.fightMode]] as const) {
@@ -87,17 +95,20 @@ function render() {
 }
 function renderStats() {
   const c = configs[selected], s = stats.get(selected); if (!c) return;
-  $('liveStatus').textContent = activeIds().includes(selected) ? s ? `${s.name} · ${s.label}` : 'Getting settled…' : 'Resting away';
+  $('liveStatus').textContent = activeIds().includes(selected) ? s ? `${c.name} · ${s.activity?.current.label ?? s.label}` : 'Getting settled…' : 'Resting away';
   transcript((s?.brain.log ?? []).filter(line => line.who !== "note"), c.name, String(selected));
+  updateActivities();
   $('windowStatus').textContent = !c.windows ? 'Optional. Buddies currently play on the desktop floor.' : s?.windows ? `${s.windows} window surfaces detected.` : 'Waiting for accessible windows. On Mac, check Accessibility permission for Mallow Desk Buddies. The desktop floor stays available.';
 }
 shell.onStats(({ id, stats: value }) => { stats.set(id, value); if (id === selected) renderStats(); });
+shell.onRoster(value=>{configs=value;render();updateFineTune();});
 shell.onConfig(({ id, config }) => { configs[id] = config; render(); });
 $<HTMLSelectElement>('buddy').onchange = () => choose(Number($<HTMLSelectElement>('buddy').value));
 $<HTMLInputElement>('name').onchange = () => { const name = $<HTMLInputElement>('name').value.trim(); if (name) set({ name }); else render(); };
 $<HTMLInputElement>('color').oninput = () => set({ look: { color: $<HTMLInputElement>('color').value } });
 for (const [id, key] of [['size', 'scale'], ['pace', 'hyperactivity'], ['volume', 'volume']] as const) $<HTMLInputElement>(id).oninput = () => set({ [key]: Number($<HTMLInputElement>(id).value) });
 for (const key of ['windows', 'sound', 'sfx', 'dailyRhythm', 'moveWindows', 'knockCursor', 'mischief', 'screenAware', 'smacking', 'destructible'] as const) $<HTMLInputElement>(key).onchange = () => set({ [key]: $<HTMLInputElement>(key).checked });
+$<HTMLInputElement>('tattoo').onchange=()=>set({look:{tattoo:$<HTMLInputElement>('tattoo').checked?'jt':'none'}});
 $<HTMLSelectElement>('fightMode').onchange = () => set({ fightMode: $<HTMLSelectElement>('fightMode').value as PetConfig['fightMode'] });
 for (const preset of CHARACTER_PRESETS) {
   const label = preset.personality[0].toUpperCase() + preset.personality.slice(1);
@@ -155,12 +166,35 @@ $('exportChat').onclick = () => exportConversation(stats.get(selected)?.brain.lo
 $('newChat').onclick = () => { $('confirmReset').hidden = false; $('clearChat').focus(); };
 $('keepChat').onclick = () => { $('confirmReset').hidden = true; $('newChat').focus(); };
 $('clearChat').onclick = () => { shell.command('conversation:new', selected); $('confirmReset').hidden = true; chat.focus(); };
-for (const [label, action, hint] of [
-  ['Have a dance', 'dance', 'A little room to move.'], ['Read a book', 'read', 'Pick up an owned book and settle in.'],
-  ['Play catch', 'catch', 'Needs a ball and an available friend.'], ['Watch TV', 'watchtv', 'Needs a placed TV.'],
-  ['Draw something', 'doodle', 'Needs their pen.'], ['Play a pocket game', 'handheld', 'Needs an owned handheld.'],
-  ['Play Pong', 'pong', 'Needs a TV and an available friend.'], ['Friendly spar', 'duel', 'Invite an available friend.'],
-] as const) { const button = document.createElement('button'), title = document.createElement('span'), small = document.createElement('small'); title.textContent = label; small.textContent = hint; button.append(title, small); button.onclick = () => { if (!activeIds().includes(selected)) { $('activityHelp').textContent = 'Bring this buddy onto the desktop first.'; return; } shell.command('do:' + action, selected); $('activityHelp').textContent = `${configs[selected].name}: ${hint} Open all activities to see current requirements.`; }; $('activityList').append(button); }
+const activityButtons = new Map<string,{button:HTMLButtonElement;title:HTMLElement;small:HTMLElement}>();
+function updateActivities(){
+  const s=stats.get(selected),available=activeIds().includes(selected),snapshot=s?.activity;
+  $('currentActivity').textContent=!available?'Resting away':session.paused?'Paused':session.hidden?'Hidden':snapshot?`${snapshot.current.label}${snapshot.current.reason?' · '+snapshot.current.reason:''}`:'Getting settled…';
+  for(const [id,entry]of activityButtons){const choice=snapshot?.choices.find(c=>c.id===id);
+    if(choice)entry.title.textContent=choice.label;
+    const reason=!available?'Bring this buddy onto the desktop first.':session.paused?'Resume buddies to start.':session.hidden?'Show buddies to start.':choice?.needs;
+    entry.button.disabled=!!reason||!choice;entry.small.textContent=reason??choice?.hint??'Waiting for buddy status…';
+  }
+}
+for(const [id,label]of [['dance','Have a dance'],['read','Read a book'],['catch','Play catch'],['watchtv','Watch TV'],['doodle','Draw something'],['handheld','Play a pocket game'],['pong','Play Pong'],['duel','Friendly spar']]){
+  const button=document.createElement('button'),title=document.createElement('span'),small=document.createElement('small');title.textContent=label;button.dataset.activity=id;button.append(title,small);
+  button.onclick=async()=>{const target=selected;button.disabled=true;try{const result=await shell.requestActivity(target,id);if(selected===target)$('activityHelp').textContent=result.message;}catch{if(selected===target)$('activityHelp').textContent='The activity could not be requested. Try again once the desktop is ready.';}finally{updateActivities();}};
+  activityButtons.set(id,{button,title,small});$('activityList').append(button);
+}
+$('bonusForm').onsubmit=async event=>{
+  event.preventDefault();const button=$<HTMLButtonElement>('redeemCode');button.disabled=true;
+  try{const result=await shell.redeemCode($<HTMLInputElement>('bonusCode').value);
+    if(!result.ok){$('bonusStatus').textContent=result.message;return;}
+    configs=result.configs;$<HTMLInputElement>('bonusCode').value='';$('bonusStatus').textContent=result.alreadyUnlocked?'Arnold is already in your roster.':'Arnold unlocked. His JT tattoo and saved life are his own.';
+    $('bringArnold').hidden=false;render();
+  }catch{$('bonusStatus').textContent='The code could not be saved. Your existing buddies are kept.';}
+  finally{button.disabled=false;}
+};
+$('bringArnold').onclick=()=>{choose(ARNOLD_ID);tab('buddies');
+  if(activeIds().includes(ARNOLD_ID))return;
+  if(activeIds().length>=MAX_ACTIVE_FIGURES){$('rosterHelp').textContent='Put one buddy away, then tick Arnold to bring him out.';$('roster').scrollIntoView({block:'center'});return;}
+  const next=[...activeIds(),ARNOLD_ID];shell.setConfig({figureCount:next.length,spawnOrder:[...new Set([...next,...configs.map((_,id)=>id)])]},0);
+};
 $('openActivities').onclick = () => shell.command('openActivities', selected);
 $('stopActivity').onclick = () => shell.command('hear:stop', selected);
 $('openBag').onclick = () => shell.command('openInventory', selected);
@@ -170,7 +204,7 @@ $('openItems').onclick = () => shell.openItemsFolder(); $('reloadItems').onclick
 function showHealth(health: SaveHealth) { $('health').hidden = !health.issues.length; $('healthText').textContent = health.issues.map(i => i.message).join(' '); }
 shell.onSaveHealth(showHealth); void shell.getSaveHealth().then(showHealth);
 $('retrySave').onclick = () => shell.retrySaves();
-function sessionView(value: SessionState) { session = value; $('pause').textContent = session.paused ? 'Resume buddies' : 'Pause buddies'; $('hide').textContent = session.hidden ? 'Show all buddies' : 'Hide all buddies'; }
+function sessionView(value: SessionState) { session = value; $('pause').textContent = session.paused ? 'Resume buddies' : 'Pause buddies'; $('hide').textContent = session.hidden ? 'Show all buddies' : 'Hide all buddies'; updateActivities(); }
 shell.onSession(sessionView); void shell.getSession().then(sessionView);
 $('quit').onclick = () => shell.quit();
 $('pause').onclick = () => shell.setSession({ paused: !session.paused }); $('hide').onclick = () => shell.setSession({ hidden: !session.hidden });
@@ -184,4 +218,4 @@ $('exportBackup').onclick = async () => {
   finally { button.disabled = false; }
 };
 void shell.productInfo().then(info => { $('version').textContent = `${PRODUCT_NAME} ${info.version}`; $('welcome').hidden = info.state.introDone; if (info.recovered.length) $('recoveryStatus').textContent = 'A damaged save was recovered from its last-good backup. The damaged original was retained.'; });
-void shell.getConfigs().then(value => { configs = value; render(); updateFineTune(); shell.command('sync', selected); });
+void shell.getConfigs().then(value => { configs = value; $('bringArnold').hidden=configs.length<=ARNOLD_ID; render(); updateFineTune(); shell.command('sync', selected); });

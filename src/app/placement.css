@@ -1,0 +1,18 @@
+/* Placement controls share the bag's cloth/paper surface and remain outside the drawing. */
+#bagTransport .placement-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  white-space: nowrap;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #bfc9b5;
+  border-radius: 7px;
+  background: #eef0e3;
+  color: #34463a;
+  cursor: pointer;
+}
+#bagTransport .placement-option input { margin: 0; accent-color: #42664e; width: 16px; height: 16px; }
+#bagTransport .placement-option[hidden] { display: none; }
+@media (max-width: 520px) { #bagTransport { flex-wrap: wrap; } #bagTransport > span { flex-basis: 100%; } }

@@ -3,6 +3,33 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-28 — Arnold and release-quality interactions (rc.4)
+
+- Added an offline bonus-code flow for Arnold, a sixth saved identity with a JT arm
+  tattoo, editable copper colour and the existing competitive personality template.
+  The tattoo follows his attached or detached arm. Five buddies can be active at once;
+  unlocking him preserves everyone and never silently replaces an active buddy.
+- Kept Arnold's configuration, memories, original belongings and conversation separate.
+  Repeat redemption is harmless; a failed unlock write leaves the roster unchanged.
+  Full backup format 2 includes the saved unlock state.
+- Added woven linen, paper-fibre and restrained wood finishes across customer Settings,
+  bags, activities, chat and Pong controls, with inset fields, clearer selected states,
+  visible keyboard focus and reduced-motion support. No downloaded textures or new
+  runtime dependencies are required.
+- Removed timed success from handling. Pickups, stowing, gifts, lamp switches and
+  furniture actions require actual hand contact, with bounded repositioning or a safe
+  cancellation. Fixed shelf-return approach geometry while retaining the original book.
+- Unified quick-activity requirements with the full activity list. Settings now shows
+  the current activity, explains blocked actions and acknowledges a queued request
+  only after acceptance. Paused, hidden, inactive or unavailable buddies cannot start it.
+- Added a furniture footprint and floor guide for new supplies, with an optional saved
+  Snap to floor control. Clear near-floor placements align before normal physics resumes;
+  blocked or free placements remain physical. Existing furniture drags are unchanged.
+- Local focused checks and working-tree customer Electron checks have passed. Final
+  committed-source aggregate, two-seed extended soaks and native package checks are
+  being repeated; final evidence belongs in the handoff. Physical Mac/Windows and
+  seller/payout/download-entitlement acceptance still gate a public paid release.
+
 ## 2026-10-24 — rc.3 verified delivery and itch.io page
 
 - Final app source 09fd9eb passed all four jobs in CI 40141842676: aggregate/types,
