@@ -145,7 +145,7 @@ test('a successful gift transfers only after a real hand-to-hand reach', () => {
   const book=a.items.give('book',a.char)!;book.bookmark=9;
   const deliver=a.ctx.deliverGift!;let deliveries=0;
   a.ctx.deliverGift=(id,message,reply)=>{
-    const hand=a.char.body.j[a.char.useHand==='L'?'handL':'handR'];
+    const hand=a.char.body.j[book.hand==='L'?'handL':'handR'];
     const receiver=b.view();const distance=Math.min(...[receiver.joints.handL,receiver.joints.handR].filter(v=>!!v).map(v=>Math.hypot(v!.x-hand.x,v!.y-hand.y)));
     assert(distance<7*a.char.scale);deliveries++;return deliver(id,message,reply);
   };
@@ -153,5 +153,54 @@ test('a successful gift transfers only after a real hand-to-hand reach', () => {
   for(let i=0;i<15/dt;i++)for(const p of [a,b])p.update(dt);
   assert.equal(deliveries,1);assert(!a.items.list.includes(book));assert(b.items.list.some(it=>it.uid===book.uid&&it.bookmark===9));
   assert.deepEqual(checkSanity([a,b]),[]);
+});
+test('a turned figure stows the original with its actual held arm', () => {
+  const [p]=pets(),book=p.items.give('book',p.char)!;
+  p.items.toHand(book,'L');p.char.facing=1;
+  const stow=p.items.stow.bind(p.items);let stored=0;
+  p.items.stow=(item)=>{
+    if(item===book){const hand=p.char.body.j.handL,at=p.items.slotPose(p.char,0).at;
+      assert(Math.hypot(hand.x-at.x,hand.y-at.y)<7*p.char.scale,'the empty front hand cannot stow a back-hand original');stored++;}
+    return stow(item);
+  };
+  const tool=new Tool('none');tool.item=book;let done=false;
+  for(let n=0;n<4/dt&&!done;n++){done=tool.stow(p.ctx,dt);p.update(dt);}
+  assert(done);assert.equal(stored,1);assert.equal(book.where,'belt');assert.equal(p.char.handTarget,null);
+});
+test('a missing selected arm fails safely and later world reaches discard body-relative arm state', () => {
+  const [p]=pets();p.char.destructible=true;p.char.detach('armL');
+  const missing=new Handling();assert(!missing.reach(p.ctx,{x:p.char.x,y:750},dt,false,'L'));assert(missing.failed);assert.equal(Boolean(p.char.handTarget),false);
+  p.char.regrow('armL');p.char.facing=1;
+  const book=p.items.give('book',p.char)!;p.items.toHand(book,'L');const tool=new Tool('none');tool.item=book;
+  for(let n=0;n<30;n++){tool.stow(p.ctx,dt);p.update(dt);}
+  assert.equal(p.char.handTarget?.bodyRelative,true);assert.equal(p.char.reachingHand,'L');
+  const world=new Handling();for(let n=0;n<25;n++)world.reach(p.ctx,{x:p.char.x+14,y:798},dt);
+  assert.equal(p.char.handTarget?.bodyRelative,undefined);assert.equal(p.char.handTarget?.hand,undefined);assert.equal(p.char.reachingHand,'R');
+  const before=p.char.body.j.neck.y;
+  p.char.handTarget={x:p.char.x+14,y:798};for(let n=0;n<120;n++)p.update(dt);
+  assert(p.char.body.j.neck.y>before+10,'a later floor reach must still bend down');
+  p.char.handTarget=null;assert.equal(p.char.reachingHand,p.char.useHand);
+});
+test('wrapped gifts recover from deep wrapping posture in both directions and touch with the held original', () => {
+  for(const side of [-1,1] as const){
+    const [a,b]=pets(2);for(const it of [...b.items.list])b.items.remove(it);
+    b.char.placeHome(a.char.x+75*side);for(let n=0;n<600;n++)for(const p of [a,b])p.update(dt);
+    Object.assign(a.mood.s,{happiness:.085,trust:.06,boredom:1,inspiration:1,energy:.8,contentment:.93,confidence:.95,affection:.95});
+    a.char.facing=side===1?-1:1;
+    const gift=a.items.give('dumbbell',a.char)!;a.items.give('flowers',a.char);
+    const pen=a.items.find('draw')!;a.items.toHand(pen,side===1?'L':'R');
+    const deliver=a.ctx.deliverGift!;let offered=0;
+    a.ctx.deliverGift=(id,message,reply)=>{
+      assert.equal(message.uid,gift.uid);assert((message.wrap??0)>0);
+      const hand=a.char.body.j[gift.hand==='L'?'handL':'handR'],view=b.view();
+      assert(Math.min(...[view.joints.handL,view.joints.handR].filter(p=>p).map(p=>Math.hypot(p!.x-hand.x,p!.y-hand.y)))<7*a.char.scale);
+      offered++;return deliver(id,message,reply);
+    };
+    a.paused=false;b.paused=false;a.mind.startActivity(a.ctx,new GiveGift(true));
+    for(let n=0;n<18/dt;n++)for(const p of [a,b])p.update(dt);
+    assert.equal(offered,1);assert(!a.items.list.includes(gift));assert(b.items.list.some(it=>it.uid===gift.uid));
+    assert.equal(b.ctx.relationship!(a.ctx.who).giftsReceived,1);assert.equal(a.char.handTarget,null);
+    assert.deepEqual(checkSanity([a,b]),[]);
+  }
 });
 console.log(`${passed} contact checks passed`);

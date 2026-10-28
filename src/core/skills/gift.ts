@@ -109,6 +109,8 @@ export class GiveGift extends Skill {
       this.t > 25
     )
       return true;
+    // Face the recipient before fetching: the gift and the reaching arm must agree.
+    ch.facing = ch.x < peer.x ? 1 : -1;
     if (!this.prepared) {
       const fetched = this.pen.fetch(c, dt);
       if (fetched === 'none') {
@@ -145,7 +147,7 @@ export class GiveGift extends Skill {
         x: n.x + f * (9 + shape[i][0] * (1 - k) + shape[i + 1][0] * k) * sc,
         y: n.y + (14 + shape[i][1] * (1 - k) + shape[i + 1][1] * k) * sc,
       };
-      ch.handTarget = at;
+      ch.handTarget = { ...at, hand: this.pen.item!.hand };
       c.look = 'target';
       c.lookTarget = at;
       this.drawing.strokes[0].push(at);
@@ -169,12 +171,12 @@ export class GiveGift extends Skill {
     ch.facing = ch.x < peer.x ? 1 : -1;
     c.look = 'target';
     c.lookTarget = peer.joints.head ?? null;
-    const actual = ch.body.j[ch.useHand === 'L' ? 'handL' : 'handR'];
+    const actual = ch.body.j[it.hand === 'L' ? 'handL' : 'handR'];
     const hand = [peer.joints.handL, peer.joints.handR]
       .filter((p): p is NonNullable<typeof p> => !!p)
       .sort((a,b)=>Math.hypot(a.x-actual.x,a.y-actual.y)-Math.hypot(b.x-actual.x,b.y-actual.y))[0]
       ?? { x: peer.x, y: ch.body.j.neck.y + 25 };
-    if (!this.reach.reach(c, hand, dt)) {
+    if (!this.reach.reach(c, hand, dt, false, it.hand)) {
       if (this.reach.failed) c.say("Come a little closer? I'll keep this safe.", 1.5);
       return this.reach.failed;
     }
@@ -218,6 +220,7 @@ export class GiveGift extends Skill {
     c.char.handTarget = null;
     c.char.handsAt = null;
     this.pen.item && c.items.list.includes(this.pen.item) && this.pen.stow(c, 1);
+    c.char.handTarget = null;
     if (this.drawing) this.drawing.alive = true;
     if (this.item && c.items.list.includes(this.item)) {
       this.item.giftWrap = 0;

@@ -1,6 +1,8 @@
-Mallow Desk Buddies 1.0.0-rc.3 is a test candidate for Apple Silicon Mac and Windows 11 x64. **Not approved for sale.**
+Mallow Desk Buddies 1.0.0-rc.4 is a test candidate for Apple Silicon Mac and Windows 11 x64. **Not approved for sale.**
 
-The offline customer build includes authored local conversations, activities, 1–5 customizable buddies, per-buddy personality, hue/hex colour and independent appearance/movement sliders, textured controls and stock materials, quiet defaults, recoverable saves and Pause/Hide/Quit. No account, API key or model download is required.
+The offline customer build includes authored local conversations, activities, up to five active customizable buddies, per-buddy personality, hue/hex colour and independent appearance/movement sliders, textured controls and stock materials, quiet defaults, recoverable saves and Pause/Hide/Quit. A bonus code adds Arnold as a sixth saved buddy with his own JT arm tattoo, belongings, memories and conversation. No account, API key or model download is required.
+
+This candidate adds richer paper and woven GUI surfaces, actual-contact handling, live activity requirements and request feedback, and an optional furniture floor-placement guide. Unlocking Arnold never replaces an existing buddy; put someone away before bringing him out if five are active. Backup format 2 includes bonus unlocks.
 
 Both archives are built on their target OS and checked after extraction into a path with spaces: real bundled helper, Pause/Resume, save, normal quit and restart. The complete workflow also runs focused regressions, actual Chromium/Electron interaction tests, a core performance profile before preserving these files here. Core/dependency changes and manual workflow runs also repeat both extended simulated soaks; UI-only changes retain the previously verified core and repeat the customer/native checks.
 

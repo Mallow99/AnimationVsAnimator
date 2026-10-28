@@ -9,9 +9,9 @@ export class Handling {
   private exhausted = false;
   /** A failed reach must be retried from an approach, or cancelled; it is never contact. */
   get failed() { return this.exhausted; }
-  reach(c: Ctx, target: Vec, dt: number, heavy = false): boolean {
-    const hand = c.char.useHand;
-    if (this.exhausted || !hand || !Number.isFinite(target.x + target.y)) {
+  reach(c: Ctx, target: Vec, dt: number, heavy = false, heldHand?: 'L' | 'R'): boolean {
+    const hand = heldHand ?? c.char.useHand;
+    if (this.exhausted || !hand || (heldHand && !c.char.hasLimb(heldHand === 'L' ? 'armL' : 'armR')) || !Number.isFinite(target.x + target.y)) {
       this.exhausted = true;
       c.char.handTarget = null;
       return false;
@@ -31,6 +31,7 @@ export class Handling {
     c.char.handTarget = {
       x: this.from.x + (target.x - this.from.x) * u,
       y: this.from.y + (target.y - this.from.y) * u - Math.sin(u * Math.PI) * 4 * c.char.scale,
+      ...(heldHand ? { hand: heldHand } : {}),
     };
     const contact = this.elapsed >= notice + duration + 0.06 &&
       Math.hypot(actual.x - target.x, actual.y - target.y) < 7 * c.char.scale;

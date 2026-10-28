@@ -3,6 +3,21 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-28 — keep bag reaches on the body and use the held arm
+
+- Replayed the seed-7 lifecycle gift failure from the first rc.4 CI run. Reaching
+  toward the hip-mounted bag was lowering the hips and moving the target away.
+  Body-attached reaches now ease out of floor stooping while keeping actual arm IK,
+  the original limb lengths, the two-second reach budget and the contact tolerance.
+- Stowing, wrapping and gift contact use the arm holding the original, even after
+  turning. Target metadata belongs to that one reach; clearing or replacing it
+  restores normal world/floor reaching. Gift cancellation clears late pen targets.
+- All 14 focused contact checks and typecheck pass, including both gift directions,
+  the actual held-arm distance, missing-arm rejection and a later floor reach.
+  Both unchanged lifecycle seeds, full CI/native repetition and exact draft
+  preservation follow. The first run's aggregate/customer/native passes remain
+  historical; its gift failure prevented draft preservation. Physical/store gates remain.
+
 ## 2026-10-28 — Arnold and release-quality interactions (rc.4)
 
 - Added an offline bonus-code flow for Arnold, a sixth saved identity with a JT arm

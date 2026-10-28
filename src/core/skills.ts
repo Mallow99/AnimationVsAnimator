@@ -602,7 +602,9 @@ export class Tool {
     if (it.where === 'hand') { ch.handTarget = null; return 'ready'; }
     // On his belt: reach down to it and pull it out.
     const slot = c.items.slotPose(ch, it.slot).at;
-    if (this.taking.reach(c,slot,dt)) {
+    const touched = this.taking.reach(c,slot,dt);
+    if (ch.handTarget) ch.handTarget.bodyRelative = true;
+    if (touched) {
       c.items.toHand(it, hand);
       ch.handTarget = null;
       c.sound?.('pickup');
@@ -619,13 +621,17 @@ export class Tool {
     it.aim = null;
     if (it.def.wear) {
       const at = ch.body.j[it.def.wear === 'head' ? 'head' : 'hip'];
-      if (!this.storing.reach(c, at, dt)) return this.storing.failed;
+      const touched = this.storing.reach(c, at, dt, false, it.hand);
+      if (ch.handTarget) ch.handTarget.bodyRelative = true;
+      if (!touched) return this.storing.failed;
       c.items.stow(it); ch.handTarget = null; c.sound?.('pickup'); return true;
     }
     const slot = preferredSlots(it.def).find((s) => !c.items.belt[s]);
     if (slot === undefined) { ch.handTarget = null; return true; } // belt's full: he just keeps holding it
     const at = c.items.slotPose(ch, slot).at;
-    if (this.storing.reach(c,at,dt)) {
+    const touched = this.storing.reach(c,at,dt,false,it.hand);
+    if (ch.handTarget) ch.handTarget.bodyRelative = true;
+    if (touched) {
       c.items.stow(it);
       ch.handTarget = null;
       c.sound?.('pickup');

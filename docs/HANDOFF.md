@@ -2,6 +2,26 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Seeded gift follow-up — 2026-10-28
+
+Initial rc.4 source 21965d9 passed aggregate, all three customer Electron flows and
+both real-helper native package/restart checks in run 40757881932, but seed 7 failed
+before the extended tail at the wrapped gift receipt assertion. Draft preservation
+correctly skipped. This is a real bag reach failure, not a recipient-selection
+fixture problem; the existing soak assertion stays unchanged.
+
+The seeded replay isolated body-following feedback: normal floor stoop lowers the
+hips while reaching for the hip-mounted satchel, moving the target away. Scoped
+body-relative reach metadata now suppresses that floor bend while keeping arm IK,
+lengths, timings and contact distance. Explicit arm metadata makes stow/wrapping/
+gift validation use the hand holding the original after a turn. Replacing or
+clearing the target removes both modes. Gift stop clears late pen cleanup targets.
+
+Typecheck and all 14 contact checks pass, including actual held-arm contact, both
+facing directions, missing-arm rejection and world/floor reaching after replacement.
+Both unchanged lifecycle seeds and final CI/native/archive evidence are being repeated.
+The first run's native hashes are historical and must not identify the fixed downloads.
+
 ## Arnold and release-quality continuation — 2026-10-28
 
 The owner approved the quality plan and specified **JT letters on Arnold's arm**,

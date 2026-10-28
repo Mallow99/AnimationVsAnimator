@@ -219,8 +219,8 @@ export class Character {
   platforms: Platform[] = [];
   /** What he's standing on: a platform id, FLOOR, or NONE while airborne. */
   support = FLOOR;
-  /** Set by skills to steer his front hand (drawing, grabbing); null = normal arm swing. */
-  handTarget: Vec | null = null;
+  /** Skills steer the front hand or an explicit held original's arm; null restores normal motion. */
+  handTarget: (Vec & { bodyRelative?: boolean; hand?: 'L' | 'R' }) | null = null;
   /** Fists up, ready to fight (sparring with your cursor). */
   guard = false;
   /**
@@ -491,6 +491,11 @@ export class Character {
   get useHand(): 'L' | 'R' | null {
     const front = this.facing > 0 ? 'R' : 'L', back = front === 'R' ? 'L' : 'R';
     return this.hasLimb(front === 'R' ? 'armR' : 'armL') ? front : this.hasLimb(back === 'R' ? 'armR' : 'armL') ? back : null;
+  }
+  /** A held original can reach with its own arm after the figure turns. */
+  get reachingHand(): 'L' | 'R' | null {
+    const hand = this.handTarget?.hand ?? this.useHand;
+    return hand && this.hasLimb(hand === 'L' ? 'armL' : 'armR') ? hand : null;
   }
 
   /**
@@ -2053,7 +2058,7 @@ export class Character {
       nod -= 0.35; fought = true;
     }
     // A skill is steering his front hand (drawing, grabbing the cursor, picking something up).
-    const useHand = this.useHand;
+    const useHand = this.reachingHand;
     const reachFor = this.handTarget && !g && useHand && !fought ? this.handTarget : null;
     if (reachFor) {
       const hand = this.reachToward(neckT, reachFor, useHand!);
@@ -2108,7 +2113,8 @@ export class Character {
    */
   private stoop(dt: number, neckY: number) {
     const armLen = this.d.upperArm + this.d.foreArm, legLen = this.d.thigh + this.d.shin;
-    const at = this.handTarget && !this.gesture && this.useHand ? this.handTarget : null;
+    // His own bag moves with his hips: bending toward it would lower the target again.
+    const at = this.handTarget && !this.handTarget.bodyRelative && !this.gesture && this.reachingHand ? this.handTarget : null;
     const want = at ? clamp((at.y - (neckY + armLen * 0.8)) / (legLen * 0.8), 0, 1) : 0;
     this.stoopNow += (want - this.stoopNow) * (1 - Math.exp(-dt * 8));
     return this.stoopNow;
@@ -2141,7 +2147,7 @@ export class Character {
     // Arms out to the sides for balance, flapping a little with each hop.
     const flap = moving ? Math.sin(Math.PI * this.hopPhase) * 6 * sc : 0;
     let handL = this.off(neck, 3 * sc, 14 * sc - flap, 16 * sc), handR = this.off(neck, 3 * sc, 14 * sc - flap, -16 * sc);
-    const useHand = this.useHand, at = this.handTarget && useHand ? this.handTarget : null;
+    const useHand = this.reachingHand, at = this.handTarget && useHand ? this.handTarget : null;
     if (at) { const h = this.reachToward(neck, at, useHand!); if (useHand === 'R') handR = h; else handL = h; }
     const other = this.body.j[leg === 'L' ? 'footR' : 'footL'];
     this.fillLimbs(t, hip, neck, 0.1 + stoop * 0.6, 0, handL, handR, leg === 'L' ? foot : other, leg === 'R' ? foot : other);
@@ -2259,9 +2265,9 @@ export class Character {
       const hands = this.fightHands(neck, this.fightPose);
       handL = hands.L; handR = hands.R;
     }
-    if (this.handTarget && this.useHand) {
-      const hand = this.reachToward(neck, this.handTarget, this.useHand);
-      if (this.useHand === 'L') handL = hand; else handR = hand;
+    if (this.handTarget && this.reachingHand) {
+      const hand = this.reachToward(neck, this.handTarget, this.reachingHand);
+      if (this.reachingHand === 'L') handL = hand; else handR = hand;
     }
     this.fillLimbs(t, hip, neck, -0.15, 0, handL, handR, footL, footR);
     Object.assign(s, { hip: 0.3, neck: 0.3, head: 0.3, kneeL: 0.25, kneeR: 0.25, footL: 0.4, footR: 0.4, elbowL: 0.22, elbowR: 0.22, handL: 0.22, handR: 0.22 });
@@ -2472,7 +2478,7 @@ export class Character {
     };
     const fL = foot('L'), fR = foot('R');
     const hand = (k: 'L' | 'R') => this.handsAt?.[k] ? this.reachToward(neck, this.handsAt[k]!, k) : this.gamepad ? this.padHand(hip, k)
-      : this.handTarget && k === this.useHand
+      : this.handTarget && k === this.reachingHand
       ? this.pt(this.handTarget.x, this.handTarget.y, neck.z)
       : this.scoot ? this.pt(st.x-Math.sign(this.scoot.to.x-this.scoot.from.x)*9*sc,st.y-2*sc,sideOf(k)*9*sc) : this.lounge ? this.off(hip, -3 * sc, -1 * sc, sideOf(k) * 11 * sc) : this.motion.sit.hands === 'lap' ? this.off(hip, 9*sc, -5*sc, sideOf(k)*3*sc) : this.motion.sit.hands === 'edge' ? this.off(hip, -2*sc, -sc, sideOf(k)*10*sc) : this.off(kneeAt(k), 1 * sc, -2 * sc, sideOf(k) * 1 * sc);
     this.fillLimbs(t, hip, neck, (this.lounge ? -0.1 : 0.1) + P.hunch * 0.6, 0, hand('L'), hand('R'), fL, fR);
