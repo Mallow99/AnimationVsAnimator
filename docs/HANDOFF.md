@@ -9,7 +9,7 @@ seed 7 (7200 seconds, 7221 audits, 35 phases); seed 32 had no reported issue thr
 6632 seconds before combined-job timeout. Native ZIPs are downloaded and checksums
 match. Finish manual continue_candidate on exactly 6a29633 using artifacts from
 40936284948. It runs seed 32 only plus performance, then preserves unchanged native
-ZIPs in draft. This avoids repeating successful tests and does not shorten coverage.
+ZIPs in draft. Both artifact downloads use the same flat staging folder. This avoids repeating successful tests and does not shorten coverage.
 
 ## Arnold send-to-friend continuation — 2026-10-29
 

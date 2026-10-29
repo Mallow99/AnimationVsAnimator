@@ -196,5 +196,6 @@ jobs:
           [[ "$CANDIDATE_RUN" =~ ^[0-9]+$ && "$CANDIDATE_SOURCE" =~ ^[0-9a-f]{40}$ ]]
           test "$(gh run view "$CANDIDATE_RUN" --json headSha --jq .headSha)" = "$CANDIDATE_SOURCE"
           test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN/jobs" --jq '[.jobs[] | select(.name | startswith("packages (")) | select(.conclusion == "success")] | length')" = 2
-          gh run download "$CANDIDATE_RUN" --pattern 'mallow-candidate-*' --dir out/validated
+          gh run download "$CANDIDATE_RUN" --name mallow-candidate-darwin --dir out/validated
+          gh run download "$CANDIDATE_RUN" --name mallow-candidate-win32 --dir out/validated
           GITHUB_SHA="$CANDIDATE_SOURCE" node scripts/preserve-candidate.mjs

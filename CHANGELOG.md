@@ -11,7 +11,7 @@ remaining issues here. Entries describe shipped behavior; unverified hardware be
 - Increased the normal job budget and added a manual continuation that tests only
   unfinished seed 32 plus performance on the exact same source. Draft preservation
   validates both prior native jobs and their source before retaining their exact ZIPs.
-- No game code, test duration, audit assertions or native archives changed.
+- Archive downloads merge into one staging folder for preservation. No game code, test duration, audit assertions or native archives changed.
 
 ## 2026-10-29 — keep tattoo visibility fixture clear
 
