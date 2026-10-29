@@ -10,7 +10,7 @@ scoped corny offline replies and idle chatter (45-second minimum, only awake/idl
 Quill starter choice and chat voice use stable pet-5 identity, never the display name.
 The original five starters and voices remain unchanged. JT is retained.
 
-Run full aggregate/customer/native checks for this new source before forwarding it.
+Local full aggregate and the actual customer Arnold flow pass, including quill, corny dialogue and reload. The tattoo fixture compares an unobstructed arm before the quill portrait; its existing pixel assertions are unchanged. Native CI for the final source is pending before forwarding.
 Prior source c151669 passed Linux aggregate, both 7,200-second soaks and Windows native;
 Mac was cancelled before starting due to hosted ARM runner capacity, not app failure.
 Do not use prior candidate archives for the new quill request.

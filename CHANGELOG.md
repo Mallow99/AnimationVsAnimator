@@ -3,6 +3,13 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-29 — keep tattoo visibility fixture clear
+
+- Capture the visible tattoo before placing the quill in hand; the new feather
+  could physically cover the marked arm in the renderer fixture. Existing tattoo
+  pixel assertions remain unchanged. The portrait holds the quill in the other hand.
+- Store Markdown and HTML both describe the feather quill and corny voice.
+
 ## 2026-10-29 — Arnold’s quill and corny voice
 
 - Arnold starts with a real feather quill that works with drawing skills. Existing

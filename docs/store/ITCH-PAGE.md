@@ -36,7 +36,7 @@ lightness controls. Adjust line thickness, head size and smooth or pixel renderi
 Movement has separate controls for stance, leg straightness, step length, foot
 lift, arm motion, lean and bounce. Changes appear immediately and save per buddy.
 
-Five saved buddies are included. A bonus buddy code can unlock Arnold, a talkative companion with a feather quill, corny jokes and a JT arm tattoo and his own belongings, memories and conversation.
+Five saved buddies are included. A bonus buddy code can unlock Arnold, a talkative, cheerfully unfunny companion with a feather quill and a JT arm tattoo. He has his own belongings, memories and conversation.
 You can keep six saved buddies and choose up to five to bring onto the desktop;
 unlocking him never replaces anyone.
 

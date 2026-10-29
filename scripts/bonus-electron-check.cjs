@@ -84,14 +84,14 @@ app.whenReady().then(async()=>{
  const render=await run(`(()=>{
   const p=window.figurePool[5];p.mind.reset(p.ctx);p.mind.holdUntil=Infinity;p.paused=true;p.mood.asleep=false;
   for(let n=0;n<360;n++)p.update(1/120);
-  const quill=p.items.list.find(i=>i.def.id==='quill');if(!quill)throw Error('Arnold quill missing');p.items.toHand(quill,p.char.useHand);
+  const quill=p.items.list.find(i=>i.def.id==='quill');if(!quill)throw Error('Arnold quill missing');
   const original={...p.config.look},draw=()=>{const c=document.createElement('canvas');c.width=innerWidth;c.height=innerHeight;p.draw(c.getContext('2d'),false);return c;};
   const compare=pixel=>{p.config.look.pixel=pixel;p.config.look.tattoo='none';const a=draw().getContext('2d').getImageData(0,0,innerWidth,innerHeight).data;p.config.look.tattoo='jt';const b=draw().getContext('2d').getImageData(0,0,innerWidth,innerHeight).data;let changed=0;for(let i=0;i<a.length;i+=4)if(a[i]!==b[i]||a[i+1]!==b[i+1]||a[i+2]!==b[i+2])changed++;return changed;};
   const attached=[compare(1),compare(2)],before=JSON.stringify(p.char.body.points.map(q=>[q.x,q.y,q.z]));draw();const stable=before===JSON.stringify(p.char.body.points.map(q=>[q.x,q.y,q.z]));
   p.char.destructible=true;const piece=p.char.detach('armL');if(!piece)throw Error('Tattoo arm did not detach');
   const detached=[compare(1),compare(2)];
   const c=document.createElement('canvas');c.width=900;c.height=340;const g=c.getContext('2d');g.fillStyle='#f4f0e5';g.fillRect(0,0,900,340);g.fillStyle='#293a32';g.font='600 21px system-ui';g.fillText('Arnold · JT follows the actual upper arm',24,35);g.font='14px system-ui';g.fillText('Actual customer renderer · smooth and pixel styles · detached arm',24,60);
-  p.char.regrow('armL');p.applyConfig({...p.config,scale:2.5,look:{...original,tattoo:'jt'}});p.char.placeHome(500);for(let n=0;n<500;n++)p.update(1/120);
+  p.char.regrow('armL');p.items.toHand(quill,'R');p.applyConfig({...p.config,scale:2.5,look:{...original,tattoo:'jt'}});p.char.placeHome(500);for(let n=0;n<500;n++)p.update(1/120);
   for(const [i,pixel]of [1,2].entries()){p.config.look.pixel=pixel;g.save();g.translate(220+i*360-p.char.x,305-p.char.groundY());p.draw(g,false);g.restore();g.fillStyle='#42664e';g.fillText(pixel===1?'Smooth':'Pixel 2',170+i*360,90);}
   p.char.destructible=true;p.char.detach('armL');p.config.look.pixel=1;const d=draw().toDataURL();p.char.regrow('armL');p.applyConfig({...p.config,scale:1.1,look:original});p.paused=false;
   return {attached,detached,stable,atlas:c.toDataURL(),detachedImage:d};
