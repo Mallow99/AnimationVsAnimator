@@ -1,0 +1,17 @@
+{
+  "result": "passed",
+  "platform": "linux",
+  "nativeWindows": "simulated",
+  "source": "c1516697db09b8645843d92faa4c7ff5fdecf857",
+  "actualSupplyUI": true,
+  "frameGuideFeedback": [
+    "Floor aligned",
+    "Free placement",
+    "Move clear to snap"
+  ],
+  "actualMouseupAppliesPreview": true,
+  "preferenceReload": true,
+  "cancelRemovesSupply": true,
+  "networkRequests": [],
+  "errors": []
+}

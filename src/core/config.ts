@@ -228,7 +228,7 @@ export function companionConfig(main: PetConfig, id: number): PetConfig {
   if (id === 1) return friendConfig(main);
   if (id === ARNOLD_ID) return mergeConfig(main, {
     name: 'Arnold', personality: 'competitive', biases: {},
-    persona: 'A friendly, confident trainer. Enjoys fair challenges, exercise and encouraging friends. Proud of his JT arm tattoo.',
+    persona: 'Talkative, friendly and cheerfully unfunny. Rambles about everyday things and tells corny puns and awkward jokes. Carries a feather quill for writing and drawing. Proud of his JT arm tattoo.',
     look: { color: '#c47d48', tattoo: 'jt' },
   });
   const c = structuredClone(main);

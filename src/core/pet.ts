@@ -346,6 +346,7 @@ export class Pet implements Peer {
       get fightMode() { return pet.config.fightMode; },
     };
     this.releasePlatforms=this.props.subscribePlatforms(()=>this.refreshPlatforms());
+    if (this.ctx.who === 'pet-5') this.items.starterItems = ['quill'];
     this.items.giveStarter(this.char); // just his pen; the rest is in his inventory (Settings → Items)
     this.items.onChange = () => this.onCollections?.();
     this.memory.onChange = () => { this.onCollections?.(); this.onMemorySave?.(this.memory.save()); };
@@ -440,6 +441,14 @@ export class Pet implements Peer {
       const o = this.partner()?.view();
       if (pt.wave && this.char.ready && o) { this.char.facing = (Math.sign(o.x - this.char.x) || this.char.facing) as 1 | -1; this.char.doGesture('wave'); }
     }
+    if (this.ctx.who === 'pet-5' && !this.paused && !this.mood.asleep) {
+      this.arnoldChatterAt ||= this.ctx.world.time + 45;
+      if (this.ctx.world.time >= this.arnoldChatterAt && !this.bubble && !this.speech.length && this.char.ready && (!sk || ['idle','wander'].includes(sk.name))) {
+        const jokes = ['My quill has a point. I am still looking for mine.', 'I wrote a joke about paper. It was tearable.', 'Being made of lines is quite a draw.', 'I had another thought. The first one needed company.'];
+        this.say(jokes[Math.floor(this.ctx.world.time / 45) % jokes.length]);
+        this.arnoldChatterAt = this.ctx.world.time + 45;
+      }
+    }
     if (this.bubble) this.typeOut(this.bubble, dt);
     if (this.bubble && this.bubble.t > this.bubble.ttl) this.bubble = null;
     for (const f of this.puffs) { f.t += dt; f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.92; f.vy *= 0.92; }
@@ -452,6 +461,7 @@ export class Pet implements Peer {
     this.ctx.doodles = this.ctx.doodles.filter((d) => this.ctx.world.time - d.born < DOODLE_LIFE);
   }
 
+  private arnoldChatterAt = 0;
   say(text: string, secs?: number) {
     if (text.length > 70 && secs === undefined) { this.speak(text); return; }
     // Time to type it out, then time to read it.

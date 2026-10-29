@@ -50,6 +50,7 @@ app.whenReady().then(async()=>{
  await ui('document.querySelector("[data-tab=settings]").click();document.querySelector("#bonusCode").value="  aRnOlD  ";document.querySelector("#bonusForm").requestSubmit()');
  await until(()=>ui('document.querySelector("#bonusStatus").textContent.includes("Arnold unlocked")'),'actual redemption form');
  await until(()=>run('window.figurePool.length===6 && window.figurePool[5]?.config.name==="Arnold"'),'sixth stable profile');
+ assert.equal(await run('window.figurePool[5].items.list.filter(i=>i.def.id==="quill").length'),1);
  const unlocked=await ui('window.petShell.getConfigs()');assert.equal(unlocked.length,6);assert.equal(unlocked[5].name,'Arnold');assert.equal(unlocked[5].look.tattoo,'jt');
  assert.equal(await run('window.pets.length'),5,'redemption silently added a sixth active figure');
  assert.equal(await ui('window.__bonusRosterEvents'),1);
@@ -83,6 +84,7 @@ app.whenReady().then(async()=>{
  const render=await run(`(()=>{
   const p=window.figurePool[5];p.mind.reset(p.ctx);p.mind.holdUntil=Infinity;p.paused=true;p.mood.asleep=false;
   for(let n=0;n<360;n++)p.update(1/120);
+  const quill=p.items.list.find(i=>i.def.id==='quill');if(!quill)throw Error('Arnold quill missing');p.items.toHand(quill,p.char.useHand);
   const original={...p.config.look},draw=()=>{const c=document.createElement('canvas');c.width=innerWidth;c.height=innerHeight;p.draw(c.getContext('2d'),false);return c;};
   const compare=pixel=>{p.config.look.pixel=pixel;p.config.look.tattoo='none';const a=draw().getContext('2d').getImageData(0,0,innerWidth,innerHeight).data;p.config.look.tattoo='jt';const b=draw().getContext('2d').getImageData(0,0,innerWidth,innerHeight).data;let changed=0;for(let i=0;i<a.length;i+=4)if(a[i]!==b[i]||a[i+1]!==b[i+1]||a[i+2]!==b[i+2])changed++;return changed;};
   const attached=[compare(1),compare(2)],before=JSON.stringify(p.char.body.points.map(q=>[q.x,q.y,q.z]));draw();const stable=before===JSON.stringify(p.char.body.points.map(q=>[q.x,q.y,q.z]));
@@ -102,6 +104,8 @@ app.whenReady().then(async()=>{
  await until(()=>run('window.figurePool[5].brain.log.some(l=>l.text.includes("Jordan"))'),'Arnold conversation');
  await run('window.petShell.retrySaves()');
  await until(()=>fs.existsSync(path.join(dir,'memory-6.json'))&&JSON.parse(fs.readFileSync(path.join(dir,'memory-6.json'),'utf8')).notes.some(n=>n.text==='Arnold integration memory'),'sixth memory file');
+ await run('window.figurePool[5].command("hear:tell me a joke")');
+ await until(()=>run('window.figurePool[5].brain.log.some(l=>/quill|tearable|draw out the conversation/.test(l.text))'),'Arnold corny offline dialogue');
  const saveDialog=dialog.showSaveDialog,backupPath=path.join(dir,'bonus-backup.json');
  try{dialog.showSaveDialog=async()=>({canceled:false,filePath:backupPath});assert.equal((await ui('window.petShell.exportBackup()')).ok,true);}finally{dialog.showSaveDialog=saveDialog;}
  const backup=JSON.parse(fs.readFileSync(backupPath,'utf8'));assert.equal(backup.version,2);assert.deepEqual(backup.productState.unlockedCharacters,['arnold']);assert.equal(backup.configs.length,6);assert.equal(backup.worlds.length,6);assert.equal(backup.memories.length,6);assert.equal(backup.configs[5].look.tattoo,'jt');

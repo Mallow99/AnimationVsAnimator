@@ -1,6 +1,29 @@
 # Commercial candidate implementation
 
-## Current material and GUI polish candidate
+## Current Arnold and quality candidate — rc.4
+
+App source **c151669** adds Arnold as a sixth saved profile through an offline bonus
+code, a JT tattoo on the actual upper arm, and an explicit five-active cap. Original
+identities, belongings, book progress, conversations and memories stay separate.
+GUI paper/linen/wood surfaces, actual-contact handling, shared activity requirements
+and acknowledgment, and optional new-furniture floor preview/snapping are implemented.
+Backup format 2 includes known bonus unlocks. Public copy omits the actual code.
+
+The 16-command aggregate, all three customer Electron flows and Windows extracted
+native restart smoke have passed in run
+[40761518061](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40761518061).
+Both extended soaks, Mac packaging and exact draft preservation are being completed.
+The preceding source 21965d9 exposed a genuine bag-reach feedback loop during the
+seed-7 gift phase. Body-attached reaches now avoid that loop, and stow/gift contact
+uses the arm holding the original. Limb lengths, timers and contact tolerances stay
+unchanged. Both unchanged local seed replays passed all 35 phases (2,566.4 simulated
+seconds and 2,640 audits each).
+Final actual-runtime media and Arnold/placement captures are being refreshed for
+source c151669. See ../store/media/SOURCE.json and ../verification/mallow-arnold-ui.json.
+Physical desktop and authenticated seller/store gates remain open. No sale readiness
+or income is claimed. Earlier candidate evidence below is historical.
+
+## Prior material and GUI polish candidate — rc.3
 
 The rc.3 pass replaces customer whole-look/palette buttons with hue, saturation,
 lightness and hex colour controls plus independent appearance/movement sliders.
@@ -29,7 +52,7 @@ Raw evidence: ../verification/mallow-material-memory.json. No native performance
 claim follows from this short software-rendered measurement.
 
 
-Latest UI candidate: **1.0.0-rc.2**, source `9e166bc`. Adds the feature/customization guide,
+Prior UI candidate: **1.0.0-rc.2**, source `9e166bc`. Adds the feature/customization guide,
 per-buddy personality selection, readable mixed presets and an in-app feature list.
 CI run [40048614400](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40048614400)
 passed all applicable checks and both native packages; core is unchanged from rc.1,

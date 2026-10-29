@@ -58,6 +58,7 @@ try {
  await until(()=>run('window.figurePool[5]?.items.list.some(i=>i.def.id==="book"&&i.bookmark===23)'),'Arnold book restored');
  await until(()=>run('window.figurePool[5].memory.notes.some(n=>n.text==="Native Arnold restart memory")'),'Arnold memory restored');
  assert.equal(await run('window.figurePool[5].config.look.tattoo'),'jt');
+ assert.equal(await run('window.figurePool[5].items.list.filter(i=>i.def.id==="quill").length'),1);
  assert.deepEqual((await run('window.petShell.productInfo()')).state.unlockedCharacters,['arnold']);
  assert.equal((await run('window.petShell.redeemCode("ARNOLD")')).alreadyUnlocked,true);
  await run('window.petShell.quit()').catch(()=>{});await until(()=>proc.exitCode!==null,'restart quit');

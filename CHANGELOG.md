@@ -3,6 +3,16 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-29 — Arnold’s quill and corny voice
+
+- Arnold starts with a real feather quill that works with drawing skills. Existing
+  Arnold saves gain it once; earlier belongings and other buddies stay intact.
+- Added talkative offline replies, deliberately corny jokes and spaced idle chatter.
+  His voice follows his saved identity even if renamed; Stop and story actions retain
+  their existing behavior. JT and normal customization remain.
+- Added real draw/reload/migration/voice checks and extended customer/native QA.
+  Full aggregate and native candidate verification are being repeated.
+
 ## 2026-10-28 — keep bag reaches on the body and use the held arm
 
 - Replayed the seed-7 lifecycle gift failure from the first rc.4 CI run. Reaching

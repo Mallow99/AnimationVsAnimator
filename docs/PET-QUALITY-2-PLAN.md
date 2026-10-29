@@ -142,3 +142,8 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
     - [ ] Inspect actual GUI/tattoo/placement captures; refresh media, source evidence and rc.4 draft ZIPs.
     - [ ] Commit/changelog, push and update draft PR #4 with final results and remaining gates.
     - [ ] Physical Mac/Windows and authenticated store acceptance before public paid publication.
+
+15. **Arnold friend request — 2026-10-29**
+    - [x] Working feather quill with safe one-time upgrade of existing Arnold saves.
+    - [x] Talkative, deliberately corny offline voice and spaced idle chatter.
+    - [ ] Final aggregate/customer/native package validation and shareable builds.

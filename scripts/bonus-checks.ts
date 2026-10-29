@@ -26,3 +26,28 @@ const g=new Proxy({},{get:(_,key)=>key==='fillRect'?()=>rectangles++:key==='save
 const random=Math.random;try{Math.random=()=>{throw Error('Tattoo consumed randomness');};drawJTTattoo(g,{x:10,y:10},{x:10,y:30},DEFAULT_LOOK,1);}finally{Math.random=random;}
 assert(rectangles>0);assert.equal(saves,restores);
 console.log('PASS bonus: JT glyph draws without fonts/randomness and restores canvas state');
+
+// Real offline companion: usable quill, one-time legacy upgrade, voice and action boundaries.
+const { Pet } = await import('../src/core/pet');
+const bounds={left:0,right:1200,top:0,floor:800};
+const a=new Pet(bounds,arnold,{identity:'pet-5'});
+assert.equal(a.items.list.filter(i=>i.def.id==='quill').length,1);
+assert.equal(a.items.find('draw')?.def.id,'quill');
+const regular=new Pet(bounds,original,{identity:'pet-0'});
+assert.equal(regular.items.find('draw')?.def.id,'pen');
+const old=JSON.parse(regular.save());a.load(JSON.stringify(old));
+assert(a.items.list.some(i=>i.def.id==='pen'));
+assert.equal(a.items.list.filter(i=>i.def.id==='quill').length,1);
+const again=new Pet(bounds,arnold,{identity:'pet-5'});again.load(a.save());
+assert.equal(again.items.list.filter(i=>i.def.id==='quill').length,1);
+assert.equal(again.items.find('draw')?.def.id,'quill');
+const reply=again.brain.conversation.respond(again.ctx,'tell me a joke','Arnold');
+assert.match(reply.say,/quill|paper|stick figure/i);
+assert.equal(again.brain.conversation.respond(again.ctx,'please stop','Arnold').stop,true);
+again.config.windows=false;again.config.dailyRhythm=false;again.config.destructible=false;
+again.mood.asleep=false;again.mind.holdUntil=Infinity;again.char.placeHome(600);
+again.paused=true;for(let n=0;n<600;n++)again.update(1/120);again.paused=false;
+again.command('do:doodle');let used=false;
+for(let n=0;n<1800;n++){again.update(1/120);used ||= again.items.list.some(i=>i.def.id==='quill'&&i.where==='hand');}
+assert(used);assert(again.ctx.doodles.some(d=>d.strokes.some(s=>s.length>1)));
+console.log('PASS Arnold: feather quill draws, legacy belongings survive, repeat load keeps one quill, corny offline voice and Stop work');

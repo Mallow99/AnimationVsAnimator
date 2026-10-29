@@ -1,11 +1,11 @@
 {
-  "source": "09fd9eb9ce252f0b33d541f648734d23a8338de1",
+  "source": "c1516697db09b8645843d92faa4c7ff5fdecf857",
   "captureScriptSha256": "809171ff1e760d9861c45e90e7ecc920496a0e1d9312f739c2b3c5b6a18fee0e",
   "platform": "Linux Electron/Xvfb",
   "nativeWindows": "simulated; no OS desktop claims",
   "background": "plain cream backdrop",
   "cover": "typographic header/footer in DOM; actual runtime figures above a 32px footer, scale 1.6 (available in Settings)",
   "demo": "180 actual runtime frames sampled at a target of 12fps; 15-second output; no audio",
-  "captureWallSeconds": 15.001,
+  "captureWallSeconds": 15.021,
   "publish": "only after native acceptance"
 }

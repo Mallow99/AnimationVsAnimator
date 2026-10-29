@@ -86,7 +86,7 @@ function render() {
   }
   for (const id of ['windows', 'sound', 'sfx', 'dailyRhythm', 'moveWindows', 'knockCursor', 'mischief', 'screenAware', 'smacking', 'destructible'] as const) $<HTMLInputElement>(id).checked = c[id];
   $<HTMLSelectElement>('personalityChoice').value = c.personality;
-  $('personality').textContent = CHARACTER_PRESETS.find(p => p.personality === c.personality)?.description ?? '';
+  $('personality').textContent = (selected === ARNOLD_ID ? 'Talkative and cheerfully unfunny. Feather-quill sketches, corny puns and plenty to say. Activity preference: ' : '') + (CHARACTER_PRESETS.find(p => p.personality === c.personality)?.description ?? '');
   syncColor();
   const enabled = active.includes(selected);
   for (const id of ['chatText', 'sendChat', 'exportChat', 'newChat', 'stopActivity']) $<HTMLButtonElement>(id).disabled = !enabled;

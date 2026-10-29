@@ -50,6 +50,16 @@ export class OfflineConversation {
   private reply(say: string): OfflineReply { return { say, plan: [] }; }
 
   respond(c: Ctx, input: string, name: string): OfflineReply {
+    if (c.who === 'pet-5' && /\b(?:joke|pun|quill|funny|unfunny)\b/i.test(input) && !isActionRequest(input) && !/^(?:please )?(?:stop|enough|cancel|don't|do not)\b/i.test(input.trim())) {
+      const jokes = ['My quill has a point. My jokes are still working on that. Anyway, I have several more if you are staying.', 'I wrote a joke about paper. It was tearable. I will give you a moment to recover from how little that helped.', 'Why did the stick figure bring a quill? To draw out the conversation. It is working. I am still talking.'];
+      return this.reply(jokes[this.state.turns++ % jokes.length]);
+    }
+    const reply = this.respondLocal(c, input, name);
+    if (c.who === 'pet-5' && !reply.stop && !reply.plan.length && this.state.topic !== 'story' && this.state.turns % 3 === 0)
+      reply.say += ' I could go on. Being made of lines, I rarely know where to draw one.';
+    return reply;
+  }
+  private respondLocal(c: Ctx, input: string, name: string): OfflineReply {
     const text = input.trim().slice(0, MESSAGE_LIMIT), t = text.toLowerCase().replace(/[’]/g, "'");
     const s = this.state, f = s.facts;
     s.turns++;

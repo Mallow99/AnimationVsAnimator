@@ -17,6 +17,7 @@ import { basis, clamp, cross3, dot3, norm3, scale3, sub3, add3, type V3, type Ve
 import { collide, collidePlatforms, integrate, makePoint, platY, solveSticks, type Bounds, type Platform, type Point, type Stick } from './physics';
 import type { Character } from './character';
 import penDef from './items/pen.json';
+import quillDef from './items/quill.json';
 import spongeDef from './items/sponge.json';
 import eraserDef from './items/eraser.json';
 import bucketDef from './items/paint-bucket.json';
@@ -133,7 +134,7 @@ export function itemFromDrawing(shape: Vec[][], title: string, color: string): I
 export const STARTER_ITEMS = ['pen'];
 
 /** The items that come with him. */
-export const BUILTIN_ITEMS: ItemDef[] = [flowersDef,blanketDef,snackDef,penDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef, cupDef, dumbbellDef, yoyoDef, spongeDef, eraserDef, bucketDef, handheldDef, consoleDef].map((d) => parseItemDef(d)!);
+export const BUILTIN_ITEMS: ItemDef[] = [flowersDef,blanketDef,snackDef,penDef,quillDef, swordDef, ballDef, maceDef, helmetDef, bootsDef, foamDef, katanaDef, bowDef, gunDef, bookDef, cupDef, dumbbellDef, yoyoDef, spongeDef, eraserDef, bucketDef, handheldDef, consoleDef].map((d) => parseItemDef(d)!);
 
 /** Belt slots: 0 = his left hip, 1 = his right hip, 2 = his back, 3 = his pocket (small things, out of sight). */
 export const SLOT_NAMES = Array.from({ length: 16 }, (_, i) => `satchel ${i + 1}`);
@@ -649,12 +650,13 @@ export class Items {
   /** The first item of his that does this (on him first, then lying around, then with you). */
   find(use: ItemUse) {
     const order = { hand: 0, belt: 1, worn: 1, world: 2, cursor: 3 } as const;
-    return this.list.filter((x) => x.def.use === use).sort((a, b) => order[a.where] - order[b.where])[0] ?? null;
+    return this.list.filter((x) => x.def.use === use).sort((a, b) => order[a.where] - order[b.where] || (use === 'draw' && this.starterItems.includes('quill') ? Number(b.def.id === 'quill') - Number(a.def.id === 'quill') : 0))[0] ?? null;
   }
 
   /** A brand-new him gets his starter things (just his pen). Older saves keep what they have. */
+  starterItems: readonly string[] = STARTER_ITEMS;
   giveStarter(ch: Character) {
-    for (const id of STARTER_ITEMS) if (!this.known.has(id)) { this.known.add(id); if (!this.list.some((it) => it.def.id === id)) this.give(id, ch); }
+    for (const id of this.starterItems) if (!this.known.has(id)) { this.known.add(id); if (!this.list.some((it) => it.def.id === id)) this.give(id, ch); }
   }
 
   /** A new thing appears in the world at `at` (you dropped it in from your inventory). */

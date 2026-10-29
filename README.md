@@ -12,6 +12,12 @@ The candidate uses paper/linen controls, textured stock furniture and books, any
 HSL/hex controls and separate appearance/movement sliders. Existing saved looks stay
 intact. [Runtime demo](docs/store/media/runtime-demo.mp4) · [Store setup notes](docs/store/LISTING.md).
 
+The rc.4 candidate adds Arnold, a bonus-code buddy with a JT arm tattoo and his own
+saved life. Six buddies can be saved, with up to five active. It also improves GUI
+textures, contact-based handling, activity feedback and optional furniture floor snapping.
+[Arnold preview](docs/verification/mallow-arnold-arm.png) ·
+[Furniture placement](docs/verification/mallow-furniture-placement.png).
+
 Develop the customer edition with `npm run start:release`. Build a candidate on the target OS
 with `npm run package:release -- darwin` or `npm run package:release -- win32`. CI packages
 both systems with source manifests and SHA-256 checksums. Customers need no Node/tools.

@@ -62,7 +62,7 @@ and choose **Unlock buddy**. This works offline and stays saved on that computer
 A repeated code does not create duplicate buddies. **Meet Arnold** opens his controls;
 if five buddies are already out, put one away before bringing him onto the desktop.
 
-Arnold has a JT tattoo on his arm and a friendly, competitive personality. His name,
+Arnold carries a working feather quill for drawing and tells deliberately corny jokes. He has a JT tattoo on his arm and a talkative, cheerfully unfunny personality. His name,
 colour and usual look/movement settings are editable. He has his own belongings,
 book progress, conversation and memories, just like the original five buddies.
 
