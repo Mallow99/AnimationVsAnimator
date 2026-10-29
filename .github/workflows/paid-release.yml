@@ -13,6 +13,17 @@ on:
       - 'CHANGELOG.md'
       - 'README.md'
   workflow_dispatch:
+    inputs:
+      continue_candidate:
+        description: 'Complete seed 32 after a combined-job timeout; preserve exact prior native archives'
+        type: boolean
+        default: false
+      candidate_source:
+        description: 'Exact already-tested source SHA'
+        type: string
+      candidate_run:
+        description: 'Run containing both successful native package artifacts'
+        type: string
 
 permissions:
   contents: read
@@ -24,8 +35,9 @@ concurrency:
 
 jobs:
   checks:
+    if: ${{ !inputs.continue_candidate }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,6 +90,7 @@ jobs:
           retention-days: 14
 
   packages:
+    if: ${{ !inputs.continue_candidate }}
     strategy:
       fail-fast: false
       matrix:
@@ -134,3 +147,54 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/preserve-candidate.mjs
+
+  remaining-soak:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.continue_candidate }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_source }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Complete unfinished seed without shortening coverage
+        run: LIVING_SOAK_SEED=32 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak
+      - name: Isolated core performance
+        run: npm run qualityprofile
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: continued-soak-evidence
+          include-hidden-files: true
+          path: .build/living-soak-report-32.json
+          if-no-files-found: warn
+
+  preserve-continued-candidate:
+    needs: remaining-soak
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.continue_candidate }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_source }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate prior native source and retain exact archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SOURCE: ${{ inputs.candidate_source }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
+        run: |
+          [[ "$CANDIDATE_RUN" =~ ^[0-9]+$ && "$CANDIDATE_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh run view "$CANDIDATE_RUN" --json headSha --jq .headSha)" = "$CANDIDATE_SOURCE"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN/jobs" --jq '[.jobs[] | select(.name | startswith("packages (")) | select(.conclusion == "success")] | length')" = 2
+          gh run download "$CANDIDATE_RUN" --pattern 'mallow-candidate-*' --dir out/validated
+          GITHUB_SHA="$CANDIDATE_SOURCE" node scripts/preserve-candidate.mjs

@@ -3,6 +3,16 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-29 — complete remaining soak after CI time limit
+
+- Source 6a29633 passed full aggregate/customer checks, both native packages and
+  seed 7's full 7,200-second soak. Seed 32 was interrupted at 6,632 seconds by the
+  combined job's 30-minute budget, with no reported invariant failure.
+- Increased the normal job budget and added a manual continuation that tests only
+  unfinished seed 32 plus performance on the exact same source. Draft preservation
+  validates both prior native jobs and their source before retaining their exact ZIPs.
+- No game code, test duration, audit assertions or native archives changed.
+
 ## 2026-10-29 — keep tattoo visibility fixture clear
 
 - Capture the visible tattoo before placing the quill in hand; the new feather
