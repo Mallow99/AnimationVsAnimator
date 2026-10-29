@@ -9,7 +9,7 @@ open Mallow-Desk-Buddies.app; follow INSTALL.md for the unsigned test build.
 3. Select Meet Arnold. If five buddies are already out, uncheck one first, then
    check Arnold. Everyone keeps their saved belongings and memories.
 4. Arnold has **JT** on his arm and a feather quill. Ask him “draw” or choose
-   Draw something in Activities. Try “tell me a joke” in his conversation.
+   Doodle in Activities. Try “tell me a joke” in his conversation.
 
 He is talkative and cheerfully unfunny. His name, colour, size and look remain
 editable. His quill, chat and memories save locally; no account or key is needed.

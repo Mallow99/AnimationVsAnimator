@@ -146,4 +146,5 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
 15. **Arnold friend request — 2026-10-29**
     - [x] Working feather quill with safe one-time upgrade of existing Arnold saves.
     - [x] Talkative, deliberately corny offline voice and spaced idle chatter.
-    - [ ] Final aggregate/customer/native package validation and shareable builds.
+    - [x] Final aggregate/customer/native package validation and shareable friend-test builds.
+    - [ ] Remaining seed-32 extended continuation 40941543881; paid release still gated.

@@ -1,11 +1,13 @@
 # Release acceptance — commercial candidates
 
-Latest candidate: **rc.3**, app source **09fd9eb**. All four UI/native jobs passed
-in [40141842676](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40141842676).
-Its core/material baseline **cf23c00** passed both 7,200-second seed-7/32 soaks,
-aggregate/customer/native checks and draft preservation in
-[40140358177](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40140358177).
-Exact source/archive/results: [../verification/mallow-materials.json](../verification/mallow-materials.json).
+Latest friend-test candidate: **rc.4**, exact app source **6a29633**. Both native
+extracted-package restart checks and all aggregate/customer flows passed in
+[40936284948](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40936284948).
+Seed 7 passed 7200 simulated seconds with 7221 audits. Seed 32 was cut off by the
+combined job time budget; [40941543881](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40941543881)
+continues that full seed and performance before automatic draft preservation.
+Do not mark that last check passed until its report exists. Friend-test ZIPs are ready;
+exact source/hashes and limits: [../verification/mallow-arnold-final.json](../verification/mallow-arnold-final.json).
 
 Status: **candidate; not approved for sale**. Automated CI produces downloadable test
 archives. A successful package job does not complete native or commercial acceptance.

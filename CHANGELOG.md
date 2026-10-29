@@ -3,6 +3,18 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-29 — deliver Arnold friend-test ZIPs and guide
+
+- Downloaded both exact source-6a29633 native ZIPs; SHA-256 matches their CI checksums
+  and clean source manifests. Both extracted native restart checks include the quill.
+- Updated Arnold preview, setup guide, store media and validation record. Full local/
+  CI aggregate and customer tests pass; seed 7 passed 7200 seconds and 7221 audits.
+- Seed 32 continuation 40941543881 remains running after the original job time limit;
+  automatic draft preservation follows success. Friend testing can use the validated
+  ZIPs now. Public sale still requires full extended, physical and store acceptance.
+- Core-baseline selection excludes manual continuation runs, which can check out an
+  older source, so they cannot incorrectly certify later untested core changes.
+
 ## 2026-10-29 — complete remaining soak after CI time limit
 
 - Source 6a29633 passed full aggregate/customer checks, both native packages and

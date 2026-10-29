@@ -48,7 +48,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          BASELINE_COMMIT=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/paid-release.yml/runs" -f branch="$GITHUB_REF_NAME" -f status=success -f per_page=1 --jq '.workflow_runs[0].head_sha // empty') || BASELINE_COMMIT=''
+          BASELINE_COMMIT=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/paid-release.yml/runs" -f branch="$GITHUB_REF_NAME" -f event=push -f status=success -f per_page=1 --jq '.workflow_runs[0].head_sha // empty') || BASELINE_COMMIT=''
           if [[ "$EVENT_NAME" != push || -z "$BASELINE_COMMIT" ]] || ! git cat-file -e "$BASELINE_COMMIT^{commit}" 2>/dev/null; then
             echo 'run=true' >> "$GITHUB_OUTPUT"
           elif git diff --quiet "$BASELINE_COMMIT" HEAD -- src/core src/shared scripts/living-soak.ts scripts/build.mjs package.json package-lock.json; then

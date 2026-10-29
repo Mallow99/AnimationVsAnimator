@@ -1,6 +1,19 @@
 # Commercial candidate implementation
 
-## Current Arnold and quality candidate — rc.4
+## Sendable friend-test candidate — rc.4
+
+Exact app source **6a29633** adds the working quill and talkative, deliberately corny
+Arnold voice. All 16 aggregate commands, all three customer Electron flows and both
+native extracted restart checks passed. Both native ZIPs are downloaded, with matching
+SHA-256 and clean manifests. See [SEND-TO-ARNOLD.md](SEND-TO-ARNOLD.md) and
+[../verification/mallow-arnold-final.json](../verification/mallow-arnold-final.json).
+Seed 7 passed 7200 simulated seconds and 7221 audits. Seed 32 hit the original job's
+combined time budget with no reported issue through 6632 seconds; continuation
+40941543881 tests the remainder's full seed, plus performance, with unchanged source.
+It automatically preserves exact archives in draft after success. Full extended,
+physical desktop and authenticated store acceptance remain pending before public sale.
+
+## Prior Arnold handling candidate — rc.4
 
 App source **c151669** adds Arnold as a sixth saved profile through an offline bonus
 code, a JT tattoo on the actual upper arm, and an explicit five-active cap. Original

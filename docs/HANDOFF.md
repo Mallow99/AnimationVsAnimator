@@ -2,6 +2,29 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Sendable Arnold friend-test build — 2026-10-29
+
+**Friend-test delivery is ready**, exact app source 6a29633. Both Mac ARM64 and
+Windows x64 ZIPs passed native extracted launch/helper/save/quit/restart, including
+one saved quill. Local and CI aggregate (16 commands, 250 focused checks plus seven
+release groups), actual Chromium and all three customer Electron flows pass.
+Arnold has JT, a functional feather quill, identity-scoped talkative/corny offline
+voice and spaced idle chatter. Original buddies and legacy belongings are preserved.
+
+Both exact ZIPs and checksums are in /workspace/Arnold-for-your-friend, with
+READ-ME-FIRST.md. Repo guide: release/SEND-TO-ARNOLD.md. Setup: Bonus code ARNOLD,
+Meet Arnold, put someone away first if five are active. Ask “tell me a joke” or Doodle.
+
+Evidence: verification/mallow-arnold-final.json and mallow-arnold-soak-7.json.
+Run 40936284948 passed seed 7 (7200 seconds, 7221 audits, 35 phases). The combined
+job hit its 30-minute budget during seed 32, with no reported issue through 6632
+seconds. Continuation 40941543881 runs ONLY unfinished seed 32 plus performance
+on unchanged 6a29633. It automatically preserves these exact native archives in a
+GitHub draft if it passes. This final extended check is still pending; do not claim
+full release acceptance. Check that run and its retained report on continuation.
+Native physical desktop and authenticated seller/store gates remain open before sale.
+No new app changes or repeat of successful native tests are needed to send this build.
+
 ## Final acceptance time-budget continuation — 2026-10-29
 
 Source 6a29633 has full aggregate/customer/native passes. Run 40936284948 passed
