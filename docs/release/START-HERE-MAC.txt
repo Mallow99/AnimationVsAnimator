@@ -1,0 +1,12 @@
+MALLOW DESK BUDDIES — APPLE SILICON MAC
+
+1. Double-click the ZIP to extract it.
+2. Drag Mallow-Desk-Buddies.app to Applications, then open it.
+3. Use the little menu-bar icon for Settings and Quit.
+
+The app includes its runtime and compiled native helper. No terminal commands,
+Node.js, Xcode, accounts, API keys or extra downloads are required.
+
+This is an unsigned test build for Apple Silicon Macs (macOS 13+).
+If macOS blocks it, follow the app-specific instructions linked in INSTALL.md.
+Do not disable system security. Your buddies save automatically on this computer.

@@ -1,0 +1,18 @@
+[
+  {
+    "file": "Mallow-Desk-Buddies-1.0.0-rc.4-win32-x64.zip",
+    "sha256": "153a018ea376a5ca79fac2488f2070fa5d88ba315a7dd9ff8246499dd48544b6",
+    "bytes": 158719385,
+    "originalArchiveSha256": "2415740b45500bf1fd2ded5fefced7bef77675d402ecb7f99fa0ffd3be8a7dcb",
+    "appSource": "6a29633d095847cc410d86ca5f883e25b7ff57cf",
+    "verification": "All original entry hashes and Unix attributes unchanged; ZIP integrity passed; root launch guide included"
+  },
+  {
+    "file": "Mallow-Desk-Buddies-1.0.0-rc.4-darwin-arm64.zip",
+    "sha256": "916bb6a769b2e9088fe0ba4c78558cdb6ff8b755aaff0b7d2e68b7421e15a89b",
+    "bytes": 130641954,
+    "originalArchiveSha256": "ab16e170197fe897427b5793173a5c35d2ac7c67a7c7f9f9d5b9e85aed6a84d1",
+    "appSource": "6a29633d095847cc410d86ca5f883e25b7ff57cf",
+    "verification": "All original entry hashes and Unix attributes unchanged; ZIP integrity passed; root launch guide included"
+  }
+]

@@ -1,28 +1,33 @@
-# Mallow Desk Buddies — release candidate
+# Mallow Desk Buddies
 
-The commercial edition is a $5 offline desktop toy for Apple Silicon Macs and Windows 11 x64.
-It has a customer interface, quiet defaults, local conversations, save recovery and native
-packaging. It is **not approved for sale yet**: real Mac/Windows acceptance and storefront
-setup remain. [Release checklist](docs/release/ACCEPTANCE.md) ·
-[Features and customization](docs/release/FEATURES.md) · [Install guide](docs/release/INSTALL.md) · [itch.io page copy](docs/store/ITCH-PAGE.md).
+Download the ZIP for your computer. It includes the app and everything it needs.
+
+| Computer | Download |
+| --- | --- |
+| Windows 11 x64 | [Download Windows app](https://github.com/Mallow99/AnimationVsAnimator/releases/download/v1.0.0-rc.4/Mallow-Desk-Buddies-1.0.0-rc.4-win32-x64.zip) |
+| Apple Silicon Mac | [Download Mac app](https://github.com/Mallow99/AnimationVsAnimator/releases/download/v1.0.0-rc.4/Mallow-Desk-Buddies-1.0.0-rc.4-darwin-arm64.zip) |
+
+**Windows:** Extract All, then open `Mallow-Desk-Buddies.exe` inside the extracted folder.
+Keep its accompanying files together.
+
+**Mac:** Extract, drag `Mallow-Desk-Buddies.app` to Applications, then open it.
+
+No Node.js, npm, terminal commands, Xcode, accounts or AI keys are required.
+Each ZIP contains a plain **START-HERE.txt** guide. These are unsigned test builds;
+see [installation help](docs/release/INSTALL.md) for OS-specific prompts.
+
+Use the tray/menu-bar icon for Settings, Pause, Hide and Quit. Everything works offline.
+The ZIPs under [Releases](https://github.com/Mallow99/AnimationVsAnimator/releases/tag/v1.0.0-rc.4)
+are the runnable apps. GitHub’s “Code → Download ZIP” contains developer source files.
+
+[Features and customization](docs/release/FEATURES.md) ·
+[Arnold setup](docs/release/SEND-TO-ARNOLD.md) ·
+[itch.io page copy](docs/store/ITCH-PAGE.md)
 
 ![Colour and appearance controls](docs/store/media/customization.png)
 
-The candidate uses paper/linen controls, textured stock furniture and books, any-colour
-HSL/hex controls and separate appearance/movement sliders. Existing saved looks stay
-intact. [Runtime demo](docs/store/media/runtime-demo.mp4) · [Store setup notes](docs/store/LISTING.md).
-
-The rc.4 candidate adds Arnold, a bonus-code buddy with a JT arm tattoo and his own
-saved life. Six buddies can be saved, with up to five active. It also improves GUI
-textures, contact-based handling, activity feedback and optional furniture floor snapping.
-[Arnold preview](docs/verification/mallow-arnold-arm.png) ·
-[Furniture placement](docs/verification/mallow-furniture-placement.png).
-
-Develop the customer edition with `npm run start:release`. Build a candidate on the target OS
-with `npm run package:release -- darwin` or `npm run package:release -- win32`. CI packages
-both systems with source manifests and SHA-256 checksums. Customers need no Node/tools.
-The development edition below retains experimental integrations and optional AI; those
-integrations are disabled in the commercial edition.
+<details>
+<summary>Developer instructions and source documentation</summary>
 
 # Development edition: AnimationVsAnimator
 
@@ -177,3 +182,5 @@ For a portable Windows copy that friends can run without Node, see [docs/WINDOWS
 | `npm run package:win` | Build a portable Windows x64 app |
 
 See `CLAUDE.md` for the architecture and roadmap.
+
+</details>

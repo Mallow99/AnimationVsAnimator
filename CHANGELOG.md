@@ -3,6 +3,19 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-30 — ready-to-run downloads and main integration
+
+- Put direct Windows/Mac app downloads first in README; collapsed development setup.
+- Added platform-specific START-HERE.txt to each self-contained ZIP and future
+  packaging. No Node, npm, Xcode, account, key or extra runtime installation is needed.
+- Verified every original archive entry's bytes and Unix attributes unchanged after
+  adding the guide; original native helper/quit/restart results therefore still apply.
+- Seed 32 completed 7200 seconds, 7221 audits and 35 phases with no issues; seed 7
+  already passed the same coverage. Core p95 was 0.229ms (two), 0.576ms (five).
+- Added a dedicated draft-asset upload workflow to avoid workspace upload-host
+  credential failure. Compiled downloads are a free test prerelease, not a paid launch.
+- Retarget latest product branch to main and merge at the owner's explicit request.
+
 ## 2026-10-29 — deliver Arnold friend-test ZIPs and guide
 
 - Downloaded both exact source-6a29633 native ZIPs; SHA-256 matches their CI checksums

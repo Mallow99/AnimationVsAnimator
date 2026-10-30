@@ -51,6 +51,7 @@ if (platform === 'darwin') {
 }
 for (const file of ['INSTALL.md', 'FEATURES.md', 'PRIVACY.md', 'LICENSE.txt', 'RECOVERY.md', 'THIRD-PARTY-NOTICES.md']) copyFileSync(join('docs/release', file), join(folder, file));
 copyFileSync(join(stage, 'release-source.json'), join(folder, 'release-source.json'));
+copyFileSync(join('docs/release', platform === 'win32' ? 'START-HERE-WINDOWS.txt' : 'START-HERE-MAC.txt'), join(folder, 'START-HERE.txt'));
 // Audit the actual packaged tree before archiving it.
 function walk(dir) { return readdirSync(dir).flatMap(name => { const file = join(dir, name); return statSync(file).isDirectory() ? walk(file) : [file]; }); }
 const files = walk(folder);

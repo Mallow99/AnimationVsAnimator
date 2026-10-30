@@ -147,4 +147,8 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
     - [x] Working feather quill with safe one-time upgrade of existing Arnold saves.
     - [x] Talkative, deliberately corny offline voice and spaced idle chatter.
     - [x] Final aggregate/customer/native package validation and shareable friend-test builds.
-    - [ ] Remaining seed-32 extended continuation 40941543881; paid release still gated.
+    - [x] Seed-32 continuation 40941543881 and performance passed; paid release still gated.
+
+16. **Single-package download and main — owner request 2026-10-30**
+    - [x] Customer-first README, plain launch guide and verified self-contained ZIPs.
+    - [ ] Upload public test downloads and merge latest branch to main.

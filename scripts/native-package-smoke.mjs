@@ -11,6 +11,7 @@ const extract = mkdtempSync(join(tmpdir(),'Mallow candidate with spaces '));
 if(platform==='darwin')execFileSync('ditto',['-x','-k',zip,extract]);
 else { const script=resolve('.build/extract-candidate.ps1');writeFileSync(script,"param([string]$Source,[string]$Destination)\n$ErrorActionPreference='Stop'\nExpand-Archive -LiteralPath $Source -DestinationPath $Destination\n");execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',script,'-Source',zip,'-Destination',extract]); }
 const folder=join(extract,readdirSync(extract).find(f=>f.startsWith('Mallow-Desk-Buddies')));
+assert(existsSync(join(folder,'START-HERE.txt')), 'Missing plain-language launch instructions');
 assert(existsSync(join(folder,'FEATURES.md')), 'Packaged feature/customization guide is missing');
 const executable=platform==='darwin'?join(folder,'Mallow-Desk-Buddies.app/Contents/MacOS/Mallow-Desk-Buddies'):join(folder,'Mallow-Desk-Buddies.exe');
 const data=mkdtempSync(join(tmpdir(),'mallow-native-data-')), output=resolve('.build/release');mkdirSync(output,{recursive:true});

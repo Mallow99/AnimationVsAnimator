@@ -64,8 +64,11 @@
     },
     {
       "seed": 32,
-      "result": "continuation running after original job time limit",
-      "lastOriginalProgressSeconds": 6632
+      "seconds": 7200,
+      "audits": 7221,
+      "phases": 35,
+      "result": "passed",
+      "run": 40941543881
     }
   ],
   "physicalAcceptance": "friend testing; ordinary Mac/Windows desktop checks remain open",
@@ -74,7 +77,13 @@
   "focusedRegressions": 250,
   "releaseGroups": 7,
   "continuation": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40941543881",
-  "delivery": "Ready for friend testing; full paid release acceptance remains pending",
+  "delivery": "Self-contained ZIP downloads; no developer tools or commands required",
   "setupGuide": "../release/SEND-TO-ARNOLD.md",
-  "archivePreservation": "Automatic draft preservation after continuation passes; not yet claimed complete"
+  "archivePreservation": "Ready-to-run release downloads include only a root launch guide added to validated app archives; see mallow-download-packages.json",
+  "coreP95Ms": {
+    "twoFigures": 0.229,
+    "fiveFigures": 0.576,
+    "budget": 8.33,
+    "platform": "Linux core-only; native desktop resource acceptance remains open"
+  }
 }

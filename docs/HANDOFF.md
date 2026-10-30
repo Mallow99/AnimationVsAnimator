@@ -2,6 +2,26 @@
 
 Start here after reading the project vision in `CLAUDE.md`.
 
+## Ready-to-run packages and main — 2026-10-30
+
+Owner requested a self-contained install/download and merger of latest branch to
+main. README now starts with compiled download links and extract/open instructions;
+developer setup is collapsed. ZIPs include START-HERE.txt, Electron and OS helpers.
+Users need no Node, npm, terminal, Xcode, account, AI key or additional downloads.
+
+App source remains 6a29633, with both native package restart tests passing. Packaging
+adds only the launch guide: scripts/prepare-downloads.py checks the original SHA256,
+source manifest, every original entry hash and Unix attributes, and ZIP integrity.
+See verification/mallow-download-packages.json for new ZIP hashes and old app hashes.
+Future package:release includes the guide directly and native smoke requires it.
+
+Both extended seeds passed 7200 seconds/7221 audits/35 phases, including continuation
+40941543881. Core p95: 0.229ms two figures, 0.576ms five. The continuation's failure was
+only draft release creation permissions (403), not test failure. Upload downloads via
+Upload ready-to-run downloads workflow, targeting the already-created rc.4 draft.
+Publish only a clearly marked free test prerelease; physical and seller/store acceptance
+still gate any paid itch.io launch. Product code/proportions are unchanged this pass.
+
 ## Sendable Arnold friend-test build — 2026-10-29
 
 **Friend-test delivery is ready**, exact app source 6a29633. Both Mac ARM64 and

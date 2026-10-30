@@ -2,7 +2,7 @@ name: Paid release candidates
 
 on:
   push:
-    branches: [codex/paid-release]
+    branches: [main, codex/paid-release]
     paths-ignore:
       - 'docs/store/**'
       - 'docs/release/IMPLEMENTATION.md'

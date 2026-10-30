@@ -2,7 +2,9 @@
 
 Little offline companions for your desktop. This archive is a release candidate.
 Check its `release-source.json` and the project's release notes for the exact version
-and tested operating systems. Native acceptance is still pending for rc.1.
+and tested operating systems. Physical desktop acceptance remains pending for rc.4.
+
+No commands, developer tools or extra downloads are needed. Start with START-HERE.txt.
 
 ## Windows
 
