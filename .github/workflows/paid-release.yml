@@ -1,0 +1,201 @@
+name: Paid release candidates
+
+on:
+  push:
+    branches: [main, codex/paid-release]
+    paths-ignore:
+      - 'docs/store/**'
+      - 'docs/release/IMPLEMENTATION.md'
+      - 'docs/release/ACCEPTANCE.md'
+      - 'docs/verification/**'
+      - 'docs/HANDOFF.md'
+      - 'docs/PET-QUALITY-2-PLAN.md'
+      - 'CHANGELOG.md'
+      - 'README.md'
+  workflow_dispatch:
+    inputs:
+      continue_candidate:
+        description: 'Complete seed 32 after a combined-job timeout; preserve exact prior native archives'
+        type: boolean
+        default: false
+      candidate_source:
+        description: 'Exact already-tested source SHA'
+        type: string
+      candidate_run:
+        description: 'Run containing both successful native package artifacts'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: paid-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    if: ${{ !inputs.continue_candidate }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select extended core checks
+        id: extended
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          BASELINE_COMMIT=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/paid-release.yml/runs" -f branch="$GITHUB_REF_NAME" -f event=push -f status=success -f per_page=1 --jq '.workflow_runs[0].head_sha // empty') || BASELINE_COMMIT=''
+          if [[ "$EVENT_NAME" != push || -z "$BASELINE_COMMIT" ]] || ! git cat-file -e "$BASELINE_COMMIT^{commit}" 2>/dev/null; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BASELINE_COMMIT" HEAD -- src/core src/shared scripts/living-soak.ts scripts/build.mjs package.json package-lock.json; then
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Select installed Chromium
+        run: echo "CHROMIUM_BIN=$(command -v google-chrome || command -v chromium)" >> "$GITHUB_ENV"
+      - run: npm run verify
+      - name: Real Electron customer flow (simulated native windows)
+        run: |
+          npm run build:release
+          xvfb-run -a node_modules/.bin/electron --no-sandbox scripts/release-electron-check.cjs
+          xvfb-run -a node_modules/.bin/electron --no-sandbox scripts/bonus-electron-check.cjs
+          xvfb-run -a node_modules/.bin/electron --no-sandbox scripts/placement-electron-check.cjs
+      - name: Feature and lifecycle soak
+        if: steps.extended.outputs.run == 'true'
+        run: |
+          LIVING_SOAK_SEED=7 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak
+          LIVING_SOAK_SEED=32 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak
+      - name: Isolated core performance
+        run: npm run qualityprofile
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: automated-evidence
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            .build/verification/
+            .build/release/
+            .build/living-soak-report-*.json
+          retention-days: 14
+
+  packages:
+    if: ${{ !inputs.continue_candidate }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin
+          - os: windows-latest
+            platform: win32
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build audited candidate
+        run: npm run package:release -- ${{ matrix.platform }}
+      - name: Launch extracted native candidate and verify restart
+        run: node scripts/native-package-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-evidence-${{ matrix.platform }}
+          path: .build/release/native-*
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mallow-candidate-${{ matrix.platform }}
+          path: |
+            out/*.zip
+            out/*.sha256
+          retention-days: 14
+      # Physical Mac/PC acceptance remains a separate release gate; no automatic public release.
+
+  preserve-draft:
+    needs: [checks, packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mallow-candidate-*
+          path: out/validated
+          merge-multiple: true
+      - name: Preserve exact tested archives in draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/preserve-candidate.mjs
+
+  remaining-soak:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.continue_candidate }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_source }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Complete unfinished seed without shortening coverage
+        run: LIVING_SOAK_SEED=32 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak
+      - name: Isolated core performance
+        run: npm run qualityprofile
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: continued-soak-evidence
+          include-hidden-files: true
+          path: .build/living-soak-report-32.json
+          if-no-files-found: warn
+
+  preserve-continued-candidate:
+    needs: remaining-soak
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.continue_candidate }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_source }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate prior native source and retain exact archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SOURCE: ${{ inputs.candidate_source }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
+        run: |
+          [[ "$CANDIDATE_RUN" =~ ^[0-9]+$ && "$CANDIDATE_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh run view "$CANDIDATE_RUN" --json headSha --jq .headSha)" = "$CANDIDATE_SOURCE"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN/jobs" --jq '[.jobs[] | select(.name | startswith("packages (")) | select(.conclusion == "success")] | length')" = 2
+          gh run download "$CANDIDATE_RUN" --name mallow-candidate-darwin --dir out/validated
+          gh run download "$CANDIDATE_RUN" --name mallow-candidate-win32 --dir out/validated
+          GITHUB_SHA="$CANDIDATE_SOURCE" node scripts/preserve-candidate.mjs

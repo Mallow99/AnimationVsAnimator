@@ -1,0 +1,59 @@
+name: Upload ready-to-run downloads
+
+on:
+  workflow_dispatch:
+    inputs:
+      native_run:
+        description: 'Run with both successful native package jobs'
+        required: true
+        type: string
+      source_sha:
+        description: 'Exact validated application source SHA'
+        required: true
+        type: string
+      release_tag:
+        description: 'Existing draft release tag'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate native results and draft destination
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_RUN: ${{ inputs.native_run }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          [[ "$NATIVE_RUN" =~ ^[0-9]+$ && "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh run view "$NATIVE_RUN" --json headSha --jq .headSha)" = "$SOURCE_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN/jobs" --jq '[.jobs[] | select(.name | startswith("packages (")) | select(.conclusion == "success")] | length')" = 2
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.native_run }}
+          pattern: mallow-candidate-*
+          path: .build/originals
+          merge-multiple: true
+      - name: Add launch guides and verify unchanged app bytes
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: python3 scripts/prepare-downloads.py .build/originals out/downloads "$SOURCE_SHA"
+      - name: Attach compiled ZIPs to existing draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" out/downloads/*.zip out/downloads/*.sha256 out/downloads/download-verification.json --clobber
+      - uses: actions/upload-artifact@v4
+        with:
+          name: download-verification
+          path: out/downloads/download-verification.json

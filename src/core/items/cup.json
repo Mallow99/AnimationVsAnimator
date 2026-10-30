@@ -1,0 +1,72 @@
+{
+  "id": "cup",
+  "name": "Cup",
+  "about": "A reusable warm drink. He takes quiet sips, pauses, then puts it away.",
+  "use": "sip",
+  "length": 14,
+  "grip": 2,
+  "bounce": 0.08,
+  "shape": [
+    {
+      "pts": [
+        [
+          -2,
+          -8
+        ],
+        [
+          12,
+          -8
+        ],
+        [
+          12,
+          7
+        ],
+        [
+          -2,
+          7
+        ]
+      ],
+      "fill": "#8ab5af",
+      "color": "#36595b",
+      "width": 1
+    },
+    {
+      "pts": [
+        [
+          12,
+          -5
+        ],
+        [
+          18,
+          -5
+        ],
+        [
+          18,
+          4
+        ],
+        [
+          12,
+          4
+        ]
+      ],
+      "color": "#36595b",
+      "width": 2
+    },
+    {
+      "pts": [
+        [
+          0,
+          -7
+        ],
+        [
+          10,
+          -7
+        ]
+      ],
+      "color": "#715542",
+      "width": 2
+    }
+  ],
+  "belt": "pocket",
+  "hit": 0
+}

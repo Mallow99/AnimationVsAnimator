@@ -1,0 +1,10 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+if (process.platform !== 'darwin') throw new Error('Build the native Mac helper on macOS. No substitute or placeholder binary is permitted.');
+const dir = resolve('.build/native'); mkdirSync(dir, { recursive: true });
+const binary = resolve(dir, 'windows-mac-arm64');
+execFileSync('xcrun', ['swiftc', '-O', '-target', 'arm64-apple-macos13.0', 'src/electron/native/windows-mac.swift', '-o', binary], { stdio: 'inherit' });
+execFileSync('codesign', ['--force', '--sign', '-', binary], { stdio: 'inherit' });
+execFileSync('lipo', [binary, '-verify_arch', 'arm64'], { stdio: 'inherit' });
+console.log('Built and ad-hoc signed arm64 helper. This is not Developer ID signing or notarization.');

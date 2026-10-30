@@ -1,0 +1,13 @@
+Mallow Desk Buddies 1.0.0-rc.4 is a test candidate for Apple Silicon Mac and Windows 11 x64. **Not approved for sale.**
+
+The offline customer build includes authored local conversations, activities, up to five active customizable buddies, per-buddy personality, hue/hex colour and independent appearance/movement sliders, textured controls and stock materials, quiet defaults, recoverable saves and Pause/Hide/Quit. A bonus code adds Arnold as a sixth saved buddy with a JT arm tattoo, working feather quill, talkative offline voice and deliberately corny jokes. His belongings, memories and conversation are his own. No account, API key or model download is required.
+
+This candidate adds richer paper and woven GUI surfaces, actual-contact handling, live activity requirements and request feedback, and an optional furniture floor-placement guide. Unlocking Arnold never replaces an existing buddy; put someone away before bringing him out if five are active. Backup format 2 includes bonus unlocks.
+
+Both archives are built on their target OS and checked after extraction into a path with spaces: real bundled helper, Pause/Resume, save, normal quit and restart. The complete workflow also runs focused regressions, actual Chromium/Electron interaction tests, a core performance profile before preserving these files here. Core/dependency changes and manual workflow runs also repeat both extended simulated soaks; UI-only changes retain the previously verified core and repeat the customer/native checks.
+
+The Mac helper is included and ad-hoc signed. Neither direct download has a paid distribution certificate or notarization. Read the included INSTALL.md before testing. Customers need no Node or compiler.
+
+Each archive contains release-source.json with its exact source commit, feature/customization guide, installation/privacy/recovery/distribution terms and third-party notices. Check the matching `.sha256` file. Automated evidence and history: https://github.com/Mallow99/AnimationVsAnimator/actions/workflows/paid-release.yml
+
+Physical focus/input, permission refusal/revocation, mixed DPI, sleep/wake and native resource acceptance remain open in docs/release/ACCEPTANCE.md. Seller identity, payout/tax setup and store entitlement testing are pending. Keep this release in draft until those gates pass. No public paid release or income is claimed.

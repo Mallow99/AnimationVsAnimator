@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prop model prototype</title>
+<style>
+body{margin:0;background:#efede6;color:#303b3f;font:15px system-ui,sans-serif}main{max-width:940px;margin:24px auto;padding:0 20px}h1{font-size:22px}p{line-height:1.5}canvas{width:100%;height:380px;background:#40566a;border:1px solid #687c95;image-rendering:pixelated}fieldset{border:1px solid #b9beb5;display:flex;flex-wrap:wrap;gap:18px;padding:16px;margin:16px 0}label{display:grid;gap:5px;min-width:135px}button,select{font:inherit;padding:7px 12px;background:#faf8f0;border:1px solid #8b9690;border-radius:3px}button[aria-pressed=true]{background:#d5e2d5}#surface{min-height:24px}small{color:#576463}
+</style>
+<main><h1>Solid prop prototype</h1>
+<p>The book has covers, paper blocks, a spine hinge and grip points. Rotate it to see which surfaces face the camera. This is a development preview; the desktop figures keep their existing style.</p>
+<canvas id="model" width="920" height="380" aria-label="Rotatable 3D prop preview"></canvas>
+<p id="surface" aria-live="polite">Move over the object to inspect a visible surface.</p>
+<fieldset><legend>Model and animation</legend>
+<label>Model<select id="kind"><option value="book">Hinged book</option><option value="box">Reference solid box</option></select></label>
+<label>Open<input id="open" type="range" min="0" max="1" step=".01" value="1"></label>
+<label>Page turn<input id="page" type="range" min="0" max="1" step=".01" value="0"></label>
+<button id="play" aria-pressed="false">Play opening / page / closing</button>
+<label><span>Grips</span><input id="grips" type="checkbox" checked></label>
+</fieldset>
+<fieldset><legend>Fixed-camera projection</legend>
+<label>Rotate<input id="yaw" type="range" min="-180" max="180" step="1" value="45"></label>
+<label>Tilt<input id="pitch" type="range" min="-60" max="60" step="1" value="20"></label>
+<label>Pixel size<input id="pixel" type="range" min="1" max="5" step="1" value="2"></label>
+<button id="reader">Reader's view</button><button id="outside">Outside cover view</button>
+</fieldset>
+<small>Canvas projects genuine XYZ geometry with rear-face culling and per-face depth order. This prototype does not replace the desktop's physics with a full 3D engine.</small>
+</main><script>/*__LAB_SCRIPT__*/</script></html>

@@ -1,0 +1,97 @@
+{
+  "id": "quill",
+  "name": "Feather quill",
+  "about": "Arnold\u2019s feather quill. A working drawing tool for sketches and questionable jokes.",
+  "use": "draw",
+  "length": 24,
+  "grip": 5,
+  "belt": "side",
+  "hit": 0,
+  "shape": [
+    {
+      "pts": [
+        [
+          -7,
+          0
+        ],
+        [
+          24,
+          0
+        ]
+      ],
+      "color": "#a88b5b",
+      "width": 1.6
+    },
+    {
+      "pts": [
+        [
+          -7,
+          0
+        ],
+        [
+          -4,
+          -5
+        ],
+        [
+          3,
+          -8
+        ],
+        [
+          11,
+          -6
+        ],
+        [
+          16,
+          -2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          -7,
+          0
+        ]
+      ],
+      "color": "#aca48c",
+      "width": 0.8,
+      "fill": "#f4edda"
+    },
+    {
+      "pts": [
+        [
+          -4,
+          0
+        ],
+        [
+          1,
+          -5
+        ],
+        [
+          6,
+          -6
+        ],
+        [
+          11,
+          -3
+        ]
+      ],
+      "color": "#c5baa0",
+      "width": 0.7
+    },
+    {
+      "pts": [
+        [
+          20,
+          0
+        ],
+        [
+          24,
+          0
+        ]
+      ],
+      "color": "#292b2b",
+      "width": 1.3
+    }
+  ]
+}

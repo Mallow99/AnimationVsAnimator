@@ -1,0 +1,93 @@
+{
+  "id": "boots",
+  "name": "Boots",
+  "about": "A pair of sturdy little boots, snug around the bottom of each leg. Drop them in or put them away any time.",
+  "use": "none",
+  "wear": "feet",
+  "length": 14,
+  "grip": 6,
+  "belt": "none",
+  "hit": 0,
+  "bounce": 0.2,
+  "shape": [
+    {
+      "pts": [
+        [
+          -4.5,
+          -12
+        ],
+        [
+          4.5,
+          -12
+        ],
+        [
+          4.5,
+          2
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          -3,
+          4
+        ],
+        [
+          -4.5,
+          2
+        ]
+      ],
+      "fill": "#7a5a44"
+    },
+    {
+      "pts": [
+        [
+          -5.2,
+          -13.5
+        ],
+        [
+          5.2,
+          -13.5
+        ],
+        [
+          5.2,
+          -9.5
+        ],
+        [
+          -5.2,
+          -9.5
+        ]
+      ],
+      "fill": "#9b7a5e"
+    },
+    {
+      "pts": [
+        [
+          -4.5,
+          0.5
+        ],
+        [
+          4.5,
+          0.5
+        ],
+        [
+          4.5,
+          2
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          -3,
+          4
+        ],
+        [
+          -4.5,
+          2
+        ]
+      ],
+      "fill": "#4a3a30"
+    }
+  ]
+}

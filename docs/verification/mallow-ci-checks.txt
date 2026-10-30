@@ -1,0 +1,133 @@
+Source: 2a78d2bb4a237c4e7935ddc1c4e858a67fb47bd0
+CI run: https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40046018836
+Checks job: 120727954208
+Result: success. The lines below are extracted from the actual completed CI log.
+Native packaging/smoke and draft preservation also passed in this run.
+The combined evidence artifact was skipped by the upload action's hidden-path default;
+the final checklist fixes that setting. The actual CI results are retained here.
+
+Checking typecheck…
+PASS typecheck
+Checking checks…
+PASS checks
+Checking roadmapcheck…
+PASS roadmapcheck
+Checking qualitycheck…
+PASS qualitycheck
+Checking sanitycheck…
+PASS sanitycheck
+Checking quality2check…
+PASS quality2check
+Checking polishcheck…
+PASS polishcheck
+Checking conversationcheck…
+PASS conversationcheck
+Checking modelcheck…
+PASS modelcheck
+Checking releasecheck…
+PASS releasecheck
+Checking sim…
+PASS sim
+Checking browsercheck…
+PASS browsercheck
+All automated core and browser checks passed. Native release acceptance is separate.
+PASS release: four customer tabs, onboarding, quiet fresh defaults, old identity/colour preserved, integrations forced offline, no loopback service
+PASS release IPC: local dialogue, reset cancellation, rename, supplies, bags and contextual activity chooser
+PASS release: Pause freezes simulation, Hide/Show controls the real overlay, resume restores the same buddies
+PASS release: injected storage quota and disk-write failures are visible, acknowledged and recover after Retry
+PASS release: reload retains name, dialogue, owned items and exact furniture count without reseeding
+PASS release: full JSON backup contains every stable identity, excludes credential files and respects cancellation
+PASS release: customer screenshots, 380px layout, no runtime exceptions or network requests; requesting acknowledged quit
+PASS release: real quit flush acknowledged before teardown; configs and memories exist on disk
+PASS all 22 stock item lifecycles: passive take/move, cancel, pass, trash/undo, store, original identity retained
+PASS all 10 stock furniture lifecycles: place, rigid dragging, release, settle, trash/undo
+PASS five parallel everyday activities: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS blanket rest, snack and reading light: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS catch with three spectators: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS book open/read/page/close/return: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS TV and Othello invitation: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS painting, blueprint and drawing: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS refinement and tool sorting: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:wave (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:chat (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:couch (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:watch (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:duet (2 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:triangle (3 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:mirror (4 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:relay (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS Pong match and interruption: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS TV arrangement: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS cooperative carry: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS reading corner: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS work corner: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS peer gift and drawing comparison: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS wrapped thoughtful gift and acceptance: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS two actual handheld runners without a TV: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS actual console attachment, TV move and detach: same owned console follows the TV; taking it detaches it
+PASS emotional reassurance: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS repair after intentional disagreement: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS reassurance: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS duel with three spectators: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS cursor gun, reload and restart: one gun, one clock, inventories/moods/relationships restored
+PASS roster removal/rejoin and sleeping pickup: same Ruby and belongings; gentle carry preserves sleep
+PASS five-figure file visit lifecycle: six visits/closures/moves/returns, original items retained, shared claims and coordinates clean
+PASS stacking, impact and leaning: resting stack drift <0.5px; impact moves it; mixed contact remains finite
+Soak progress: 2441 simulated seconds, 2513 audits
+Soak progress: 3041 simulated seconds, 3094 audits
+Soak progress: 3641 simulated seconds, 3674 audits
+Soak progress: 4241 simulated seconds, 4259 audits
+Soak progress: 4841 simulated seconds, 4859 audits
+Soak progress: 5441 simulated seconds, 5459 audits
+Soak progress: 6041 simulated seconds, 6059 audits
+Soak progress: 6641 simulated seconds, 6659 audits
+PASS unattended furnished life: autonomous offline behavior; every-second live audits clean
+PASS scheduled Living Stickmen soak: 7200.0 simulated seconds, 7220 live audits, 35 feature phases; no issues. Report: .build/living-soak-report-7.json
+PASS all 22 stock item lifecycles: passive take/move, cancel, pass, trash/undo, store, original identity retained
+PASS all 10 stock furniture lifecycles: place, rigid dragging, release, settle, trash/undo
+PASS five parallel everyday activities: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS blanket rest, snack and reading light: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS catch with three spectators: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS book open/read/page/close/return: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS TV and Othello invitation: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS painting, blueprint and drawing: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS refinement and tool sorting: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:wave (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:chat (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:couch (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:watch (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:duet (2 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:triangle (3 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:mirror (4 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS group:relay (5 figures): started, observed, completed or explicitly stopped; claims and ownership clean
+PASS Pong match and interruption: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS TV arrangement: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS cooperative carry: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS reading corner: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS work corner: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS peer gift and drawing comparison: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS wrapped thoughtful gift and acceptance: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS two actual handheld runners without a TV: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS actual console attachment, TV move and detach: same owned console follows the TV; taking it detaches it
+PASS emotional reassurance: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS repair after intentional disagreement: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS reassurance: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS duel with three spectators: started, observed, completed or explicitly stopped; claims and ownership clean
+PASS cursor gun, reload and restart: one gun, one clock, inventories/moods/relationships restored
+PASS roster removal/rejoin and sleeping pickup: same Ruby and belongings; gentle carry preserves sleep
+PASS five-figure file visit lifecycle: six visits/closures/moves/returns, original items retained, shared claims and coordinates clean
+PASS stacking, impact and leaning: resting stack drift <0.5px; impact moves it; mixed contact remains finite
+Soak progress: 2441 simulated seconds, 2513 audits
+Soak progress: 3041 simulated seconds, 3094 audits
+Soak progress: 3641 simulated seconds, 3674 audits
+Soak progress: 4241 simulated seconds, 4259 audits
+Soak progress: 4841 simulated seconds, 4859 audits
+Soak progress: 5441 simulated seconds, 5459 audits
+Soak progress: 6041 simulated seconds, 6059 audits
+Soak progress: 6641 simulated seconds, 6659 audits
+PASS unattended furnished life: autonomous offline behavior; every-second live audits clean
+PASS scheduled Living Stickmen soak: 7200.0 simulated seconds, 7220 live audits, 35 feature phases; no issues. Report: .build/living-soak-report-32.json
+2 figures + 4 loose items + couch/bookshelf: 60 simulated seconds in 1.16s; mean 0.162ms, p95 0.308ms per combined 120Hz update (8.33ms budget)
+5 figures + 10 loose items + couch/bookshelf: 60 simulated seconds in 4.21s; mean 0.585ms, p95 0.777ms per combined 120Hz update (8.33ms budget)
+##[warning]No files were found with the provided path: .build/verification/
+

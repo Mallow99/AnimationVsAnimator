@@ -1,0 +1,241 @@
+{
+  "type": "prop",
+  "id": "chair",
+  "name": "Chair",
+  "about": "A wooden chair. He sits on it when he's tired (up straight, or turned out to face you), and drags it over to watch TV.",
+  "use": "seat",
+  "outline": [
+    [
+      0,
+      22
+    ],
+    [
+      30,
+      22
+    ],
+    [
+      30,
+      44
+    ],
+    [
+      0,
+      44
+    ]
+  ],
+  "seat": [
+    15,
+    23
+  ],
+  "shape": [
+    {
+      "rect": [
+        2,
+        0,
+        5,
+        24
+      ],
+      "fill": "#8a735e",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        23,
+        0,
+        5,
+        24
+      ],
+      "fill": "#8a735e",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        1,
+        0,
+        28,
+        6
+      ],
+      "fill": "#a08670",
+      "radius": 2,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        6,
+        10,
+        18,
+        4
+      ],
+      "fill": "#8a735e",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        2,
+        26,
+        5,
+        18
+      ],
+      "fill": "#6e5a48",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        23,
+        26,
+        5,
+        18
+      ],
+      "fill": "#6e5a48",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        6,
+        35,
+        18,
+        4
+      ],
+      "fill": "#5f4c3b",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        0,
+        20,
+        30,
+        5
+      ],
+      "fill": "#a08670",
+      "radius": 2,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        1,
+        24,
+        28,
+        3
+      ],
+      "fill": "#6e5a48",
+      "radius": 1,
+      "material": "wood"
+    }
+  ],
+  "move": "carry",
+  "collision": [
+    [
+      [
+        2,
+        0
+      ],
+      [
+        7,
+        0
+      ],
+      [
+        7,
+        44
+      ],
+      [
+        2,
+        44
+      ]
+    ],
+    [
+      [
+        23,
+        0
+      ],
+      [
+        28,
+        0
+      ],
+      [
+        28,
+        44
+      ],
+      [
+        23,
+        44
+      ]
+    ],
+    [
+      [
+        1,
+        0
+      ],
+      [
+        29,
+        0
+      ],
+      [
+        29,
+        6
+      ],
+      [
+        1,
+        6
+      ]
+    ],
+    [
+      [
+        6,
+        10
+      ],
+      [
+        24,
+        10
+      ],
+      [
+        24,
+        14
+      ],
+      [
+        6,
+        14
+      ]
+    ],
+    [
+      [
+        0,
+        20
+      ],
+      [
+        30,
+        20
+      ],
+      [
+        30,
+        27
+      ],
+      [
+        0,
+        27
+      ]
+    ],
+    [
+      [
+        6,
+        35
+      ],
+      [
+        24,
+        35
+      ],
+      [
+        24,
+        39
+      ],
+      [
+        6,
+        39
+      ]
+    ]
+  ]
+}

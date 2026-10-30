@@ -1,0 +1,89 @@
+{
+  "version": "1.0.0-rc.4",
+  "source": "6a29633d095847cc410d86ca5f883e25b7ff57cf",
+  "ci": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40936284948",
+  "localAggregate": "passed; 16 commands, including real Chromium",
+  "customerArnoldFlow": "passed; quill, JT, offline jokes, unlock, cap, backup, reload and quit",
+  "nativeBuilds": [
+    {
+      "platform": "win32",
+      "sha256": "2415740b45500bf1fd2ded5fefced7bef77675d402ecb7f99fa0ffd3be8a7dcb",
+      "bytes": 158718835,
+      "file": "Mallow-Desk-Buddies-1.0.0-rc.4-win32-x64.zip",
+      "nativeSmoke": {
+        "platform": "win32",
+        "result": "passed",
+        "source": {
+          "commit": "6a29633d095847cc410d86ca5f883e25b7ff57cf",
+          "dirty": false,
+          "platform": "win32",
+          "arch": "x64",
+          "version": "1.0.0-rc.4",
+          "nativeAcceptance": "pending",
+          "status": "release candidate; not approved for sale"
+        },
+        "extractedPathWithSpaces": true,
+        "helper": "real; reported windows",
+        "normalQuitAndRestart": true,
+        "arnoldUnlockAndSixthProfileRestart": true,
+        "limits": "CI runner smoke only; physical focus/input/permissions/DPI/sleep/resources gates remain"
+      }
+    },
+    {
+      "platform": "darwin",
+      "sha256": "ab16e170197fe897427b5793173a5c35d2ac7c67a7c7f9f9d5b9e85aed6a84d1",
+      "bytes": 130641385,
+      "file": "Mallow-Desk-Buddies-1.0.0-rc.4-darwin-arm64.zip",
+      "nativeSmoke": {
+        "platform": "darwin",
+        "result": "passed",
+        "source": {
+          "commit": "6a29633d095847cc410d86ca5f883e25b7ff57cf",
+          "dirty": false,
+          "platform": "darwin",
+          "arch": "arm64",
+          "version": "1.0.0-rc.4",
+          "nativeAcceptance": "pending",
+          "status": "release candidate; not approved for sale"
+        },
+        "extractedPathWithSpaces": true,
+        "helper": "real; reported windows",
+        "normalQuitAndRestart": true,
+        "arnoldUnlockAndSixthProfileRestart": true,
+        "limits": "CI runner smoke only; physical focus/input/permissions/DPI/sleep/resources gates remain"
+      }
+    }
+  ],
+  "extendedSoaks": [
+    {
+      "seed": 7,
+      "seconds": 7200,
+      "audits": 7221,
+      "phases": 35,
+      "result": "passed"
+    },
+    {
+      "seed": 32,
+      "seconds": 7200,
+      "audits": 7221,
+      "phases": 35,
+      "result": "passed",
+      "run": 40941543881
+    }
+  ],
+  "physicalAcceptance": "friend testing; ordinary Mac/Windows desktop checks remain open",
+  "store": "itch.io Markdown/HTML prepared; unpublished",
+  "aggregateCommands": 16,
+  "focusedRegressions": 250,
+  "releaseGroups": 7,
+  "continuation": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40941543881",
+  "delivery": "Self-contained ZIP downloads; no developer tools or commands required",
+  "setupGuide": "../release/SEND-TO-ARNOLD.md",
+  "archivePreservation": "Ready-to-run release downloads include only a root launch guide added to validated app archives; see mallow-download-packages.json",
+  "coreP95Ms": {
+    "twoFigures": 0.229,
+    "fiveFigures": 0.576,
+    "budget": 8.33,
+    "platform": "Linux core-only; native desktop resource acceptance remains open"
+  }
+}

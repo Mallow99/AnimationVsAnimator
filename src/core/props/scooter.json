@@ -1,0 +1,141 @@
+{
+  "type": "prop",
+  "id": "scooter",
+  "name": "Scooter",
+  "about": "A kick scooter. He hops on, holds the handlebar, kicks off, and rolls across the screen.",
+  "use": "ride",
+  "outline": [
+    [
+      4,
+      32
+    ],
+    [
+      34,
+      32
+    ],
+    [
+      39,
+      0
+    ],
+    [
+      41,
+      38
+    ],
+    [
+      5,
+      38
+    ]
+  ],
+  "wheels": [
+    3,
+    4
+  ],
+  "wheel": 4.5,
+  "bar": [
+    39,
+    1
+  ],
+  "friction": 0.01,
+  "shape": [
+    {
+      "pts": [
+        [
+          33,
+          32
+        ],
+        [
+          37,
+          32
+        ],
+        [
+          41,
+          2
+        ],
+        [
+          37,
+          1
+        ]
+      ],
+      "fill": "#8d9b9a",
+      "material": "metal"
+    },
+    {
+      "rect": [
+        2,
+        29,
+        37,
+        6
+      ],
+      "fill": "#5d7f9e",
+      "radius": 3,
+      "material": "metal"
+    },
+    {
+      "rect": [
+        4,
+        29,
+        31,
+        2
+      ],
+      "fill": "#3f5163",
+      "radius": 1,
+      "material": "metal"
+    },
+    {
+      "rect": [
+        32,
+        -2,
+        12,
+        5
+      ],
+      "fill": "#4b5355",
+      "radius": 2.5,
+      "material": "rubber"
+    },
+    {
+      "rect": [
+        0.5,
+        33.5,
+        9,
+        9
+      ],
+      "fill": "#3b3f4f",
+      "radius": 4.5,
+      "material": "rubber"
+    },
+    {
+      "rect": [
+        36.5,
+        33.5,
+        9,
+        9
+      ],
+      "fill": "#3b3f4f",
+      "radius": 4.5,
+      "material": "rubber"
+    },
+    {
+      "rect": [
+        3,
+        36,
+        4,
+        4
+      ],
+      "fill": "#9aa3b8",
+      "radius": 2,
+      "material": "metal"
+    },
+    {
+      "rect": [
+        39,
+        36,
+        4,
+        4
+      ],
+      "fill": "#9aa3b8",
+      "radius": 2,
+      "material": "metal"
+    }
+  ],
+  "move": "drag"
+}

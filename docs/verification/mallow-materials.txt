@@ -1,0 +1,19 @@
+Mallow Desk Buddies 1.0.0-rc.3
+Final source: 09fd9eb9ce252f0b33d541f648734d23a8338de1
+Final CI: https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40141842676
+Core CI: https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40140358177
+Result: all four jobs passed in each workflow.
+Draft: https://github.com/Mallow99/AnimationVsAnimator/releases/tag/untagged-51f75ab71a059bcef180
+
+darwin ZIP: 130628286 bytes; SHA-256 ce2e25fe9a2ca28e4015e8680bec176b8451486ccfc42800edbb4b7749645537
+win32 ZIP: 158706086 bytes; SHA-256 6a118292e629722d317d8b6687b224705b0a93f281b0016389369cbd8a0bf7f6
+Remote asset digests and bytes match the exact native builds.
+
+Both seed-7/32 core soaks: 7200 simulated seconds, 7220 audits, 35 phases, no issues.
+Final UI-only candidate repeats aggregate/customer/native checks; core unchanged.
+Core p95: 0.297 / 0.788 ms for 2 / 5 figures (8.33 ms budget).
+Offline Electron: zero network requests, no runtime exceptions, acknowledged quit.
+
+Store page: docs/store/ITCH-PAGE.md; HTML: docs/store/itch-page.html.
+Media: docs/store/media; source and capture recipe in SOURCE.json.
+Still draft/unpublished. Physical desktop, seller/payout and entitlement acceptance pending.

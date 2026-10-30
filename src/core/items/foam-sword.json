@@ -1,0 +1,94 @@
+{
+  "id": "foam-sword",
+  "name": "Foam sword",
+  "about": "A squishy practice sword. For play fights with his friend: it bonks, it doesn't hurt.",
+  "use": "swing",
+  "length": 30,
+  "grip": 7,
+  "belt": "back",
+  "hit": 0.35,
+  "bounce": 0.5,
+  "shape": [
+    {
+      "pts": [
+        [
+          -7,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "color": "#3b3f4f",
+      "width": 3.4
+    },
+    {
+      "pts": [
+        [
+          -1,
+          -5
+        ],
+        [
+          1,
+          -5
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          -1,
+          5
+        ]
+      ],
+      "fill": "#ffc94d"
+    },
+    {
+      "pts": [
+        [
+          1,
+          -2.6
+        ],
+        [
+          28,
+          -2.6
+        ],
+        [
+          31,
+          0
+        ],
+        [
+          28,
+          2.6
+        ],
+        [
+          1,
+          2.6
+        ]
+      ],
+      "fill": "#4cc3e6"
+    },
+    {
+      "pts": [
+        [
+          1,
+          -2.6
+        ],
+        [
+          28,
+          -2.6
+        ],
+        [
+          29.2,
+          -1.4
+        ],
+        [
+          1,
+          -1.4
+        ]
+      ],
+      "fill": "#8fe0f5"
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "version": "1.0.0-rc.2",
+  "source": "9e166bcd875259ebecd7c5c493ec6f83e7ce8bae",
+  "ci": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40048614400",
+  "jobs": [
+    {
+      "name": "packages (macos-14, darwin)",
+      "result": "success"
+    },
+    {
+      "name": "packages (windows-latest, win32)",
+      "result": "success"
+    },
+    {
+      "name": "checks",
+      "result": "success"
+    },
+    {
+      "name": "preserve-draft",
+      "result": "success"
+    }
+  ],
+  "nativeBuilds": [
+    {
+      "job": 120735966013,
+      "name": "packages (macos-14, darwin)",
+      "sha256": "2f13c45970510e2c3325e4ec5b0693284ec9eaac2b1bb797f18d5625557b9490",
+      "bytes": 130623934,
+      "commit": "9e166bcd875259ebecd7c5c493ec6f83e7ce8bae",
+      "result": "success"
+    },
+    {
+      "job": 120735966156,
+      "name": "packages (windows-latest, win32)",
+      "sha256": "77b218a9f65da9a5e9ad0b896b2fb81068ff33d0137b0f757e8595e602386efe",
+      "bytes": 158701950,
+      "commit": "9e166bcd875259ebecd7c5c493ec6f83e7ce8bae",
+      "result": "success"
+    }
+  ],
+  "checks": [
+    "typecheck",
+    "218 core regressions and release groups",
+    "simulation and actual Chromium",
+    "real Electron scoped personality, mixed presets, chat/item preservation and reload",
+    "real Electron failed-save/retry/offline/backup/quit",
+    "native extracted package/helper/pause/save/quit/restart with packaged feature guide"
+  ],
+  "coreUnchanged": true,
+  "extendedSoaks": "Skipped for UI-only update; src/core unchanged from verified rc.1, whose seed-7/32 soaks each passed 7200 simulated seconds and 7220 audits.",
+  "ciP95Ms": {
+    "two": 0.429,
+    "five": 1.095,
+    "budget": 8.33
+  },
+  "evidenceArtifact": 12542082674,
+  "nativeAcceptance": "physical desktop gates remain open",
+  "draftRelease": {
+    "url": "https://github.com/Mallow99/AnimationVsAnimator/releases/tag/untagged-5d695bfa397f59ecb7b5",
+    "source": "9e166bcd875259ebecd7c5c493ec6f83e7ce8bae",
+    "draft": true,
+    "files": [
+      {
+        "name": "Mallow-Desk-Buddies-1.0.0-rc.2-darwin-arm64.zip",
+        "bytes": 130623934,
+        "digest": "sha256:2f13c45970510e2c3325e4ec5b0693284ec9eaac2b1bb797f18d5625557b9490"
+      },
+      {
+        "name": "Mallow-Desk-Buddies-1.0.0-rc.2-darwin-arm64.zip.sha256",
+        "bytes": 114,
+        "digest": "sha256:df3779f8a4bd44a9facb3fc4e93e43f1ed3e5ea97a6547c35cd8287d8f3893ec"
+      },
+      {
+        "name": "Mallow-Desk-Buddies-1.0.0-rc.2-win32-x64.zip",
+        "bytes": 158701950,
+        "digest": "sha256:77b218a9f65da9a5e9ad0b896b2fb81068ff33d0137b0f757e8595e602386efe"
+      },
+      {
+        "name": "Mallow-Desk-Buddies-1.0.0-rc.2-win32-x64.zip.sha256",
+        "bytes": 111,
+        "digest": "sha256:48688c7ae1d10185705a5f3a6a96959d9ccb7a6ee36df56f85e96ca64cefe1bd"
+      }
+    ],
+    "zipDigestsMatchCi": true
+  }
+}

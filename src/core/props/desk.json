@@ -1,0 +1,183 @@
+{
+  "type": "prop",
+  "id": "desk",
+  "name": "Desk",
+  "about": "Draw blueprints here, rest tools on the top, and use a nearby chair.",
+  "use": "work",
+  "outline": [
+    [
+      0,
+      0
+    ],
+    [
+      80,
+      0
+    ],
+    [
+      80,
+      44
+    ],
+    [
+      0,
+      44
+    ]
+  ],
+  "shape": [
+    {
+      "rect": [
+        4,
+        6,
+        6,
+        38
+      ],
+      "fill": "#6e5a48",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        50,
+        6,
+        26,
+        38
+      ],
+      "fill": "#8a735e",
+      "radius": 2,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        53,
+        10,
+        20,
+        13
+      ],
+      "fill": "#a08670",
+      "radius": 2,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        53,
+        26,
+        20,
+        14
+      ],
+      "fill": "#a08670",
+      "radius": 2,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        60,
+        15,
+        6,
+        3
+      ],
+      "fill": "#5f4c3b",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        60,
+        31,
+        6,
+        3
+      ],
+      "fill": "#5f4c3b",
+      "radius": 1,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        0,
+        0,
+        80,
+        7
+      ],
+      "fill": "#a08670",
+      "radius": 2,
+      "material": "wood"
+    },
+    {
+      "rect": [
+        2,
+        6,
+        76,
+        2
+      ],
+      "fill": "#6e5a48",
+      "radius": 1,
+      "material": "wood"
+    }
+  ],
+  "screen": [
+    12,
+    -10,
+    33,
+    18
+  ],
+  "actions": [
+    "drawhere",
+    "store",
+    "move"
+  ],
+  "move": "drag",
+  "collision": [
+    [
+      [
+        0,
+        0
+      ],
+      [
+        80,
+        0
+      ],
+      [
+        80,
+        8
+      ],
+      [
+        0,
+        8
+      ]
+    ],
+    [
+      [
+        4,
+        8
+      ],
+      [
+        10,
+        8
+      ],
+      [
+        10,
+        44
+      ],
+      [
+        4,
+        44
+      ]
+    ],
+    [
+      [
+        50,
+        8
+      ],
+      [
+        76,
+        8
+      ],
+      [
+        76,
+        44
+      ],
+      [
+        50,
+        44
+      ]
+    ]
+  ]
+}

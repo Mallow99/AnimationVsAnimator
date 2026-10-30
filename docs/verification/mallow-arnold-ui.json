@@ -1,0 +1,18 @@
+{
+  "result": "passed",
+  "platform": "linux",
+  "nativeWindows": "simulated",
+  "source": "6a29633d095847cc410d86ca5f883e25b7ff57cf",
+  "render": {
+    "attached": [
+      15,
+      32
+    ],
+    "detached": [
+      27,
+      36
+    ]
+  },
+  "networkRequests": [],
+  "errors": []
+}

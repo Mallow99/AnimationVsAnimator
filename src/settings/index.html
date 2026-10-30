@@ -1,0 +1,354 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <title>Settings</title>
+  <style>
+    /* Layout: a compact control panel. Header with his live mood, tabs, one column of controls. */
+    :root {
+      --bg: #eee9df; --panel: #faf6eb; --ink: #29232d; --muted: #686073; --line: #d2c8b6;
+      --accent: #4450d6; --accent-ink: #fff; --track: #dfe2ee;
+      --good: #2f9e6a; --warn: #c98a1c; --bad: #d1495b;
+      --ui: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #13141d; --panel: #1a1c28; --ink: #e8e9f3; --muted: #9a9db5; --line: #2b2e42;
+              --accent: #8c96ff; --accent-ink: #13141d; --track: #262938; color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--ui); }
+    header { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 16px 18px 0; border-bottom: 1px solid var(--line); }
+    .who { display: flex; align-items: center; gap: 10px; }
+    h1 { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -.01em; }
+    .mood-chip { font: 600 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 5px 8px; border-radius: 99px;
+                 background: var(--accent); color: var(--accent-ink); }
+    .doing { margin: 4px 0 12px; color: var(--muted); font-size: 13px; }
+    nav { display: flex; gap: 2px; overflow-x: auto; }
+    nav button { white-space: nowrap; font: 600 13px/1 var(--ui); color: var(--muted); background: none; border: 0; padding: 10px 8px; border-bottom: 2px solid transparent; cursor: pointer; }
+    nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+    main { padding: 18px; display: grid; gap: 22px; }
+    section { display: grid; gap: 22px; }
+    section[hidden] { display: none !important; }
+    .group { display: grid; gap: 10px; }
+    h2 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; display: grid; gap: 10px; }
+    .bar { display: grid; grid-template-columns: 112px 1fr 38px; align-items: center; gap: 10px; }
+    .bar input[type="range"] { margin: 0; }
+    .bar .fill { display: block; width: 0; height: 100%; border-radius: 99px; background: var(--accent); transition: width .35s ease; }
+    .bar .val { font: 12px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+    .bar .name { font-weight: 600; }
+    .note { color: var(--muted); font-size: 13px; margin: 0; }
+    .recent { font: 12px/1.6 var(--mono); color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { font: 600 13px/1 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; cursor: pointer; }
+    .chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+    .chip .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+    .bundle { text-align: left; display: grid; gap: 3px; padding: 10px 12px; }
+    .bundle small { font-weight: 400; color: var(--muted); }
+    .bundles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .row-label { font-size: 13px; font-weight: 600; }
+    .slider { display: grid; gap: 4px; }
+    .slider .top { display: flex; justify-content: space-between; gap: 8px; }
+    .slider .top span:last-child { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+    .slider small { color: var(--muted); font-size: 12px; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    input[type="text"] { font: 15px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; }
+    textarea { font: 14px/1.45 var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; min-height: 110px; resize: vertical; }
+    select { font: 14px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; }
+    a { color: var(--accent); }
+    input[type="password"] { font: 14px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; }
+    .chat { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+    .chat.tall { max-height: 52vh; min-height: 200px; align-content: start; }
+    .chat .acts { display: block; justify-self: start; color: var(--muted); font-size: 12px; font-style: italic; padding: 0 10px; margin-top: -4px; }
+    [hidden] { display: none !important; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+    #talkText { min-height: 88px; max-height: 30vh; }
+    #neurons { width: 100%; display: block; }
+    .list { display: grid; gap: 6px; }
+    .list .row { display: flex; align-items: center; gap: 8px; }
+    .list .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .list .row small { color: var(--muted); }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+    .gallery figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px; display: grid; gap: 4px; }
+    .gallery canvas { width: 100%; aspect-ratio: 1; background: #fff; border-radius: 4px; image-rendering: pixelated; }
+    .gallery figcaption { font-size: 12px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gallery .btns { justify-content: center; gap: 4px; }
+    .thing-card { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .thing-card:last-child { border-bottom: 0; }
+    .thing-card canvas { width: 64px; height: 64px; image-rendering: pixelated; background: var(--bg); border: 1px solid var(--line); }
+    .thing-info { display: grid; gap: 5px; align-content: start; }
+    .thing-info p { font-size: 12px; color: var(--muted); margin: 0; }
+    .list .row { flex-wrap: wrap; padding: 5px 0; }
+    .list .row span { min-width: 120px; }
+    textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn:disabled { opacity: 0.45; cursor: default; }
+    .btn.small { padding: 5px 8px; font-size: 12px; }
+    .notes .row { align-items: flex-start; }
+    .notes .kind { flex: 0 0 auto !important; font: 600 10px/1.8 var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--accent); min-width: 62px; }
+    .notes .text { flex: 1; white-space: normal !important; overflow-wrap: anywhere; cursor: text; border-radius: 4px; padding: 0 3px; }
+    .notes .text:focus { outline: 1px solid var(--accent); background: var(--bg); }
+    .notes small { white-space: nowrap; }
+    .chat p { white-space: pre-wrap; line-height: 1.6; margin: 0; padding: 7px 10px; border-radius: 4px; max-width: 85%; overflow-wrap: anywhere; }
+    .chat .you { justify-self: end; background: var(--accent); color: var(--accent-ink); }
+    .chat .him { justify-self: start; background: var(--track); }
+    .chat .note { justify-self: center; color: var(--muted); font-size: 12px; text-align: center; }
+    input[type="color"] { width: 44px; height: 32px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); padding: 2px; }
+    .inline { display: flex; align-items: center; gap: 10px; }
+    .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+    .radio { display: flex; align-items: flex-start; gap: 10px; }
+    .radio input { margin-top: 3px; accent-color: var(--accent); }
+    .radio small { display: block; color: var(--muted); }
+    .radio.off { opacity: .55; }
+    .btn { font: 600 13px/1 var(--ui); color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 4px; padding: 9px 12px; cursor: pointer; }
+    .btn.ghost { color: var(--ink); background: none; border: 1px solid var(--line); }
+    #spawnRoster {border:1px solid var(--line);margin:12px 0;padding:8px;}
+    #figureTarget {width:100%;}
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="who"><h1 id="title">Stick men</h1><span class="mood-chip" id="label">…</span></div>
+    <label class="row-label" for="figureTarget">Control</label><select id="figureTarget" aria-label="Settings target"></select>
+    <p class="note" id="scopeNotice"></p>
+    <p class="doing" id="doing">Waiting for him to report in…</p>
+    <nav role="tablist">
+      <button role="tab" data-tab="chat" aria-selected="false">Chat</button>
+      <button role="tab" data-tab="mood" aria-selected="true">Mood</button>
+      <button role="tab" data-tab="mind" aria-selected="false">Mind</button>
+      <button role="tab" data-tab="items" aria-selected="false">Items</button>
+      <button role="tab" data-tab="look" aria-selected="false">Look</button>
+      <button role="tab" data-tab="body" aria-selected="false">Movement</button>
+      <button role="tab" data-tab="him" aria-selected="false">General</button>
+    </nav>
+  </header>
+  <main>
+    <section data-panel="mood">
+      <div class="group">
+        <h2>How he feels</h2>
+        <div class="card" id="bars"></div>
+        <details><summary>Social feelings and friendships</summary><div class="card" id="socialBars"></div><div id="friendships" class="note"></div></details>
+        <p class="note">Each bar moves on its own as things happen to him. Drag a bar to set it yourself.</p>
+        <div class="chips" id="moodPresets"></div>
+      </div>
+      <div class="group">
+        <h2>Make him…</h2>
+        <div class="chips" id="commands"></div>
+        <p class="note">He'll do it right away if he can (getting down needs him to be on a window; grabbing the cursor needs Mischief mode on, under General). His learned moves are in the Mind tab.</p>
+      </div>
+      <div class="group">
+        <h2>Recently</h2>
+        <div class="card"><div class="recent" id="recent">—</div></div>
+      </div>
+      <div class="btns">
+        <button class="btn ghost" id="resetMood" type="button">Reset his mood</button>
+        <button class="btn ghost" id="respawn" type="button">Drop him in again</button>
+        <button class="btn ghost" id="clearDoodles" type="button">Wipe doodles off the screen</button>
+      </div>
+    </section>
+
+    <section data-panel="chat" hidden>
+      <div class="group">
+        <h2 id="chatHeading">Talk to him</h2>
+        <div class="card"><div class="chat tall" id="chat" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions" tabindex="0"><p class="note">Say hi. He answers in his speech bubble.</p></div></div>
+        <form class="inline" id="talkForm"><textarea id="talkText" rows="3" maxlength="4000" aria-label="Message" aria-describedby="chatHelp" placeholder="Tell me about your day, or ask for a story…"></textarea><button class="btn" id="sendTalk" type="submit">Send</button></form>
+        <p class="note" id="chatHelp">Enter to send · Shift+Enter for a new line. Saved on this device: up to 240 messages. Local dialogue follows topics and story choices; it cannot answer every subject.</p>
+        <div class="btns"><button class="btn ghost" type="button" id="exportChat">Export chat</button><button class="btn ghost" type="button" id="newChat">New conversation</button></div>
+        <div class="card" id="chatReset" hidden><p>Clear this figure’s transcript and conversation context? Saved memories in Mind stay. Export first to keep a copy.</p><div class="btns"><button class="btn" id="confirmNewChat" type="button">Clear and start new</button><button class="btn ghost" id="cancelNewChat" type="button">Keep conversation</button></div></div>
+        <p class="note" id="brainState"></p>
+      </div>
+      <div class="group">
+        <h2>Put words in his mouth</h2>
+        <form class="inline" id="sayForm"><input type="text" id="sayText" maxlength="80" placeholder="hello!" /><button class="btn ghost" type="submit">Say</button></form>
+        <p class="note">Shows exactly this in his bubble. No AI.</p>
+      </div>
+    </section>
+
+    <section data-panel="mind" hidden>
+      <div class="group"><h2>Activity pace</h2><div id="activitySliders"></div>
+        <p class="note">Calm figures can watch for around half an hour, read for a while, or play for several minutes. Restless figures switch sooner. You can still talk to them or ask for a different activity.</p></div>
+      <div class="group">
+        <h2>Inside his head</h2>
+        <div class="chips" role="group" aria-label="How his mind looks">
+          <button class="chip" type="button" id="mindHead" aria-pressed="true">His head (clearer)</button>
+          <button class="chip" type="button" id="mindCircuit" aria-pressed="false">Circuit board</button>
+        </div>
+        <div class="card"><canvas id="neurons" height="380" style="touch-action:none"></canvas></div>
+        <p class="note" id="mindCircuitNote" hidden>The same thinking as a circuit board: his feelings are the input pins on the left, feeding a bus; every chip is something he could do (bigger and brighter = wants it more); the big chip on the right is what he's doing; the one at the top is his AI brain. Lit traces with moving signals are the path his decision took. <b>Drag a feeling pin</b> up or down to change it. <b>Click a chip</b> to make him do it; <b>drag it up or down</b> (or scroll on it) to make him like it more or less (a ring shows your tweak; dotted = less).</p>
+        <p class="note" id="mindHeadNote">His real decision-making, live, inside a model of his head. The ring low at the back is what he feels; the neurons scattered through his head are everything he could do (bigger and brighter = wants it more); the big one at the front is what he's doing; the one on top is his AI brain. <b>Drag the head</b> to turn it. <b>Drag a feeling</b> up or down to change it. <b>Click a choice</b> to make him do it; <b>drag it up or down</b> (or scroll on it) to make him like it more or less from now on (a ring shows your tweak; dotted = less).</p>
+        <div class="btns"><button class="btn ghost small" id="resetBiases" type="button">Reset his preferences</button></div>
+      </div>
+      <div class="group">
+        <h2>Personality</h2>
+        <textarea id="persona" maxlength="1500" aria-label="Persona"></textarea>
+        <p class="note">Who he is, in your words. His AI brain plays this character (Chat or Full brain, under General). His moods still come from what happens to him.</p>
+      </div>
+      <div class="group">
+        <h2>Moves</h2>
+        <div class="card">
+          <span class="row-label">Learned</span>
+          <div id="savedMoves" class="list"></div>
+          <span class="row-label">Made up lately</span>
+          <div id="recentMoves" class="list"></div>
+        </div>
+        <p class="note">When his AI brain makes up a move you like, save it. He remembers saved moves, shows them off on his own when he's in a good mood (even offline), and the AI can do them again by name.</p>
+      </div>
+      <div class="group">
+        <h2>Drawings</h2>
+        <div class="gallery" id="gallery"></div>
+        <p class="note">Everything he's drawn. Ask him to draw something in Chat, or tell him to Doodle.</p>
+      </div>
+      <div class="group">
+        <h2>Memories</h2>
+        <div class="card">
+          <p class="recent" id="memTally">—</p>
+          <span class="row-label">Summary</span>
+          <textarea id="memSummary" maxlength="1200" aria-label="Memory summary" placeholder="Nothing summed up yet. Once enough notes pile up, he tidies them into a summary here."></textarea>
+          <small class="note" id="memSummaryInfo"></small>
+          <span class="row-label">Notes</span>
+          <div id="memNotes" class="list notes"></div>
+          <form class="inline" id="memForm"><input type="text" id="memText" maxlength="140" placeholder="tell him something to remember" /><button class="btn" type="submit">Add</button></form>
+          <div class="btns">
+            <button class="btn ghost small" id="memTidy" type="button">Tidy up now</button>
+            <button class="btn ghost small" id="memClear" type="button">Forget everything</button>
+          </div>
+        </div>
+        <p class="note">His notes, in his words: things about you, things that happened, his opinions. With an AI brain on, he writes his own and every so often the AI tidies them into the summary. Offline, he still counts what you do to him and remembers it. Click a note to edit it; your edits are his memories now. Saved in memory.json next to his settings.</p>
+      </div>
+    </section>
+
+    <section data-panel="items" hidden>
+      <div class="group"><h2>Inventory and supplies</h2>
+        <p class="note">One inventory for every character. Choose a name or All figures in the bag. Give supplies to everyone, inspect actual owned items, or start an activity.</p>
+        <button class="btn" id="openInventory">Open inventory and supplies</button>
+      </div>
+      <details class="group"><summary>Custom definitions</summary>
+        <p class="note">Reload your custom item/furniture files or open their folder.</p>
+        <button class="btn ghost" id="reloadItems">Reload definitions</button>
+        <button class="btn ghost" id="openItems">Open items folder</button>
+      </details>
+    </section>
+
+    <section data-panel="look" hidden>
+      <div class="group"><h2>Presets</h2><div class="bundles" id="bundles"></div></div>
+      <div class="group" id="lookRows"></div>
+      <div class="group">
+        <h2>Fine-tune</h2>
+        <div class="card">
+          <div class="inline"><input type="color" id="color" aria-label="Color" /><span class="row-label">Color</span></div>
+          <label class="switch"><span><span class="row-label">Outline</span><br /><small class="note">A dark edge around him, like a sprite in a pixel-art game.</small></span><input type="checkbox" id="outline" /></label>
+          <div id="lookSliders" class="group"></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-panel="body" hidden>
+      <div class="group" id="bodyRows"></div>
+      <div class="group"><h2>Fine-tune</h2><div class="card" id="bodySliders"></div></div>
+    </section>
+
+    <section data-panel="him" hidden>
+      <div class="group">
+        <h2>Name</h2>
+        <input type="text" id="name" maxlength="40" />
+      </div>
+      <div class="group">
+        <h2>The group</h2>
+        <div class="card">
+          <label class="row-label" for="figureCount">On the desktop</label>
+          <select id="figureCount"><option value="1">1 stick man</option><option value="2">2 stick men</option><option value="3">3 stick men</option><option value="4">4 stick men</option><option value="5">5 stick men</option></select>
+          <fieldset id="spawnRoster"><legend>Choose who appears</legend></fieldset>
+          <p class="note">Each character keeps their items and relationships when removed and added again. Pick one in Control to adjust them, or All figures to apply the same setting to everyone on the desktop.</p>
+          <p id="personality" class="note"></p>
+          <label class="switch"><span>Make tools with his pen</span><input type="checkbox" id="drawTools" /></label>
+          <label class="switch"><span>Show supplies bag shortcut <small>(drag to reposition)</small></span><input type="checkbox" id="showBag" /></label>
+          <label class="switch"><span>Show trash can <small>(drag to reposition)</small></span><input type="checkbox" id="showTrash" /></label>
+          <label class="switch"><span>Require a console attachment for TV games</span><input type="checkbox" id="consoleRequired" /></label>
+          <label class="switch"><span>Follow the local day/night rhythm</span><input type="checkbox" id="dailyRhythm" /></label>
+          <div id="workshopSliders"></div>
+          <details><summary>Experience guide</summary><p>Choose a named figure for private chat. Double-click a figure or use Chat; Enter sends and Shift+Enter adds a line. Closing keeps your draft until the app closes.</p><p>Talking about an activity keeps it running. Ask directly (“read a book”, “dance”) to change activities; “stop” cancels. Picking up a tool only carries it; choose Use to activate it. Trash offers Undo.</p><p>Offline conversations need no account, key or download. They follow supported topics and story choices. For open-ended local AI, install Ollama, download a model, select Ollama below, use Find models and choose Chat. Nothing is downloaded automatically.</p><p>New conversation clears only that figure’s transcript and chat context after confirmation. Export first to keep a copy. Memories in Mind are separate.</p></details>
+          <details><summary>Development checks</summary><button class="btn ghost small" id="sanityCheck" type="button">Check live world</button><p id="sanityResult" role="status" class="note">Checks ownership, coordinates, controllers and shared claims.</p></details>
+          <label class="switch"><span>Developer: show break pressure during fights</span><input type="checkbox" id="debugCombat" /></label>
+          <label class="row-label" for="fightMode">Fights</label>
+          <select id="fightMode">
+            <option value="play">Play fights: fists, foam and wooden swords (nobody gets hurt)</option>
+            <option value="real">Real fights: katanas that cut limbs off or run them through</option>
+          </select>
+          <small class="note">Real fights need <b>Breakable</b> on (below) for limbs to come off. No gore either way: sparks, and they stick their limbs back on.</small>
+          <div class="btns"><button class="btn ghost small" id="duelNow" type="button">Make them spar now</button></div>
+        </div>
+      </div>
+      <div class="group">
+        <h2>Interaction</h2>
+        <div class="card">
+          <label class="switch"><span><span class="row-label">Climb on windows</span><br /><small class="note">He can stand on, jump onto and get carried by your open windows.</small></span><input type="checkbox" id="windows" /></label>
+          <small class="note" id="winInfo"></small>
+          <label class="switch"><span><span class="row-label">He can move your windows</span><br /><small class="note">He pushes windows along, kicks them across the screen, and surfs on them. The first time, macOS asks you to allow it under Privacy &amp; Security → Accessibility. He leaves alone the window you're working in.</small></span><input type="checkbox" id="moveWindows" /></label>
+          <small class="note" id="moveInfo"></small>
+          <label class="switch"><span><span class="row-label">He can see what you're doing</span><br /><small class="note">He knows which app you're in and its window's title (he'll comment on it), and where the text and buttons in it are, so he can sit on your chat messages. Nothing from inside your windows is read. It all stays on your computer, except with an AI brain on: then the app name and title go into what he tells the AI. On a Mac this uses the same Accessibility permission as moving windows.</small></span><input type="checkbox" id="screenAware" /></label>
+          <label class="switch"><span><span class="row-label">He can hit your cursor</span><br /><small class="note">His punches, kicks, sword and mace hits (and his ball) knock your real cursor flying, and sometimes he jumps up and hangs off it. Move your mouse to take it back; shake him off.</small></span><input type="checkbox" id="knockCursor" /></label>
+          <label class="switch"><span><span class="row-label">Mischief mode</span><br /><small class="note">Desktop Goose style: now and then he grabs your cursor and drags it around. Move your mouse to take it back.</small></span><input type="checkbox" id="mischief" /></label>
+          <label class="switch"><span><span class="row-label">Talking sounds</span><br /><small class="note">Little blips as his words type out, like characters in indie games.</small></span><input type="checkbox" id="sound" /></label>
+          <label class="switch"><span><span class="row-label">Sound effects</span><br /><small class="note">Footsteps, thuds, an "oof" when he crashes, snaps, whooshes. All made in code, no sound files.</small></span><input type="checkbox" id="sfx" /></label>
+          <div id="volumeSlider"></div>
+          <label class="switch"><span><span class="row-label">Breakable</span><br /><small class="note">His arms and legs can come off: really hard crashes, hard smacks, or yanking a hand or foot. No gore, just sparks. He goes and gets them and sticks them back on.</small></span><input type="checkbox" id="destructible" /></label>
+          <label class="switch"><span><span class="row-label">Smack mode</span><br /><small class="note">Swipe the cursor through him fast to smack him. Off so it doesn't happen by accident.</small></span><input type="checkbox" id="smacking" /></label>
+        </div>
+      </div>
+      <div class="group"><h2>Chrome and windows</h2><div class="card">
+        <label class="switch"><span><span class="row-label">Play with connected Chrome pages</span><br><small class="note">The extension grants one page at a time. They can close that tab, take a selected element onto the desktop, and restore it. Page fragments stay on your computer.</small></span><input type="checkbox" id="browserPlay"></label>
+        <div class="btns"><button class="btn ghost small" id="extensionFolder">Open Chrome extension folder</button><button class="btn ghost small" id="pairChrome">Copy Chrome pairing link</button></div>
+        <small class="note">In Chrome, open chrome://extensions, enable Developer mode, then Load unpacked and choose that folder. Open the extension, paste the pairing link, and connect the page.</small>
+        <small class="note" id="chromeInfo"></small>
+        <label class="switch"><span><span class="row-label">Allow requested window closing</span><br><small class="note">When you ask, they press the front window's normal close button. The app may still ask you to save. On Mac this needs Accessibility.</small></span><input type="checkbox" id="closeWindows"></label>
+      </div></div>
+      <div class="group"><h2>File and folder visits</h2><div class="card">
+        <label class="switch"><span><span class="row-label">Allow file and folder visits</span><br><small class="note">Visits appear inside the matching native window and hide when it closes. Turning this off returns all visitors to the desktop. Your files are not modified.</small></span><input type="checkbox" id="fileHomes"></label>
+        <p class="note" id="fileSupport">Select a named figure above to choose where they visit.</p>
+        <div class="btns"><button class="btn ghost small" id="chooseHabitat" disabled>Visit a folder…</button><button class="btn ghost small" id="chooseFile" disabled>Visit an open file…</button><button class="btn ghost small" id="returnHome" disabled>Return to desktop</button></div>
+        <p class="note" id="fileLocations" style="white-space:pre-line;overflow-wrap:anywhere" aria-live="polite"></p>
+        <p class="note" id="fileWarning" role="status"></p>
+        <p class="note" id="fileInfo" role="status"></p>
+      </div></div>
+      <div class="group"><h2>Your cursor weapons</h2><div class="card">
+        <p class="note">Hold the mouse button and swing. The pistol aims at the nearest figure. This mode catches desktop clicks; use Put away to return to normal.</p>
+        <div class="btns"><button class="btn ghost" data-weapon="sword">Sword</button><button class="btn ghost" data-weapon="mace">Mace</button><button class="btn ghost" data-weapon="gun">Pistol</button><button class="btn ghost" data-weapon="none">Put away</button></div>
+      </div></div>
+      <div class="group">
+        <h2>Brain</h2>
+        <div class="card">
+          <label class="radio"><input type="radio" name="mind" value="offline" /><span><span class="row-label">Offline</span><small>Local conversations, stories, actions and moods. No internet or key needed.</small></span></label>
+          <label class="radio"><input type="radio" name="mind" value="chat" /><span><span class="row-label">Chat</span><small>AI only when you talk to him. He can also do what you ask.</small></span></label>
+          <label class="radio"><input type="radio" name="mind" value="full" /><span><span class="row-label">Full</span><small>AI also picks his own ideas and comments on events. Use the interval below to reduce calls.</small></span></label>
+          <label for="aiInterval" class="row-label">How often he thinks on his own</label>
+          <select id="aiInterval"><option value="40">Every 40 seconds (original)</option><option value="120">Every 2 minutes</option><option value="300">Every 5 minutes</option></select>
+          <small class="note">Only affects Full mode. He still answers when you talk to him and keeps playing offline between thoughts. Event comments also slow down.</small>
+        </div>
+        <div class="card">
+          <span class="row-label">AI service</span>
+          <select id="provider"></select>
+          <small class="note"><span id="providerHelp">Cloud services need their own account and API key.</span> <a id="keyLink" href="#" target="_blank">Get a free key →</a></small>
+          <span class="row-label" id="apiKeyLabel">API key</span>
+          <form class="inline" id="keyForm"><input type="password" id="apiKey" autocomplete="off" placeholder="paste your key" /><button class="btn" type="submit">Save</button><button class="btn ghost" id="forgetKey" type="button">Forget</button></form>
+          <small class="note" id="keyInfo"></small>
+          <span class="row-label">Model</span>
+          <div class="inline"><input type="text" id="model" maxlength="80" spellcheck="false" list="modelList" /><button class="btn ghost" id="findModels" type="button">Find models</button></div>
+          <datalist id="modelList"></datalist>
+          <small class="note" id="modelInfo">Free tiers have daily limits; if he stops answering, he's probably used today's share. "Find models" lists what your key can use.</small>
+          <label class="switch"><span><span class="row-label">Let the AI move his body</span><br /><small class="note">It can make up its own moves (handstands, floating, flips…), not just pick from his normal skills. Physics still applies, so it may go wrong in funny ways.</small></span><input type="checkbox" id="puppet" /></label>
+        </div>
+      </div>
+      <div class="group">
+        <h2>Size</h2>
+        <div class="card" id="sizeSlider"></div>
+      </div>
+      <div class="btns"><button class="btn ghost" id="resetAll" type="button">Reset all settings</button></div>
+    </section>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+{
+  "type": "prop",
+  "id": "tv",
+  "name": "TV",
+  "about": "A chunky old TV on a wooden cabinet. Watch cartoons or play TV games; a console can attach beside it.",
+  "use": "tv",
+  "outline": [
+    [
+      4,
+      4
+    ],
+    [
+      66,
+      4
+    ],
+    [
+      66,
+      48
+    ],
+    [
+      70,
+      48
+    ],
+    [
+      70,
+      70
+    ],
+    [
+      0,
+      70
+    ],
+    [
+      0,
+      48
+    ],
+    [
+      4,
+      48
+    ]
+  ],
+  "screen": [
+    11,
+    11,
+    48,
+    30
+  ],
+  "shape": [
+    {
+      "pts": [
+        [
+          30,
+          4
+        ],
+        [
+          18,
+          -8
+        ]
+      ],
+      "color": "#4b5355",
+      "width": 1.8
+    },
+    {
+      "pts": [
+        [
+          40,
+          4
+        ],
+        [
+          52,
+          -8
+        ]
+      ],
+      "color": "#4b5355",
+      "width": 1.8
+    },
+    {
+      "rect": [
+        29,
+        0,
+        12,
+        6
+      ],
+      "radius": 3,
+      "fill": "#6c7778",
+      "material": "metal"
+    },
+    {
+      "rect": [
+        4,
+        4,
+        62,
+        44
+      ],
+      "radius": 8,
+      "fill": "#8d9b9a",
+      "material": "metal"
+    },
+    {
+      "rect": [
+        6,
+        5,
+        58,
+        4
+      ],
+      "radius": 2,
+      "fill": "#a2afae",
+      "material": "metal"
+    },
+    {
+      "rect": [
+        8,
+        8,
+        54,
+        36
+      ],
+      "radius": 6,
+      "fill": "#4b5355",
+      "material": "metal"
+    },
+    {
+      "rect": [
+        0,
+        46,
+        70,
+        24
+      ],
+      "radius": 3,
+      "fill": "#8a735e",
+      "material": "wood"
+    },
+    {
+      "rect": [
+        0,
+        46,
+        70,
+        3
+      ],
+      "radius": 1.5,
+      "fill": "#9c8570",
+      "material": "wood"
+    },
+    {
+      "rect": [
+        5,
+        53,
+        60,
+        13
+      ],
+      "radius": 2,
+      "fill": "#705a46",
+      "material": "wood"
+    },
+    {
+      "rect": [
+        7,
+        54,
+        56,
+        10
+      ],
+      "radius": 1,
+      "fill": "#a28a71",
+      "material": "wood"
+    },
+    {
+      "pts": [
+        [
+          8,
+          64
+        ],
+        [
+          62,
+          64
+        ]
+      ],
+      "color": "#b69c80",
+      "width": 1
+    },
+    {
+      "rect": [
+        30,
+        58,
+        10,
+        3
+      ],
+      "radius": 1,
+      "fill": "#50473f",
+      "material": "wood"
+    }
+  ],
+  "move": "drag"
+}

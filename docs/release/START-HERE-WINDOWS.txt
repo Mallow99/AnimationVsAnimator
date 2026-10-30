@@ -1,0 +1,12 @@
+MALLOW DESK BUDDIES — WINDOWS
+
+1. Right-click the downloaded ZIP and choose Extract All.
+2. Open the extracted folder and double-click Mallow-Desk-Buddies.exe.
+3. Use the little tray icon near the clock for Settings and Quit.
+
+That is all. The ZIP includes the app, runtime and native helper.
+No terminal commands, Node.js, npm, accounts, API keys or extra downloads.
+Keep the whole extracted folder together; do not move only the EXE.
+
+This is an unsigned test build for Windows 11 x64. See INSTALL.md for
+installation details. Your buddies save automatically on this computer.

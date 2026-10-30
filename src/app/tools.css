@@ -1,0 +1,134 @@
+#overlayTools { font: 12px/1.4 monospace; color: #343c3b; }
+#overlayTools button { font: inherit; color: inherit; cursor: pointer; }
+#overlayTools button:focus-visible { outline: 2px solid #557d91; outline-offset: 2px; }
+#grabBag, #trashCan { position: fixed; width: 36px; height: 36px; padding: 0; border: 0; background: transparent; z-index: 24; }
+#grabBag canvas, #trashCan canvas { width: 36px; height: 36px; image-rendering: pixelated; }
+#grabBag:hover, #trashCan:hover, #trashCan.receiving { background: #e3d7b755; }
+#undoTrash { position: fixed; padding: 4px; border: 1px solid #8d9996; background: #f5f1e9; z-index: 24; }
+#bagPanel { position: fixed; display: flex; flex-direction: column; width: min(350px, calc(100vw - 16px)); max-height: min(540px, calc(100vh - 16px)); box-sizing: border-box; overflow: hidden; padding: 10px; border: 2px solid #8e806d; background: #f4efe5; box-shadow: 4px 4px #0003; z-index: 25; }
+#bagPanel[hidden] { display: none; }
+#bagPanel > :not(.bag-choices) { flex-shrink: 0; }
+#bagPanel header { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+#bagPanel header strong { flex: 1; }
+#bagPanel header button, .bag-owners button { border: 1px solid #b7b0a3; padding: 4px; background: #fffaf1; }
+.bag-owners { display: flex; gap: 4px; flex-wrap: wrap; }
+.bag-owners [aria-pressed=true] { background: #d9cab0; }
+#bagHint { margin: 10px 0; color: #696354; }
+.bag-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; min-height: 50px; overflow: auto; }
+.bag-choices h3 { grid-column: 1 / -1; margin: 7px 0 0; font-size: 12px; color: #756958; }
+#overlayTools .bag-choice { border: 1px solid #d3c7b7; padding: 6px; background: #fffcf5; text-align: left; min-width: 0; touch-action: none; }
+#overlayTools .bag-choice:hover { background: #eae2d2; border-color: #998975; }
+.bag-choice .thing-card { display: flex; align-items: center; gap: 6px; }
+.bag-choice canvas { width: 36px; height: 36px; flex-shrink: 0; image-rendering: pixelated; }
+.bag-choice strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.bag-choice p, .bag-choice .btns { display: none; }
+#pongPanel { position: fixed; z-index: 23; padding: 6px; border: 2px solid #8e806d; background: #f4efe5; font: 11px monospace; max-width: calc(100vw - 24px); }
+#pongPanel strong { display: block; margin-bottom: 4px; }
+#pongPanel canvas { width: 240px; max-width: 100%; height: 150px; image-rendering: pixelated; }
+#pongPanel button { font: inherit; border: 1px solid #8e806d; background: #fff8e8; padding: 4px; margin: 3px; }
+.bag-tabs { display: flex; gap: 5px; margin-top: 10px; }
+.bag-tabs button { flex: 1; padding: 7px; border: 1px solid #b7b0a3; background: #fffaf1; }
+.bag-tabs [aria-pressed=true], #overlayTools .bag-choice[aria-pressed=true] { background: #d9cab0; border-color: #77624a; }
+#bagDetails { padding: 8px; margin-bottom: 9px; max-height: 30vh; overflow: auto; border: 1px solid #b7b0a3; background: #fffaf1; }
+#bagDetails p { margin: 5px 0 8px; }
+.bag-item-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.bag-item-actions button, #bagUndo { padding: 6px; border: 1px solid #998975; background: #f4efe5; }
+.bag-choice small { display: block; margin-top: 5px; color: #696354; }
+.bag-activity { grid-column: 1 / -1; padding: 8px; border: 1px solid #d3c7b7; background: #fffcf5; text-align: left; }
+.bag-activity strong, .bag-activity small { display: block; }
+.bag-activity small { margin-top: 3px; }
+.bag-activity:disabled { color: #756f64 !important; background: #e7e2d8; cursor: default !important; }
+.bag-empty { grid-column: 1 / -1; }
+#bagPanel footer { margin-top: 10px; max-height: 120px; overflow: auto; border-top: 1px solid #d3c7b7; padding-top: 8px; }
+#bagPanel summary { cursor: pointer; padding-top: 6px; }
+#bagPanel details p { margin: 6px 0; }
+#bagTransport { position: fixed; top: 12px; right: 12px; display: flex; align-items: center; gap: 10px; max-width: min(480px, calc(100vw - 24px)); box-sizing: border-box; padding: 8px; border: 2px solid #8e806d; background: #f4efe5; z-index: 26; }
+#bagTransport[hidden] { display: none; }
+#bagTransport button { padding: 5px; border: 1px solid #998975; background: #fffaf1; }
+#figureHint { position: fixed; padding: 5px 7px; color: #343c3b; background: #f4efe5; border: 2px solid #8e806d; font: 11px monospace; pointer-events: none; z-index: 22; }
+
+#weaponBar button { font: inherit; border: 1px solid #998975; background: #fffaf1; padding: 5px; }
+#weaponBar button[hidden] { display: none; }
+
+.bag-owners, #bagSearch { width: 100%; box-sizing: border-box; border: 1px solid #b7b0a3; padding: 5px; font: inherit; background: #fffaf1; color: #343c3b; }
+
+/* Material tokens are limited to the controls; the desktop body remains transparent. */
+:root {
+  --tool-paper: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22128%22%20height%3D%22128%22%20viewBox%3D%220%200%20128%20128%22%3E%3Cfilter%20id%3D%22grain%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%22.62%22%20numOctaves%3D%223%22%20seed%3D%228%22%20stitchTiles%3D%22stitch%22%2F%3E%3CfeColorMatrix%20type%3D%22saturate%22%20values%3D%220%22%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%22128%22%20height%3D%22128%22%20filter%3D%22url%28%23grain%29%22%20opacity%3D%22.12%22%2F%3E%3Cg%20stroke%3D%22%239a8059%22%20stroke-opacity%3D%22.13%22%20stroke-width%3D%22.45%22%20fill%3D%22none%22%3E%3Cpath%20d%3D%22m9%2018%206-1m27%2012%204%202m41-21%207%201m-71%2044%205-1m49%201%207%202m-34%2033%207-1m-46%2020%206%201m72-19%205-2m18%2026%206%201%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --tool-linen: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cg%20fill%3D%22none%22%20stroke-width%3D%221%22%3E%3Cpath%20d%3D%22M0%202h24M0%206h24M0%2010h24M0%2014h24M0%2018h24M0%2022h24%22%20stroke%3D%22%236b7655%22%20stroke-opacity%3D%22.11%22%2F%3E%3Cpath%20d%3D%22M2%200v24M6%200v24M10%200v24M14%200v24M18%200v24M22%200v24%22%20stroke%3D%22%23ffffff%22%20stroke-opacity%3D%22.32%22%2F%3E%3Cpath%20d%3D%22M0%203h24M0%2011h24M0%2019h24%22%20stroke%3D%22%23ffffff%22%20stroke-opacity%3D%22.3%22%2F%3E%3Cpath%20d%3D%22M3%200v24M11%200v24M19%200v24%22%20stroke%3D%22%236b7655%22%20stroke-opacity%3D%22.05%22%2F%3E%3C%2Fg%3E%3Cg%20fill%3D%22%23fdfbf1%22%20opacity%3D%22.24%22%3E%3Cpath%20d%3D%22M2%202h2v2H2zM10%2010h2v2h-2zM18%2018h2v2h-2zM2%2018h2v2H2zM18%202h2v2h-2z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --tool-wood: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22160%22%20height%3D%2248%22%20viewBox%3D%220%200%20160%2048%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23684a30%22%20stroke-opacity%3D%22.15%22%20stroke-width%3D%22.7%22%3E%3Cpath%20d%3D%22M-4%208c35-4%2052%203%2084%200s55-2%2084%201M-4%2021c30%205%2048-4%2084-1s57%202%2084-1M-4%2035c38-4%2051%204%2084%201s51-1%2084%201%22%2F%3E%3Cpath%20d%3D%22M-4%2011c35-4%2053%202%2084-1s55-2%2084%201M-4%2038c38-4%2052%204%2084%201s51-1%2084%201%22%20stroke%3D%22%23fff7de%22%20stroke-opacity%3D%22.22%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+}
+#overlayTools { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #2c3b32 }
+#bagPanel, #pongPanel, #bagTransport, body #talk {
+  background-color: #faf6e9;
+  background-image: var(--tool-paper), linear-gradient(125deg, #fffdf3, #f0ead9);
+  background-size: 128px 128px, 100% 100%;
+  border-color: #a7af96;
+  border-radius: 12px;
+  box-shadow: inset 0 1px #fffef9, inset 0 -2px #d8d5bd, 0 5px 18px #273b2c24;
+}
+#bagPanel header {
+  padding: 7px 8px 9px;
+  margin: -2px -2px 9px;
+  border: 1px solid #c9d0b8;
+  border-radius: 7px;
+  background: var(--tool-linen), linear-gradient(#eff1dc, #e1e7cf);
+  background-size: 24px 24px, 100% 100%;
+  box-shadow: inset 0 1px #fff8;
+}
+#overlayTools button:not(#grabBag):not(#trashCan), #pongPanel button, body #talk button {
+  border-radius: 6px;
+  background-color: #f7f3e6;
+  background-image: var(--tool-paper), linear-gradient(#fffdf2, #ede8d8);
+  background-size: 128px 128px, 100% 100%;
+  box-shadow: inset 0 1px #fff, inset 0 -1px #d7d3bb, 0 1px 2px #34412f0b;
+}
+#overlayTools button:focus-visible, body #talk :focus-visible { outline: 3px solid #af6a3e; outline-offset: 2px }
+#overlayTools button:hover:enabled:not(#grabBag):not(#trashCan), #pongPanel button:hover:enabled, body #talk button:hover:enabled {
+  border-color: #879b75;
+  background-image: var(--tool-paper), linear-gradient(#f9fbed, #e4ead4);
+}
+#overlayTools button:active:enabled:not(#grabBag):not(#trashCan), body #talk button:active:enabled { box-shadow: inset 0 2px 3px #34412f24 }
+#overlayTools .bag-owners [aria-pressed=true], #overlayTools .bag-tabs [aria-pressed=true], #overlayTools .bag-choice[aria-pressed=true] {
+  background: var(--tool-linen), linear-gradient(#eef2dd, #dce6ca);
+  background-size: 24px 24px, 100% 100%;
+  border-color: #758d62;
+  box-shadow: inset 0 1px #fff9, inset 0 -2px #718b60;
+}
+#bagDetails {
+  border-color: #c7bea9;
+  border-radius: 8px;
+  background: var(--tool-paper), linear-gradient(#fffdf4, #f4efdf);
+  background-size: 128px 128px, 100% 100%;
+  box-shadow: inset 0 1px 3px #5b573114, 0 1px #fff8;
+}
+#overlayTools .bag-choice { border-color: #d3cbb6; overflow-wrap: anywhere }
+#overlayTools .bag-choice:disabled, #overlayTools .bag-activity:disabled { background-color: #e8e6d9; background-image: var(--tool-paper); color: #69705f !important; box-shadow: inset 0 1px #fff7; cursor: default }
+.bag-choice strong { color: #344331 }
+.bag-choice small, .bag-activity small, #bagHint { color: #606b58 }
+#bagSearch, #bagPanel select {
+  border-color: #b7c0a6;
+  border-radius: 6px;
+  background: var(--tool-paper), linear-gradient(#eeeddd, #fffdf2 12px);
+  background-size: 128px 128px, 100% 100%;
+  box-shadow: inset 0 1px 3px #34412f0d;
+}
+#bagPanel footer { border-color: #c9cdb8 }
+#bagTransport { flex-wrap: wrap; border-color: #aaa386; background-image: var(--tool-linen), linear-gradient(#f0eddb, #e5e6cf); background-size: 24px 24px, 100% 100% }
+#bagTransport button { flex-shrink: 0 }
+#figureHint, #undoTrash {
+  border-color: #b0b99f;
+  border-radius: 7px;
+  background: var(--tool-paper), #f9f5e7;
+  background-size: 128px 128px, 100% 100%;
+  box-shadow: inset 0 1px #fff, 0 2px 5px #34412f1c;
+}
+#pongPanel { background-image: var(--tool-wood), linear-gradient(#e9dfc9, #d3c5a9); background-size: 160px 48px, 100% 100%; border-color: #a59170 }
+#pongPanel canvas { border: 1px solid #9caa87; border-radius: 5px; box-shadow: 0 1px #fff9 }
+body #talk { border-color: var(--ink, #a7af96) }
+body #talk header { border-bottom: 1px solid #c8cfb6; padding: 0 0 8px }
+body #talk textarea { border-color: #b7c0a6; border-radius: 7px; background: var(--tool-paper), #fffdf3; background-size: 128px 128px, 100% 100%; box-shadow: inset 0 1px 3px #34412f0d }
+body #talkLog p { border: 1px solid #d8dfc8; border-radius: 8px; background: var(--tool-paper), linear-gradient(#edf2e1, #e4ead6); background-size: 128px 128px, 100% 100%; box-shadow: inset 0 1px #fff9 }
+body #talkLog .you { border-color: #e2d4bd; background-image: var(--tool-paper), linear-gradient(#f6e9d5, #edddc5) }
+body #talkLog .note { background: transparent; border: 0; box-shadow: none }
+@media (prefers-reduced-motion: no-preference) { #overlayTools button, #pongPanel button, body #talk button { transition: border-color .14s, box-shadow .14s, background-color .14s } }
