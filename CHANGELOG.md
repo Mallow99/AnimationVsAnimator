@@ -3,6 +3,15 @@
 Every working commit records concrete additions, behavior changes, repairs, verification and
 remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
 
+## 2026-10-30 — verify public downloads and completed main merge
+
+- PR #4 merged the latest product branch into main (d81f20a), as requested.
+- Upload workflow 41089104176 succeeded; published rc.4 as a free test prerelease.
+  Both direct ZIP URLs return HTTP 200 without an account. Remote SHA256 and byte
+  counts match the verified packages with START-HERE.txt. No paid store launched.
+- Recorded completed seed-32/performance results and cleared obsolete pending
+  acceptance notes. Physical desktop and authenticated seller/store checks remain.
+
 ## 2026-10-30 — ready-to-run downloads and main integration
 
 - Put direct Windows/Mac app downloads first in README; collapsed development setup.

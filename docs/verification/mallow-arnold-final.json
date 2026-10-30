@@ -77,13 +77,19 @@
   "focusedRegressions": 250,
   "releaseGroups": 7,
   "continuation": "https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40941543881",
-  "delivery": "Self-contained ZIP downloads; no developer tools or commands required",
+  "delivery": "Self-contained public GitHub test ZIPs; no developer tools or commands required",
   "setupGuide": "../release/SEND-TO-ARNOLD.md",
-  "archivePreservation": "Ready-to-run release downloads include only a root launch guide added to validated app archives; see mallow-download-packages.json",
+  "archivePreservation": "Published free test prerelease after upload workflow 41089104176; remote digest and byte count match docs/verification/mallow-download-packages.json",
   "coreP95Ms": {
     "twoFigures": 0.229,
     "fiveFigures": 0.576,
     "budget": 8.33,
     "platform": "Linux core-only; native desktop resource acceptance remains open"
+  },
+  "release": "https://github.com/Mallow99/AnimationVsAnimator/releases/tag/v1.0.0-rc.4",
+  "merge": {
+    "pr": 4,
+    "commit": "d81f20ab5c6d40e7cd716964541d18a67c83bddd",
+    "branch": "main"
   }
 }

@@ -1,6 +1,18 @@
 # Commercial candidate implementation
 
-## Sendable friend-test candidate — rc.4
+## Self-contained downloads and main — 2026-10-30
+
+[Public test ZIPs](https://github.com/Mallow99/AnimationVsAnimator/releases/tag/v1.0.0-rc.4)
+include the app, runtime, native helper and START-HERE.txt. Extract/open is sufficient;
+no terminal, Node, npm, Xcode, account or key is needed. Both public URLs return 200.
+Every original archive entry hash and Unix permission matches the native-tested
+source 6a29633 ZIP; only a root launch guide is added. Remote file digest/size matches
+verification/mallow-download-packages.json. Upload workflow 41089104176 passed.
+Both extended seeds and performance passed; native helper/quit/restart passed on both
+OS runners. Main contains the latest product branch, merged by PR #4 as d81f20a.
+Physical desktop and seller/store acceptance still gate paid publication.
+
+## Earlier friend-test candidate — rc.4
 
 Exact app source **6a29633** adds the working quill and talkative, deliberately corny
 Arnold voice. All 16 aggregate commands, all three customer Electron flows and both

@@ -17,9 +17,10 @@ Future package:release includes the guide directly and native smoke requires it.
 
 Both extended seeds passed 7200 seconds/7221 audits/35 phases, including continuation
 40941543881. Core p95: 0.229ms two figures, 0.576ms five. The continuation's failure was
-only draft release creation permissions (403), not test failure. Upload downloads via
-Upload ready-to-run downloads workflow, targeting the already-created rc.4 draft.
-Publish only a clearly marked free test prerelease; physical and seller/store acceptance
+only draft release creation permissions (403), not test failure. Upload workflow 41089104176 passed. Both assets match the recorded SHA256/bytes
+and their public download links return HTTP 200 without a login. Release: https://github.com/Mallow99/AnimationVsAnimator/releases/tag/v1.0.0-rc.4.
+PR #4 merged latest branch into main as d81f20a at the owner’s explicit request.
+This is a clearly marked free test prerelease; physical and seller/store acceptance
 still gate any paid itch.io launch. Product code/proportions are unchanged this pass.
 
 ## Sendable Arnold friend-test build — 2026-10-29

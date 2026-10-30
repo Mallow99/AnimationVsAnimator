@@ -138,9 +138,9 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
     - [x] Show truthful quick-activity requirements, request acceptance and current activity.
     - [x] New-supply furniture footprint/floor preview and optional saved clear-floor snapping.
     - [x] Update features, backup recovery and matching itch.io Markdown/HTML without public bonus code.
-    - [ ] Repeat final committed-source aggregate/customer/native tests and two-seed extended soaks.
-    - [ ] Inspect actual GUI/tattoo/placement captures; refresh media, source evidence and rc.4 draft ZIPs.
-    - [ ] Commit/changelog, push and update draft PR #4 with final results and remaining gates.
+    - [x] Repeat final committed-source aggregate/customer/native tests and two-seed extended soaks.
+    - [x] Inspect actual GUI/tattoo/placement captures; refresh media/source evidence and rc.4 test ZIPs.
+    - [x] Commit/changelog, push, update PR #4 and merge into main with final results and remaining gates.
     - [ ] Physical Mac/Windows and authenticated store acceptance before public paid publication.
 
 15. **Arnold friend request — 2026-10-29**
@@ -151,4 +151,4 @@ Do not advance the integration roadmap. Owner hardware acceptance is the remaini
 
 16. **Single-package download and main — owner request 2026-10-30**
     - [x] Customer-first README, plain launch guide and verified self-contained ZIPs.
-    - [ ] Upload public test downloads and merge latest branch to main.
+    - [x] Upload public test downloads (rc.4) and merge latest branch into main (PR #4).

@@ -1,13 +1,15 @@
 # Release acceptance — commercial candidates
 
-Latest friend-test candidate: **rc.4**, exact app source **6a29633**. Both native
-extracted-package restart checks and all aggregate/customer flows passed in
+Latest compiled test downloads: **rc.4**, app source **6a29633**. Both native
+extracted-package restart checks, full aggregate and customer flows passed in
 [40936284948](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40936284948).
-Seed 7 passed 7200 simulated seconds with 7221 audits. Seed 32 was cut off by the
-combined job time budget; [40941543881](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40941543881)
-continues that full seed and performance before automatic draft preservation.
-Do not mark that last check passed until its report exists. Friend-test ZIPs are ready;
-exact source/hashes and limits: [../verification/mallow-arnold-final.json](../verification/mallow-arnold-final.json).
+Both seeds passed 7200 simulated seconds, 7221 audits and 35 phases; seed 32 and
+performance completed in [40941543881](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40941543881).
+The separate upload job 41089104176 succeeded. Ready-to-run ZIPs add only a root
+launch guide; every existing app entry/permission matches the native-tested archive.
+[Download test apps](https://github.com/Mallow99/AnimationVsAnimator/releases/tag/v1.0.0-rc.4).
+PR #4 merged into main. Exact source/hashes: [../verification/mallow-download-packages.json](../verification/mallow-download-packages.json).
+This is a free test prerelease, not a paid itch.io publication. Physical/store gates below remain open.
 
 Status: **candidate; not approved for sale**. Automated CI produces downloadable test
 archives. A successful package job does not complete native or commercial acceptance.
