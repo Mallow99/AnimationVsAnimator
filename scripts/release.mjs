@@ -1,7 +1,7 @@
 // Run by GitHub (see .github/workflows/build.yml) after every check passed: puts the freshly
 // built ZIPs in out/built on the project's Releases page as a public test release.
-// The tag is "v" + the version in product.json. A release that is already public is never
-// replaced, so people who downloaded it keep getting the same file: change the version instead.
+// The tag is "v" + the version in product.json. Files in a release that is already public are
+// never replaced, so people who downloaded it keep getting the same file: change the version instead.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -21,14 +21,24 @@ if (!zips.some((zip) => zip.includes('win32')))
 if (!zips.every((zip) => files.includes(zip + '.sha256'))) throw new Error('A ZIP is missing its checksum file.');
 
 const gh = (...args) => execFileSync('gh', args, { stdio: 'inherit' });
-const existing = spawnSync('gh', ['release', 'view', tag, '--json', 'isDraft'], { encoding: 'utf8' });
-if (existing.status === 0 && !JSON.parse(existing.stdout).isDraft) {
-  console.log(`${tag} is already public and was left as it is. To ship this build, change "version" in product.json.`);
+const existing = spawnSync('gh', ['release', 'view', tag, '--json', 'isDraft,assets'], { encoding: 'utf8' });
+const release = existing.status === 0 ? JSON.parse(existing.stdout) : null;
+if (release && !release.isDraft) {
+  // Already public: files people may have downloaded are never replaced. An app that was missing
+  // (say the Mac machines were unavailable last time) is added.
+  const have = new Set(release.assets.map((asset) => asset.name));
+  const missing = files.filter((file) => !have.has(file.split(/[\\/]/).at(-1)));
+  if (missing.length) gh('release', 'upload', tag, ...missing);
+  console.log(
+    missing.length
+      ? `${tag} was already public. Added what it was missing: ${missing.map((file) => file.split(/[\\/]/).at(-1)).join(', ')}`
+      : `${tag} is already public and was left as it is. To ship this build, change "version" in product.json.`,
+  );
   process.exit(0);
 }
 const title = `${product.name} ${product.version} (test build)`;
 const notes = resolve('docs/release/RELEASE-NOTES.md');
-if (existing.status !== 0)
+if (!release)
   gh(
     'release',
     'create',
