@@ -35,8 +35,9 @@ was fixed, what was checked, and what is still unconfirmed on a real Mac or PC.
   evidence moved to `docs/archive/`.
 
 **Checked** (cloud, Linux, pretend windows): `npm run verify -- --app`; also `dev-app`,
-`conversation-ui`, `chrome-bridge`, `file-visits`, `quality-profile`, a 120-second `soak` and
-`living-soak` with seed 7.
+`conversation-ui`, `chrome-bridge`, `file-visits`, `quality-profile` and a 120-second `soak`.
+The Windows ZIP was built once in the cloud and its contents inspected (it cannot be started there).
+The two-hour simulated `living-soak` was not finished locally; GitHub runs it before publishing.
 
 **Not checked**: anything on a real Mac or Windows desktop for this version, and Local AI with a
 real Ollama model (tests use a pretend local server).
