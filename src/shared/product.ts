@@ -1,4 +1,4 @@
-import { mergeConfig, type PetConfig } from '../core/config';
+import { mergeConfig, PROVIDERS, type PetConfig } from '../core/config';
 import metadata from '../../product.json';
 
 declare const __COMMERCIAL__: boolean;
@@ -17,10 +17,18 @@ export function productDefaults(base: PetConfig): PetConfig {
   });
 }
 
-/** Applied at the shell boundary, including old configs and hand-edited patches. */
+/**
+ * Applied at the shell boundary, including old configs and hand-edited patches.
+ * The packaged app never talks to the internet. The only AI it may use is Ollama running on this
+ * same computer (an opt-in setting), so the service is always 'ollama', and an AI mode saved for a
+ * cloud service falls back to built-in dialogue.
+ */
 export function offlineEdition(config: PetConfig): PetConfig {
+  const local = config.provider === 'ollama';
   return mergeConfig(config, {
-    mind: 'offline', puppet: false, fileHomes: false, browserPlay: false,
+    mind: local ? config.mind : 'offline',
+    ...(local ? {} : { provider: 'ollama', model: PROVIDERS.ollama.model }),
+    puppet: false, fileHomes: false, browserPlay: false,
     closeWindows: false, debugCombat: false,
   });
 }

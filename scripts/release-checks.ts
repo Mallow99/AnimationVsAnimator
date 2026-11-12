@@ -62,7 +62,11 @@ try {
   assert.equal(offline.name, 'My friend'); assert.equal(offline.look.color, '#aa7733');
   assert.equal(offline.mind, 'offline'); assert.equal(offline.fileHomes, false); assert.equal(offline.browserPlay, false); assert.equal(offline.closeWindows, false);
   assert.equal(custom.mind, 'full');
-  console.log('PASS commercial defaults are quiet; imported and patched configs stay offline without changing identity or appearance');
+  assert.equal(offline.provider, 'ollama'); assert.equal(quiet.mind, 'offline');
+  const local = offlineEdition(mergeConfig(offlineEdition(quiet), { mind: 'chat', model: 'my-model:7b', puppet: true }));
+  assert.equal(local.mind, 'chat'); assert.equal(local.model, 'my-model:7b'); assert.equal(local.puppet, false);
+  assert.equal(offlineEdition(mergeConfig(local, { provider: 'groq' })).mind, 'offline');
+  console.log('PASS commercial defaults are quiet; imported and patched configs can never reach a cloud AI (only opt-in Ollama on this computer), without changing identity or appearance');
 
   for (let r=0;r<=255;r+=17) for (let g=0;g<=255;g+=17) for (let b=0;b<=255;b+=17) {
     const hex='#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');

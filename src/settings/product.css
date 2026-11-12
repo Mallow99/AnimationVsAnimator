@@ -207,5 +207,9 @@ footer { padding: 8px 0 20px; text-align: center; color: var(--muted); font-size
 @media (prefers-reduced-motion: no-preference) {
   button { transition: border-color .14s, box-shadow .14s, background-color .14s }
 }
+/* Grid cells refuse to shrink below their longest word unless told to: without this a long status or
+   button label pushes the whole card a few pixels past a narrow window. */
+main > *, #activityList > * { min-width: 0 }
+#activityList button, .status { overflow-wrap: anywhere }
 @media (max-width: 440px) { .slider-grid, #activityList { grid-template-columns: 1fr } }
 @media (max-width: 400px) { header, main { padding-left: 15px; padding-right: 15px } h1 { font-size: 23px } .card { padding: 15px } }

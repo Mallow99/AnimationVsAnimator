@@ -30,6 +30,8 @@ if (COMMERCIAL) {
   app.setAboutPanelOptions({ applicationName: PRODUCT_NAME, applicationVersion: PRODUCT_VERSION });
 }
 const editionConfig = (c: PetConfig) => COMMERCIAL ? offlineEdition(c) : c;
+// Deliberately not passed through editionConfig: a save is merged onto these first, so an AI mode
+// saved without naming Ollama (an old or development save) is seen as a cloud one and switched off.
 const editionDefaults = COMMERCIAL ? productDefaults(DEFAULT_CONFIG) : DEFAULT_CONFIG;
 const saveIssues = new Map<string, string>();
 const recoveredSaves = new Set<string>();
@@ -95,7 +97,9 @@ const configPath = (id: number) => path.join(app.getPath('userData'), id ? `pet-
 const configs: PetConfig[] = Array.from({length:5},(_,id)=>companionConfig(editionDefaults,id));
 let config = configs[0];
 /** Settings that are about the app (or both of them), kept the same in both stick figures. */
-const SHARED: (keyof PetConfig)[] = ['windows', 'moveWindows', 'screenAware', 'knockCursor', 'mischief', 'fightMode', 'friend', 'provider', 'model', 'sfx', 'volume', 'figureCount', 'debugCombat', 'closeWindows', 'browserPlay', 'fileHomes', 'showBag', 'showTrash', 'inkLifetime', 'consoleRequired', 'dailyRhythm', 'spawnOrder'];
+const SHARED: (keyof PetConfig)[] = ['windows', 'moveWindows', 'screenAware', 'knockCursor', 'mischief', 'fightMode', 'friend', 'provider', 'model', 'sfx', 'volume', 'figureCount', 'debugCombat', 'closeWindows', 'browserPlay', 'fileHomes', 'showBag', 'showTrash', 'inkLifetime', 'consoleRequired', 'dailyRhythm', 'spawnOrder',
+  // The packaged app has one Local AI switch for everyone; the development build keeps a mind mode per figure.
+  ...(COMMERCIAL ? ['mind' as const] : [])];
 let saveTimer: NodeJS.Timeout | undefined;
 const dirty = new Set<number>();
 
@@ -110,7 +114,7 @@ function saveConfig() {
 function loadConfig() {
   configs.splice(0, configs.length, ...availableProfileIds(productState.unlockedCharacters).map(id=>companionConfig(editionDefaults,id)));
   try { const text = readSave(configPath(0), 'read:config:0'); configs[0] = editionConfig(mergeConfig(editionDefaults, text ? JSON.parse(text) : null)); }
-  catch { configs[0] = structuredClone(editionDefaults); }
+  catch { configs[0] = editionConfig(structuredClone(editionDefaults)); }
   // The second one: their own file, or (first time) made from the first one's, with their own name and color.
   const second = mergeConfig(editionDefaults, { ...friendConfig(configs[0]), name: configs[0].friend.name, look: { ...configs[0].look, color: configs[0].friend.color } });
   try { const text = readSave(configPath(1), 'read:config:1'); configs[1] = editionConfig(mergeConfig(second, text ? JSON.parse(text) : null)); }
@@ -539,9 +543,14 @@ ipcMain.on('session:set', (_e, patch: Partial<SessionState>) => setSession({
 }));
 ipcMain.on('save:retry', () => { saveConfig(); if (pendingProductState) saveProductState(pendingProductState); win?.webContents.send('save:request', 0); });
 // Their AI brains: the overlay asks, main calls the AI service with the saved key (one key for both).
-ipcMain.handle('brain:ask', (_e, id: unknown, req: BrainRequest) => { if (COMMERCIAL) return { ok: false, error: 'This edition uses built-in offline dialogue.' }; const c = configs[petIndex(id)]; return llm.ask(c.provider, c.model, req); });
+// The packaged app only ever asks Ollama on this computer, and only when Local AI is switched on.
+ipcMain.handle('brain:ask', (_e, id: unknown, req: BrainRequest) => {
+  const c = configs[petIndex(id)];
+  if (COMMERCIAL && (c.provider !== 'ollama' || c.mind === 'offline')) return { ok: false, error: 'Local AI is off, so built-in dialogue answers.' };
+  return llm.ask(c.provider, c.model, req);
+});
 ipcMain.handle('brain:keyStatus', (_e, provider: ProviderId) => COMMERCIAL ? { provider: config.provider, saved: false, hint: 'Offline edition' } : llm.keyStatus(Object.hasOwn(PROVIDERS, provider) ? provider : config.provider));
-ipcMain.handle('brain:models', () => COMMERCIAL ? { ok: false, error: 'This edition uses built-in offline dialogue.' } : llm.listModels(config.provider));
+ipcMain.handle('brain:models', () => llm.listModels(COMMERCIAL ? 'ollama' : config.provider));
 ipcMain.on('brain:setKey', (_e, key: string) => {
   if (COMMERCIAL) return;
   llm.setKey(config.provider, String(key ?? ''));

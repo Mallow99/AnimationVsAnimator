@@ -1,10 +1,12 @@
 // The AI brain's connection to the outside world. Runs in the main process only,
 // so API keys never reach the pet's page or the settings page.
 //
-// All the supported services (Google Gemini, Groq, OpenRouter) speak the same
-// "OpenAI-compatible chat completions" format, so one plain web request covers
-// them all — no extra libraries. Each service gets its own key, saved in the app's
-// data folder and encrypted with the operating system's keychain when available.
+// All the supported services (Ollama on this computer, Google Gemini, Groq, OpenRouter)
+// speak the same "OpenAI-compatible chat completions" format, so one plain web request
+// covers them all — no extra libraries. Ollama needs no key and never touches the key
+// file. Each cloud service gets its own key, saved in the app's data folder and
+// encrypted with the operating system's keychain when available. The packaged app
+// only ever uses Ollama (see offlineEdition in src/shared/product.ts).
 
 import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
@@ -76,7 +78,7 @@ export async function ask(provider: ProviderId, model: string, req: BrainRequest
       max_tokens: 3000, // room for a made-up move (a list of poses) plus any thinking the model does
       ...(json ? { response_format: { type: 'json_object' } } : {}),
     }),
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(local ? 120000 : 45000), // a local model may need to load into memory first
   });
   try {
     const tag = `${provider}:${model}`;

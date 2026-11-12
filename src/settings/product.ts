@@ -5,7 +5,7 @@ import { ARNOLD_ID, MAX_ACTIVE_FIGURES } from '../core/profiles';
 import { type ActivitySnapshot, type ActivityRequestResult } from '../shared/activity';
 import { PRODUCT_NAME, type RedeemResult, type SaveHealth, type SaveResult, type SessionState } from '../shared/product';
 
-interface Stats { activity?: ActivitySnapshot; name: string; label: string; doing: string; windows: number; moveNote?: string; brain: { log: Parameters<typeof exportConversation>[0] } }
+interface Stats { activity?: ActivitySnapshot; name: string; label: string; doing: string; windows: number; moveNote?: string; brain: { status?: string; log: Parameters<typeof exportConversation>[0] } }
 interface Shell {
   quit(): void;
   getConfigs(): Promise<PetConfig[]>;
@@ -28,6 +28,7 @@ interface Shell {
   onSession(cb: (state: SessionState) => void): void;
   openItemsFolder(): void;
   reloadItems(): void;
+  listModels(): Promise<{ ok: true; models: string[] } | { ok: false; error: string }>;
   openData(): void;
   exportBackup(): Promise<SaveResult>;
 }
@@ -91,6 +92,7 @@ function render() {
   const enabled = active.includes(selected);
   for (const id of ['chatText', 'sendChat', 'exportChat', 'newChat', 'stopActivity']) $<HTMLButtonElement>(id).disabled = !enabled;
   $('confirmReset').hidden = true;
+  renderAi();
   renderStats();
 }
 function renderStats() {
@@ -98,6 +100,7 @@ function renderStats() {
   $('liveStatus').textContent = activeIds().includes(selected) ? s ? `${c.name} · ${s.activity?.current.label ?? s.label}` : 'Getting settled…' : 'Resting away';
   transcript((s?.brain.log ?? []).filter(line => line.who !== "note"), c.name, String(selected));
   updateActivities();
+  renderAiStatus();
   $('windowStatus').textContent = !c.windows ? 'Optional. Buddies currently play on the desktop floor.' : s?.windows ? `${s.windows} window surfaces detected.` : 'Waiting for accessible windows. On Mac, check Accessibility permission for Mallow Desk Buddies. The desktop floor stays available.';
 }
 shell.onStats(({ id, stats: value }) => { stats.set(id, value); if (id === selected) renderStats(); });
@@ -159,6 +162,40 @@ function updateFineTune() {
     if(values){if(document.activeElement!==input)input.value=String(values[key]);$<HTMLOutputElement>(input.id+'-value').value=formatRange(input.dataset.path!,values[key]);}
   }
 }
+// Local AI (optional): Ollama on this computer. One switch and one model for every buddy
+// (the shell copies both to all of them), so configs[0] is the one to read.
+const aiMode = $<HTMLSelectElement>('aiMode'), aiModel = $<HTMLSelectElement>('aiModel');
+let installedModels: string[] = [], aiNote = '';
+function renderAi() {
+  const c = configs[0]; if (!c) return;
+  if (document.activeElement !== aiMode) aiMode.value = c.mind;
+  const names = [...new Set([c.model, ...installedModels])];
+  if (document.activeElement !== aiModel) { aiModel.replaceChildren(...names.map(name => new Option(name, name))); aiModel.value = c.model; }
+  aiModel.disabled = $<HTMLButtonElement>('findModels').disabled = c.mind === 'offline';
+  renderAiStatus();
+}
+function renderAiStatus() {
+  const c = configs[0]; if (!c) return;
+  const trouble = stats.get(selected)?.brain.status;
+  $('aiStatus').textContent = c.mind === 'offline' ? 'Off. Buddies use built-in dialogue.'
+    : aiNote || (trouble && trouble !== 'thinking…' ? `Last try: ${trouble}` : `On, using ${c.model}. Double-click a buddy to talk.`);
+}
+async function findModels() {
+  aiNote = 'Looking for Ollama on this computer…'; renderAiStatus();
+  let result: Awaited<ReturnType<Shell['listModels']>>;
+  try { result = await shell.listModels(); } catch { result = { ok: false, error: 'Could not look for models. Try again.' }; }
+  if (!result.ok) aiNote = result.error;
+  else if (!result.models.length) aiNote = 'Ollama is running but has no models yet. Run “ollama pull llama3.2:3b” in a terminal, then choose Find models again.';
+  else {
+    installedModels = result.models; aiNote = '';
+    // The saved model isn't installed here: use the first one that is.
+    if (!installedModels.includes(configs[0].model)) shell.setConfig({ model: installedModels[0] }, 0);
+  }
+  renderAi();
+}
+aiMode.onchange = () => { aiNote = ''; shell.setConfig({ mind: aiMode.value as PetConfig['mind'] }, 0); if (aiMode.value !== 'offline') void findModels(); };
+aiModel.onchange = () => { aiNote = ''; shell.setConfig({ model: aiModel.value }, 0); };
+$('findModels').onclick = () => void findModels();
 const chat = $<HTMLTextAreaElement>('chatText'), form = $<HTMLFormElement>('chatForm');
 conversationKeys(chat, form);
 form.onsubmit = event => { event.preventDefault(); if (chat.disabled || !chat.value.trim()) return; shell.command('hear:' + chat.value, selected); chat.value = ''; drafts.delete(selected); };

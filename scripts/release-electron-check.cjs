@@ -11,7 +11,13 @@ let listens = 0;
 const listen = http.Server.prototype.listen;
 http.Server.prototype.listen = function(...args) { listens++; return listen.apply(this, args); };
 const fetch = global.fetch;
-global.fetch = (...args) => { requests.push(String(args[0])); return Promise.reject(new Error('No network allowed in release QA')); };
+// Everything is refused and recorded, except a pretend Ollama on this computer while a test installs one.
+let ollama = null; const localCalls = [];
+global.fetch = (...args) => {
+  const url = String(args[0]);
+  if (ollama && url.startsWith('http://127.0.0.1:11434/v1/')) { localCalls.push({ url, options: args[1] ?? {} }); return ollama(url); }
+  requests.push(url); return Promise.reject(new Error('No network allowed in release QA'));
+};
 fs.writeFileSync(path.join(dir, 'pet.json'), JSON.stringify({ name: 'My little friend', mind: 'full', browserPlay: true, fileHomes: true, closeWindows: true, look: { color: '#596cb2' } }));
 app.on('web-contents-created', (_e, web) => {
   web.on('render-process-gone', (_e, details) => errors.push('renderer ' + details.reason));
@@ -123,8 +129,32 @@ app.whenReady().then(async () => {
   assert.deepEqual(await run('window.petShell.getSaveHealth()'), { issues: [] });
   console.log('PASS release: injected storage quota and disk-write failures are visible, acknowledged and recover after Retry');
 
-  await run('window.petShell.setConfig({mind:"full",browserPlay:true,fileHomes:true})');
-  await until(() => run('window.pet.config.mind==="offline"&&!window.pet.config.fileHomes&&!window.pet.config.browserPlay'), 'release scope enforcement');
+  // Optional Local AI: only Ollama on this computer, only once switched on, and never a cloud service.
+  const say = text => ui(`document.querySelector("#chatText").value=${JSON.stringify(text)};document.querySelector("#chatForm").requestSubmit()`);
+  const aiMode = mode => ui(`document.querySelector("#aiMode").value="${mode}";document.querySelector("#aiMode").dispatchEvent(new Event("change"))`);
+  assert(await ui('document.querySelector("#aiMode").value==="offline" && document.querySelector("#findModels").disabled'));
+  ollama = async url => new Response(JSON.stringify(url.endsWith('/models') ? { data: [{ id: 'zeta-local' }, { id: 'alpha-local' }] } : { choices: [{ message: { content: '{"say":"Answer from the local model.","plan":[]}' } }] }));
+  await aiMode('chat');
+  await until(() => run('window.pets.every(p=>p.config.mind==="chat"&&p.config.provider==="ollama"&&p.config.model==="alpha-local")'), 'Local AI on for every buddy, using an installed model');
+  await say('what do you think about clouds?');
+  await until(() => ui('document.querySelector("#chatLog").textContent.includes("Answer from the local model.")'), 'reply from the local model');
+  const asked = localCalls.find(call => call.url.endsWith('/chat/completions'));
+  assert(asked && !('Authorization' in asked.options.headers) && JSON.parse(asked.options.body).model === 'alpha-local');
+  ollama = async () => { throw new Error('connection refused'); };
+  const lines = await run('window.pet.brain.log.filter(l=>l.who!=="note").length');
+  await say('tell me about your day');
+  await until(() => ui('/Could not reach Ollama/.test(document.querySelector("#aiStatus").textContent)'), 'a stopped Ollama is explained');
+  await until(() => run(`window.pet.brain.log.filter(l=>l.who!=="note").length>${lines}+1`), 'built-in dialogue answers when Ollama is stopped');
+  await aiMode('offline');
+  await until(() => run('window.pets.every(p=>p.config.mind==="offline")'), 'Local AI off again');
+  const localBefore = localCalls.length;
+  await say('hello again'); await pause(600);
+  assert.equal(localCalls.length, localBefore, 'asked the local model while Local AI was off');
+  ollama = null;
+  console.log('PASS release: optional Local AI uses only loopback Ollama with no key, explains a stopped service, falls back to built-in dialogue, and stays silent when off');
+
+  await run('window.petShell.setConfig({provider:"groq",mind:"full",browserPlay:true,fileHomes:true})');
+  await until(() => run('window.pet.config.mind==="offline"&&window.pet.config.provider==="ollama"&&!window.pet.config.fileHomes&&!window.pet.config.browserPlay'), 'release scope enforcement');
   const oldCount = await run('window.pet.props.placed.length');
   await run('window.petShell.retrySaves()'); await pause(400);
   overlay.reload();
