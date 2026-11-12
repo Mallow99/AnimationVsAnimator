@@ -25,7 +25,20 @@ export interface Note {
 }
 
 /** Things he counts over his whole life. */
-export const TALLY_KEYS = ['thrown', 'poked', 'petted', 'smacked', 'grabbed', 'crashed', 'fellOff', 'talks', 'ripped', 'itemsTaken', 'cursorHits', 'windowsMoved'] as const;
+export const TALLY_KEYS = [
+  'thrown',
+  'poked',
+  'petted',
+  'smacked',
+  'grabbed',
+  'crashed',
+  'fellOff',
+  'talks',
+  'ripped',
+  'itemsTaken',
+  'cursorHits',
+  'windowsMoved',
+] as const;
 export type TallyKey = (typeof TALLY_KEYS)[number];
 
 /** Notes he writes the first time something happens, and again when it keeps happening. */
@@ -118,13 +131,21 @@ export class Memory {
 
   remove(id: number) {
     const i = this.notes.findIndex((x) => x.id === id);
-    if (i >= 0) { this.notes.splice(i, 1); this.changed(); }
+    if (i >= 0) {
+      this.notes.splice(i, 1);
+      this.changed();
+    }
   }
 
-  setSummary(text: string) { this.summary = clean(text, 1200); this.changed(); }
+  setSummary(text: string) {
+    this.summary = clean(text, 1200);
+    this.changed();
+  }
 
   clear() {
-    this.notes = []; this.summary = ''; this.sinceTidy = 0;
+    this.notes = [];
+    this.summary = '';
+    this.sinceTidy = 0;
     for (const k of TALLY_KEYS) this.tally[k] = 0;
     this.firstMet = Date.now();
     this.changed();
@@ -140,9 +161,11 @@ export class Memory {
 
   /** You came back after a long time away (real time). */
   sawYou() {
-    const now = Date.now(), away = now - this.lastSeen;
+    const now = Date.now(),
+      away = now - this.lastSeen;
     this.lastSeen = now;
-    if (away > 6 * 3600 * 1000) this.add(`you were gone for ${Math.round(away / 3600000)} hours. I waited.`, 'event', 'him', 1);
+    if (away > 6 * 3600 * 1000)
+      this.add(`you were gone for ${Math.round(away / 3600000)} hours. I waited.`, 'event', 'him', 1);
   }
 
   /**
@@ -152,10 +175,16 @@ export class Memory {
   recall(moment: 'grabbed' | 'petted' | 'greet' | 'poked' | 'smacked'): string | null {
     const t = this.tally;
     switch (moment) {
-      case 'grabbed': return t.thrown >= 2 ? pickOne(['no throwing this time', 'don\'t throw me again', 'I remember last time...']) : null;
-      case 'petted': return t.petted >= 25 ? pickOne(['you\'re good at this', 'my favorite thing']) : null;
-      case 'poked': return t.poked >= 60 ? pickOne(['you and the poking...', 'poke number ' + t.poked]) : null;
-      case 'smacked': return t.smacked >= 3 ? pickOne(['AGAIN?', 'you always do this']) : null;
+      case 'grabbed':
+        return t.thrown >= 2
+          ? pickOne(['no throwing this time', "don't throw me again", 'I remember last time...'])
+          : null;
+      case 'petted':
+        return t.petted >= 25 ? pickOne(["you're good at this", 'my favorite thing']) : null;
+      case 'poked':
+        return t.poked >= 60 ? pickOne(['you and the poking...', 'poke number ' + t.poked]) : null;
+      case 'smacked':
+        return t.smacked >= 3 ? pickOne(['AGAIN?', 'you always do this']) : null;
       case 'greet': {
         const you = [...this.notes].reverse().find((n) => n.kind === 'you' && n.by !== 'him');
         return you && Math.random() < 0.5 ? `hey! (I remember: ${you.text.slice(0, 40)})` : null;
@@ -167,26 +196,34 @@ export class Memory {
 
   /** What he remembers, for his AI prompt: the summary plus the newest notes. */
   forPrompt(maxNotes = 14) {
-    const notes = [...this.notes].sort((a, b) => b.at - a.at).slice(0, maxNotes).reverse();
+    const notes = [...this.notes]
+      .sort((a, b) => b.at - a.at)
+      .slice(0, maxNotes)
+      .reverse();
     const lines: string[] = [];
     if (this.summary) lines.push(`Summary: ${this.summary}`);
     for (const n of notes) lines.push(`- ${n.text}`);
-    const t = this.tally, facts = TALLY_KEYS.filter((k) => t[k] > 0).map((k) => `${k} ${t[k]}×`);
+    const t = this.tally,
+      facts = TALLY_KEYS.filter((k) => t[k] > 0).map((k) => `${k} ${t[k]}×`);
     if (facts.length) lines.push(`Counts (your whole life): ${facts.join(', ')}.`);
     lines.push(`You first met them ${ageText(Date.now() - this.firstMet)} ago.`);
     return lines.join('\n');
   }
 
   /** Time for a tidy-up? */
-  get needsTidy() { return this.sinceTidy >= TIDY_AFTER; }
+  get needsTidy() {
+    return this.sinceTidy >= TIDY_AFTER;
+  }
 
   /** The request that asks his AI brain to tidy his notes into a summary. */
   tidyRequest(name: string): BrainRequest {
-    const list = this.notes.map((n, i) => `${i + 1}. [${n.kind}${n.by === 'you' ? ', written by the person' : ''}] ${n.text}`).join('\n');
+    const list = this.notes
+      .map((n, i) => `${i + 1}. [${n.kind}${n.by === 'you' ? ', written by the person' : ''}] ${n.text}`)
+      .join('\n');
     return {
       system: [
         `You are tidying the memory notes of ${name}, a little stick figure who lives on someone's computer screen.`,
-        'Write a new summary in his voice (first person, casual, short lines like a kid\'s diary): what he knows about the person, what has happened, how he feels about things.',
+        "Write a new summary in his voice (first person, casual, short lines like a kid's diary): what he knows about the person, what has happened, how he feels about things.",
         'Merge the old summary with the notes. Keep anything important (names, likes, promises, big events, strong feelings). Drop small stuff that no longer matters. At most 8 short sentences.',
         'Then choose which notes are still worth keeping as separate notes (recent or important ones, and always the ones written by the person). The rest get folded into the summary.',
         'Answer with ONE JSON object and nothing else: {"summary": "...", "keep": [note numbers]}',
@@ -197,10 +234,15 @@ export class Memory {
 
   /** Use the AI's tidy-up. Returns false if the answer couldn't be read. */
   applyTidy(text: string): boolean {
-    const s = text.indexOf('{'), e = text.lastIndexOf('}');
+    const s = text.indexOf('{'),
+      e = text.lastIndexOf('}');
     if (s < 0 || e <= s) return false;
     let data: { summary?: unknown; keep?: unknown };
-    try { data = JSON.parse(text.slice(s, e + 1)); } catch { return false; }
+    try {
+      data = JSON.parse(text.slice(s, e + 1));
+    } catch {
+      return false;
+    }
     if (typeof data.summary !== 'string' || !data.summary.trim()) return false;
     const keep = new Set(Array.isArray(data.keep) ? data.keep.map(Number).filter(Number.isFinite) : []);
     this.notes = this.notes.filter((n, i) => keep.has(i + 1) || n.by === 'you');
@@ -213,18 +255,23 @@ export class Memory {
 
   /** Tidy-up without an AI: keep the important and recent notes, and sum up the counts in words. */
   tidyOffline() {
-    const t = this.tally, bits: string[] = [];
+    const t = this.tally,
+      bits: string[] = [];
     if (t.thrown) bits.push(`you've thrown me ${t.thrown} time${t.thrown > 1 ? 's' : ''}`);
     if (t.smacked) bits.push(`smacked me ${t.smacked}×`);
     if (t.petted) bits.push(`pet me ${t.petted}×`);
     if (t.poked) bits.push(`poked me ${t.poked}×`);
     if (t.ripped) bits.push(`I've lost a limb ${t.ripped}×`);
     const old = this.notes.filter((n) => Date.now() - n.at > 3600 * 1000 && n.weight < 2 && n.by !== 'you');
-    const gist = old.slice(-4).map((n) => n.text.replace(/\.$/, '')).join('; ');
+    const gist = old
+      .slice(-4)
+      .map((n) => n.text.replace(/\.$/, ''))
+      .join('; ');
     const lines = [`I met you ${ageText(Date.now() - this.firstMet)} ago.`];
     if (bits.length) lines.push(bits.join(', ') + '.');
     if (gist) lines.push(`stuff that happened: ${gist}.`);
-    if (this.summary && !this.summary.startsWith('I met you')) lines.unshift(this.summary.split('. ').slice(0, 3).join('. '));
+    if (this.summary && !this.summary.startsWith('I met you'))
+      lines.unshift(this.summary.split('. ').slice(0, 3).join('. '));
     this.summary = clean(lines.join(' '), 1200);
     this.notes = this.notes.filter((n) => !old.includes(n));
     this.sinceTidy = 0;
@@ -239,12 +286,23 @@ export class Memory {
     this.notes = this.notes.filter((x) => !drop.has(x));
   }
 
-  private changed(save = true) { if (save) this.onChange?.(); }
+  private changed(save = true) {
+    if (save) this.onChange?.();
+  }
 
   // ───────────── saving ─────────────
 
   save() {
-    return JSON.stringify({ v: 1, notes: this.notes, summary: this.summary, summarizedAt: this.summarizedAt, tally: this.tally, firstMet: this.firstMet, lastSeen: this.lastSeen, sinceTidy: this.sinceTidy });
+    return JSON.stringify({
+      v: 1,
+      notes: this.notes,
+      summary: this.summary,
+      summarizedAt: this.summarizedAt,
+      tally: this.tally,
+      firstMet: this.firstMet,
+      lastSeen: this.lastSeen,
+      sinceTidy: this.sinceTidy,
+    });
   }
 
   load(json: string | null) {
@@ -252,10 +310,17 @@ export class Memory {
     try {
       const d = JSON.parse(json);
       if (Array.isArray(d.notes)) {
-        this.notes = d.notes.filter((n: Note) => n && typeof n.text === 'string').map((n: Note) => ({
-          id: Number(n.id) || 0, text: clean(n.text), kind: (['you', 'event', 'opinion'].includes(n.kind) ? n.kind : 'event') as NoteKind,
-          at: Number(n.at) || Date.now(), by: (['him', 'ai', 'you'].includes(n.by) ? n.by : 'him') as Note['by'], weight: Math.min(3, Math.max(1, Number(n.weight) || 1)),
-        })).slice(-MAX_NOTES);
+        this.notes = d.notes
+          .filter((n: Note) => n && typeof n.text === 'string')
+          .map((n: Note) => ({
+            id: Number(n.id) || 0,
+            text: clean(n.text),
+            kind: (['you', 'event', 'opinion'].includes(n.kind) ? n.kind : 'event') as NoteKind,
+            at: Number(n.at) || Date.now(),
+            by: (['him', 'ai', 'you'].includes(n.by) ? n.by : 'him') as Note['by'],
+            weight: Math.min(3, Math.max(1, Number(n.weight) || 1)),
+          }))
+          .slice(-MAX_NOTES);
       }
       if (typeof d.summary === 'string') this.summary = clean(d.summary, 1200);
       for (const k of TALLY_KEYS) if (typeof d.tally?.[k] === 'number') this.tally[k] = d.tally[k];
@@ -265,11 +330,15 @@ export class Memory {
       if (typeof d.sinceTidy === 'number') this.sinceTidy = d.sinceTidy;
       this.nextId = Math.max(0, ...this.notes.map((n) => n.id)) + 1;
       for (const n of this.notes) if (!n.id) n.id = this.nextId++;
-    } catch { /* a broken file: start fresh */ }
+    } catch {
+      /* a broken file: start fresh */
+    }
   }
 }
 
-function pickOne<T>(a: T[]) { return a[Math.floor(Math.random() * a.length)]; }
+function pickOne<T>(a: T[]) {
+  return a[Math.floor(Math.random() * a.length)];
+}
 
 /** "3 days", "2 hours", "a few minutes". */
 export function ageText(ms: number) {

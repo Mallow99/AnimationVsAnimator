@@ -10,10 +10,21 @@ export const LEGACY_DATA_NAME = metadata.legacyDataName;
 
 export function productDefaults(base: PetConfig): PetConfig {
   return mergeConfig(base, {
-    mind: 'offline', puppet: false, windows: false, sound: false, sfx: false,
-    mischief: false, knockCursor: false, moveWindows: false, screenAware: false,
-    fileHomes: false, browserPlay: false, closeWindows: false, debugCombat: false,
-    showBag: true, volume: 0.35,
+    mind: 'offline',
+    puppet: false,
+    windows: false,
+    sound: false,
+    sfx: false,
+    mischief: false,
+    knockCursor: false,
+    moveWindows: false,
+    screenAware: false,
+    fileHomes: false,
+    browserPlay: false,
+    closeWindows: false,
+    debugCombat: false,
+    showBag: true,
+    volume: 0.35,
   });
 }
 
@@ -28,14 +39,30 @@ export function offlineEdition(config: PetConfig): PetConfig {
   return mergeConfig(config, {
     mind: local ? config.mind : 'offline',
     ...(local ? {} : { provider: 'ollama', model: PROVIDERS.ollama.model }),
-    puppet: false, fileHomes: false, browserPlay: false,
-    closeWindows: false, debugCombat: false,
+    puppet: false,
+    fileHomes: false,
+    browserPlay: false,
+    closeWindows: false,
+    debugCombat: false,
   });
 }
 
-export interface SaveIssue { key: string; message: string }
-export interface SaveHealth { issues: SaveIssue[] }
+export interface SaveIssue {
+  key: string;
+  message: string;
+}
+export interface SaveHealth {
+  issues: SaveIssue[];
+}
 export type SaveResult = { ok: true } | { ok: false; message: string };
-export interface ProductState { introDone: boolean; sceneReady: boolean; unlockedCharacters?: string[] }
-export type RedeemResult = { ok: true; alreadyUnlocked: boolean; characterId: number; configs: PetConfig[] } | { ok: false; message: string };
-export interface SessionState { paused: boolean; hidden: boolean }
+export interface ProductState {
+  introDone: boolean;
+  sceneReady: boolean;
+  unlockedCharacters?: string[];
+}
+export type RedeemResult =
+  { ok: true; alreadyUnlocked: boolean; characterId: number; configs: PetConfig[] } | { ok: false; message: string };
+export interface SessionState {
+  paused: boolean;
+  hidden: boolean;
+}

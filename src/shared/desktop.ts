@@ -1,5 +1,4 @@
-export type DesktopAction =
-  'closetab' | 'closewindow' | 'pluck' | 'restorepage' | 'folder' | 'file';
+export type DesktopAction = 'closetab' | 'closewindow' | 'pluck' | 'restorepage' | 'folder' | 'file';
 export interface DesktopResult {
   ok: boolean;
   message: string;

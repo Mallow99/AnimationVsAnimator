@@ -55,13 +55,7 @@ export function modelGrip(model: PropModel, name: string, pose: ModelPose): V3 {
   return modelPoint(grip, pose);
 }
 /** A hand holds an exact local grip, so the model follows the real hand without floating. */
-export function poseAtGrip(
-  model: PropModel,
-  name: string,
-  hand: V3,
-  axes: ModelAxes,
-  scale: number,
-): ModelPose {
+export function poseAtGrip(model: PropModel, name: string, hand: V3, axes: ModelAxes, scale: number): ModelPose {
   const grip = model.grips[name];
   if (!grip) throw new Error(`Missing model grip: ${name}`);
   const v = modelVector(grip, axes);
@@ -75,8 +69,7 @@ export function modelVertices(model: PropModel, pose: ModelPose): V3[] {
   let vertices = verticesByModel.get(model);
   if (!vertices) {
     const unique = new Map<string, V3>();
-    for (const face of model.faces)
-      for (const p of face.points) unique.set(`${p.x}:${p.y}:${p.z}`, p);
+    for (const face of model.faces) for (const p of face.points) unique.set(`${p.x}:${p.y}:${p.z}`, p);
     vertices = [...unique.values()];
     verticesByModel.set(model, vertices);
   }
@@ -105,15 +98,26 @@ function paintFace(g: Ctx2D, face: ProjectedFace) {
   g.beginPath();
   face.points.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
   g.closePath();
-  g.fillStyle = shade(
-    face.color,
-    -0.18 * (1 - Math.max(0, dot3(face.normal, { x: -0.25, y: -0.45, z: 0.857321 }))),
-  );
+  g.fillStyle = shade(face.color, -0.18 * (1 - Math.max(0, dot3(face.normal, { x: -0.25, y: -0.45, z: 0.857321 }))));
   g.fill();
-  const material=face.surface==='cover'||face.surface==='spine'?'leather':face.surface.startsWith('page')||face.surface==='turning-page'?'paper':undefined;
-  if(material && face.points.length===4){
-    const [a,b,,d]=face.points,w=Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z),h=Math.hypot(d.x-a.x,d.y-a.y,d.z-a.z);
-    if(w>.01 && h>.01){g.save();g.clip();g.transform((b.x-a.x)/w,(b.y-a.y)/w,(d.x-a.x)/h,(d.y-a.y)/h,a.x,a.y);paintMaterial(g,material,0,0,w,h);if(face.surface==='page-surface'||face.surface==='turning-page')paintPageText(g,w,h);g.restore();}
+  const material =
+    face.surface === 'cover' || face.surface === 'spine'
+      ? 'leather'
+      : face.surface.startsWith('page') || face.surface === 'turning-page'
+        ? 'paper'
+        : undefined;
+  if (material && face.points.length === 4) {
+    const [a, b, , d] = face.points,
+      w = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z),
+      h = Math.hypot(d.x - a.x, d.y - a.y, d.z - a.z);
+    if (w > 0.01 && h > 0.01) {
+      g.save();
+      g.clip();
+      g.transform((b.x - a.x) / w, (b.y - a.y) / w, (d.x - a.x) / h, (d.y - a.y) / h, a.x, a.y);
+      paintMaterial(g, material, 0, 0, w, h);
+      if (face.surface === 'page-surface' || face.surface === 'turning-page') paintPageText(g, w, h);
+      g.restore();
+    }
   }
 }
 export function modelParts(model: PropModel, pose: ModelPose, alpha = 1): DepthPart[] {

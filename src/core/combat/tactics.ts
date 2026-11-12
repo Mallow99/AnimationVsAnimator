@@ -2,8 +2,7 @@ import type { FighterView } from '../peer';
 import type { Personality } from '../config';
 import type { MoveName } from '../skills/swordplay';
 
-export type CombatGoal =
-  'recover' | 'punish' | 'break-guard' | 'approach' | 'probe' | 'pressure';
+export type CombatGoal = 'recover' | 'punish' | 'break-guard' | 'approach' | 'probe' | 'pressure';
 export interface Exchange {
   goal: CombatGoal;
   moves: MoveName[];
@@ -17,8 +16,7 @@ export function chooseExchange(
   personality: Personality = 'inventive',
   last: MoveName | null = null,
 ): Exchange {
-  if (ownPoise < 0.22 && foe.stagger <= 0)
-    return { goal: 'recover', moves: [] };
+  if (ownPoise < 0.22 && foe.stagger <= 0) return { goal: 'recover', moves: [] };
   if (foe.stagger > 0)
     return {
       goal: 'punish',
@@ -31,25 +29,17 @@ export function chooseExchange(
     };
   if (foe.poise < 0.38 || foe.block) {
     const opener: MoveName =
-      foe.block === 'high'
-        ? 'rising'
-        : foe.block === 'low'
-          ? 'heavy'
-          : last === 'heavy'
-            ? 'flurry'
-            : 'heavy';
+      foe.block === 'high' ? 'rising' : foe.block === 'low' ? 'heavy' : last === 'heavy' ? 'flurry' : 'heavy';
     return {
       goal: 'break-guard',
       moves: [opener, opener === 'heavy' ? 'thrust' : 'heavy'],
     };
   }
-  if (foe.move && !foe.move.windup && foe.hitstun <= 0)
-    return { goal: 'punish', moves: ['thrust', 'cut'] };
+  if (foe.move && !foe.move.windup && foe.hitstun <= 0) return { goal: 'punish', moves: ['thrust', 'cut'] };
   if (personality === 'competitive')
     return {
       goal: 'pressure',
-      moves:
-        last === 'flurry' ? ['cut', 'heavy'] : ['flurry', 'thrust', 'heavy'],
+      moves: last === 'flurry' ? ['cut', 'heavy'] : ['flurry', 'thrust', 'heavy'],
     };
   if (personality === 'gentle')
     return {
@@ -58,9 +48,6 @@ export function chooseExchange(
     };
   return {
     goal: 'probe',
-    moves:
-      last === 'cut'
-        ? ['feint', 'thrust', 'rising']
-        : ['cut', 'rising', 'heavy'],
+    moves: last === 'cut' ? ['feint', 'thrust', 'rising'] : ['cut', 'rising', 'heavy'],
   };
 }

@@ -1,6 +1,6 @@
 /** Small plain-data snapshots shared by the overlay, shell and customer controls. */
 export const QUICK_ACTIVITY_IDS = ['dance', 'read', 'catch', 'watchtv', 'doodle', 'handheld', 'pong', 'duel'] as const;
-export type QuickActivityId = typeof QUICK_ACTIVITY_IDS[number];
+export type QuickActivityId = (typeof QUICK_ACTIVITY_IDS)[number];
 
 export interface QuickActivityChoice {
   id: QuickActivityId;

@@ -13,7 +13,9 @@ export function audioCtx(): AudioContext | null {
     audio ??= new AudioContext();
     if (audio.state === 'suspended') audio.resume();
     return audio;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function noise(a: AudioContext) {
@@ -25,8 +27,19 @@ function noise(a: AudioContext) {
 }
 
 /** A tone: type, start/end pitch (Hz), length (s), loudness, delay (s). */
-function tone(a: AudioContext, out: AudioNode, type: OscillatorType, f0: number, f1: number, len: number, vol: number, delay = 0) {
-  const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+function tone(
+  a: AudioContext,
+  out: AudioNode,
+  type: OscillatorType,
+  f0: number,
+  f1: number,
+  len: number,
+  vol: number,
+  delay = 0,
+) {
+  const t = a.currentTime + delay,
+    o = a.createOscillator(),
+    g = a.createGain();
   o.type = type;
   o.frequency.setValueAtTime(f0, t);
   o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + len);
@@ -34,25 +47,50 @@ function tone(a: AudioContext, out: AudioNode, type: OscillatorType, f0: number,
   g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
   g.gain.exponentialRampToValueAtTime(0.0001, t + len);
   o.connect(g).connect(out);
-  o.start(t); o.stop(t + len + 0.02);
+  o.start(t);
+  o.stop(t + len + 0.02);
 }
 
 /** A burst of noise through a filter whose frequency sweeps from f0 to f1. */
-function hiss(a: AudioContext, out: AudioNode, filter: BiquadFilterType, f0: number, f1: number, len: number, vol: number, delay = 0, q = 1) {
-  const t = a.currentTime + delay, src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+function hiss(
+  a: AudioContext,
+  out: AudioNode,
+  filter: BiquadFilterType,
+  f0: number,
+  f1: number,
+  len: number,
+  vol: number,
+  delay = 0,
+  q = 1,
+) {
+  const t = a.currentTime + delay,
+    src = a.createBufferSource(),
+    f = a.createBiquadFilter(),
+    g = a.createGain();
   src.buffer = noise(a);
-  f.type = filter; f.Q.value = q;
+  f.type = filter;
+  f.Q.value = q;
   f.frequency.setValueAtTime(f0, t);
   f.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + len);
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
   g.gain.exponentialRampToValueAtTime(0.0001, t + len);
   src.connect(f).connect(g).connect(out);
-  src.start(t, Math.random() * 0.3); src.stop(t + len + 0.02);
+  src.start(t, Math.random() * 0.3);
+  src.stop(t + len + 0.02);
 }
 
 /** Minimum seconds between two of the same sound (so a pile of events doesn't turn into a buzz). */
-const GAP: Record<string, number> = { step: 0.07, scribble: 0.06, thud: 0.08, kick: 0.08, bonk: 0.1, poke: 0.05, punch: 0.06, knock: 0.08 };
+const GAP: Record<string, number> = {
+  step: 0.07,
+  scribble: 0.06,
+  thud: 0.08,
+  kick: 0.08,
+  bonk: 0.1,
+  poke: 0.05,
+  punch: 0.06,
+  knock: 0.08,
+};
 
 /**
  * Play a sound effect. `strength` 0..1 scales it (a small landing vs a big one),
@@ -94,7 +132,10 @@ export function playSfx(name: string, strength = 1, volume = 0.6, pitch = 1) {
       tone(a, out, 'square', 900, 900, 0.03, 0.06);
       tone(a, out, 'square', 1300, 1300, 0.04, 0.06, 0.06);
       break;
-    case 'shot': hiss(a,out,'highpass',2400,600,0.08,s*0.55); tone(a,out,'square',160,50,0.1,s*0.25); break;
+    case 'shot':
+      hiss(a, out, 'highpass', 2400, 600, 0.08, s * 0.55);
+      tone(a, out, 'square', 160, 50, 0.1, s * 0.25);
+      break;
     case 'whoosh': // sword swing
       hiss(a, out, 'bandpass', 500, 2600, 0.2, 0.22, 0, 2.5);
       break;
@@ -164,7 +205,9 @@ export function playSfx(name: string, strength = 1, volume = 0.6, pitch = 1) {
 export function playBlip(pitch: number, volume = 0.6) {
   const a = audioCtx();
   if (!a || volume <= 0) return;
-  const t = a.currentTime, osc = a.createOscillator(), gain = a.createGain();
+  const t = a.currentTime,
+    osc = a.createOscillator(),
+    gain = a.createGain();
   osc.type = 'square';
   osc.frequency.setValueAtTime(pitch, t);
   gain.gain.setValueAtTime(0.0001, t);

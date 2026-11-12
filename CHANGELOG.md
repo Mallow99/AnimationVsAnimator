@@ -1,7 +1,45 @@
 # Changelog
 
-Every working commit records concrete additions, behavior changes, repairs, verification and
-remaining issues here. Entries describe shipped behavior; unverified hardware behavior stays explicit.
+Newest first. One short entry per piece of work: what changed for the person using the app, what
+was fixed, what was checked, and what is still unconfirmed on a real Mac or PC.
+
+## 2026-11-12 — 1.0.0-rc.5: Local AI option, project cleanup
+
+**New**
+
+- Packaged edition: Settings → **Local AI (optional)**. Buddies can answer with a model from Ollama
+  running on the same computer. Off by default, one switch and one model for all buddies, no key,
+  nothing sent over the internet, no model downloads. If Ollama is closed they use built-in dialogue
+  and the Settings card says what went wrong. Cloud AI remains impossible in this edition.
+
+**Fixed**
+
+- Packaged Settings window: a long status line or activity label made the page 2 px wider than a
+  380 px window.
+- Packaged Settings window: its title changed to "Stickmen — Settings" after any setting changed.
+
+**Cleanup (no change to how the app behaves)**
+
+- All code auto-formatted with Prettier (`npm run format`). Proven safe by comparing every source
+  file after stripping formatting and comments: identical before and after.
+- Removed unused imports, variables and one unused field; `npm run typecheck` now rejects new ones.
+- About 35 npm commands replaced by `npm run check <name>` (run `npm run check` for the list),
+  `npm run verify` and `npm run package <win32|darwin>`. Test files moved to `scripts/checks/`.
+- Removed the old development-edition Windows packager (`package:win`, `docs/WINDOWS.md`) and the
+  release helper scripts made obsolete by the new workflow.
+- GitHub: one workflow, `Build and test the apps`. On `main` it runs every check, two long soaks,
+  builds both apps on real Windows and Mac machines, starts them, and publishes a test release when
+  the version in `product.json` is not public yet.
+- Documents: new `AGENTS.md` (step-by-step working instructions), short `CLAUDE.md` and
+  `docs/HANDOFF.md`. Old plans, the previous handoff diary, the original brief and saved test
+  evidence moved to `docs/archive/`.
+
+**Checked** (cloud, Linux, pretend windows): `npm run verify -- --app`; also `dev-app`,
+`conversation-ui`, `chrome-bridge`, `file-visits`, `quality-profile`, a 120-second `soak` and
+`living-soak` with seed 7.
+
+**Not checked**: anything on a real Mac or Windows desktop for this version, and Local AI with a
+real Ollama model (tests use a pretend local server).
 
 ## 2026-10-30 — verify public downloads and completed main merge
 

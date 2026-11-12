@@ -1,6 +1,5 @@
 import { bookModel } from '../core/book-model';
 import {
-  IDENTITY_AXES,
   modelBox,
   modelGrip,
   projectModel,

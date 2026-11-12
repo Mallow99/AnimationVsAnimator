@@ -13,8 +13,7 @@ async function bridge(route, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await response.json();
-  if (!response.ok)
-    throw new Error(data.error ?? 'The desktop bridge refused the action.');
+  if (!response.ok) throw new Error(data.error ?? 'The desktop bridge refused the action.');
   return data;
 }
 async function active() {
@@ -23,8 +22,7 @@ async function active() {
   return tab;
 }
 async function ensurePage(tab) {
-  if (!/^https?:\/\//.test(tab.url ?? ''))
-    throw new Error('Chrome protects this page. Use a regular website.');
+  if (!/^https?:\/\//.test(tab.url ?? '')) throw new Error('Chrome protects this page. Use a regular website.');
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     files: ['content.js'],
@@ -39,10 +37,7 @@ async function cutout(tab, command) {
     active: true,
     windowId: tab.windowId,
   });
-  if (front?.id !== tab.id)
-    throw new Error(
-      'Bring the connected tab to the front to take a screenshot.',
-    );
+  if (front?.id !== tab.id) throw new Error('Bring the connected tab to the front to take a screenshot.');
   const data = await chrome.tabs.captureVisibleTab(tab.windowId, {
     format: 'png',
   });
@@ -63,31 +58,17 @@ async function cutout(tab, command) {
   )
     throw new Error('Scroll so the selected element is fully visible.');
   const shrink = Math.min(1, 640 / width, 440 / height);
-  const canvas = new OffscreenCanvas(
-    Math.round(width * shrink),
-    Math.round(height * shrink),
-  );
+  const canvas = new OffscreenCanvas(Math.round(width * shrink), Math.round(height * shrink));
   canvas
     .getContext('2d')
-    .drawImage(
-      bitmap,
-      x * ratio,
-      y * ratio,
-      width * ratio,
-      height * ratio,
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
+    .drawImage(bitmap, x * ratio, y * ratio, width * ratio, height * ratio, 0, 0, canvas.width, canvas.height);
   bitmap.close();
   const blob = await canvas.convertToBlob({ type: 'image/png' }),
     bytes = new Uint8Array(await blob.arrayBuffer());
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   const image = `data:image/png;base64,${btoa(binary)}`;
-  if (image.length > 1500000)
-    throw new Error('That image is too large. Select a smaller element.');
+  if (image.length > 1500000) throw new Error('That image is too large. Select a smaller element.');
   // Deliver before hiding it. If delivery fails, the website stays intact.
   await bridge('/browser/result', {
     id: command.id,
@@ -106,8 +87,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   (async () => {
     if (sender.tab) {
       const tab = sender.tab;
-      if (message.action !== 'tick')
-        throw new Error('Unsupported page message.');
+      if (message.action !== 'tick') throw new Error('Unsupported page message.');
       // Only content scripts we injected can send these messages; webpage JS has no bridge access.
       await bridge('/browser/state', {
         ...message.page,
@@ -121,8 +101,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
             continue;
           }
           if (command.action === 'closetab') await chrome.tabs.remove(tab.id);
-          else if (command.action === 'restorepage')
-            await chrome.tabs.sendMessage(tab.id, { action: 'restore' });
+          else if (command.action === 'restorepage') await chrome.tabs.sendMessage(tab.id, { action: 'restore' });
           else throw new Error('Unknown action.');
           await bridge('/browser/result', { id: command.id, ok: true });
         } catch (error) {
@@ -149,15 +128,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     }
     const tab = await active();
     await ensurePage(tab);
-    if (!['connect', 'pick', 'restore', 'disconnect'].includes(message.action))
-      throw new Error('Unknown action.');
+    if (!['connect', 'pick', 'restore', 'disconnect'].includes(message.action)) throw new Error('Unknown action.');
     await chrome.tabs.sendMessage(tab.id, { action: message.action });
     return {
       ok: true,
-      message:
-        message.action === 'pick'
-          ? 'Click a visible element on the page. Escape cancels.'
-          : 'Done.',
+      message: message.action === 'pick' ? 'Click a visible element on the page. Escape cancels.' : 'Done.',
     };
   })().then(respond, (error) => respond({ ok: false, error: error.message }));
   return true;

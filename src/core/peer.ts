@@ -15,16 +15,16 @@ import type { V3, Vec } from './math';
 export interface FighterView {
   id?: string;
   looseItemHulls?: Vec[][];
-  shelvedBooks?: {key:string;slot:number}[];
-  consoleLocations?: {x:number;y:number;dock?:number|null}[];
+  shelvedBooks?: { key: string; slot: number }[];
+  consoleLocations?: { x: number; y: number; dock?: number | null }[];
   talent?: import('./relationships').Talent;
   group?: import('./skills/group').GroupView;
   partner?: string | null;
   name: string;
-  personality?:import('./config').Personality;
-  freeBagSlots?:number;
-  hasHandheld?:boolean;
-  ownedItemIds?:number[];
+  personality?: import('./config').Personality;
+  freeBagSlots?: number;
+  hasHandheld?: boolean;
+  ownedItemIds?: number[];
   color: string;
   /** Doing something of his own that he wouldn't drop for a fight (a game, sleeping...). */
   busy: boolean;
@@ -59,28 +59,54 @@ export interface FighterView {
    * meet, in place and ready, or doing it. */
   social: { act: string; phase: 'meet' | 'ready' | 'do' } | null;
   asleep: boolean;
-  energy?:number;
+  energy?: number;
   /** His mood, in a word ('happy', 'angry'...): the other one reads it before asking him anything. */
   mood: string;
 }
 
 /** A weapon, as much as the one being hit needs to know about it. */
-export interface WeaponInfo { id: string; hit: number; cuts: boolean }
+export interface WeaponInfo {
+  id: string;
+  hit: number;
+  cuts: boolean;
+}
 
 export type PeerMsg =
-  | {type:'moment';kind:'compare'|'check'|'apology'}
-  | {type:'toolGift';token:string;uid:number;def:import('./items').ItemDef;ammo:number;reloadRemaining?:number;bookmark?:number;bookPages?:number;bookReadThroughs?:number;gameBest?:number;wrap?:number;ink?:import('./crafting-state').InkProject}
-  | {type:'giftReceipt';token:string;accepted:boolean;appreciation?:number}
-
+  | { type: 'moment'; kind: 'compare' | 'check' | 'apology' }
+  | {
+      type: 'toolGift';
+      token: string;
+      uid: number;
+      def: import('./items').ItemDef;
+      ammo: number;
+      reloadRemaining?: number;
+      bookmark?: number;
+      bookPages?: number;
+      bookReadThroughs?: number;
+      gameBest?: number;
+      wrap?: number;
+      ink?: import('./crafting-state').InkProject;
+    }
+  | { type: 'giftReceipt'; token: string; accepted: boolean; appreciation?: number }
   | { type: 'groupInvite'; plan: import('./skills/group').GroupPlan }
   | { type: 'groupGo'; session: string; epoch: number }
-  | { type: 'groupCancel'; session: string; finished?:boolean }
-
+  | { type: 'groupCancel'; session: string; finished?: boolean }
   | { type: 'weaponRequest'; uid: number }
   | { type: 'weaponGrant'; uid: number; weapon: import('./combat/armament').LooseWeapon }
 
   /** One of my hits reached you (`onBlade`: it met your sword, not you; `ranged`: an arrow, from afar). You decide what it does (blocked? parried? a cut?) and answer. */
-  | { type: 'hit'; joint: JointName; vx: number; vy: number; power: number; weapon: WeaponInfo | null; at: Vec; kind: HitKind; onBlade?: boolean; ranged?: boolean }
+  | {
+      type: 'hit';
+      joint: JointName;
+      vx: number;
+      vy: number;
+      power: number;
+      weapon: WeaponInfo | null;
+      at: Vec;
+      kind: HitKind;
+      onBlade?: boolean;
+      ranged?: boolean;
+    }
   /** Your hit didn't land clean: blocked (I was guarding) or parried (and you're thrown off balance). */
   | { type: 'blocked'; parried: boolean; push: number; disarm: boolean }
   /** Our blades met mid-swing: both of us bounce off. */

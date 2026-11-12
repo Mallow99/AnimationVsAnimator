@@ -89,9 +89,9 @@ known limits requiring visual judgment.
 ## Repeatable acceptance
 
 Run `npm run typecheck`, `npm run sim`, and the affected focused suites. The conversation-specific
-checks are `npm run conversationcheck`, `node scripts/local-brain-check.mjs`, and (after a build)
-`node scripts/conversation-ui-check.mjs`. `npm run browsercheck` exercises actual Chromium controls
-and rendered activity/preset sequences; `npm run sanitycheck` checks physical/social invariants.
+checks are `npm run check conversation`, `npm run check local-ai` and
+`npm run check conversation-ui`. `npm run check browser` exercises actual Chromium controls
+and rendered activity/preset sequences; `npm run check living` checks physical/social invariants.
 General → Development checks → **Check live world** runs the existing read-only runtime audit.
 
 The chat UI check uses actual Chromium keyboard/input, reload, bounds and scroll behavior. Its

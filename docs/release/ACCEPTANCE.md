@@ -1,41 +1,26 @@
-# Release acceptance — commercial candidates
+# Before this could be sold: the checklist
 
-Latest compiled test downloads: **rc.4**, app source **6a29633**. Both native
-extracted-package restart checks, full aggregate and customer flows passed in
-[40936284948](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40936284948).
-Both seeds passed 7200 simulated seconds, 7221 audits and 35 phases; seed 32 and
-performance completed in [40941543881](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40941543881).
-The separate upload job 41089104176 succeeded. Ready-to-run ZIPs add only a root
-launch guide; every existing app entry/permission matches the native-tested archive.
-[Download test apps](https://github.com/Mallow99/AnimationVsAnimator/releases/tag/v1.0.0-rc.4).
-PR #4 merged into main. Exact source/hashes: [../verification/mallow-download-packages.json](../verification/mallow-download-packages.json).
-This is a free test prerelease, not a paid itch.io publication. Physical/store gates below remain open.
+Nothing is for sale. The downloads on the Releases page are free test builds.
+This is the list of what must be true before charging money for it. It is paused until the
+owner picks it up again. Only a person at a real computer can tick the boxes below; a passing
+automated check on another system is not a tick.
 
-Status: **candidate; not approved for sale**. Automated CI produces downloadable test
-archives. A successful package job does not complete native or commercial acceptance.
+## Automated checks (GitHub runs these for every build)
 
-Prior recorded automated baseline: source `2a78d2b`, CI run [40046018836](https://github.com/Mallow99/AnimationVsAnimator/actions/runs/40046018836).
-All 218 core regressions, five release groups, simulation, Chromium/customer Electron,
-two 7,200-second simulated soaks and performance gate passed. Both real native candidate
-smoke checks and draft preservation passed. Exact ZIPs/hashes and results are in
-[../verification/mallow-release.json](../verification/mallow-release.json).
+- `npm run verify -- --app`: type check, every check group, the long simulation, the overlay in
+  headless Chrome, and the packaged edition running in real Electron (first run, old saves,
+  no internet requests, Local AI only through Ollama on this computer, save failures, quit).
+- `npm run check living-soak` with seeds 7 and 32: two simulated hours of every feature each.
+  This is simulated time, not two hours on real hardware.
+- `npm run check quality-profile`: one physics step must fit in 8.33 ms with two and five figures.
+  Linux numbers are not a promise about frame rate on a Mac or PC.
+- `npm run check ram-profile`: memory use (run by hand; results from older versions are in
+  `docs/archive/verification/`).
+- Each ZIP is built on its own operating system, unzipped, started, saved, quit and restarted.
 
-## Repeatable automated checks
-
-- `npm ci`, `npm run verify`: types, all existing focused checks, storage/release tests,
-  simulation and actual Chromium controls/rendering.
-- `npm run build:release`; run `scripts/release-electron-check.cjs` with Electron:
-  customer UI, old-config migration, offline boundary, no loopback service or outgoing
-  requests, ownership/reload, injected quota/write failures and acknowledged quit.
-- `LIVING_SOAK_SEED=7 LIVING_SOAK_SECONDS=7200 LIVING_SOAK_TAIL_FPS=30 npm run livingsoak`;
-  repeat seed 32. This is simulated time with every-second invariants, not two hours of hardware use.
-- Run `npm run qualityprofile` by itself. Combined p95 update work must fit 8.33 ms
-  for two and five figures. Linux measurements are not native frame-rate claims.
-- Run `npm run ramprofile` with two/five figures and rich/churn fixtures. Record
-  process-tree memory and whether it settles after repeated UI lifecycle changes.
-- Inspect actual opening, mid-action, closing and interruption frames for reading,
-  pickup, throwing, drawing, sitting, climbing, gifts, games and shared activities.
-  Check both facings, all presets and 1/2/5 figures.
+Also look at real frames (opening, middle, closing, interrupted) of reading, pickup, throwing,
+drawing, sitting, climbing, gifts, games and shared activities, facing both ways, with one, two
+and five figures.
 
 ## Native gates — outstanding until evidence is recorded
 

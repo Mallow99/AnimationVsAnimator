@@ -2,8 +2,8 @@
 
 An offline desktop toy with up to five procedural stick-figure companions on screen.
 Five saved buddies are included, with a sixth available through a bonus code.
-Current candidate: 1.0.0-rc.4. Target platforms: Apple Silicon Mac and Windows 11 x64.
-Physical release acceptance remains pending; see the installation guide.
+Target platforms: Apple Silicon Mac and Windows 11 x64. This is a test build;
+see the installation guide. The exact version is in `release-source.json`.
 
 ## What you get
 
@@ -21,8 +21,11 @@ Physical release acceptance remains pending; see the installation guide.
   New furniture supplies show a footprint and floor guide; optional Snap to floor
   aligns a clear near-floor placement before releasing normal physics.
 - **Local conversation:** familiar topics, remembered details and branching stories.
-  Saved transcripts can be exported or cleared for one buddy. No general-purpose
-  AI answers, account, API key, model download or subscription is required.
+  Saved transcripts can be exported or cleared for one buddy. No account, API key,
+  model download or subscription is required.
+- **Optional Local AI:** if you run Ollama on the same computer, buddies can answer
+  with one of your own models (Settings → Local AI). Off by default. Nothing is sent
+  over the internet and the app never downloads a model.
 - **Optional desktop play:** window climbing, cursor mischief, window movement,
   active-app reactions, talking sounds and sound effects. These start off on a
   fresh install. Pause, Hide/Show and Quit stay available in Settings and the tray.
@@ -85,8 +88,9 @@ Primary-monitor play. Mac minimum binary target is macOS 13; the accepted releas
 must list the actual tested OS versions. Direct downloads are unsigned on Windows
 and ad-hoc signed on Mac, without Developer ID notarization. Read INSTALL.md.
 
-All conversations and app state stay local. The commercial build disables cloud
-AI, local-model connections, browser-extension pairing and file/document visits.
+All conversations and app state stay local. This edition has no cloud AI,
+browser-extension pairing or file/document visits. Its only AI option is Local AI:
+a connection to Ollama on the same computer, which you switch on yourself.
 Cartoon sparring can include limbs coming off and being reattached; no gore or
 permanent death. Breakable limbs can be switched off.
 

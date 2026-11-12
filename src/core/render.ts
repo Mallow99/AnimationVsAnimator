@@ -10,33 +10,56 @@ export interface Look {
   color: string;
   /** Built-in cosmetic, anchored to the left upper arm. */
   tattoo?: 'none' | 'jt';
-  lineWidth: number;  // limb thickness (before scaling)
-  headSize: number;   // 1 = normal
-  pixel: number;      // 1 = smooth; 2+ = pixel-art with pixels this many screen points wide
+  lineWidth: number; // limb thickness (before scaling)
+  headSize: number; // 1 = normal
+  pixel: number; // 1 = smooth; 2+ = pixel-art with pixels this many screen points wide
   showJoints: boolean;
   /** A dark outline around him, like a sprite in a pixel-art game. */
   outline: boolean;
 }
 
-export const DEFAULT_LOOK: Look = { color: '#4450d6', tattoo: 'none', lineWidth: 7, headSize: 1.25, pixel: 2, showJoints: false, outline: false };
+export const DEFAULT_LOOK: Look = {
+  color: '#4450d6',
+  tattoo: 'none',
+  lineWidth: 7,
+  headSize: 1.25,
+  pixel: 2,
+  showJoints: false,
+  outline: false,
+};
 
 /** Darken (amount < 0) or lighten a #rrggbb color. */
 export function shade(hex: string, amount: number) {
   const n = parseInt(hex.slice(1), 16);
-  const ch = (v: number) => Math.round(Math.min(255, Math.max(0, amount < 0 ? v * (1 + amount) : v + (255 - v) * amount)));
-  const r = ch(n >> 16), g = ch((n >> 8) & 255), b = ch(n & 255);
+  const ch = (v: number) =>
+    Math.round(Math.min(255, Math.max(0, amount < 0 ? v * (1 + amount) : v + (255 - v) * amount)));
+  const r = ch(n >> 16),
+    g = ch((n >> 8) & 255),
+    b = ch(n & 255);
   return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 
 export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 /** Something drawn as part of him, in depth order with his limbs (his belt, things in his hands). */
-export interface DepthPart { z: number; draw: (g: Ctx2D) => void; pts?: { x: number; y: number }[] }
+export interface DepthPart {
+  z: number;
+  draw: (g: Ctx2D) => void;
+  pts?: { x: number; y: number }[];
+}
 
 export function drawCharacter(ctx: Ctx2D, c: Character, look: Look, extras: DepthPart[] = []) {
   // Smooth style with an outline: draw him once fatter and darker underneath.
-  if (look.outline && look.pixel <= 1) drawCharacter(ctx, c, { ...look, tattoo: 'none', outline: false, color: shade(look.color, -0.7), lineWidth: look.lineWidth + 3 });
-  const j = c.body.j, sc = c.scale;
+  if (look.outline && look.pixel <= 1)
+    drawCharacter(ctx, c, {
+      ...look,
+      tattoo: 'none',
+      outline: false,
+      color: shade(look.color, -0.7),
+      lineWidth: look.lineWidth + 3,
+    });
+  const j = c.body.j,
+    sc = c.scale;
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -50,38 +73,67 @@ export function drawCharacter(ctx: Ctx2D, c: Character, look: Look, extras: Dept
   };
   // He's 3D: draw the parts furthest from you first, so nearer limbs pass in front.
   // Parts behind his body get a shade darker, so he reads with depth from any angle.
-  const torsoZ = (j.neck.z + j.hip.z) / 2, depthRange = 5 * sc;
+  const torsoZ = (j.neck.z + j.hip.z) / 2,
+    depthRange = 5 * sc;
   const colorAt = (z: number) => shade(look.color, -0.22 * Math.min(1, Math.max(0, (torsoZ - z) / depthRange)));
   const parts: { z: number; draw: () => void }[] = [];
   const ghost = c.body.ghost;
   const limb = (pts: { x: number; y: number; z: number }[], tattoo = false) => {
     if (pts.some((p) => ghost.has(nameOf(c, p)))) return; // that limb came off
     const z = pts.slice(1).reduce((a, p) => a + p.z, 0) / (pts.length - 1);
-    parts.push({ z, draw: () => { ctx.strokeStyle = colorAt(z); path(pts); if (tattoo && look.tattoo === 'jt') drawJTTattoo(ctx, pts[0], pts[1], look, sc); } });
+    parts.push({
+      z,
+      draw: () => {
+        ctx.strokeStyle = colorAt(z);
+        path(pts);
+        if (tattoo && look.tattoo === 'jt') drawJTTattoo(ctx, pts[0], pts[1], look, sc);
+      },
+    });
   };
   limb([j.hip, j.kneeL, j.footL]);
   limb([j.hip, j.kneeR, j.footR]);
   limb([j.neck, j.elbowL, j.handL], true);
   limb([j.neck, j.elbowR, j.handR]);
-  parts.push({ z: torsoZ, draw: () => { ctx.strokeStyle = look.color; path([j.head, j.neck, j.hip]); } });
-  parts.push({ z: j.head.z + 0.01, draw: () => {
-    ctx.fillStyle = colorAt(j.head.z);
-    ctx.beginPath();
-    ctx.arc(j.head.x, j.head.y, c.d.headR, 0, Math.PI * 2);
-    ctx.fill();
-  } });
+  parts.push({
+    z: torsoZ,
+    draw: () => {
+      ctx.strokeStyle = look.color;
+      path([j.head, j.neck, j.hip]);
+    },
+  });
+  parts.push({
+    z: j.head.z + 0.01,
+    draw: () => {
+      ctx.fillStyle = colorAt(j.head.z);
+      ctx.beginPath();
+      ctx.arc(j.head.x, j.head.y, c.d.headR, 0, Math.PI * 2);
+      ctx.fill();
+    },
+  });
   // Accessories can change stroke width, alpha or transforms. Isolate each one so
   // limbs drawn after it retain the figure's look in every pose/depth order.
-  for (const e of extras) parts.push({ z: e.z, draw: () => {
-    ctx.save();
-    try { e.draw(ctx); } finally { ctx.restore(); }
-  } });
+  for (const e of extras)
+    parts.push({
+      z: e.z,
+      draw: () => {
+        ctx.save();
+        try {
+          e.draw(ctx);
+        } finally {
+          ctx.restore();
+        }
+      },
+    });
   parts.sort((a, b) => a.z - b.z);
   for (const p of parts) p.draw();
 
   if (look.showJoints) {
     ctx.fillStyle = '#fff';
-    for (const p of c.body.points) { ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); ctx.fill(); }
+    for (const p of c.body.points) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.restore();
 }
@@ -96,32 +148,59 @@ export function drawLooseLimb(ctx: Ctx2D, piece: LooseLimb, look: Look, scale: n
   const [a, b, c] = piece.points;
   ctx.save();
   ctx.globalAlpha *= piece.fade;
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.lineWidth = look.lineWidth * scale;
   ctx.strokeStyle = shade(look.color, -0.22 * Math.min(1, Math.max(0, -((a.z + b.z + c.z) / 3) / (5 * scale))));
-  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.lineTo(c.x, c.y);
+  ctx.stroke();
   if (piece.limb === 'armL' && look.tattoo === 'jt') drawJTTattoo(ctx, a, b, look, scale);
   ctx.restore();
 }
 
 /** JT is ink on the limb, not a screen-space badge; it turns and detaches with the arm. */
-export function drawJTTattoo(ctx: Ctx2D, a: {x:number;y:number}, b: {x:number;y:number}, look: Look, scale: number) {
-  const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
-  if(length<2*scale)return;
-  const width=look.lineWidth*scale;
+export function drawJTTattoo(
+  ctx: Ctx2D,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  look: Look,
+  scale: number,
+) {
+  const dx = b.x - a.x,
+    dy = b.y - a.y,
+    length = Math.hypot(dx, dy);
+  if (length < 2 * scale) return;
+  const width = look.lineWidth * scale;
   // Seven columns: the J, a one-column gap, then the T. No platform fonts or images.
-  const rows=['1110111','0100010','0100010','0100010','1100010'];
-  const unit=Math.min(Math.max(.35*scale,(width-1*scale)/7),length*.48/5);
-  const n=parseInt(look.color.slice(1),16),luma=.2126*(n>>16)+.7152*((n>>8)&255)+.0722*(n&255);
+  const rows = ['1110111', '0100010', '0100010', '0100010', '1100010'];
+  const unit = Math.min(Math.max(0.35 * scale, (width - 1 * scale) / 7), (length * 0.48) / 5);
+  const n = parseInt(look.color.slice(1), 16),
+    luma = 0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
   ctx.save();
   // Clip to the real upper-arm stroke, retaining the character's original silhouette.
-  ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineWidth=width;ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
   // A narrow polygon provides a filled clip without widening the arm.
-  const nx=-dy/length*width/2,ny=dx/length*width/2;
-  ctx.beginPath();ctx.moveTo(a.x+nx,a.y+ny);ctx.lineTo(b.x+nx,b.y+ny);ctx.lineTo(b.x-nx,b.y-ny);ctx.lineTo(a.x-nx,a.y-ny);ctx.closePath();ctx.clip();
-  ctx.translate(a.x+dx*.54,a.y+dy*.54);ctx.rotate(Math.atan2(dy,dx)-Math.PI/2);
-  ctx.fillStyle=luma<95?'#fff1d6':'#292a27';
-  for(let y=0;y<rows.length;y++)for(let x=0;x<7;x++)if(rows[y][x]==='1')ctx.fillRect((x-3.5)*unit,(y-2.5)*unit,unit,unit);
+  const nx = ((-dy / length) * width) / 2,
+    ny = ((dx / length) * width) / 2;
+  ctx.beginPath();
+  ctx.moveTo(a.x + nx, a.y + ny);
+  ctx.lineTo(b.x + nx, b.y + ny);
+  ctx.lineTo(b.x - nx, b.y - ny);
+  ctx.lineTo(a.x - nx, a.y - ny);
+  ctx.closePath();
+  ctx.clip();
+  ctx.translate(a.x + dx * 0.54, a.y + dy * 0.54);
+  ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
+  ctx.fillStyle = luma < 95 ? '#fff1d6' : '#292a27';
+  for (let y = 0; y < rows.length; y++)
+    for (let x = 0; x < 7; x++) if (rows[y][x] === '1') ctx.fillRect((x - 3.5) * unit, (y - 2.5) * unit, unit, unit);
   ctx.restore();
 }
 
@@ -141,22 +220,39 @@ export class PixelLayer {
     const thick = { ...look, lineWidth: Math.max(look.lineWidth, (1.5 * p) / c.scale) };
     const pts = [...c.body.points, ...extras.flatMap((e) => e.pts ?? [])];
     this.paint(ctx, pts, c.d.headR + look.lineWidth * c.scale + p * 3, look, (g) => drawCharacter(g, c, thick, extras));
-    for (const piece of c.loosePieces) this.paint(ctx, piece.points, look.lineWidth * c.scale + p * 3, look, (g) => drawLooseLimb(g, piece, thick, c.scale));
+    for (const piece of c.loosePieces)
+      this.paint(ctx, piece.points, look.lineWidth * c.scale + p * 3, look, (g) =>
+        drawLooseLimb(g, piece, thick, c.scale),
+      );
   }
 
   /**
    * Draw anything (around `pts`) onto a tiny canvas (one pixel per "art pixel"),
    * snap every pixel to fully on or off, then blow it up without smoothing.
    */
-  paint(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[], pad: number, look: Look, drawIt: (g: OffscreenCanvasRenderingContext2D) => void) {
+  paint(
+    ctx: CanvasRenderingContext2D,
+    pts: { x: number; y: number }[],
+    pad: number,
+    look: Look,
+    drawIt: (g: OffscreenCanvasRenderingContext2D) => void,
+  ) {
     const p = Math.max(2, Math.round(look.pixel));
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
     for (const pt of pts) {
-      minX = Math.min(minX, pt.x); minY = Math.min(minY, pt.y);
-      maxX = Math.max(maxX, pt.x); maxY = Math.max(maxY, pt.y);
+      minX = Math.min(minX, pt.x);
+      minY = Math.min(minY, pt.y);
+      maxX = Math.max(maxX, pt.x);
+      maxY = Math.max(maxY, pt.y);
     }
     // Snap to the pixel grid so the pixels don't shimmer as he moves.
-    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+    minX -= pad;
+    minY -= pad;
+    maxX += pad;
+    maxY += pad;
     // Offscreen limbs/throws must not allocate a desktop-sized pixel workspace. Respect the
     // caller's scale/translation (including Retina); keep one art pixel outside the viewport.
     const transform = ctx.getTransform();
@@ -166,8 +262,10 @@ export class PixelLayer {
       maxX = Math.min(maxX, (ctx.canvas.width - transform.e) / transform.a + p);
       maxY = Math.min(maxY, (ctx.canvas.height - transform.f) / transform.d + p);
     }
-    const x0 = Math.floor(minX / p) * p, y0 = Math.floor(minY / p) * p;
-    const w = Math.ceil((maxX - x0) / p), h = Math.ceil((maxY - y0) / p);
+    const x0 = Math.floor(minX / p) * p,
+      y0 = Math.floor(minY / p) * p;
+    const w = Math.ceil((maxX - x0) / p),
+      h = Math.ceil((maxY - y0) / p);
     if (w <= 0 || h <= 0 || w > 4000 || h > 4000) return;
     const bucket = (n: number) => Math.max(64, Math.ceil(n / 64) * 64);
     if (this.cv && this.cv.width * this.cv.height > Math.max(4096, w * h) * 4) this.smallFrames++;
@@ -175,7 +273,9 @@ export class PixelLayer {
     if (!this.cv) this.cv = new OffscreenCanvas(bucket(w), bucket(h));
     else if (this.cv.width < w || this.cv.height < h || this.smallFrames > 120) {
       // Resize the existing object, rather than leaving successive backing stores to GC.
-      this.cv.width = bucket(w); this.cv.height = bucket(h); this.smallFrames = 0;
+      this.cv.width = bucket(w);
+      this.cv.height = bucket(h);
+      this.smallFrames = 0;
       this.outlineMask = new Uint8Array(0);
     }
     const g = this.cv.getContext('2d', { willReadFrequently: true })!;
@@ -183,20 +283,31 @@ export class PixelLayer {
     g.clearRect(0, 0, w, h);
     g.setTransform(1 / p, 0, 0, 1 / p, -x0 / p, -y0 / p);
     drawIt(g);
-    const img = g.getImageData(0, 0, w, h), a = img.data;
+    const img = g.getImageData(0, 0, w, h),
+      a = img.data;
     for (let i = 3; i < a.length; i += 4) a[i] = a[i] >= 110 ? 255 : 0;
     if (look.outline) {
       // Any empty pixel touching him becomes outline.
       if (this.outlineMask.length < w * h) this.outlineMask = new Uint8Array(this.cv.width * this.cv.height);
-      const n = parseInt(shade(look.color, -0.7).slice(1), 16), solid = this.outlineMask;
+      const n = parseInt(shade(look.color, -0.7).slice(1), 16),
+        solid = this.outlineMask;
       for (let i = 0; i < w * h; i++) solid[i] = a[i * 4 + 3] ? 1 : 0;
-      for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
-        const i = yy * w + xx;
-        if (solid[i]) continue;
-        if ((xx > 0 && solid[i - 1]) || (xx < w - 1 && solid[i + 1]) || (yy > 0 && solid[i - w]) || (yy < h - 1 && solid[i + w])) {
-          a[i * 4] = n >> 16; a[i * 4 + 1] = (n >> 8) & 255; a[i * 4 + 2] = n & 255; a[i * 4 + 3] = 255;
+      for (let yy = 0; yy < h; yy++)
+        for (let xx = 0; xx < w; xx++) {
+          const i = yy * w + xx;
+          if (solid[i]) continue;
+          if (
+            (xx > 0 && solid[i - 1]) ||
+            (xx < w - 1 && solid[i + 1]) ||
+            (yy > 0 && solid[i - w]) ||
+            (yy < h - 1 && solid[i + w])
+          ) {
+            a[i * 4] = n >> 16;
+            a[i * 4 + 1] = (n >> 8) & 255;
+            a[i * 4 + 2] = n & 255;
+            a[i * 4 + 3] = 255;
+          }
         }
-      }
     }
     g.putImageData(img, 0, 0);
     ctx.save();
@@ -208,16 +319,30 @@ export class PixelLayer {
 
 /** A game controller held in both hands (flat, like his furniture), in front of him. */
 export function controllerPart(c: Character): DepthPart {
-  const j = c.body.j, sc = c.scale, x = (j.handL.x + j.handR.x) / 2, y = (j.handL.y + j.handR.y) / 2;
-  const w = 16 * sc, h = 8 * sc;
+  const j = c.body.j,
+    sc = c.scale,
+    x = (j.handL.x + j.handR.x) / 2,
+    y = (j.handL.y + j.handR.y) / 2;
+  const w = 16 * sc,
+    h = 8 * sc;
   return {
     z: Math.max(j.handL.z, j.handR.z) + 0.5,
-    pts: [{ x: x - w, y: y - h }, { x: x + w, y: y + h }],
+    pts: [
+      { x: x - w, y: y - h },
+      { x: x + w, y: y + h },
+    ],
     draw: (g) => {
       g.save();
-      g.beginPath(); g.roundRect(x - w / 2, y - h / 2, w, h, h / 2); g.fillStyle = '#3b3f4f'; g.fill();
-      g.fillStyle = '#e46a5c'; g.beginPath(); g.arc(x + w * 0.24, y, 1.8 * sc, 0, 7); g.fill();
-      g.fillStyle = '#b4bccc'; g.fillRect(x - w * 0.36, y - 1 * sc, 4.5 * sc, 2 * sc);
+      g.beginPath();
+      g.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+      g.fillStyle = '#3b3f4f';
+      g.fill();
+      g.fillStyle = '#e46a5c';
+      g.beginPath();
+      g.arc(x + w * 0.24, y, 1.8 * sc, 0, 7);
+      g.fill();
+      g.fillStyle = '#b4bccc';
+      g.fillRect(x - w * 0.36, y - 1 * sc, 4.5 * sc, 2 * sc);
       g.restore();
     },
   };
@@ -228,31 +353,69 @@ export function controllerPart(c: Character): DepthPart {
  * part behind him is drawn behind his body and the front part in front.
  */
 export function beltParts(c: Character, color: string): DepthPart[] {
-  const j = c.body.j, sc = c.scale, r = 4.6 * sc;
-  const ux = j.neck.x - j.hip.x, uy = j.neck.y - j.hip.y, uz = j.neck.z - j.hip.z, ul = Math.hypot(ux, uy, uz) || 1;
+  const j = c.body.j,
+    sc = c.scale,
+    r = 4.6 * sc;
+  const ux = j.neck.x - j.hip.x,
+    uy = j.neck.y - j.hip.y,
+    uz = j.neck.z - j.hip.z,
+    ul = Math.hypot(ux, uy, uz) || 1;
   const up = { x: ux / ul, y: uy / ul, z: uz / ul };
-  const L = c.dirToWorld(0, 0, 1), k = L.x * up.x + L.y * up.y + L.z * up.z;
-  let lx = L.x - up.x * k, ly = L.y - up.y * k, lz = L.z - up.z * k;
-  const ll = Math.hypot(lx, ly, lz) || 1; lx /= ll; ly /= ll; lz /= ll;
+  const L = c.dirToWorld(0, 0, 1),
+    k = L.x * up.x + L.y * up.y + L.z * up.z;
+  let lx = L.x - up.x * k,
+    ly = L.y - up.y * k,
+    lz = L.z - up.z * k;
+  const ll = Math.hypot(lx, ly, lz) || 1;
+  lx /= ll;
+  ly /= ll;
+  lz /= ll;
   // forward = left × up (so the ring is square to his torso)
-  const fx = ly * up.z - lz * up.y, fy = lz * up.x - lx * up.z, fz = lx * up.y - ly * up.x;
-  const N = 10, pts = Array.from({ length: N + 1 }, (_, i) => {
-    const a = (i / N) * Math.PI * 2, ca = Math.cos(a) * r, sa = Math.sin(a) * r;
-    return { x: j.hip.x + lx * ca + fx * sa - up.x * 1.5 * sc, y: j.hip.y + ly * ca + fy * sa - up.y * 1.5 * sc, z: j.hip.z + lz * ca + fz * sa - up.z * 1.5 * sc };
-  });
+  const fx = ly * up.z - lz * up.y,
+    fy = lz * up.x - lx * up.z,
+    fz = lx * up.y - ly * up.x;
+  const N = 10,
+    pts = Array.from({ length: N + 1 }, (_, i) => {
+      const a = (i / N) * Math.PI * 2,
+        ca = Math.cos(a) * r,
+        sa = Math.sin(a) * r;
+      return {
+        x: j.hip.x + lx * ca + fx * sa - up.x * 1.5 * sc,
+        y: j.hip.y + ly * ca + fy * sa - up.y * 1.5 * sc,
+        z: j.hip.z + lz * ca + fz * sa - up.z * 1.5 * sc,
+      };
+    });
   const out: DepthPart[] = [];
   for (let i = 0; i < N; i++) {
-    const a = pts[i], b = pts[i + 1];
-    out.push({ z: (a.z + b.z) / 2, pts: [a, b], draw: (g) => {
-      g.save(); g.strokeStyle = color; g.lineWidth = 2.4 * sc; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); g.restore();
-    } });
+    const a = pts[i],
+      b = pts[i + 1];
+    out.push({
+      z: (a.z + b.z) / 2,
+      pts: [a, b],
+      draw: (g) => {
+        g.save();
+        g.strokeStyle = color;
+        g.lineWidth = 2.4 * sc;
+        g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(a.x, a.y);
+        g.lineTo(b.x, b.y);
+        g.stroke();
+        g.restore();
+      },
+    });
   }
   return out;
 }
 
 /** A speech bubble above his head, kept on screen. */
-export function measureBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, b: { left: number; right: number; top: number }, pixel = 1) {
+export function measureBubble(
+  ctx: CanvasRenderingContext2D,
+  c: Character,
+  text: string,
+  b: { left: number; right: number; top: number },
+  pixel = 1,
+) {
   const short = text.length <= 3;
   ctx.save();
   ctx.font = `${short ? 600 : 500} ${short ? 15 : 13}px system-ui, -apple-system, "Segoe UI", sans-serif`;
@@ -260,27 +423,51 @@ export function measureBubble(ctx: CanvasRenderingContext2D, c: Character, text:
   let line = '';
   const maxWidth = Math.max(24, Math.min(320, b.right - b.left - 34));
   for (const char of text) {
-    if (line && ctx.measureText(line + char).width > maxWidth) { nativeLines.push(line); line = ''; }
+    if (line && ctx.measureText(line + char).width > maxWidth) {
+      nativeLines.push(line);
+      line = '';
+    }
     line += char;
   }
   nativeLines.push(line);
   const pixelWidth = Math.max(6, Math.min(100, Math.floor((b.right - b.left - 16) / pixel) - 8));
   const lines = pixel > 1 ? wrapPixelText(text, pixelWidth) : nativeLines;
-  const w = pixel > 1 ? (Math.max(...lines.map(textWidth), 7) + 8) * pixel : Math.max(...lines.map(t => ctx.measureText(t).width), 6) + (short ? 14 : 18);
+  const w =
+    pixel > 1
+      ? (Math.max(...lines.map(textWidth), 7) + 8) * pixel
+      : Math.max(...lines.map((t) => ctx.measureText(t).width), 6) + (short ? 14 : 18);
   const h = pixel > 1 ? (lines.length * (FONT_HEIGHT + 4) + 3) * pixel : (short ? 24 : 26) + (lines.length - 1) * 18;
   ctx.restore();
-  const tipX = c.body.j.head.x, tipY = c.body.j.head.y - c.d.headR - 5 * c.scale;
-  return { x: Math.max(b.left + 4, Math.min(tipX - w / 2, b.right - w - 4)), y: Math.max(tipY - 8 - h, b.top + 4), w, h, tipX, tipY, lines };
+  const tipX = c.body.j.head.x,
+    tipY = c.body.j.head.y - c.d.headR - 5 * c.scale;
+  return {
+    x: Math.max(b.left + 4, Math.min(tipX - w / 2, b.right - w - 4)),
+    y: Math.max(tipY - 8 - h, b.top + 4),
+    w,
+    h,
+    tipX,
+    tipY,
+    lines,
+  };
 }
 
-export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, alpha: number, b: { left: number; right: number; top: number }, placement?: { x: number; y: number }, shown = text.length) {
-  const head = c.body.j.head, sc = c.scale;
+export function drawBubble(
+  ctx: CanvasRenderingContext2D,
+  c: Character,
+  text: string,
+  alpha: number,
+  b: { left: number; right: number; top: number },
+  placement?: { x: number; y: number },
+  shown = text.length,
+) {
   const short = text.length <= 3; // emotes like "!" or "♥" get a smaller bubble
   ctx.save();
   ctx.globalAlpha = Math.max(0, alpha);
   ctx.font = `${short ? 600 : 500} ${short ? 15 : 13}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   const layout = measureBubble(ctx, c, text, b);
-  const { w, h, tipX, lines } = layout, x = placement?.x ?? layout.x, y = placement?.y ?? layout.y;
+  const { w, h, tipX, lines } = layout,
+    x = placement?.x ?? layout.x,
+    y = placement?.y ?? layout.y;
 
   ctx.fillStyle = 'rgba(255,255,255,0.96)';
   ctx.strokeStyle = 'rgba(0,0,0,0.25)';
@@ -292,7 +479,9 @@ export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: st
   // little tail pointing at his head
   const tx = Math.min(Math.max(tipX, x + 10), x + w - 10);
   ctx.beginPath();
-  ctx.moveTo(tx - 5, y + h - 0.5); ctx.lineTo(tx, y + h + 7); ctx.lineTo(tx + 5, y + h - 0.5);
+  ctx.moveTo(tx - 5, y + h - 0.5);
+  ctx.lineTo(tx, y + h + 7);
+  ctx.lineTo(tx + 5, y + h - 0.5);
   ctx.closePath();
   ctx.fill();
 
@@ -300,7 +489,10 @@ export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: st
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   let left = Math.floor(shown);
-  for (const [i, line] of lines.entries()) { ctx.fillText(line.slice(0, Math.max(0, left)), x + w / 2, y + 13 + i * 18); left -= line.length; }
+  for (const [i, line] of lines.entries()) {
+    ctx.fillText(line.slice(0, Math.max(0, left)), x + w / 2, y + 13 + i * 18);
+    left -= line.length;
+  }
   ctx.restore();
 }
 
@@ -309,17 +501,32 @@ export function drawBubble(ctx: CanvasRenderingContext2D, c: Character, text: st
  * corners and a stepped tail. `shown` = how many letters have appeared so far
  * (they type out one by one). `p` = screen size of one pixel.
  */
-export function drawPixelBubble(ctx: CanvasRenderingContext2D, c: Character, text: string, shown: number, alpha: number, b: { left: number; right: number; top: number }, p: number, ink: string, placement?: { x: number; y: number }) {
-  const head = c.body.j.head, sc = c.scale;
+export function drawPixelBubble(
+  ctx: CanvasRenderingContext2D,
+  c: Character,
+  text: string,
+  shown: number,
+  alpha: number,
+  b: { left: number; right: number; top: number },
+  p: number,
+  ink: string,
+  placement?: { x: number; y: number },
+) {
+  const head = c.body.j.head,
+    sc = c.scale;
   const lines = wrapPixelText(text, Math.max(6, Math.min(100, Math.floor((b.right - b.left - 16) / p) - 8)));
   // Lay out the full text so the bubble doesn't grow while typing.
   const wText = Math.max(...lines.map(textWidth), 7);
   const lineH = FONT_HEIGHT + 4;
-  const padX = 4, padY = 3;
-  const wPx = wText + padX * 2, hPx = lines.length * lineH - 3 + padY * 2;
-  const W = wPx * p, H = hPx * p;
+  const padX = 4,
+    padY = 3;
+  const wPx = wText + padX * 2,
+    hPx = lines.length * lineH - 3 + padY * 2;
+  const W = wPx * p,
+    H = hPx * p;
   const snap = (v: number) => Math.round(v / p) * p;
-  const tipX = head.x, tipY = head.y - c.d.headR - 5 * sc;
+  const tipX = head.x,
+    tipY = head.y - c.d.headR - 5 * sc;
   const x = placement?.x ?? snap(Math.min(Math.max(tipX - W / 2, b.left + 4), b.right - W - 4));
   const y = placement?.y ?? snap(Math.max(tipY - 4 * p - H, b.top + 4));
   ctx.save();
@@ -355,7 +562,15 @@ export function drawPixelBubble(ctx: CanvasRenderingContext2D, c: Character, tex
 }
 
 /** Sparks when a limb snaps off or clicks back on: bright pixel squares that fly out and fall. */
-export interface Spark { x: number; y: number; vx: number; vy: number; t: number; life: number; color: string }
+export interface Spark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  t: number;
+  life: number;
+  color: string;
+}
 
 export function drawSparks(ctx: CanvasRenderingContext2D, sparks: Spark[], p: number) {
   ctx.save();
@@ -369,32 +584,55 @@ export function drawSparks(ctx: CanvasRenderingContext2D, sparks: Spark[], p: nu
 }
 
 /** Little puffs of dust (landings, crashes): pixel squares that drift and fade. */
-export interface Puff { x: number; y: number; vx: number; vy: number; t: number; life: number; size: number }
+export interface Puff {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  t: number;
+  life: number;
+  size: number;
+}
 
 export function drawPuffs(ctx: CanvasRenderingContext2D, puffs: Puff[], p: number, color: string) {
   ctx.save();
   ctx.fillStyle = color;
   for (const f of puffs) {
     ctx.globalAlpha = Math.max(0, 1 - f.t / f.life) * 0.8;
-    const s = Math.max(p, Math.round((f.size * (1 - f.t / f.life * 0.5)) / p) * p);
+    const s = Math.max(p, Math.round((f.size * (1 - (f.t / f.life) * 0.5)) / p) * p);
     ctx.fillRect(Math.round(f.x / p) * p - s / 2, Math.round(f.y / p) * p - s / 2, s, s);
   }
   ctx.restore();
 }
 
 /** The right-click menu: a pixel box with one row per choice. Returns nothing; layout comes from `menuLayout`. */
-export interface MenuLayout { x: number; y: number; w: number; rowH: number; rows: string[]; p: number }
+export interface MenuLayout {
+  x: number;
+  y: number;
+  w: number;
+  rowH: number;
+  rows: string[];
+  p: number;
+}
 
-export function menuLayout(rows: string[], at: { x: number; y: number }, b: { left: number; right: number; top: number; floor: number }, p: number): MenuLayout {
+export function menuLayout(
+  rows: string[],
+  at: { x: number; y: number },
+  b: { left: number; right: number; top: number; floor: number },
+  p: number,
+): MenuLayout {
   const wText = Math.max(...rows.map(textWidth), 20);
-  const w = (wText + 10) * p, rowH = (FONT_HEIGHT + 6) * p, h = rows.length * rowH + 4 * p;
+  const w = (wText + 10) * p,
+    rowH = (FONT_HEIGHT + 6) * p,
+    h = rows.length * rowH + 4 * p;
   const x = Math.min(Math.max(at.x + 10, b.left + 4), b.right - w - 4);
   const y = Math.min(Math.max(at.y - h / 2, b.top + 4), b.floor - h - 4);
   return { x: Math.round(x / p) * p, y: Math.round(y / p) * p, w, rowH, rows, p };
 }
 
 export function drawMenu(ctx: CanvasRenderingContext2D, m: MenuLayout, hover: number, ink: string) {
-  const { x, y, w, rowH, rows, p } = m, h = rows.length * rowH + 4 * p;
+  const { x, y, w, rowH, rows, p } = m,
+    h = rows.length * rowH + 4 * p;
   ctx.save();
   // Stepped corners, like his speech bubble.
   const box = (inset: number, color: string) => {
@@ -407,7 +645,10 @@ export function drawMenu(ctx: CanvasRenderingContext2D, m: MenuLayout, hover: nu
   box(1, '#ffffff');
   rows.forEach((label, i) => {
     const ry = y + 2 * p + i * rowH;
-    if (i === hover) { ctx.fillStyle = ink; ctx.fillRect(x + 2 * p, ry, w - 4 * p, rowH); }
+    if (i === hover) {
+      ctx.fillStyle = ink;
+      ctx.fillRect(x + 2 * p, ry, w - 4 * p, rowH);
+    }
     ctx.fillStyle = i === hover ? '#ffffff' : '#1b1d2e';
     drawPixelText(ctx, label, x + 5 * p, ry + 3 * p, p);
   });

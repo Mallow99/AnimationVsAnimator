@@ -16,15 +16,7 @@ export interface Round extends Vec {
 }
 export class Projectiles {
   readonly rounds: Round[] = [];
-  fire(
-    x: number,
-    y: number,
-    vx: number,
-    vy: number,
-    toy: boolean,
-    cursor = false,
-    kind: 'round' | 'arrow' = 'round',
-  ) {
+  fire(x: number, y: number, vx: number, vy: number, toy: boolean, cursor = false, kind: 'round' | 'arrow' = 'round') {
     if (![x, y, vx, vy].every(Number.isFinite)) return;
     const speed = Math.hypot(vx, vy);
     if (speed > 5000) {
@@ -55,32 +47,18 @@ export class Projectiles {
       const to = { x: r.x + r.vx * dt, y: r.y + r.vy * dt };
       let landed = false;
       // Sample in travel order, never farther apart than a limb's collision padding.
-      const steps = Math.max(
-        1,
-        Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 4),
-      );
+      const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 4));
       for (let k = 1; k <= steps && !landed; k++) {
         const at = {
           x: from.x + ((to.x - from.x) * k) / steps,
           y: from.y + ((to.y - from.y) * k) / steps,
         };
-        if (
-          at.x < bounds.left ||
-          at.x > bounds.right ||
-          at.y > bounds.floor ||
-          at.y < bounds.top - 100
-        ) {
+        if (at.x < bounds.left || at.x > bounds.right || at.y > bounds.floor || at.y < bounds.top - 100) {
           landed = true;
           break;
         }
         for (const pl of platforms)
-          if (
-            r.vy > 0 &&
-            at.x >= pl.x1 &&
-            at.x <= pl.x2 &&
-            from.y <= platY(pl, at.x) &&
-            at.y >= platY(pl, at.x)
-          ) {
+          if (r.vy > 0 && at.x >= pl.x1 && at.x <= pl.x2 && from.y <= platY(pl, at.x) && at.y >= platY(pl, at.x)) {
             landed = true;
             break;
           }
@@ -88,11 +66,7 @@ export class Projectiles {
           impact(at);
           break;
         }
-        if (
-          r.cursor &&
-          cursor &&
-          Math.hypot(at.x - cursor.x, at.y - cursor.y) < 10
-        ) {
+        if (r.cursor && cursor && Math.hypot(at.x - cursor.x, at.y - cursor.y) < 10) {
           hitCursor?.(at, r.vx, r.vy);
           landed = true;
           impact(at);
@@ -170,9 +144,5 @@ export class Projectiles {
   }
 }
 function blocksRound(v: FighterView, from: Vec, to: Vec) {
-  return (
-    !!v.blade &&
-    !!(v.block || v.parrying) &&
-    segDist(from, to, v.blade.a, v.blade.b) < 5 * v.scale
-  );
+  return !!v.blade && !!(v.block || v.parrying) && segDist(from, to, v.blade.a, v.blade.b) < 5 * v.scale;
 }

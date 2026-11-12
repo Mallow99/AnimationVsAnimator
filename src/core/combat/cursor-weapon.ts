@@ -33,7 +33,7 @@ export class CursorWeapon {
   }
   get status() {
     return this.item?.def.use === 'gun'
-      ? `${this.item.def.name} · ${this.item.reloadRemaining > 0 ? "Reloading…" : `${this.item.ammo}/6`}`
+      ? `${this.item.def.name} · ${this.item.reloadRemaining > 0 ? 'Reloading…' : `${this.item.ammo}/6`}`
       : (this.item?.def.name ?? '');
   }
   equip(kind: CursorWeaponKind) {
@@ -49,13 +49,7 @@ export class CursorWeapon {
     this.item = item;
     this.owner = owner;
     this.kind =
-      item.def.use === 'gun'
-        ? 'gun'
-        : item.def.use === 'shoot'
-          ? 'bow'
-          : item.def.use === 'smash'
-            ? 'mace'
-            : 'sword';
+      item.def.use === 'gun' ? 'gun' : item.def.use === 'shoot' ? 'bow' : item.def.use === 'smash' ? 'mace' : 'sword';
     item.cursorControlled = true;
     owner.userWeaponControlled = true;
     this.reset();
@@ -109,24 +103,17 @@ export class CursorWeapon {
     if (!pets.length || !Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, 0.1);
     this.time += dt;
-    if (
-      this.owner &&
-      (this.item?.where !== 'cursor' ||
-        !this.owner.items.list.includes(this.item))
-    )
-      this.detach();
+    if (this.owner && (this.item?.where !== 'cursor' || !this.owner.items.list.includes(this.item))) this.detach();
     const item = this.item,
       def = item?.def;
-    const at =
-      this.aiming || this.releaseBow ? (this.grip ?? this.at) : this.at;
+    const at = this.aiming || this.releaseBow ? (this.grip ?? this.at) : this.at;
     const last = this.previous ?? at,
       dx = at.x - last.x,
       dy = at.y - last.y;
     const pointerDistance = Math.hypot(this.at.x - at.x, this.at.y - at.y);
     if ((this.aiming || this.releaseBow) && pointerDistance > 3)
       this.angle = Math.atan2(this.at.y - at.y, this.at.x - at.x);
-    else if (!this.aiming && !this.releaseBow && Math.hypot(dx, dy) > 1)
-      this.angle = Math.atan2(dy, dx);
+    else if (!this.aiming && !this.releaseBow && Math.hypot(dx, dy) > 1) this.angle = Math.atan2(dy, dx);
     const fx = Math.cos(this.angle),
       fy = Math.sin(this.angle);
     const source: Peer = {
@@ -165,8 +152,7 @@ export class CursorWeapon {
       this.fireAt = this.time + 0.3;
       pets[0].ctx.sound?.('shot', 0.5);
     }
-    if (this.held && this.kind === 'bow')
-      this.charge = Math.min(1, this.charge + dt / 0.7);
+    if (this.held && this.kind === 'bow') this.charge = Math.min(1, this.charge + dt / 0.7);
     if (def && item && this.releaseBow) {
       const speed = 950 * (0.35 + 0.65 * this.charge);
       this.projectiles.fire(
@@ -198,22 +184,10 @@ export class CursorWeapon {
       item.loosen();
     }
     const speed = Math.min(3500, Math.hypot(dx, dy) / Math.max(dt, 1 / 240));
-    if (
-      def &&
-      item &&
-      this.held &&
-      !['gun', 'bow'].includes(this.kind) &&
-      this.previous &&
-      speed > 350
-    )
+    if (def && item && this.held && !['gun', 'bow'].includes(this.kind) && this.previous && speed > 350)
       this.swing(pets, source, def, item.scale, last, dx, dy, speed, dt);
-    this.projectiles.update(
-      dt,
-      pets[0].ctx.world.bounds,
-      pets[0].ctx.world.platforms,
-      source,
-      pets,
-      (impact) => pets[0].ctx.burst?.(impact.x, impact.y, 6),
+    this.projectiles.update(dt, pets[0].ctx.world.bounds, pets[0].ctx.world.platforms, source, pets, (impact) =>
+      pets[0].ctx.burst?.(impact.x, impact.y, 6),
     );
     this.previous = { ...at };
     this.previousAngle = this.angle;
@@ -232,10 +206,7 @@ export class CursorWeapon {
     let turn = this.angle - this.previousAngle;
     turn = Math.atan2(Math.sin(turn), Math.cos(turn));
     const length = def.length * scale;
-    const count = Math.min(
-      512,
-      Math.ceil((Math.hypot(dx, dy) + Math.abs(turn) * length) / 4) + 1,
-    );
+    const count = Math.min(512, Math.ceil((Math.hypot(dx, dy) + Math.abs(turn) * length) / 4) + 1);
     for (let i = 0; i <= count; i++) {
       const grip = {
           x: last.x + (dx * i) / count,
@@ -260,14 +231,8 @@ export class CursorWeapon {
           {
             type: 'hit',
             joint: joint as JointName,
-            vx: Math.max(
-              -1400,
-              Math.min(1400, (dx / Math.max(dt, 1 / 240)) * 0.4),
-            ),
-            vy: Math.max(
-              -700,
-              Math.min(700, (dy / Math.max(dt, 1 / 240)) * 0.2),
-            ),
+            vx: Math.max(-1400, Math.min(1400, (dx / Math.max(dt, 1 / 240)) * 0.4)),
+            vy: Math.max(-700, Math.min(700, (dy / Math.max(dt, 1 / 240)) * 0.2)),
             power: Math.min(1.4, speed / 1400),
             weapon: { id: def.id, hit: def.hit, cuts: !!def.cuts },
             at: hit,

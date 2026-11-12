@@ -1,0 +1,11 @@
+# Only source code is auto-formatted. Docs, data files and build output are left alone.
+node_modules/
+dist/
+.build/
+out/
+docs/
+assets/
+.github/
+*.md
+*.json
+src/lab/*.html

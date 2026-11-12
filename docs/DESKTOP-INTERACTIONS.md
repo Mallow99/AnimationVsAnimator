@@ -98,7 +98,7 @@ identifies a represented document's URL.
 `npm run checks` checks core behavior and local bridge authorization/routing.
 `npm run sim` checks physics and offline/AI behavior using simulated model replies.
 `SOAK_FIGURES=5 SOAK_SECONDS=300 SOAK_SEED=1 npm run soak` exercises group life and furniture.
-`npm run browsercheck` exercises the real overlay in Chromium.
-`npm run chromecheck` runs actual picker/bridge/crop/restore code against a real Chromium DOM/canvas,
+`npm run check browser` exercises the real overlay in Chromium.
+`npm run check chrome-bridge` runs actual picker/bridge/crop/restore code against a real Chromium DOM/canvas,
 with simulated Chrome extension API calls. It does not verify installed Chrome permissions or real
 Chrome tab closing. A separate Linux/Xvfb Electron smoke verified real preload/settings IPC, group resizing, cursor equipment, and bridge-to-overlay fragment rendering. Mac and Windows native helpers are not executed by those cloud checks.

@@ -5,7 +5,8 @@ import type { Vec } from './math';
 import { wipeDoodles } from './sponge';
 import { compoundOffset, polygonDistance } from './geometry';
 
-type HeldObject = { kind: 'item'; owner: Pet; object: Item }
+type HeldObject =
+  | { kind: 'item'; owner: Pet; object: Item }
   | { kind: 'thing'; owner: Pet; object: Thing }
   | { kind: 'ball'; owner: Pet; object: Ball };
 
@@ -26,42 +27,84 @@ export class OverlayTools {
   using = false;
   /** Only new furniture supplies use this optional placement aid. Existing drags stay physical. */
   snapToFloor = true;
-  private origin: { created: boolean; state?: Pick<Item, 'where' | 'slot' | 'hand' | 'at' | 'dir' | 'shelf'> } | null = null;
+  private origin: { created: boolean; state?: Pick<Item, 'where' | 'slot' | 'hand' | 'at' | 'dir' | 'shelf'> } | null =
+    null;
   private wipeFrom: Vec | null = null;
   private lastTrash: { entry: HeldObject; born: number; at: number } | null = null;
   constructor(private readonly pets: () => Pet[]) {}
 
-  get dragging() { return this.held !== null; }
+  get dragging() {
+    return this.held !== null;
+  }
   get trashedName() {
     const e = this.lastTrash?.entry;
-    return e?.kind === 'item' ? e.object.def.name : e?.kind === 'thing' ? (e.object.def?.name ?? e.object.kind) : e ? 'drawn ball' : null;
+    return e?.kind === 'item'
+      ? e.object.def.name
+      : e?.kind === 'thing'
+        ? (e.object.def?.name ?? e.object.kind)
+        : e
+          ? 'drawn ball'
+          : null;
   }
 
   get placementPreview(): FurniturePlacementPreview | null {
     const e = this.held;
-    if (!this.origin?.created || e?.kind !== 'thing' || !e.object.def || !e.owner.props.things.includes(e.object)) return null;
-    const object = e.object, bounds = e.owner.ctx.world.bounds, hull = object.collisionHull;
+    if (!this.origin?.created || e?.kind !== 'thing' || !e.object.def || !e.owner.props.things.includes(e.object))
+      return null;
+    const object = e.object,
+      bounds = e.owner.ctx.world.bounds,
+      hull = object.collisionHull;
     if (!hull.length) return null;
     // The physics solver keeps a 1.5-point contact margin around the visible contour.
-    const bottom = Math.max(...hull.map(p => p.y)), dy = bounds.floor - 1.5 - bottom;
-    const floorHull = hull.map(p => ({ x: p.x, y: p.y + dy }));
-    const floorParts = object.collisionHulls.map(part => part.map(p => ({ x: p.x, y: p.y + dy })));
-    const outside = floorHull.some(p => p.x < bounds.left + 1.49 || p.x > bounds.right - 1.49 || p.y < bounds.top + 1.49);
+    const bottom = Math.max(...hull.map((p) => p.y)),
+      dy = bounds.floor - 1.5 - bottom;
+    const floorHull = hull.map((p) => ({ x: p.x, y: p.y + dy }));
+    const floorParts = object.collisionHulls.map((part) => part.map((p) => ({ x: p.x, y: p.y + dy })));
+    const outside = floorHull.some(
+      (p) => p.x < bounds.left + 1.49 || p.x > bounds.right - 1.49 || p.y < bounds.top + 1.49,
+    );
     const currentPets = this.pets();
-    const blocked = outside
-      || e.owner.props.things.some(other => other !== object && !!compoundOffset(floorParts, other.collisionHulls))
-      || currentPets.some(p => p.items.list.some(item => item.where === 'world' && !!compoundOffset(floorParts, [item.collisionHull])))
-      || e.owner.props.balls.some(ball => floorParts.some(part => polygonDistance(ball.p, part) < ball.r + 1.5))
-      || currentPets.some(p => Object.entries(p.char.body.j).some(([joint, point]) => !p.char.body.ghost.has(joint as keyof typeof p.char.body.j) && floorParts.some(part => polygonDistance(point, part) < point.r + 1.5)));
+    const blocked =
+      outside ||
+      e.owner.props.things.some((other) => other !== object && !!compoundOffset(floorParts, other.collisionHulls)) ||
+      currentPets.some((p) =>
+        p.items.list.some((item) => item.where === 'world' && !!compoundOffset(floorParts, [item.collisionHull])),
+      ) ||
+      e.owner.props.balls.some((ball) => floorParts.some((part) => polygonDistance(ball.p, part) < ball.r + 1.5)) ||
+      currentPets.some((p) =>
+        Object.entries(p.char.body.j).some(
+          ([joint, point]) =>
+            !p.char.body.ghost.has(joint as keyof typeof p.char.body.j) &&
+            floorParts.some((part) => polygonDistance(point, part) < point.r + 1.5),
+        ),
+      );
     const nearFloor = Math.abs(dy) <= Math.max(12, Math.min(32, 18 * object.scale));
-    return { hull, floorHull, floor: bounds.floor, floorCenter: { x: object.center.x, y: object.center.y + dy }, nearFloor, blocked, snap: this.snapToFloor && nearFloor && !blocked };
+    return {
+      hull,
+      floorHull,
+      floor: bounds.floor,
+      floorCenter: { x: object.center.x, y: object.center.y + dy },
+      nearFloor,
+      blocked,
+      snap: this.snapToFloor && nearFloor && !blocked,
+    };
   }
 
   beginItem(owner: Pet, object: Item, at: Vec) {
     if (this.held || !owner.items.list.includes(object)) return false;
-    if (this.pets().some(p => p.items.carried && p.items.carried !== object)) return false;
+    if (this.pets().some((p) => p.items.carried && p.items.carried !== object)) return false;
     this.using = false;
-    this.origin = { created: false, state: { where: object.where, slot: object.slot, hand: object.hand, at: { ...object.at }, dir: { ...object.dir }, shelf: object.shelf ? {...object.shelf} : null } };
+    this.origin = {
+      created: false,
+      state: {
+        where: object.where,
+        slot: object.slot,
+        hand: object.hand,
+        at: { ...object.at },
+        dir: { ...object.dir },
+        shelf: object.shelf ? { ...object.shelf } : null,
+      },
+    };
     owner.takeItem(object);
     object.cursorControlled = true;
     owner.userWeaponControlled = true; // Transport never swings/fires the weapon.
@@ -73,11 +116,14 @@ export class OverlayTools {
 
   /** Pull a definition from the bag; custom definitions use the same path as built-ins. */
   pull(owner: Pet, kind: 'item' | 'prop', id: string, at: Vec) {
-    if (this.held || this.pets().some(p => p.items.carried)) return false;
+    if (this.held || this.pets().some((p) => p.items.carried)) return false;
     if (kind === 'item') {
       const object = owner.items.spawn(id, at, owner.char.scale);
       if (!object) return false;
-      if (!this.beginItem(owner, object, at)) { owner.items.remove(object); return false; }
+      if (!this.beginItem(owner, object, at)) {
+        owner.items.remove(object);
+        return false;
+      }
       this.origin!.created = true;
       return true;
     }
@@ -94,9 +140,10 @@ export class OverlayTools {
     if (!e) return;
     if (e.kind === 'item') {
       if (!applyUse) this.wipeFrom = null;
-      if (applyUse && this.using && (e.object.def.use === 'erase' || e.object.def.use === 'color')) this.animateInk(e.object.def.use, at);
+      if (applyUse && this.using && (e.object.def.use === 'erase' || e.object.def.use === 'color'))
+        this.animateInk(e.object.def.use, at);
       if (applyUse && this.using && e.object.def.use === 'wipe') {
-        const sets = new Set(this.pets().map(p => p.ctx.doodles));
+        const sets = new Set(this.pets().map((p) => p.ctx.doodles));
         for (const doodles of sets) wipeDoodles(doodles, this.wipeFrom ?? at, at, 14 * e.object.scale);
         this.wipeFrom = { ...at };
       }
@@ -104,7 +151,8 @@ export class OverlayTools {
       e.object.dir = { x: 0, y: 1, z: 0 };
       e.object.loosen();
       e.object.resetMotion();
-    } else if (e.kind === 'thing' && e.object.held) Object.assign(e.object.held, at, { vx: velocity.x, vy: velocity.y });
+    } else if (e.kind === 'thing' && e.object.held)
+      Object.assign(e.object.held, at, { vx: velocity.x, vy: velocity.y });
     else if (e.kind === 'ball') e.object.moveHold(at.x, at.y, velocity.x, velocity.y);
   }
 
@@ -116,21 +164,30 @@ export class OverlayTools {
 
   private animateInk(use: 'erase' | 'color', at: Vec) {
     for (const owner of this.pets()) {
-      const item = owner.items.list.find(i => i.ink && i.where === 'world' && i.distTo(at.x, at.y) < 14);
-      const prop = owner.props.things.find(t => t.ink && !t.held && !t.movingBy && !t.sitters.size && !t.watchers.size && t.contains(at.x, at.y));
-      const object = item ?? prop; if (!object?.ink) continue;
+      const item = owner.items.list.find((i) => i.ink && i.where === 'world' && i.distTo(at.x, at.y) < 14);
+      const prop = owner.props.things.find(
+        (t) => t.ink && !t.held && !t.movingBy && !t.sitters.size && !t.watchers.size && t.contains(at.x, at.y),
+      );
+      const object = item ?? prop;
+      if (!object?.ink) continue;
       if (use === 'erase') {
-        if (item) owner.items.remove(item); else if (prop) {
-          for (const p of this.pets()) if (prop.platforms.some(pl => pl.id === p.char.support)) p.mind.reset(p.ctx);
+        if (item) owner.items.remove(item);
+        else if (prop) {
+          for (const p of this.pets()) if (prop.platforms.some((pl) => pl.id === p.char.support)) p.mind.reset(p.ctx);
           owner.props.remove(prop);
         }
         owner.ctx.say(owner.config.personality === 'competitive' ? 'Hey! I made that!' : 'My drawing…', 1.6);
-        if (owner.char.ready && Math.abs(owner.char.x - at.x) < 55) owner.char.walkTo(owner.char.x + (owner.char.x < at.x ? -30 : 30));
+        if (owner.char.ready && Math.abs(owner.char.x - at.x) < 55)
+          owner.char.walkTo(owner.char.x + (owner.char.x < at.x ? -30 : 30));
       } else if (object.ink.progress < 0.6) {
         const source = item ? owner.items.defs.get(object.ink.source) : owner.props.defs.get(object.ink.source);
         if (!source || source.refinable === false) continue;
         object.ink.progress = 0.6;
-        object.def = { ...object.def!, shape: structuredClone(source.shape), sprite: structuredClone(source.sprite) } as typeof object.def;
+        object.def = {
+          ...object.def!,
+          shape: structuredClone(source.shape),
+          sprite: structuredClone(source.sprite),
+        } as typeof object.def;
         owner.ctx.say('Thanks! I’ll polish it.', 1.5);
       }
       return;
@@ -167,13 +224,21 @@ export class OverlayTools {
       if (e.kind === 'thing' && placement?.snap) {
         // Place the exact preview pose, then release all hold constraints. No scene is frozen.
         e.object.place(placement.floorCenter, e.object.tilt);
-        if (e.object.held) { e.object.held.vx = 0; e.object.held.vy = 0; }
+        if (e.object.held) {
+          e.object.held.vx = 0;
+          e.object.held.vy = 0;
+        }
       }
       e.object.release();
     }
-    if(e.kind==='item'&&e.object.def.use==='connect'&&!recipient){
-      const tv=e.owner.props.placed.find(t=>t.def?.use==='tv'&&Math.abs(t.center.x-at.x)<100*e.object.scale);
-      if(tv){tv.consoleConnected=true;e.owner.ctx.say('Console connected.',1.4);}
+    if (e.kind === 'item' && e.object.def.use === 'connect' && !recipient) {
+      const tv = e.owner.props.placed.find(
+        (t) => t.def?.use === 'tv' && Math.abs(t.center.x - at.x) < 100 * e.object.scale,
+      );
+      if (tv) {
+        tv.consoleConnected = true;
+        e.owner.ctx.say('Console connected.', 1.4);
+      }
     }
     return true;
   }
@@ -184,8 +249,8 @@ export class OverlayTools {
     if (!e) {
       for (const owner of this.pets()) {
         const item = owner.items.carried;
-        const thing = owner.props.things.find(t => t.held);
-        const ball = owner.props.balls.find(b => b.heldBy === 'user');
+        const thing = owner.props.things.find((t) => t.held);
+        const ball = owner.props.balls.find((b) => b.heldBy === 'user');
         if (item) e = { kind: 'item', owner, object: item };
         else if (thing) e = { kind: 'thing', owner, object: thing };
         else if (ball) e = { kind: 'ball', owner, object: ball };
@@ -217,14 +282,25 @@ export class OverlayTools {
         const t = e.object;
         for (const p of this.pets()) {
           const who = p.ctx.who;
-          if (t.sitters.has(who) || t.watchers.has(who) || t.players.includes(who) || t.platforms.some(pl => pl.id === p.char.support)) p.mind.reset(p.ctx);
+          if (
+            t.sitters.has(who) ||
+            t.watchers.has(who) ||
+            t.players.includes(who) ||
+            t.platforms.some((pl) => pl.id === p.char.support)
+          )
+            p.mind.reset(p.ctx);
         }
-        t.sitters.clear(); t.watchers.clear(); t.players = [];
-        t.on = false; t.arcade = null; t.arcade2 = null; t.board = null;
+        t.sitters.clear();
+        t.watchers.clear();
+        t.players = [];
+        t.on = false;
+        t.arcade = null;
+        t.arcade2 = null;
+        t.board = null;
         owner.props.remove(t);
       } else {
         if (!owner.props.balls.includes(e.object)) return false;
-        owner.props.balls = owner.props.balls.filter(b => b !== e!.object);
+        owner.props.balls = owner.props.balls.filter((b) => b !== e!.object);
       }
       e.object.release();
     }
@@ -237,19 +313,24 @@ export class OverlayTools {
 
   /** Cancel puts an existing item back; an unused supply is never left on the desktop. */
   cancel() {
-    const e = this.held, origin = this.origin;
+    const e = this.held,
+      origin = this.origin;
     if (!e) return false;
     this.held = null;
-    this.using = false; this.origin = null; this.wipeFrom = null;
+    this.using = false;
+    this.origin = null;
+    this.wipeFrom = null;
     if (e.kind === 'item') {
-      e.owner.userWeaponControlled = false; e.object.cursorControlled = false;
+      e.owner.userWeaponControlled = false;
+      e.object.cursorControlled = false;
       if (!e.owner.items.list.includes(e.object)) return true;
       if (origin?.created) e.owner.items.remove(e.object);
       else if (!this.pets().includes(e.owner) && this.pets()[0]) {
         const owner = this.pets()[0];
-        e.owner.items.remove(e.object); owner.items.list.push(e.object); owner.giveBack(e.object);
-      }
-      else if (origin?.state) {
+        e.owner.items.remove(e.object);
+        owner.items.list.push(e.object);
+        owner.giveBack(e.object);
+      } else if (origin?.state) {
         const s = origin.state;
         if (s.where === 'hand') e.owner.items.toHand(e.object, s.hand);
         else if (s.where === 'cursor') e.owner.giveBack(e.object);
@@ -258,11 +339,15 @@ export class OverlayTools {
           // Keep the original slot when it is still free.
           if (s.where === 'belt' && s.slot >= 0 && !e.owner.items.belt[s.slot]) {
             e.owner.items.belt[e.object.slot] = null;
-            e.object.slot = s.slot; e.owner.items.belt[s.slot] = e.object;
+            e.object.slot = s.slot;
+            e.owner.items.belt[s.slot] = e.object;
           }
         } else {
-          e.object.at = { ...s.at }; e.object.dir = { ...s.dir };
-          e.owner.items.drop(e.object, 0, 0); e.object.shelf = s.shelf; e.object.resetMotion();
+          e.object.at = { ...s.at };
+          e.object.dir = { ...s.dir };
+          e.owner.items.drop(e.object, 0, 0);
+          e.object.shelf = s.shelf;
+          e.object.resetMotion();
         }
       }
     } else {
@@ -281,7 +366,7 @@ export class OverlayTools {
     const owner = this.pets().includes(e.owner) ? e.owner : this.pets()[0];
     if (!owner) return false;
     if (e.kind === 'item') {
-      if (this.pets().some(p => p.items.list.includes(e.object))) return false;
+      if (this.pets().some((p) => p.items.list.includes(e.object))) return false;
       owner.items.list.push(e.object);
       e.object.at = { ...at, z: 0 };
       owner.items.drop(e.object, 0, 0);
@@ -292,7 +377,12 @@ export class OverlayTools {
         if (owner.props.things.includes(e.object)) return false;
         e.object.unstick(); // Retrieved drawings leave their old window anchors behind.
         const center = e.object.center;
-        for (const p of e.object.points) { p.x += at.x - center.x; p.y += at.y - center.y; p.px = p.x; p.py = p.y; }
+        for (const p of e.object.points) {
+          p.x += at.x - center.x;
+          p.y += at.y - center.y;
+          p.px = p.x;
+          p.py = p.y;
+        }
         owner.props.add(e.object);
       } else {
         if (owner.props.balls.includes(e.object)) return false;

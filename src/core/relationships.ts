@@ -50,34 +50,19 @@ export function parseRelationship(raw: unknown): Relationship | null {
     Object.fromEntries(
       Object.entries(raw && typeof raw === 'object' ? raw : {})
         .slice(0, 24)
-        .filter(
-          ([key, v]) =>
-            /^[a-z0-9:-]{1,40}$/.test(key) && typeof v === 'number' && Number.isFinite(v),
-        )
+        .filter(([key, v]) => /^[a-z0-9:-]{1,40}$/.test(key) && typeof v === 'number' && Number.isFinite(v))
         .map(([key, v]) => [key, Math.max(0, Math.min(1000, v as number))]),
     );
-  for (const key of [
-    'cooperation',
-    'care',
-    'rivalry',
-    'trust',
-    'familiarity',
-    'respect',
-    'generosity',
-  ] as const)
-    if (typeof o[key] === 'number' && Number.isFinite(o[key]))
-      r[key] = Math.max(0, Math.min(1, o[key] as number));
+  for (const key of ['cooperation', 'care', 'rivalry', 'trust', 'familiarity', 'respect', 'generosity'] as const)
+    if (typeof o[key] === 'number' && Number.isFinite(o[key])) r[key] = Math.max(0, Math.min(1, o[key] as number));
   for (const key of ['giftsGiven', 'giftsReceived'] as const)
     if (typeof o[key] === 'number' && Number.isFinite(o[key]))
       r[key] = Math.max(0, Math.min(1000, Math.floor(o[key] as number)));
   for (const key of ['lastGift', 'favoriteShared'] as const)
-    if (typeof o[key] === 'string' && /^[a-z0-9:-]{1,40}$/.test(o[key] as string))
-      r[key] = o[key] as string;
+    if (typeof o[key] === 'string' && /^[a-z0-9:-]{1,40}$/.test(o[key] as string)) r[key] = o[key] as string;
   r.lastShared = typeof o.lastShared === 'string' ? o.lastShared.slice(0, 40) : '';
   r.recent = Array.isArray(o.recent)
-    ? o.recent
-        .filter((v): v is string => typeof v === 'string' && /^[a-z0-9:-]{1,40}$/.test(v))
-        .slice(-8)
+    ? o.recent.filter((v): v is string => typeof v === 'string' && /^[a-z0-9:-]{1,40}$/.test(v)).slice(-8)
     : [];
   r.activities = counts(o.activities);
   r.vulnerable = counts(o.vulnerable);
@@ -85,8 +70,7 @@ export function parseRelationship(raw: unknown): Relationship | null {
     typeof o.disagreements === 'number' && Number.isFinite(o.disagreements)
       ? Math.max(0, Math.min(1000, o.disagreements))
       : 0;
-  r.lastDisagreement =
-    typeof o.lastDisagreement === 'string' ? o.lastDisagreement.slice(0, 80) : '';
+  r.lastDisagreement = typeof o.lastDisagreement === 'string' ? o.lastDisagreement.slice(0, 80) : '';
   return r;
 }
 
@@ -109,8 +93,7 @@ export function sharedMoment(r: Relationship, act: string, success: boolean) {
   r.lastShared = act;
   r.recent.push(act);
   if (r.recent.length > 8) r.recent.shift();
-  if (['check', 'hug', 'gift', 'apology'].includes(act))
-    r.care = Math.min(1, r.care + 0.04 * novelty);
+  if (['check', 'hug', 'gift', 'apology'].includes(act)) r.care = Math.min(1, r.care + 0.04 * novelty);
   if (['duel', 'pong', 'videogame', 'handheld', 'catch'].includes(act))
     r.rivalry = Math.min(1, r.rivalry + 0.02 * novelty);
   r.favoriteShared =

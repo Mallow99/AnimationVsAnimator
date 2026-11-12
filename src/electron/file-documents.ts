@@ -25,12 +25,7 @@ export class FileDocuments {
         y: w.y,
         width: w.w,
         height: w.h,
-        tops: doc.tops?.map(([x, y, width, height]) => [
-          x + w.x - doc.x,
-          y + w.y - doc.y,
-          width,
-          height,
-        ]),
+        tops: doc.tops?.map(([x, y, width, height]) => [x + w.x - doc.x, y + w.y - doc.y, width, height]),
       });
     }
     return files;

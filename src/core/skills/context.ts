@@ -17,11 +17,11 @@ export interface World {
   bounds: Bounds;
   cursor: Vec | null;
   cursorMovedAt: number; // world.time when the cursor last moved
-  time: number;          // seconds since start
+  time: number; // seconds since start
   platforms: Platform[]; // window tops he can stand on
-  walls: Wall[];         // window sides and screen edges he can climb
-  windows: WinRect[];    // the windows on screen (front-most first), where they are right now
-  sides: Wall[];         // every visible window side, at any height (for pushing and kicking them)
+  walls: Wall[]; // window sides and screen edges he can climb
+  windows: WinRect[]; // the windows on screen (front-most first), where they are right now
+  sides: Wall[]; // every visible window side, at any height (for pushing and kicking them)
   /** What you're doing: the app in front, its window's title, since when (world.time). Null if he can't tell. */
   screen?: { app: string; title: string; since: number } | null;
   /** Things in your front window he can stand on (text, buttons, chat messages): their top edges. */
@@ -38,17 +38,23 @@ export const DEFAULT_LESSONS: Lessons = { safeDrop: 420 };
 /** Everything a skill can see and touch. */
 export interface Ctx {
   /** Which figure this is (unique while the app runs): who's sitting where, who's watching the TV. */
-  desktopAction?: (action:import('../../shared/desktop').DesktopAction)=>Promise<import('../../shared/desktop').DesktopResult>;
-  desktopState?: ()=>import('../../shared/desktop').DesktopState;
+  desktopAction?: (
+    action: import('../../shared/desktop').DesktopAction,
+  ) => Promise<import('../../shared/desktop').DesktopResult>;
+  desktopState?: () => import('../../shared/desktop').DesktopState;
   who: string;
   hyperactivity?: number;
   personality?: import('../config').Personality;
   drawTools?: boolean;
   talent?: import('../relationships').Talent;
-  relationship?: (id:string)=>import('../relationships').Relationship;
-  recordActivity?: (id:string,act:string,success:boolean)=>void;
-  recordGift?: (id:string,item:string,appreciation:number,received:boolean)=>void;
-  deliverGift?: (id:string,message:Extract<PeerMsg,{type:'toolGift'}>,reply:(accepted:boolean,appreciation:number)=>void)=>(()=>void);
+  relationship?: (id: string) => import('../relationships').Relationship;
+  recordActivity?: (id: string, act: string, success: boolean) => void;
+  recordGift?: (id: string, item: string, appreciation: number, received: boolean) => void;
+  deliverGift?: (
+    id: string,
+    message: Extract<PeerMsg, { type: 'toolGift' }>,
+    reply: (accepted: boolean, appreciation: number) => void,
+  ) => () => void;
   inkLifetime?: number;
   consoleRequired?: boolean;
   tellTo?: (id: string, m: PeerMsg) => void;
@@ -131,14 +137,19 @@ export abstract class Skill {
   abstract update(c: Ctx, dt: number): boolean;
   stop(_c: Ctx) {}
   /** Only safe tasks opt in. A temporary reaction may resume their original resources. */
-  continuation(_c:Ctx):(()=>Skill|null)|null {return null;}
+  continuation(_c: Ctx): (() => Skill | null) | null {
+    return null;
+  }
 }
 
 export function arrive(c: Ctx, x: number, tol = 8) {
   const ch = c.char;
   if (!ch.ready) return false;
   // (Never tighter than where his own walking calls it "there", or he'd stop short and wait forever.)
-  if (Math.abs(ch.x - x) <= Math.max(tol, 6) * ch.scale) { ch.stop(); return true; }
+  if (Math.abs(ch.x - x) <= Math.max(tol, 6) * ch.scale) {
+    ch.stop();
+    return true;
+  }
   if (ch.walking) return false;
   // Up on a piece of furniture (or something he drew) and the spot's past its edge: he hops down rather than
   // waiting at the edge forever. (Off a window, getting down is its own skill.)

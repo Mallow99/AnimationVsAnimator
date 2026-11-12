@@ -5,5 +5,7 @@ export function unchangedExample(file: string, history: unknown[]): boolean {
   try {
     const value = JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')));
     return history.some((old) => JSON.stringify(old) === value);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }

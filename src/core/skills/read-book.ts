@@ -44,9 +44,7 @@ export class ReadBook extends Skill {
       elapsed = this.clock.elapsed;
     if (!book || this.phase === 'close' || this.phase === 'return') return null;
     return () =>
-      c.items.list.includes(book) && book.where !== 'cursor'
-        ? new ReadBook(book, elapsed, this.autonomous)
-        : null;
+      c.items.list.includes(book) && book.where !== 'cursor' ? new ReadBook(book, elapsed, this.autonomous) : null;
   }
 
   start(c: Ctx) {
@@ -54,9 +52,7 @@ export class ReadBook extends Skill {
     // Include loose/shelved books. Never conjure another when the owner is carrying the only one.
     this.book =
       this.original ??
-      c.items.list.find(
-        (it) => isBookItem(it) && it.where !== 'cursor' && it.bookmark < it.bookPages,
-      ) ??
+      c.items.list.find((it) => isBookItem(it) && it.where !== 'cursor' && it.bookmark < it.bookPages) ??
       (this.autonomous
         ? null
         : (c.items.list.find((it) => isBookItem(it) && it.where !== 'cursor') ??
@@ -71,8 +67,7 @@ export class ReadBook extends Skill {
         .filter((t) => t.def?.id === 'bookshelf' && !t.held && Math.abs(t.tilt) < 0.35)
         .sort(
           (a, b) =>
-            Number(b.storageKey === this.book!.shelf?.key) -
-              Number(a.storageKey === this.book!.shelf?.key) ||
+            Number(b.storageKey === this.book!.shelf?.key) - Number(a.storageKey === this.book!.shelf?.key) ||
             Math.abs(a.center.x - c.char.x) - Math.abs(b.center.x - c.char.x),
         )[0] ?? null;
     this.tool.item = this.book;
@@ -85,14 +80,7 @@ export class ReadBook extends Skill {
     const ch = c.char,
       book = this.book;
     this.phaseTime += dt;
-    if (
-      !book ||
-      !c.items.list.includes(book) ||
-      book.where === 'cursor' ||
-      !ch.useHand ||
-      this.t > 2350
-    )
-      return true;
+    if (!book || !c.items.list.includes(book) || book.where === 'cursor' || !ch.useHand || this.t > 2350) return true;
     if (this.phase === 'fetch') {
       if (this.fetch) {
         this.fetch.t += dt;
@@ -104,9 +92,7 @@ export class ReadBook extends Skill {
       const result = this.tool.fetch(c, dt);
       if (result !== 'ready') return result === 'none' || this.t > 25;
       if (!this.light.prepare(c, dt)) return this.t > 25;
-      const seat = propsOf(c, 'seat').find(
-        (t) => t.sitters.has(c.who) || t.sitters.size < t.seatRoom,
-      );
+      const seat = propsOf(c, 'seat').find((t) => t.sitters.has(c.who) || t.sitters.size < t.seatRoom);
       if (seat) {
         this.seat = new SitOnProp(seat, 3600, ch.facing as 1 | -1, 'reading', true);
         this.seat.start(c);
@@ -140,18 +126,16 @@ export class ReadBook extends Skill {
       ch.handTarget = null;
       c.look = 'target';
       c.lookTarget = this.shelf?.center ?? null;
-      if (
-        !this.shelf ||
-        !c.props?.things.includes(this.shelf) ||
-        this.shelf.held ||
-        Math.abs(this.shelf.tilt) > 0.35
-      )
+      if (!this.shelf || !c.props?.things.includes(this.shelf) || this.shelf.held || Math.abs(this.shelf.tilt) > 0.35)
         return true;
       const slot = this.nextReturnSlot(c);
       if (slot === undefined) return true;
       const target = this.shelf.toWorld(10 + slot * 15, 35);
       this.returnSide ??= ch.x < target.x ? -1 : 1;
-      if (this.returnSlot !== slot) { this.returnSlot = slot; this.returning = new Handling(); }
+      if (this.returnSlot !== slot) {
+        this.returnSlot = slot;
+        this.returning = new Handling();
+      }
       // Approach the chosen slot, leaving room for the torso's natural forward
       // bend. The old shelf-centre destination could leave it behind his hand.
       if (!arrive(c, target.x + this.returnSide * 16 * ch.scale, 6)) return this.phaseTime > 18;
@@ -175,8 +159,7 @@ export class ReadBook extends Skill {
       this.pageTime += dt;
       if (this.pageTime >= 0.85) {
         book.bookmark = Math.min(book.bookPages, book.bookmark + 1);
-        if (book.bookmark === book.bookPages)
-          book.bookReadThroughs = Math.min(1000, book.bookReadThroughs + 1);
+        if (book.bookmark === book.bookPages) book.bookReadThroughs = Math.min(1000, book.bookReadThroughs + 1);
         this.pageTime = -1;
         turned = true;
       }
@@ -201,18 +184,25 @@ export class ReadBook extends Skill {
     book.aimLocal = null;
     c.look = 'target';
     c.lookTarget = { x: at.x + aim.x * length * 0.5 * sc, y: at.y + aim.y * length * 0.5 * sc };
-    if(book.model3D){
-      const forward=ch.dirToWorld(1,0),axes=readerBookAxes(forward);
-      const pose:ModelPose={...axes,scale:sc,at:{x:n.x+forward.x*18*sc,y:n.y+(24-12*ready)*sc,z:n.z+forward.z*18*sc}};
-      const main=book.hand==='R'?'right':'left',other=book.hand==='R'?'L':'R';
-      const anchored=poseAtGrip(book.model3D,main,ch.body.j[book.hand==='R'?'handR':'handL'],axes,sc);
-      ch.handsAt={
-        [book.hand]:modelGrip(book.model3D,main,pose),
-        [other]:modelGrip(book.model3D,book.model3D.grips.turn?'turn':other==='R'?'right':'left',anchored),
+    if (book.model3D) {
+      const forward = ch.dirToWorld(1, 0),
+        axes = readerBookAxes(forward);
+      const pose: ModelPose = {
+        ...axes,
+        scale: sc,
+        at: { x: n.x + forward.x * 18 * sc, y: n.y + (24 - 12 * ready) * sc, z: n.z + forward.z * 18 * sc },
       };
-      book.bookAxes=axes;book.aim=axes.front;
-      const gaze=modelGrip(book.model3D,'spine',pose);
-      c.lookTarget={x:gaze.x+axes.down.x*-10*sc,y:gaze.y+axes.down.y*-10*sc};
+      const main = book.hand === 'R' ? 'right' : 'left',
+        other = book.hand === 'R' ? 'L' : 'R';
+      const anchored = poseAtGrip(book.model3D, main, ch.body.j[book.hand === 'R' ? 'handR' : 'handL'], axes, sc);
+      ch.handsAt = {
+        [book.hand]: modelGrip(book.model3D, main, pose),
+        [other]: modelGrip(book.model3D, book.model3D.grips.turn ? 'turn' : other === 'R' ? 'right' : 'left', anchored),
+      };
+      book.bookAxes = axes;
+      book.aim = axes.front;
+      const gaze = modelGrip(book.model3D, 'spine', pose);
+      c.lookTarget = { x: gaze.x + axes.down.x * -10 * sc, y: gaze.y + axes.down.y * -10 * sc };
     }
     c.mood.s.boredom = Math.max(0, c.mood.s.boredom - dt / 300);
     if (this.phase === 'close') {
@@ -257,8 +247,7 @@ export class ReadBook extends Skill {
     return [0, 1, 2, 3, 4].find((i) => !used.includes(i));
   }
   private returnBook(c: Ctx, slot: number) {
-    if (!this.shelf || !this.book || this.shelf.held || Math.abs(this.shelf.tilt) > 0.35)
-      return false;
+    if (!this.shelf || !this.book || this.shelf.held || Math.abs(this.shelf.tilt) > 0.35) return false;
     if (this.nextReturnSlot(c) !== slot) return false;
     const at = this.shelf.toWorld(10 + slot * 15, 35);
     this.book.at = { ...at, z: 6 };

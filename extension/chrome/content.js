@@ -17,9 +17,7 @@
     };
   }
   function page() {
-    const r = selected?.isConnected
-      ? selected.getBoundingClientRect()
-      : { x: 0, y: 0, width: 1, height: 1 };
+    const r = selected?.isConnected ? selected.getBoundingClientRect() : { x: 0, y: 0, width: 1, height: 1 };
     return {
       ...screenPoint(r),
       width: r.width,
@@ -34,8 +32,7 @@
   function restore() {
     for (const [node, visibility, priority] of taken)
       if (node.isConnected) {
-        if (visibility)
-          node.style.setProperty('visibility', visibility, priority);
+        if (visibility) node.style.setProperty('visibility', visibility, priority);
         else node.style.removeProperty('visibility');
       }
     taken.length = 0;
@@ -69,10 +66,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       const node = event.target;
-      if (
-        node instanceof HTMLElement &&
-        !['HTML', 'BODY', 'INPUT', 'TEXTAREA', 'SELECT'].includes(node.tagName)
-      )
+      if (node instanceof HTMLElement && !['HTML', 'BODY', 'INPUT', 'TEXTAREA', 'SELECT'].includes(node.tagName))
         selected = node;
       cancel();
     },
@@ -109,13 +103,7 @@
         viewportWidth: innerWidth,
         viewportHeight: innerHeight,
         screen: screenPoint(r),
-        title: (
-          selected.getAttribute('alt') ||
-          selected.textContent ||
-          selected.tagName
-        )
-          .trim()
-          .slice(0, 80),
+        title: (selected.getAttribute('alt') || selected.textContent || selected.tagName).trim().slice(0, 80),
       });
       return;
     }

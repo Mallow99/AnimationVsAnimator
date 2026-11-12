@@ -42,7 +42,7 @@ export interface GroupView {
   act: GroupAct;
   members: string[];
   phase: 'meet' | 'ready' | 'do';
-  game?:{score:number;best:number;presses:number;crashed:boolean};
+  game?: { score: number; best: number; presses: number; crashed: boolean };
   ball?: { uid: number; at: Vec; holder: string | null; throws: number; catches: number };
 }
 const required: Partial<Record<GroupAct, number>> = {
@@ -52,7 +52,8 @@ const required: Partial<Record<GroupAct, number>> = {
   relay: 5,
   carry: 2,
   pong: 2,
-  catch: 2,handheld:2,
+  catch: 2,
+  handheld: 2,
 };
 export const availableForGroup = (v: FighterView) =>
   !!v.id &&
@@ -65,12 +66,7 @@ export const availableForGroup = (v: FighterView) =>
   !v.group &&
   !['duel', 'together', 'ask'].includes(v.doing ?? '');
 
-export function groupPlan(
-  c: Ctx,
-  act: GroupAct,
-  prop?: Thing,
-  destination?: number,
-): GroupPlan | null {
+export function groupPlan(c: Ctx, act: GroupAct, prop?: Thing, destination?: number): GroupPlan | null {
   if (!GROUP_ACTS.includes(act)) return null;
   const talent = act === 'carry' ? 'building' : act === 'pong' ? 'games' : null;
   const affinity = (id: string) => {
@@ -82,7 +78,7 @@ export function groupPlan(
     );
   };
   const peers = (c.peers?.() ?? [])
-    .filter(v=>availableForGroup(v)&&(act!=='handheld'||v.hasHandheld))
+    .filter((v) => availableForGroup(v) && (act !== 'handheld' || v.hasHandheld))
     .sort(
       (a, b) =>
         Number(b.talent === talent) - Number(a.talent === talent) ||
@@ -100,24 +96,22 @@ export function groupPlan(
         !t.held &&
         !t.movingBy &&
         Math.abs(t.tilt) < 0.35 &&
-        (act === 'couch'
-          ? t.seatRoom >= n && !t.sitters.size
-          : !!t.def && propActions(t.def).includes('watch')),
+        (act === 'couch' ? t.seatRoom >= n && !t.sitters.size : !!t.def && propActions(t.def).includes('watch')),
     );
   if ((act === 'couch' || act === 'watch' || act === 'pong' || act === 'carry') && !prop) {
     c.say('We need a free spot.', 1.5);
     return null;
   }
-  if(act==='handheld'&&!c.items.list.some(i=>i.def.use==='game'&&i.where!=='cursor')){c.say('I need my own handheld.',1.6);return null;}
-  const ball =
-    act === 'catch'
-      ? c.items.list.find((i) => i.def.id === 'bouncy-ball' && i.where !== 'cursor')
-      : null;
+  if (act === 'handheld' && !c.items.list.some((i) => i.def.use === 'game' && i.where !== 'cursor')) {
+    c.say('I need my own handheld.', 1.6);
+    return null;
+  }
+  const ball = act === 'catch' ? c.items.list.find((i) => i.def.id === 'bouncy-ball' && i.where !== 'cursor') : null;
   if (act === 'catch' && !ball) {
     c.say('I need my ball.', 1.5);
     return null;
   }
-  const gap = (act === 'catch' ? 160 : act==='handheld'?105:34) * c.char.scale,
+  const gap = (act === 'catch' ? 160 : act === 'handheld' ? 105 : 34) * c.char.scale,
     half = ((n - 1) * gap) / 2;
   const x = Math.max(
     c.world.bounds.left + half + 25,
@@ -133,10 +127,7 @@ export function groupPlan(
         to = members[listener],
         person = peers.find((v) => v.id === id);
       const personality = id === c.who ? c.personality : person?.personality;
-      const recent =
-        turn === 0
-          ? (c.relationship?.(to)?.recent.at(-1) ?? c.relationship?.(to)?.lastShared)
-          : undefined;
+      const recent = turn === 0 ? (c.relationship?.(to)?.recent.at(-1) ?? c.relationship?.(to)?.lastShared) : undefined;
       const history =
         recent === 'pong' || recent === 'duel'
           ? 'Another friendly rematch sometime?'
@@ -153,11 +144,15 @@ export function groupPlan(
         speaker: id,
         listener: to,
         text,
-        seconds:Math.max(3.8,2.8+text.length/characterTemplate(personality).voice.rate+(text.match(/[,.!?]/g)?.length??0)*characterTemplate(personality).voice.pause),
+        seconds: Math.max(
+          3.8,
+          2.8 +
+            text.length / characterTemplate(personality).voice.rate +
+            (text.match(/[,.!?]/g)?.length ?? 0) * characterTemplate(personality).voice.pause,
+        ),
       });
       speaker = listener;
-      listener =
-        turn % 3 === 0 ? (speaker === 0 ? 1 : 0) : (speaker + 1 + Math.floor(turn / 3)) % n;
+      listener = turn % 3 === 0 ? (speaker === 0 ? 1 : 0) : (speaker + 1 + Math.floor(turn / 3)) % n;
       if (listener === speaker) listener = (speaker + 1) % n;
     }
   }
@@ -229,8 +224,8 @@ export class GroupActivity extends Skill {
   private ballTime = 0;
   private throws = 0;
   private catches = 0;
-  private handheld=new PlayHandheld(true);
-  private gameComment=10;
+  private handheld = new PlayHandheld(true);
+  private gameComment = 10;
   constructor(readonly plan: GroupPlan) {
     super();
   }
@@ -240,7 +235,18 @@ export class GroupActivity extends Skill {
       act: this.plan.act,
       members: [...this.plan.members],
       phase: this.phase,
-      ...(this.handheld.item?.arcade?{game:{score:this.handheld.item.arcade.score,best:Math.max(this.handheld.item.arcade.best,this.handheld.item.arcade.score),presses:this.handheld.item.arcade.presses,crashed:this.handheld.item.arcade.crashedAt>=0&&this.handheld.item.arcade.time-this.handheld.item.arcade.crashedAt<.8}}:{}),
+      ...(this.handheld.item?.arcade
+        ? {
+            game: {
+              score: this.handheld.item.arcade.score,
+              best: Math.max(this.handheld.item.arcade.best, this.handheld.item.arcade.score),
+              presses: this.handheld.item.arcade.presses,
+              crashed:
+                this.handheld.item.arcade.crashedAt >= 0 &&
+                this.handheld.item.arcade.time - this.handheld.item.arcade.crashedAt < 0.8,
+            },
+          }
+        : {}),
       ...(this.ball
         ? {
             ball: {
@@ -262,8 +268,7 @@ export class GroupActivity extends Skill {
     if (this.plan.act === 'catch' && this.plan.leader === c.who) {
       this.ball =
         c.items.list.find(
-          (it) =>
-            it.uid === this.plan.ballUid && it.def.id === 'bouncy-ball' && it.where !== 'cursor',
+          (it) => it.uid === this.plan.ballUid && it.def.id === 'bouncy-ball' && it.where !== 'cursor',
         ) ?? null;
       this.ballTool.item = this.ball;
       if (this.ball?.where === 'world') {
@@ -281,22 +286,14 @@ export class GroupActivity extends Skill {
   receive(c: Ctx, m: PeerMsg, sender: string) {
     if (!this.plan.members.includes(sender)) return;
     if (m.type === 'groupCancel' && m.session === this.plan.session) {
-      if (
-        !m.finished &&
-        this.started &&
-        ['chat', 'couch'].includes(this.plan.act) &&
-        this.plan.members.length > 2
-      ) {
+      if (!m.finished && this.started && ['chat', 'couch'].includes(this.plan.act) && this.plan.members.length > 2) {
         this.plan.members = this.plan.members.filter((id) => id !== sender);
         this.plan.leader = this.plan.members[0];
         this.plan.turns = this.plan.turns
           ?.filter((t) => t.speaker !== sender)
           .map((t) => ({
             ...t,
-            listener:
-              t.listener === sender
-                ? this.plan.members.find((id) => id !== t.speaker)!
-                : t.listener,
+            listener: t.listener === sender ? this.plan.members.find((id) => id !== t.speaker)! : t.listener,
           }));
       } else {
         this.cancelled = !m.finished;
@@ -320,9 +317,7 @@ export class GroupActivity extends Skill {
       ch = c.char,
       i = p.members.indexOf(c.who),
       target = this.target;
-    const peers = p.members
-      .filter((id) => id !== c.who)
-      .map((id) => c.peers?.().find((v) => v.id === id));
+    const peers = p.members.filter((id) => id !== c.who).map((id) => c.peers?.().find((v) => v.id === id));
     if (
       this.cancelled ||
       !ch.whole ||
@@ -355,7 +350,7 @@ export class GroupActivity extends Skill {
       this.descent.stop(c);
       this.descent = null;
     }
-    if (ch.mode !== 'ground' && !(['couch','handheld'].includes(p.act) && ch.mode === 'sit')) return true;
+    if (ch.mode !== 'ground' && !(['couch', 'handheld'].includes(p.act) && ch.mode === 'sit')) return true;
     let x = p.x + (i - (p.members.length - 1) / 2) * p.gap;
     if (p.act === 'couch') {
       if (!target!.claimSeat(c.who, ch.x)) return true;
@@ -363,18 +358,13 @@ export class GroupActivity extends Skill {
       x = seat.x;
       if (ch.mode === 'sit') ch.scootTo(seat);
     }
-    if (p.act === 'watch' || p.act === 'pong')
-      x = target!.center.x + target!.facing * (80 * ch.scale + i * p.gap);
+    if (p.act === 'watch' || p.act === 'pong') x = target!.center.x + target!.facing * (80 * ch.scale + i * p.gap);
     if (p.act === 'carry')
       x =
         target!.center.x +
-        (i === 0 ? -1 : 1) *
-          (target!.def!.bounds![2] - target!.def!.bounds![0]) *
-          target!.scale *
-          0.6;
+        (i === 0 ? -1 : 1) * (target!.def!.bounds![2] - target!.def!.bounds![0]) * target!.scale * 0.6;
     if (p.act === 'catch' && p.leader === c.who && this.phase !== 'do') {
-      if (!this.ball || !c.items.list.includes(this.ball) || this.ball.where === 'cursor')
-        return true;
+      if (!this.ball || !c.items.list.includes(this.ball) || this.ball.where === 'cursor') return true;
       if (this.fetchBall) {
         this.fetchBall.t += dt;
         if (!this.fetchBall.update(c, dt)) return this.t > 40;
@@ -385,17 +375,17 @@ export class GroupActivity extends Skill {
       const got = this.ballTool.fetch(c, dt);
       if (got !== 'ready') return got === 'none' || this.t > 40;
     }
-    if(p.act==='handheld'&&this.phase!=='do'){const prepared=this.handheld.prepare(c,dt);if(prepared!=='ready')return prepared==='none'||this.t>40;}
+    if (p.act === 'handheld' && this.phase !== 'do') {
+      const prepared = this.handheld.prepare(c, dt);
+      if (prepared !== 'ready') return prepared === 'none' || this.t > 40;
+    }
     if (this.phase !== 'do') {
       if (this.t > 40) return true;
       if (this.phase === 'meet' && !arrive(c, x, 8)) return false;
       ch.stop();
       this.phase = 'ready';
       if (p.act === 'couch' && ch.mode !== 'sit') ch.sitOn(target!.seatFor(c.who)!, 1, 'front');
-      if (
-        p.leader === c.who &&
-        peers.every((v) => v!.group?.session === p.session && v!.group.phase === 'ready')
-      ) {
+      if (p.leader === c.who && peers.every((v) => v!.group?.session === p.session && v!.group.phase === 'ready')) {
         this.epoch = c.world.time + 0.1;
         this.phase = 'do';
         this.broadcast(c, {
@@ -416,12 +406,31 @@ export class GroupActivity extends Skill {
       c.mood.nudge({ happiness: 0.04, boredom: -0.1 });
     }
     c.lookTarget = target?.center ?? { x: p.x, y: neck.y };
-    if(p.act==='handheld'){
-      ch.facing=i===0?1:-1;this.handheld.t=this.t;
-      if(this.handheld.update(c,dt))return true;
-      const mine=this.handheld.item!.arcade!,other=peers[0]!.group?.game;
-      if(u>this.gameComment&&other){this.gameComment=u+10;c.say(other.crashed?(c.personality==='competitive'?'Keep going. You’ve got this.':'Try again. I’ll wait for your next run.'):other.best>Math.max(mine.best,mine.score)?'Nice run! I’m catching up.':'This is a good round.',1.8);}
-      if(u>35){this.finished=true;c.say(i===0?'Good round. Same time later?':'Let’s compare our best runs.',1.8);return true;}return false;
+    if (p.act === 'handheld') {
+      ch.facing = i === 0 ? 1 : -1;
+      this.handheld.t = this.t;
+      if (this.handheld.update(c, dt)) return true;
+      const mine = this.handheld.item!.arcade!,
+        other = peers[0]!.group?.game;
+      if (u > this.gameComment && other) {
+        this.gameComment = u + 10;
+        c.say(
+          other.crashed
+            ? c.personality === 'competitive'
+              ? 'Keep going. You’ve got this.'
+              : 'Try again. I’ll wait for your next run.'
+            : other.best > Math.max(mine.best, mine.score)
+              ? 'Nice run! I’m catching up.'
+              : 'This is a good round.',
+          1.8,
+        );
+      }
+      if (u > 35) {
+        this.finished = true;
+        c.say(i === 0 ? 'Good round. Same time later?' : 'Let’s compare our best runs.', 1.8);
+        return true;
+      }
+      return false;
     }
     if (p.act === 'catch') return this.playCatch(c, dt, u, peers as FighterView[]);
     if (p.act === 'carry') {
@@ -442,9 +451,7 @@ export class GroupActivity extends Skill {
           c.props!.things.some(
             (t) =>
               t !== target &&
-              t.collisionHull.some(
-                (q) => Math.abs(q.x - next) < width / 2 + 4 && q.y > c.world.bounds.floor - 60 * sc,
-              ),
+              t.collisionHull.some((q) => Math.abs(q.x - next) < width / 2 + 4 && q.y > c.world.bounds.floor - 60 * sc),
           )
         ) {
           c.say('Something’s in the way.', 1.5);
@@ -538,7 +545,13 @@ export class GroupActivity extends Skill {
         const topic = Math.floor(turn / p.members.length);
         c.say(
           current?.text ?? conversationLine(c.personality, topic, speaker !== 0),
-          Math.max(1.3,(current?.seconds??3.8)-.35-(current?.text?.length??30)/characterTemplate(c.personality).voice.rate-(current?.text?.match(/[,.!?]/g)?.length??0)*characterTemplate(c.personality).voice.pause),
+          Math.max(
+            1.3,
+            (current?.seconds ?? 3.8) -
+              0.35 -
+              (current?.text?.length ?? 30) / characterTemplate(c.personality).voice.rate -
+              (current?.text?.match(/[,.!?]/g)?.length ?? 0) * characterTemplate(c.personality).voice.pause,
+          ),
         );
         c.mood.nudge({ socialNeed: -0.08, contentment: 0.02 });
       }
@@ -546,7 +559,27 @@ export class GroupActivity extends Skill {
       const acknowledge = person !== c.who && addressed === c.who && elapsed > 0.5 && elapsed < 0.9;
       ch.handsAt =
         speaker === i && elapsed < 1.3
-          ? { R: { x: neck.x + ch.facing * (characterTemplate(c.personality).voice.gesture==='scratch'?5:c.personality==='adventurous'?18:12) * sc, y: neck.y + (characterTemplate(c.personality).voice.gesture==='scratch'?1:c.personality==='gentle'?22:16) * sc } }
+          ? {
+              R: {
+                x:
+                  neck.x +
+                  ch.facing *
+                    (characterTemplate(c.personality).voice.gesture === 'scratch'
+                      ? 5
+                      : c.personality === 'adventurous'
+                        ? 18
+                        : 12) *
+                    sc,
+                y:
+                  neck.y +
+                  (characterTemplate(c.personality).voice.gesture === 'scratch'
+                    ? 1
+                    : c.personality === 'gentle'
+                      ? 22
+                      : 16) *
+                    sc,
+              },
+            }
           : acknowledge
             ? { L: { x: neck.x - ch.facing * 7 * sc, y: neck.y + 22 * sc } }
             : null;
@@ -605,8 +638,7 @@ export class GroupActivity extends Skill {
         this.flight = false;
         this.ballTime = 0;
         this.catches++;
-        if (this.catches === 1)
-          c.say(c.personality === 'competitive' ? 'Nice catch. Keep it going!' : 'Got it!', 1.5);
+        if (this.catches === 1) c.say(c.personality === 'competitive' ? 'Nice catch. Keep it going!' : 'Got it!', 1.5);
       } else if (this.ballTime > 1.3) {
         c.say("Oops. Let's get that later.", 1.5);
         return true;
@@ -622,22 +654,20 @@ export class GroupActivity extends Skill {
     const to = anchor(c.who),
       has = snapshot.holder === c.who,
       near = Math.hypot(snapshot.at.x - to.x, snapshot.at.y - to.y) < 65 * sc;
-    ch.handsAt =
-      has || near ? { R: { x: to.x + 4 * sc, y: to.y }, L: { x: to.x - 4 * sc, y: to.y } } : null;
+    ch.handsAt = has || near ? { R: { x: to.x + 4 * sc, y: to.y }, L: { x: to.x - 4 * sc, y: to.y } } : null;
     return u > 35;
   }
   stop(c: Ctx) {
-    if(this.plan.act==='handheld')this.handheld.stop(c);
+    if (this.plan.act === 'handheld') this.handheld.stop(c);
     this.fetchBall?.stop(c);
-    if (this.ball&&c.items.list.includes(this.ball)) {
+    if (this.ball && c.items.list.includes(this.ball)) {
       this.ball.working = false;
       this.ball.thrownAt = -10;
       if (this.ball.where === 'hand' && !c.items.stow(this.ball)) c.items.drop(this.ball, 0, 0);
     }
     this.descent?.stop(c);
     for (const id of this.plan.members)
-      if (id !== c.who)
-        c.recordActivity?.(id, this.plan.act, this.started && this.finished && !this.cancelled);
+      if (id !== c.who) c.recordActivity?.(id, this.plan.act, this.started && this.finished && !this.cancelled);
     this.broadcast(c, {
       type: 'groupCancel',
       session: this.plan.session,

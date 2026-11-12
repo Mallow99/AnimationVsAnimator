@@ -1,8 +1,14 @@
 # Privacy
 
-Mallow Desk Buddies' commercial edition has no account, advertising, analytics,
-cloud AI requests, model downloads, subscription or browser extension connection.
-The app does not run the development project's browser pairing server.
+Mallow Desk Buddies has no account, advertising, analytics, cloud AI requests,
+model downloads, subscription or browser extension connection. It makes no internet
+connections. The app does not run the development project's browser pairing server.
+
+Local AI is optional and starts off. When you switch it on, what you say to a buddy,
+their recent conversation, memories and mood are sent to Ollama on this same computer
+(address 127.0.0.1) and nowhere else. If you also turned on "React to the active app
+title", the front app's name and window title are included. Ollama is separate
+software that you install and manage yourself.
 
 Names, preferences, moods, friendships, belongings, artwork, conversations and memories
 are stored locally in the app's data folder. Chat history is bounded to 240 entries /

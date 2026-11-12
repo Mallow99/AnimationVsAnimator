@@ -52,11 +52,7 @@ export class ActivityClock {
     readonly autonomous = false,
   ) {}
   duration(c: Ctx, variation = this.variation) {
-    return (this.autonomous ? autonomousActivitySeconds : activitySeconds)(
-      c,
-      this.activity,
-      variation,
-    );
+    return (this.autonomous ? autonomousActivitySeconds : activitySeconds)(c, this.activity, variation);
   }
   tick(c: Ctx, dt: number) {
     this.elapsed += dt;

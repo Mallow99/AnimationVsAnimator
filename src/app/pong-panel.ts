@@ -1,29 +1,26 @@
-import type { Pet } from "../core/pet";
-import { paintPong } from "../core/pong";
+import type { Pet } from '../core/pet';
+import { paintPong } from '../core/pong';
 
-export function createPongPanel(
-  pets: () => Pet[],
-  typing: (on: boolean) => void,
-) {
-  const root = document.createElement("section");
-  root.id = "pongPanel";
+export function createPongPanel(pets: () => Pet[], typing: (on: boolean) => void) {
+  const root = document.createElement('section');
+  root.id = 'pongPanel';
   root.hidden = true;
-  const title = document.createElement("strong"),
-    court = document.createElement("canvas");
+  const title = document.createElement('strong'),
+    court = document.createElement('canvas');
   court.width = 160;
   court.height = 100;
-  const join = document.createElement("button"),
-    rematch = document.createElement("button"),
-    leave = document.createElement("button"),
-    keys = document.createElement("button"),
-    preview = document.createElement("button");
-  join.textContent = "Join";
-  rematch.textContent = "Rematch";
-  leave.textContent = "Leave";
-  keys.textContent = "Keyboard";
-  preview.textContent = "Show court";
-  for (const b of [join, rematch, leave, keys, preview]) b.type = "button";
-  const controls = document.createElement("div");
+  const join = document.createElement('button'),
+    rematch = document.createElement('button'),
+    leave = document.createElement('button'),
+    keys = document.createElement('button'),
+    preview = document.createElement('button');
+  join.textContent = 'Join';
+  rematch.textContent = 'Rematch';
+  leave.textContent = 'Leave';
+  keys.textContent = 'Keyboard';
+  preview.textContent = 'Show court';
+  for (const b of [join, rematch, leave, keys, preview]) b.type = 'button';
+  const controls = document.createElement('div');
   controls.append(join, rematch, keys, leave, preview);
   // Controls stay in the same place when the intermittent court preview appears.
   root.append(title, controls, court);
@@ -31,7 +28,9 @@ export function createPongPanel(
   let keyboard = false;
   let showCourt = false;
   let game: unknown;
-  preview.onclick = () => { showCourt = !showCourt; };
+  preview.onclick = () => {
+    showCourt = !showCourt;
+  };
   const tv = () => pets()[0]?.props.things.find((t) => t.pong);
   join.onclick = () => {
     const p = tv()?.pong;
@@ -66,11 +65,11 @@ export function createPongPanel(
   root.onkeydown = (e) => {
     const p = tv()?.pong;
     if (!p) return;
-    if (["ArrowUp", "ArrowDown"].includes(e.key)) {
+    if (['ArrowUp', 'ArrowDown'].includes(e.key)) {
       e.preventDefault();
-      p.moveUser(p.paddles[p.user ?? 0] + (e.key === "ArrowUp" ? -0.06 : 0.06));
+      p.moveUser(p.paddles[p.user ?? 0] + (e.key === 'ArrowUp' ? -0.06 : 0.06));
     }
-    if (e.key === "Escape") {
+    if (e.key === 'Escape') {
       p.user = null;
       keyboard = false;
       court.blur();
@@ -86,7 +85,12 @@ export function createPongPanel(
     update() {
       const t = tv(),
         p = t?.pong;
-      if (game !== p) { game = p; showCourt = false; keyboard = false; typing(false); }
+      if (game !== p) {
+        game = p;
+        showCourt = false;
+        keyboard = false;
+        typing(false);
+      }
       root.hidden = !p;
       if (!p) {
         if (keyboard) {
@@ -95,9 +99,7 @@ export function createPongPanel(
         }
         return;
       }
-      const names = p.players.map(
-        (id) => pets().find((q) => q.ctx.who === id)?.config.name ?? id,
-      );
+      const names = p.players.map((id) => pets().find((q) => q.ctx.who === id)?.config.name ?? id);
       title.textContent =
         p.winner === null
           ? `${names[0]} · ${p.score[0]} : ${p.score[1]} · ${names[1]}`
@@ -105,7 +107,7 @@ export function createPongPanel(
       join.hidden = p.user !== null;
       leave.hidden = p.user === null;
       rematch.hidden = p.winner === null;
-      paintPong(court.getContext("2d")!, p, 0, 0, court.width, court.height);
+      paintPong(court.getContext('2d')!, p, 0, 0, court.width, court.height);
       // Apply visibility before measuring, including on Escape and Join.
       court.hidden = !showCourt && !keyboard && p.user === null && p.winner === null;
       preview.textContent = showCourt ? 'Hide court' : 'Show court';

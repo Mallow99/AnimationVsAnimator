@@ -61,9 +61,7 @@ export class GiveGift extends Skill {
     this.item = target
       ? ((this.wrapped
           ? candidates.sort(
-              (a, b) =>
-                giftPreference(target.personality, b.def.id) -
-                giftPreference(target.personality, a.def.id),
+              (a, b) => giftPreference(target.personality, b.def.id) - giftPreference(target.personality, a.def.id),
             )
           : candidates)[0] ?? null)
       : null;
@@ -174,19 +172,16 @@ export class GiveGift extends Skill {
     const actual = ch.body.j[it.hand === 'L' ? 'handL' : 'handR'];
     const hand = [peer.joints.handL, peer.joints.handR]
       .filter((p): p is NonNullable<typeof p> => !!p)
-      .sort((a,b)=>Math.hypot(a.x-actual.x,a.y-actual.y)-Math.hypot(b.x-actual.x,b.y-actual.y))[0]
-      ?? { x: peer.x, y: ch.body.j.neck.y + 25 };
+      .sort((a, b) => Math.hypot(a.x - actual.x, a.y - actual.y) - Math.hypot(b.x - actual.x, b.y - actual.y))[0] ?? {
+      x: peer.x,
+      y: ch.body.j.neck.y + 25,
+    };
     if (!this.reach.reach(c, hand, dt, false, it.hand)) {
       if (this.reach.failed) c.say("Come a little closer? I'll keep this safe.", 1.5);
       return this.reach.failed;
     }
     it.working = true;
-    c.say(
-      this.wrapped
-        ? `I thought you might like this.`
-        : 'Here, you can keep this.',
-      2,
-    );
+    c.say(this.wrapped ? `I thought you might like this.` : 'Here, you can keep this.', 2);
     this.sent = true;
     const message: Extract<PeerMsg, { type: 'toolGift' }> = {
       type: 'toolGift',
@@ -204,11 +199,7 @@ export class GiveGift extends Skill {
     };
     this.releaseReply =
       c.deliverGift?.(this.peer!, message, (accepted, appreciation) =>
-        this.receive(
-          c,
-          { type: 'giftReceipt', token: this.token, accepted, appreciation },
-          this.peer!,
-        ),
+        this.receive(c, { type: 'giftReceipt', token: this.token, accepted, appreciation }, this.peer!),
       ) ?? null;
     if (!c.deliverGift) {
       this.accepted = false;
@@ -246,8 +237,7 @@ export class ReceiveGift extends Skill {
   update(c: Ctx, dt: number) {
     const it = this.item,
       ch = c.char;
-    if (!c.items.list.includes(it) || it.where === 'cursor' || !ch.useHand || this.t > 12)
-      return true;
+    if (!c.items.list.includes(it) || it.where === 'cursor' || !ch.useHand || this.t > 12) return true;
     if (it.where !== 'hand') {
       const result = this.tool.fetch(c, dt);
       if (result !== 'ready') return result === 'none';
@@ -270,12 +260,7 @@ export class ReceiveGift extends Skill {
     c.look = 'target';
     c.lookTarget = it.at;
     if (this.elapsed > 2.5 && this.elapsed - dt <= 2.5)
-      c.say(
-        this.appreciation > 0.7
-          ? 'You remembered what I like! Thank you.'
-          : 'That’s kind of you. Thank you.',
-        2,
-      );
+      c.say(this.appreciation > 0.7 ? 'You remembered what I like! Thank you.' : 'That’s kind of you. Thank you.', 2);
     if (this.elapsed > 5) {
       ch.handsAt = null;
       it.giftWrap = 0;

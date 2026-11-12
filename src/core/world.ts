@@ -6,7 +6,13 @@
 
 import { platY, type Bounds, type Platform } from './physics';
 
-export interface WinRect { id: number; x: number; y: number; w: number; h: number }
+export interface WinRect {
+  id: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** Visible top edges of the windows (front-most first), as platforms. */
 /** `headroom`: how tall he is — a window top closer than that to the top of the screen has no room to stand on. */
@@ -22,7 +28,8 @@ export function windowPlatforms(wins: WinRect[], bounds: Bounds, minWidth = 40, 
     for (let k = 0; k < i && segs.length; k++) {
       const f = wins[k];
       if (y < f.y - 2 || y > f.y + f.h) continue; // the front window doesn't cover this height
-      const a = f.x, b = f.x + f.w;
+      const a = f.x,
+        b = f.x + f.w;
       segs = segs.flatMap(([s, e]): [number, number][] => {
         if (b <= s || a >= e) return [[s, e]];
         const parts: [number, number][] = [];
@@ -32,7 +39,9 @@ export function windowPlatforms(wins: WinRect[], bounds: Bounds, minWidth = 40, 
       });
     }
     // Give each visible piece a stable id: window id * 8 + piece number.
-    segs.forEach(([s, e], n) => { if (e - s >= minWidth) out.push({ id: w.id * 8 + n, x1: s, x2: e, y, win: w.id, wx: w.x }); });
+    segs.forEach(([s, e], n) => {
+      if (e - s >= minWidth) out.push({ id: w.id * 8 + n, x1: s, x2: e, y, win: w.id, wx: w.x });
+    });
   }
   return out;
 }
@@ -40,7 +49,10 @@ export function windowPlatforms(wins: WinRect[], bounds: Bounds, minWidth = 40, 
 /** The highest surface directly below (x, y): a platform's y, or the floor. */
 export function surfaceBelow(x: number, y: number, platforms: Platform[], floor: number): { y: number; id: number } {
   let best = { y: floor, id: -1 };
-  for (const p of platforms) { const py = platY(p, x); if (x >= p.x1 && x <= p.x2 && py >= y && py < best.y) best = { y: py, id: p.id }; }
+  for (const p of platforms) {
+    const py = platY(p, x);
+    if (x >= p.x1 && x <= p.x2 && py >= y && py < best.y) best = { y: py, id: p.id };
+  }
   return best;
 }
 
@@ -49,7 +61,15 @@ export function surfaceBelow(x: number, y: number, platforms: Platform[], floor:
  * `face` is the way he faces while climbing it (toward the wall).
  * `top` says what's at the top: a window top to pull himself onto, or the ceiling (top of the screen).
  */
-export interface Wall { id: number; x: number; y1: number; y2: number; face: 1 | -1; top: 'platform' | 'ceiling'; win?: number }
+export interface Wall {
+  id: number;
+  x: number;
+  y1: number;
+  y2: number;
+  face: 1 | -1;
+  top: 'platform' | 'ceiling';
+  win?: number;
+}
 
 /** Climbable walls: the two screen edges, plus the visible sides of each window. */
 export function windowWalls(wins: WinRect[], bounds: Bounds, headroom = 30): Wall[] {
@@ -60,7 +80,10 @@ export function windowWalls(wins: WinRect[], bounds: Bounds, headroom = 30): Wal
   for (let i = 0; i < wins.length; i++) {
     const w = wins[i];
     if (w.y < bounds.top + headroom) continue; // no room to stand on top
-    for (const [x, face, n] of [[w.x, 1, 0], [w.x + w.w, -1, 1]] as const) {
+    for (const [x, face, n] of [
+      [w.x, 1, 0],
+      [w.x + w.w, -1, 1],
+    ] as const) {
       if (x <= bounds.left + 4 || x >= bounds.right - 4) continue;
       let segs: [number, number][] = [[w.y, Math.min(w.y + w.h, bounds.floor)]];
       // Parts of this side hidden behind windows in front can't be climbed.
@@ -77,7 +100,8 @@ export function windowWalls(wins: WinRect[], bounds: Bounds, headroom = 30): Wal
       }
       // Only the piece that reaches the window's top lets him pull himself up.
       const s = segs.find(([a]) => a <= w.y + 1);
-      if (s && s[1] - s[0] > 40) out.push({ id: w.id * 8 + 4 + n, x, y1: s[0], y2: s[1], face, top: 'platform', win: w.id });
+      if (s && s[1] - s[0] > 40)
+        out.push({ id: w.id * 8 + 4 + n, x, y1: s[0], y2: s[1], face, top: 'platform', win: w.id });
     }
   }
   return out;
@@ -92,7 +116,10 @@ export function windowSides(wins: WinRect[], bounds: Bounds): Wall[] {
   const out: Wall[] = [];
   for (let i = 0; i < wins.length; i++) {
     const w = wins[i];
-    for (const [x, face, n] of [[w.x, 1, 0], [w.x + w.w, -1, 1]] as const) {
+    for (const [x, face, n] of [
+      [w.x, 1, 0],
+      [w.x + w.w, -1, 1],
+    ] as const) {
       if (x <= bounds.left + 4 || x >= bounds.right - 4) continue;
       let segs: [number, number][] = [[Math.max(w.y, bounds.top), Math.min(w.y + w.h, bounds.floor)]];
       for (let k = 0; k < i && segs.length; k++) {
@@ -106,7 +133,9 @@ export function windowSides(wins: WinRect[], bounds: Bounds): Wall[] {
           return parts;
         });
       }
-      segs.forEach(([a, b], m) => { if (b - a > 20) out.push({ id: w.id * 64 + 32 + n * 8 + m, x, y1: a, y2: b, face, top: 'platform', win: w.id }); });
+      segs.forEach(([a, b], m) => {
+        if (b - a > 20) out.push({ id: w.id * 64 + 32 + n * 8 + m, x, y1: a, y2: b, face, top: 'platform', win: w.id });
+      });
     }
   }
   return out;

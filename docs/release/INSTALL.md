@@ -1,8 +1,8 @@
 # Mallow Desk Buddies
 
 Little offline companions for your desktop. This archive is a release candidate.
-Check its `release-source.json` and the project's release notes for the exact version
-and tested operating systems. Physical desktop acceptance remains pending for rc.4.
+Check its `release-source.json` and the project's release notes for the exact version.
+It passed automated tests; it has not been hand-tested on every Mac and Windows setup.
 
 No commands, developer tools or extra downloads are needed. Start with START-HERE.txt.
 
@@ -34,7 +34,8 @@ https://support.apple.com/102445. Do not disable Gatekeeper or run blanket secur
 
 - Rub gently to pet a buddy. Click for a poke; drag to pick up, release to drop or throw.
 - Double-click to talk. Built-in dialogue knows familiar topics and branching stories;
-  it is not a general-purpose AI assistant.
+  it is not a general-purpose AI assistant. If you already use Ollama on this computer,
+  Settings → Local AI lets buddies answer with one of your models instead (optional).
 - Right-click for the bag and activities. Supplies include objects and furniture.
 - Picking up a tool carries it; choose Use for active controls. Escape exits interactions.
 - Choose one to five buddies in Settings. Putting someone away preserves their things.

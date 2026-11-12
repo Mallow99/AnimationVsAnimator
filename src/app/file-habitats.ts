@@ -101,10 +101,7 @@ export class FileHabitats {
       if (!frame) {
         if (before) {
           const cursor = visit.pet.ctx.world.cursor;
-          visit.pet.pointerUp(
-            cursor?.x ?? visit.pet.char.x,
-            cursor?.y ?? visit.pet.char.body.j.neck.y,
-          );
+          visit.pet.pointerUp(cursor?.x ?? visit.pet.char.x, cursor?.y ?? visit.pet.char.body.j.neck.y);
         }
         continue;
       }
@@ -153,10 +150,7 @@ export class FileHabitats {
   update(dt: number) {
     for (const visit of this.visits.values()) if (visit.frame) visit.pet.update(dt);
   }
-  draw(
-    g: CanvasRenderingContext2D,
-    nativeWindows: { id: number; x: number; y: number; w: number; h: number }[],
-  ) {
+  draw(g: CanvasRenderingContext2D, nativeWindows: { id: number; x: number; y: number; w: number; h: number }[]) {
     for (const visit of this.visits.values()) {
       const f = visit.frame;
       if (!f || !nativeWindows.some((w) => w.id === f.id)) continue;
@@ -177,21 +171,14 @@ export class FileHabitats {
       g.restore();
     }
   }
-  hit(
-    x: number,
-    y: number,
-    nativeWindows: { id: number; x: number; y: number; w: number; h: number }[],
-  ) {
+  hit(x: number, y: number, nativeWindows: { id: number; x: number; y: number; w: number; h: number }[]) {
     for (const visit of [...this.visits.values()].reverse()) {
       const f = visit.frame;
-      if (!f || x < f.x + 8 || x > f.x + f.width - 8 || y < f.y + 64 || y > f.y + f.height - 12)
-        continue;
+      if (!f || x < f.x + 8 || x > f.x + f.width - 8 || y < f.y + 64 || y > f.y + f.height - 12) continue;
       const index = nativeWindows.findIndex((w) => w.id === f.id);
       if (
         index < 0 ||
-        nativeWindows
-          .slice(0, index)
-          .some((w) => x >= w.x && x <= w.x + w.w && y >= w.y && y <= w.y + w.h)
+        nativeWindows.slice(0, index).some((w) => x >= w.x && x <= w.x + w.w && y >= w.y && y <= w.y + w.h)
       )
         continue;
       if (visit.pet.hit(x, y) || visit.pet.uiHit(x, y) || visit.pet.carrying) return visit.pet;

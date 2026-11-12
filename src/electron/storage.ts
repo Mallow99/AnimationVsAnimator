@@ -3,14 +3,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 function validJson(text: string): boolean {
-  try { const value = JSON.parse(text); return !!value && typeof value === 'object' && !Array.isArray(value); }
-  catch { return false; }
+  try {
+    const value = JSON.parse(text);
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+  } catch {
+    return false;
+  }
 }
 
 export function readStoredJson(file: string): { text: string | null; recovered: boolean } {
   let original: string | undefined;
-  try { original = fs.readFileSync(file, 'utf8'); if (validJson(original)) return { text: original, recovered: false }; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  try {
+    original = fs.readFileSync(file, 'utf8');
+    if (validJson(original)) return { text: original, recovered: false };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
   try {
     const text = fs.readFileSync(file + '.bak', 'utf8');
     if (!validJson(text)) throw new Error('The backup is damaged.');
@@ -19,7 +27,8 @@ export function readStoredJson(file: string): { text: string | null; recovered: 
     writeAtomic(file, text);
     return { text, recovered: true };
   } catch (error) {
-    if (original === undefined && (error as NodeJS.ErrnoException).code === 'ENOENT') return { text: null, recovered: false };
+    if (original === undefined && (error as NodeJS.ErrnoException).code === 'ENOENT')
+      return { text: null, recovered: false };
     throw new Error('Saved data could not be read. The original files have been kept for recovery.');
   }
 }

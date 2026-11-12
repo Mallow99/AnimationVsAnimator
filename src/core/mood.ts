@@ -6,19 +6,19 @@ import type { Posture } from './character';
 import { clamp } from './math';
 
 export interface MoodState {
-  energy: number;    // 0 exhausted … 1 wired. Drains while awake, refills asleep.
+  energy: number; // 0 exhausted … 1 wired. Drains while awake, refills asleep.
   happiness: number; // 0 miserable … 1 delighted
-  boredom: number;   // rises when nothing happens
+  boredom: number; // rises when nothing happens
   annoyance: number; // at YOU. Spikes on pokes/throws, cools off in a minute or so.
-  fear: number;      // spikes on big throws/crashes, fades fast
-  socialNeed:number; // rises while alone; shared activities satisfy it
-  inspiration:number; // urge to make or learn, satisfied by purposeful work
-  frustration:number; // recent setbacks, cools through rest and cooperation
-  contentment:number; // steadier satisfaction than an excited happiness burst
-  confidence:number; // grows from finishing, practicing and considerate company
-  affection:number; // warm feelings after company, gifts and reassurance; fades gently
-  stress:number; // setbacks and rough interactions; quieter routines help it settle
-  trust: number;     // long-term: how he feels about you. Moves slowly, persists.
+  fear: number; // spikes on big throws/crashes, fades fast
+  socialNeed: number; // rises while alone; shared activities satisfy it
+  inspiration: number; // urge to make or learn, satisfied by purposeful work
+  frustration: number; // recent setbacks, cools through rest and cooperation
+  contentment: number; // steadier satisfaction than an excited happiness burst
+  confidence: number; // grows from finishing, practicing and considerate company
+  affection: number; // warm feelings after company, gifts and reassurance; fades gently
+  stress: number; // setbacks and rough interactions; quieter routines help it settle
+  trust: number; // long-term: how he feels about you. Moves slowly, persists.
 }
 
 /** One-click moods for testing (settings → Mood). */
@@ -45,11 +45,41 @@ export type MoodLabel = 'sleepy' | 'sad' | 'angry' | 'scared' | 'playful' | 'bor
  * hands behind his back); excited is playful turned up; lonely is sad because you're gone;
  * nervous is scared turned down. Proud and embarrassed are flashes that last a few seconds.
  */
-export type Emotion = 'sleepy' | 'sad' | 'lonely' | 'angry' | 'annoyed' | 'scared' | 'nervous' | 'excited' | 'playful' | 'happy'
-  | 'bored' | 'content' | 'proud' | 'embarrassed' | 'supported' | 'frustrated' | 'overwhelmed';
+export type Emotion =
+  | 'sleepy'
+  | 'sad'
+  | 'lonely'
+  | 'angry'
+  | 'annoyed'
+  | 'scared'
+  | 'nervous'
+  | 'excited'
+  | 'playful'
+  | 'happy'
+  | 'bored'
+  | 'content'
+  | 'proud'
+  | 'embarrassed'
+  | 'supported'
+  | 'frustrated'
+  | 'overwhelmed';
 
 export class Mood {
-  s: MoodState = { energy: 0.85, happiness: 0.6, boredom: 0.2, annoyance: 0, fear: 0, trust: 0.5, socialNeed:.2,inspiration:.35,frustration:0,contentment:.55,confidence:.5,affection:.25,stress:0 };
+  s: MoodState = {
+    energy: 0.85,
+    happiness: 0.6,
+    boredom: 0.2,
+    annoyance: 0,
+    fear: 0,
+    trust: 0.5,
+    socialNeed: 0.2,
+    inspiration: 0.35,
+    frustration: 0,
+    contentment: 0.55,
+    confidence: 0.5,
+    affection: 0.25,
+    stress: 0,
+  };
   asleep = false;
   /** A short burst of feeling (proud after nailing something, embarrassed after a faceplant), and how long it lasts. */
   flash: { kind: 'proud' | 'embarrassed'; left: number } | null = null;
@@ -57,30 +87,32 @@ export class Mood {
   tick(dt: number) {
     const s = this.s;
     if (this.asleep) {
-      s.energy += dt / 180;   // a full recharge in ~3 minutes of napping
+      s.energy += dt / 180; // a full recharge in ~3 minutes of napping
       s.boredom -= dt / 60;
     } else {
       s.energy -= dt / (40 * 60); // ~40 minutes awake to run flat
-      s.boredom += dt / 150;      // ~2.5 minutes of nothing to get fully bored
+      s.boredom += dt / 150; // ~2.5 minutes of nothing to get fully bored
     }
     if (this.flash && (this.flash.left -= dt) <= 0) this.flash = null;
-    s.socialNeed += this.asleep ? -dt/400 : dt/900;
-    s.inspiration += this.asleep ? -dt/1200 : dt/900;
-    s.frustration -= dt/(this.asleep?45:150);
-    s.contentment += (.55-s.contentment)*dt/600;
-    s.confidence += (.5-s.confidence)*dt/2400;
-    s.affection += (.25-s.affection)*dt/1200;
-    s.stress -= dt/(this.asleep?70:400);
+    s.socialNeed += this.asleep ? -dt / 400 : dt / 900;
+    s.inspiration += this.asleep ? -dt / 1200 : dt / 900;
+    s.frustration -= dt / (this.asleep ? 45 : 150);
+    s.contentment += ((0.55 - s.contentment) * dt) / 600;
+    s.confidence += ((0.5 - s.confidence) * dt) / 2400;
+    s.affection += ((0.25 - s.affection) * dt) / 1200;
+    s.stress -= dt / (this.asleep ? 70 : 400);
     s.annoyance -= dt / 45;
     s.fear -= dt / 6;
     // Happiness drifts toward a resting point that depends on how much he trusts you.
-    const rest = 0.5 + (s.trust - 0.5) * 0.4 - (s.boredom > 0.8 ? 0.15 : 0)+(.1*(s.contentment-.5))-s.frustration*.08;
+    const rest =
+      0.5 + (s.trust - 0.5) * 0.4 - (s.boredom > 0.8 ? 0.15 : 0) + 0.1 * (s.contentment - 0.5) - s.frustration * 0.08;
     s.happiness += (rest - s.happiness) * (dt / 240);
     this.clampAll();
   }
 
   nudge(d: Partial<MoodState>) {
-    for (const k of Object.keys(d) as (keyof MoodState)[]) if(typeof d[k] === "number" && Number.isFinite(d[k]))this.s[k] += d[k]!;
+    for (const k of Object.keys(d) as (keyof MoodState)[])
+      if (typeof d[k] === 'number' && Number.isFinite(d[k])) this.s[k] += d[k]!;
     this.clampAll();
   }
 
@@ -97,21 +129,24 @@ export class Mood {
 
   /** The finer emotion (see `Emotion`). Always inside the family `label` gives. */
   get emotion(): Emotion {
-    const s = this.s, L = this.label;
+    const s = this.s,
+      L = this.label;
     if (L === 'scared' || L === 'angry' || L === 'sleepy') return L;
     if (this.flash) return this.flash.kind;
-    if(s.stress>.65)return 'overwhelmed';
-    if(s.frustration>.6)return 'frustrated';
-    if (L === 'sad') return s.socialNeed > .6 || s.boredom > 0.6 ? 'lonely' : 'sad';
+    if (s.stress > 0.65) return 'overwhelmed';
+    if (s.frustration > 0.6) return 'frustrated';
+    if (L === 'sad') return s.socialNeed > 0.6 || s.boredom > 0.6 ? 'lonely' : 'sad';
     if (s.annoyance > 0.3) return 'annoyed';
     if (s.fear > 0.22) return 'nervous';
     if (L === 'bored') return 'bored';
     if (L === 'playful') return s.happiness > 0.8 && s.energy > 0.72 && s.boredom < 0.35 ? 'excited' : 'playful';
-    return s.affection>.65&&s.contentment>.6?'supported':s.happiness > 0.62 ? 'happy' : 'content';
+    return s.affection > 0.65 && s.contentment > 0.6 ? 'supported' : s.happiness > 0.62 ? 'happy' : 'content';
   }
 
   /** A quick flash of pride or embarrassment (a few seconds). */
-  feel(kind: 'proud' | 'embarrassed', secs = 5) { if (!this.asleep) this.flash = { kind, left: secs }; }
+  feel(kind: 'proud' | 'embarrassed', secs = 5) {
+    if (!this.asleep) this.flash = { kind, left: secs };
+  }
 
   /** Body language for the current mood. */
   posture(): Posture {
@@ -120,10 +155,10 @@ export class Mood {
     const tired = clamp((0.3 - s.energy) * 3, 0, 1);
     return {
       // Kept subtle: he stands tall unless he's properly down.
-      hunch: clamp(sadness * 0.6 + tired * 0.45 + s.fear * 0.25+s.stress*.08, 0, 1),
+      hunch: clamp(sadness * 0.6 + tired * 0.45 + s.fear * 0.25 + s.stress * 0.08, 0, 1),
       bounce: clamp((s.happiness - 0.55) * 2.5, 0, 1) * clamp(s.energy * 1.5, 0, 1),
-      tension: clamp((s.annoyance - 0.3) * 2+s.stress*.2, 0, 1),
-      speed: 0.6 + s.energy * 0.5 + s.annoyance * 0.3 - sadness * 0.15-s.stress*.08+(s.confidence-.5)*.08,
+      tension: clamp((s.annoyance - 0.3) * 2 + s.stress * 0.2, 0, 1),
+      speed: 0.6 + s.energy * 0.5 + s.annoyance * 0.3 - sadness * 0.15 - s.stress * 0.08 + (s.confidence - 0.5) * 0.08,
     };
   }
 
@@ -131,16 +166,20 @@ export class Mood {
     for (const k of Object.keys(this.s) as (keyof MoodState)[]) this.s[k] = clamp(this.s[k], 0, 1);
   }
 
-  save() { return { ...this.s, asleep: this.asleep, savedAt: Date.now() }; }
+  save() {
+    return { ...this.s, asleep: this.asleep, savedAt: Date.now() };
+  }
 
   /** Restore from a save. Time away counts: he rested, calmed down, and got a bit bored. */
   load(data: unknown) {
     if (!data || typeof data !== 'object') return;
     const d = data as Partial<MoodState> & { savedAt?: number };
-    for (const k of Object.keys(this.s) as (keyof MoodState)[]) if (typeof d[k] === 'number' && Number.isFinite(d[k])) this.s[k] = d[k]!;
+    for (const k of Object.keys(this.s) as (keyof MoodState)[])
+      if (typeof d[k] === 'number' && Number.isFinite(d[k])) this.s[k] = d[k]!;
     const away = d.savedAt ? (Date.now() - d.savedAt) / 1000 : 0;
     if (away > 60) {
-      this.s.annoyance = 0; this.s.fear = 0;
+      this.s.annoyance = 0;
+      this.s.fear = 0;
       this.s.energy = clamp(this.s.energy + away / 1800, 0, 1);
       this.s.boredom = clamp(this.s.boredom + away / 3600, 0, 0.6);
     }

@@ -26,13 +26,18 @@ import type { Vec } from './math';
 import type { Ctx } from './skills';
 import type { Memory, NoteKind } from './memory';
 
-const pickOne = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // Ordinary conversation during a match should not replace the seated game skill.
 const asksForActivity = isActionRequest;
 
 /** What he has and where, in words: "pen (in your satchel), wooden sword (the person took it)". */
 function itemsText(c: Ctx) {
-  const where = { belt: 'in your satchel', hand: 'in your hand', worn: 'wearing it', world: 'lying on the ground', cursor: 'the person took it' } as const;
+  const where = {
+    belt: 'in your satchel',
+    hand: 'in your hand',
+    worn: 'wearing it',
+    world: 'lying on the ground',
+    cursor: 'the person took it',
+  } as const;
   return c.items.list.map((it) => `${it.def.name.toLowerCase()} (${where[it.where]})`).join(', ') || 'nothing';
 }
 
@@ -43,9 +48,20 @@ function noteKind(text: string): NoteKind {
   return 'event';
 }
 
-export interface BrainTurn { role: 'user' | 'assistant'; text: string }
-export interface BrainRequest { system: string; messages: BrainTurn[] }
-export interface BrainReply { say: string; feel: Partial<MoodState>; plan: PlanStep[]; remember: string[] }
+export interface BrainTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+export interface BrainRequest {
+  system: string;
+  messages: BrainTurn[];
+}
+export interface BrainReply {
+  say: string;
+  feel: Partial<MoodState>;
+  plan: PlanStep[];
+  remember: string[];
+}
 /** Sends the request to the AI service and returns its raw answer text. */
 export type AskFn = (req: BrainRequest) => Promise<string>;
 
@@ -53,13 +69,33 @@ export type AskFn = (req: BrainRequest) => Promise<string>;
 export const ACTIONS = COMMANDS.map((c) => c.name);
 
 /** A move the AI made up, kept so you can save the good ones. */
-export interface MadeMove { name: string; frames: Keyframe[] }
+export interface MadeMove {
+  name: string;
+  frames: Keyframe[];
+}
 
 /** Longest made-up move: this many poses, this many seconds. Longest plan: this many steps. */
-const MAX_FRAMES = 16, MAX_MOVE_SECONDS = 10, MAX_STEPS = 8;
-const MOOD_KEYS: (keyof MoodState)[] = ['happiness', 'energy', 'boredom', 'annoyance', 'fear', 'trust','socialNeed','inspiration','frustration','contentment','confidence','affection','stress'];
+const MAX_FRAMES = 16,
+  MAX_MOVE_SECONDS = 10,
+  MAX_STEPS = 8;
+const MOOD_KEYS: (keyof MoodState)[] = [
+  'happiness',
+  'energy',
+  'boredom',
+  'annoyance',
+  'fear',
+  'trust',
+  'socialNeed',
+  'inspiration',
+  'frustration',
+  'contentment',
+  'confidence',
+  'affection',
+  'stress',
+];
 
-const num = (v: unknown) => (typeof v === 'number' || typeof v === 'string') && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
+const num = (v: unknown) =>
+  (typeof v === 'number' || typeof v === 'string') && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
 
 /** Check a made-up move from the AI and clean it up. Anything malformed is dropped. */
 export function parseMove(raw: unknown): Keyframe[] | null {
@@ -74,11 +110,17 @@ export function parseMove(raw: unknown): Keyframe[] | null {
     for (const name of PUPPET_JOINTS) {
       const v = src[name];
       if (Array.isArray(v) && v.length >= 2 && num(v[0]) !== null && num(v[1]) !== null) {
-        pose[name as PuppetJoint] = v.length >= 3 && num(v[2]) !== null ? [num(v[0])!, num(v[1])!, num(v[2])!] : [num(v[0])!, num(v[1])!];
+        pose[name as PuppetJoint] =
+          v.length >= 3 && num(v[2]) !== null ? [num(v[0])!, num(v[1])!, num(v[2])!] : [num(v[0])!, num(v[1])!];
       }
     }
-    const spin = (key: string) => { const v = num(o[key]); return v ? Math.max(-1440, Math.min(1440, v)) : 0; };
-    const turn = spin('turn'), flip = spin('flip'), roll = spin('roll');
+    const spin = (key: string) => {
+      const v = num(o[key]);
+      return v ? Math.max(-1440, Math.min(1440, v)) : 0;
+    };
+    const turn = spin('turn'),
+      flip = spin('flip'),
+      roll = spin('roll');
     if (!Object.keys(pose).length && !turn && !flip && !roll) continue;
     const t = Math.min(3, Math.max(0.1, num(o.t) ?? 0.5));
     if (total + t > MAX_MOVE_SECONDS) break;
@@ -97,7 +139,10 @@ export function parseDrawing(raw: unknown): Vec[][] | null {
     const pts: Vec[] = [];
     for (const p of st.slice(0, 60)) {
       if (Array.isArray(p) && num(p[0]) !== null && num(p[1]) !== null) {
-        pts.push({ x: Math.max(-0.5, Math.min(0.5, num(p[0])! / 100)), y: Math.max(-0.5, Math.min(0.5, -num(p[1])! / 100)) });
+        pts.push({
+          x: Math.max(-0.5, Math.min(0.5, num(p[0])! / 100)),
+          y: Math.max(-0.5, Math.min(0.5, -num(p[1])! / 100)),
+        });
       }
     }
     if (pts.length >= 2) strokes.push(pts);
@@ -109,33 +154,47 @@ export function parseDrawing(raw: unknown): Vec[][] | null {
 function parseStep(raw: unknown, saved: MadeMove[]): PlanStep | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  if (typeof o.do === 'string') return (ACTIONS.includes(o.do) || /^draw(?:item|prop):[a-z0-9-]{1,30}$/.test(o.do)) ? { do:o.do,...(typeof o.with==='string' && o.with.trim()?{with:o.with.trim().slice(0,40)}:{}) } : null;
+  if (typeof o.do === 'string')
+    return ACTIONS.includes(o.do) || /^draw(?:item|prop):[a-z0-9-]{1,30}$/.test(o.do)
+      ? { do: o.do, ...(typeof o.with === 'string' && o.with.trim() ? { with: o.with.trim().slice(0, 40) } : {}) }
+      : null;
   if (typeof o.say === 'string' && o.say.trim()) return { say: o.say.trim().slice(0, 140) };
   if (num(o.wait) !== null) return { wait: Math.min(5, Math.max(0, num(o.wait)!)) };
-  if (typeof o.walk === 'string' && ['left', 'right', 'cursor', 'away'].includes(o.walk)) return { walk: o.walk as 'left' };
+  if (typeof o.walk === 'string' && ['left', 'right', 'cursor', 'away'].includes(o.walk))
+    return { walk: o.walk as 'left' };
   if (o.move !== undefined) {
     const frames = parseMove(o.move);
-    return frames ? { move: frames, name: typeof o.name === 'string' ? o.name.slice(0, 40) : '' } as PlanStep : null;
+    return frames ? ({ move: frames, name: typeof o.name === 'string' ? o.name.slice(0, 40) : '' } as PlanStep) : null;
   }
   if (typeof o.replay === 'string') {
     const m = saved.find((x) => x.name.toLowerCase() === (o.replay as string).toLowerCase());
-    return m ? { move: m.frames, name: m.name } as PlanStep : null;
+    return m ? ({ move: m.frames, name: m.name } as PlanStep) : null;
   }
   if (o.draw !== undefined) {
     const d = parseDrawing(o.draw);
-    const becomes = ['ball', 'box', 'platform', 'item'].includes(o.becomes as string) ? o.becomes as 'ball' : undefined;
-    return d ? { draw: d, title: typeof o.title === 'string' ? o.title.slice(0, 40) : '', ...(becomes ? { becomes } : {}) } : null;
+    const becomes = ['ball', 'box', 'platform', 'item'].includes(o.becomes as string)
+      ? (o.becomes as 'ball')
+      : undefined;
+    return d
+      ? { draw: d, title: typeof o.title === 'string' ? o.title.slice(0, 40) : '', ...(becomes ? { becomes } : {}) }
+      : null;
   }
   return null;
 }
 
 /** Read the AI's answer. Forgiving: finds the JSON even inside extra text or code fences. */
 export function parseReply(text: string, saved: MadeMove[] = []): BrainReply | null {
-  const start = text.indexOf('{'), end = text.lastIndexOf('}');
+  const start = text.indexOf('{'),
+    end = text.lastIndexOf('}');
   // No JSON at all: it just talked. Keep the words, short.
-  if (start < 0 || end <= start) return text.trim() ? { say: text.trim().slice(0, 2000), feel: {}, plan: [], remember: [] } : null;
+  if (start < 0 || end <= start)
+    return text.trim() ? { say: text.trim().slice(0, 2000), feel: {}, plan: [], remember: [] } : null;
   let data: Record<string, unknown>;
-  try { data = JSON.parse(text.slice(start, end + 1)); } catch { return null; }
+  try {
+    data = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
   const feel: Partial<MoodState> = {};
   if (data.feel && typeof data.feel === 'object') {
     for (const k of MOOD_KEYS) {
@@ -143,14 +202,20 @@ export function parseReply(text: string, saved: MadeMove[] = []): BrainReply | n
       if (v !== null) feel[k] = Math.max(-0.4, Math.min(0.4, v));
     }
   }
-  let plan = (Array.isArray(data.plan) ? data.plan : []).slice(0, MAX_STEPS).map((x) => parseStep(x, saved)).filter((x): x is PlanStep => !!x);
+  let plan = (Array.isArray(data.plan) ? data.plan : [])
+    .slice(0, MAX_STEPS)
+    .map((x) => parseStep(x, saved))
+    .filter((x): x is PlanStep => !!x);
   // Older answer shapes: a single "do" / "move" at the top level.
   if (!plan.length) {
     const single = parseStep({ do: data.do }, saved) ?? (data.move ? parseStep({ move: data.move }, saved) : null);
     if (single) plan = [single];
   }
   const raw = Array.isArray(data.remember) ? data.remember : typeof data.remember === 'string' ? [data.remember] : [];
-  const remember = raw.filter((x): x is string => typeof x === 'string' && !!x.trim()).slice(0, 3).map((x) => x.trim().slice(0, 140));
+  const remember = raw
+    .filter((x): x is string => typeof x === 'string' && !!x.trim())
+    .slice(0, 3)
+    .map((x) => x.trim().slice(0, 140));
   return { say: typeof data.say === 'string' ? data.say.trim().slice(0, 2000) : '', feel, plan, remember };
 }
 
@@ -180,7 +245,12 @@ const DRAW_GUIDE = [
 ];
 
 /** A line in the chat log. `acts`: what he did, in words ("hops ×3, walks away"). */
-export interface LogLine { who: 'you' | 'him' | 'note'; text: string; at: number; acts?: string }
+export interface LogLine {
+  who: 'you' | 'him' | 'note';
+  text: string;
+  at: number;
+  acts?: string;
+}
 
 /** How often he thinks on his own in full mode, at most (seconds). */
 const AUTO_EVERY = 40;
@@ -194,44 +264,87 @@ const HISTORY = 32;
 /** Notable things that happened to him, in words (what the model sees). */
 function describe(e: MindEvent): string | null {
   switch (e.type) {
-    case 'poked': return 'you poked him';
-    case 'petted': return 'you petted him';
-    case 'smacked': return 'you smacked him';
-    case 'grabbed': return 'you picked him up';
-    case 'released': return e.speed > 900 ? 'you threw him' : 'you put him down';
-    case 'crashed': return 'he fell hard and hit the ground';
-    case 'tripped': return 'he tripped and fell over';
-    case 'fellOff': return 'he fell off a window';
-    case 'reachedTop': return 'he climbed to the top of a wall';
-    case 'letGo': return 'he let go of the wall';
-    case 'landed': return e.speed > 600 ? 'he landed a big jump' : null;
-    case 'limbOff': return `${e.yanked ? 'you yanked his' : 'his'} ${e.limb.startsWith('arm') ? 'arm' : 'leg'} ${e.yanked ? 'clean off' : 'came off'}`;
-    case 'limbOn': return `he got his ${e.limb.startsWith('arm') ? 'arm' : 'leg'} back on`;
-    case 'itemTaken': return `you took his ${e.name}`;
-    case 'itemGiven': return `you gave him back his ${e.name}`;
-    case 'itemDropped': return `you dropped his ${e.name} on the ground`;
-    case 'rolled': return 'he rolled out of a big landing';
-    case 'flipped': return 'he landed a flip';
-    case 'wallJump': return 'he kicked off a wall';
-    case 'bonked': return 'a ball hit him';
-    default: return null;
+    case 'poked':
+      return 'you poked him';
+    case 'petted':
+      return 'you petted him';
+    case 'smacked':
+      return 'you smacked him';
+    case 'grabbed':
+      return 'you picked him up';
+    case 'released':
+      return e.speed > 900 ? 'you threw him' : 'you put him down';
+    case 'crashed':
+      return 'he fell hard and hit the ground';
+    case 'tripped':
+      return 'he tripped and fell over';
+    case 'fellOff':
+      return 'he fell off a window';
+    case 'reachedTop':
+      return 'he climbed to the top of a wall';
+    case 'letGo':
+      return 'he let go of the wall';
+    case 'landed':
+      return e.speed > 600 ? 'he landed a big jump' : null;
+    case 'limbOff':
+      return `${e.yanked ? 'you yanked his' : 'his'} ${e.limb.startsWith('arm') ? 'arm' : 'leg'} ${e.yanked ? 'clean off' : 'came off'}`;
+    case 'limbOn':
+      return `he got his ${e.limb.startsWith('arm') ? 'arm' : 'leg'} back on`;
+    case 'itemTaken':
+      return `you took his ${e.name}`;
+    case 'itemGiven':
+      return `you gave him back his ${e.name}`;
+    case 'itemDropped':
+      return `you dropped his ${e.name} on the ground`;
+    case 'rolled':
+      return 'he rolled out of a big landing';
+    case 'flipped':
+      return 'he landed a flip';
+    case 'wallJump':
+      return 'he kicked off a wall';
+    case 'bonked':
+      return 'a ball hit him';
+    default:
+      return null;
   }
 }
 /** Events worth a spoken reaction in full mode. */
-const REACT_TO = new Set(['smacked', 'crashed', 'released', 'petted', 'reachedTop', 'limbOff', 'itemTaken', 'itemGiven']);
+const REACT_TO = new Set([
+  'smacked',
+  'crashed',
+  'released',
+  'petted',
+  'reachedTop',
+  'limbOff',
+  'itemTaken',
+  'itemGiven',
+]);
 
 /** Break a long reply into bubble-sized pieces at sentence or word boundaries. */
 export function splitSpeech(text: string, max = 70): string[] {
   const out: string[] = [];
-  const sentences = text.replace(/\s+/g, ' ').trim().match(/[^.!?…]+[.!?…]*\s*/g) ?? [];
+  const sentences =
+    text
+      .replace(/\s+/g, ' ')
+      .trim()
+      .match(/[^.!?…]+[.!?…]*\s*/g) ?? [];
   let cur = '';
   for (const s of sentences) {
-    if ((cur + s).trim().length <= max) { cur += s; continue; }
+    if ((cur + s).trim().length <= max) {
+      cur += s;
+      continue;
+    }
     if (cur.trim()) out.push(cur.trim());
     cur = '';
-    if (s.trim().length <= max) { cur = s; continue; }
+    if (s.trim().length <= max) {
+      cur = s;
+      continue;
+    }
     for (const w of s.trim().split(' ')) {
-      if ((cur + ' ' + w).trim().length > max && cur.trim()) { out.push(cur.trim()); cur = ''; }
+      if ((cur + ' ' + w).trim().length > max && cur.trim()) {
+        out.push(cur.trim());
+        cur = '';
+      }
       cur = (cur + ' ' + w).trim();
     }
     cur += ' ';
@@ -251,7 +364,8 @@ function summarizeStep(st: PlanStep) {
 export function describePlan(plan: PlanStep[]) {
   const words = plan.flatMap((st): string[] => {
     if ('do' in st) return [COMMANDS.find((x) => x.name === st.do)?.label.toLowerCase() ?? st.do];
-    if ('walk' in st) return [st.walk === 'cursor' ? 'walks to you' : st.walk === 'away' ? 'walks away' : `walks ${st.walk}`];
+    if ('walk' in st)
+      return [st.walk === 'cursor' ? 'walks to you' : st.walk === 'away' ? 'walks away' : `walks ${st.walk}`];
     if ('move' in st) return [st.name ? `made-up move: ${st.name}` : 'a made-up move'];
     if ('draw' in st) return [st.title ? `draws ${st.title}` : 'draws something'];
     return [];
@@ -292,11 +406,7 @@ export class Brain {
     },
     identity: string,
   ) {
-    if (
-      settings.mode !== this.mode ||
-      identity !== this.identity ||
-      settings.persona !== this.persona
-    ) {
+    if (settings.mode !== this.mode || identity !== this.identity || settings.persona !== this.persona) {
       this.revision++;
       this.busy = false;
       this.heard = [];
@@ -344,7 +454,11 @@ export class Brain {
     if (!text) return;
     this.addLog('you', text, c);
     if (/^(?:please )?(?:stop|enough|cancel|don't|do not)\b/i.test(text)) {
-      this.revision++; this.busy = false; this.heard = []; this.heardOffline = [text]; this.status = '';
+      this.revision++;
+      this.busy = false;
+      this.heard = [];
+      this.heardOffline = [text];
+      this.status = '';
       return;
     }
     if (!this.active) {
@@ -361,11 +475,7 @@ export class Brain {
   /** Authored local conversations retain their own state even when a provider is unavailable. */
   private offlineAnswer(c: Ctx, mind: Mind, text: string) {
     if (!this.active && !this.explainedOffline) {
-      this.addLog(
-        'note',
-        'Offline: conversation and actions run locally. No AI call.',
-        c,
-      );
+      this.addLog('note', 'Offline: conversation and actions run locally. No AI call.', c);
       this.explainedOffline = true;
     }
     const reply = this.conversation.respond(c, text, this.name);
@@ -378,14 +488,19 @@ export class Brain {
     let did = '';
     if (
       reply.plan.length &&
-      ((!c.game || c.game.state === 'closed') && !isSettledActivity(mind.skill?.name) || asksForActivity(text)) &&
+      (((!c.game || c.game.state === 'closed') && !isSettledActivity(mind.skill?.name)) || asksForActivity(text)) &&
       mind.perform(c, reply.plan, 'you asked')
     )
       did = describePlan(reply.plan);
     // The full reply belongs in the transcript; a short excerpt keeps desktop bubbles readable.
-    this.onSpeak(reply.say.length > 220 ? reply.say.slice(0, 190).replace(/\s+\S*$/, '') + '… (more in chat)' : reply.say);
+    this.onSpeak(
+      reply.say.length > 220 ? reply.say.slice(0, 190).replace(/\s+\S*$/, '') + '… (more in chat)' : reply.say,
+    );
     this.addLog('him', reply.say, c, did);
-    this.history.push({ role: 'user', text }, { role: 'assistant', text: JSON.stringify({ say: reply.say, plan: [] }) });
+    this.history.push(
+      { role: 'user', text },
+      { role: 'assistant', text: JSON.stringify({ say: reply.say, plan: [] }) },
+    );
     this.trimHistory();
   }
 
@@ -413,26 +528,12 @@ export class Brain {
     if (this.heard.length) {
       const said = this.heard.shift()!;
       this.think(c, mind, `You hear: "${said}"`, 'you');
-    } else if (
-      this.mode === 'full' &&
-      this.reactPending &&
-      now >= this.nextReact
-    ) {
+    } else if (this.mode === 'full' && this.reactPending && now >= this.nextReact) {
       const what = this.reactPending;
       this.reactPending = null;
       this.nextReact = now + Math.max(REACT_EVERY, this.autoEvery / 3);
-      this.think(
-        c,
-        mind,
-        `Something just happened: ${what}. React if you want (a few words), or stay quiet.`,
-        'event',
-      );
-    } else if (
-      this.mode === 'full' &&
-      now >= this.nextAuto &&
-      mind.idle &&
-      c.char.ready
-    ) {
+      this.think(c, mind, `Something just happened: ${what}. React if you want (a few words), or stay quiet.`, 'event');
+    } else if (this.mode === 'full' && now >= this.nextAuto && mind.idle && c.char.ready) {
       this.nextAuto = now + this.autoEvery;
       mind.holdUntil = now + 8; // give the brain a few seconds to decide before instinct takes over
       this.think(
@@ -448,16 +549,9 @@ export class Brain {
   systemPrompt(memory?: Memory, request = '') {
     // Keep conversation cheap; detailed coordinates are only useful when making something.
     const bodyGuide =
-      this.puppet &&
-      /move|pose|handstand|float|levitat|flip|spin|weird|invent|body|acrobat/i.test(
-        request,
-      );
-    const drawGuide = /draw|doodle|paint|sketch|art|picture|pen|canvas/i.test(
-      request,
-    );
-    const actions = COMMANDS.map(
-      (x) => `${x.name} (${x.label.toLowerCase()})`,
-    ).join(', ');
+      this.puppet && /move|pose|handstand|float|levitat|flip|spin|weird|invent|body|acrobat/i.test(request);
+    const drawGuide = /draw|doodle|paint|sketch|art|picture|pen|canvas/i.test(request);
+    const actions = COMMANDS.map((x) => `${x.name} (${x.label.toLowerCase()})`).join(', ');
     const saved = this.savedMoves.map((m) => `"${m.name}"`).join(', ');
     return [
       `You ARE ${this.name}: not an assistant, not a chatbot, a little stick figure who lives on the person's computer screen. ${this.persona}`,
@@ -479,14 +573,8 @@ export class Brain {
       '- {"say": "..."} say something more partway through',
       '- {"wait": seconds}',
       '- {"walk": "left" | "right" | "cursor" | "away"}',
-      ...(this.puppet
-        ? [
-            '- {"move": [poses], "name": "..."} a move you make up (see MAKING UP MOVES)',
-          ]
-        : []),
-      ...(this.puppet && saved
-        ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`]
-        : []),
+      ...(this.puppet ? ['- {"move": [poses], "name": "..."} a move you make up (see MAKING UP MOVES)'] : []),
+      ...(this.puppet && saved ? [`- {"replay": "<name>"} do a move you learned before: ${saved}`] : []),
       '- {"draw": [strokes], "title": "..."} draw something with your pen (see DRAWING). Only works if you have your pen.',
       'YOUR SATCHEL: your wearable bag holds your stored tools. You reach into it to take them out and put them back naturally. [state] says what you have and where; the person hands you new things now and then. What they do: a pen (you draw with it), a sword ("swing" practices, "slash" goes after the cursor), a mace ("smash": overhead, at the cursor or the window you stand on), a ball ("throw" at the cursor, "bounce" to play). Without the thing, you can\'t do the action. If the person took something, you can ask for it back.',
       'FIGHTING THE CURSOR: "spar" is a friendly fight with their cursor (fists up, punches, kicks, jump punches); "brawl" is the angry version. Only when you mean it.',
@@ -564,8 +652,16 @@ export class Brain {
       `your things: ${itemsText(c)}`,
       `your specialty: ${c.talent ?? 'drawing'}. Friends can teach each other; do not interrupt busy friends.`,
       `everyday requests: sip (needs a cup), exercise (needs a dumbbell), yoyo (needs a yo-yo), read (open/read/close a book). workshop requests: deskwork, refine, sorttools, arrange, carrytogether, passtool, comparedrawings, checkfriend, pong, handheld, group:wave/chat/couch/watch/duet/triangle/mirror/relay. Only invite available friends.`,
-      `drawable blueprints: ${[...c.items.defs.values()].filter(d=>d.drawable!==false&&!d.drawn&&!d.blueprint).map(d=>`drawitem:${d.id}`).concat([...c.props?.defs.values()??[]].filter(d=>d.drawable!==false&&!d.id.startsWith('ink-')).map(d=>`drawprop:${d.id}`)).join(', ')}`,
-      `shared furniture: ${(c.props?.placed ?? []).map(t=>`${t.def?.name}: ${t.def?.use}${t.ink?' (unfinished ink)':''}`).join('; ')}`,
+      `drawable blueprints: ${[...c.items.defs.values()]
+        .filter((d) => d.drawable !== false && !d.drawn && !d.blueprint)
+        .map((d) => `drawitem:${d.id}`)
+        .concat(
+          [...(c.props?.defs.values() ?? [])]
+            .filter((d) => d.drawable !== false && !d.id.startsWith('ink-'))
+            .map((d) => `drawprop:${d.id}`),
+        )
+        .join(', ')}`,
+      `shared furniture: ${(c.props?.placed ?? []).map((t) => `${t.def?.name}: ${t.def?.use}${t.ink ? ' (unfinished ink)' : ''}`).join('; ')}`,
 
       ...(c.game && c.game.state !== 'closed'
         ? [
@@ -582,7 +678,7 @@ export class Brain {
         : [
             `body: missing your ${[...ch.missing.keys()].map((l) => `${l.endsWith('L') ? 'left' : 'right'} ${l.startsWith('arm') ? 'arm' : 'leg'}`).join(' and ')} (it came off; you can get it back)`,
           ]),
-      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}${p.id ? `, bond ${c.relationship?.(p.id)?.bond.toFixed(2)??'new'}`:''}`).join('; ') || 'alone'}`,
+      `companions: ${(c.peers?.() ?? []).map((p) => `${p.name}: ${p.mood}, ${p.doing ?? 'free'}${p.id === c.foe?.()?.id ? ' (current partner)' : ''}${p.id ? `, bond ${c.relationship?.(p.id)?.bond.toFixed(2) ?? 'new'}` : ''}`).join('; ') || 'alone'}`,
       `relationship with current partner: ${c.feel.bond.toFixed(2)}`,
       `connected Chrome page: ${c.desktopState?.().browser?.title ?? 'none'}. Page selection: ${c.desktopState?.().browser?.selected ? 'available to take' : 'none'}. Use desktop actions only when asked.`,
       `available actions now: ${mind
@@ -595,12 +691,7 @@ export class Brain {
     ].join('\n');
   }
 
-  private think(
-    c: Ctx,
-    mind: Mind,
-    prompt: string,
-    why: 'you' | 'event' | 'auto',
-  ) {
+  private think(c: Ctx, mind: Mind, prompt: string, why: 'you' | 'event' | 'auto') {
     const now = c.world.time;
     if (now < this.retryAt && why !== 'you') {
       mind.holdUntil = 0;
@@ -609,11 +700,7 @@ export class Brain {
     this.calls = this.calls.filter((t) => now - t < 3600);
     if (this.calls.length >= MAX_PER_HOUR) {
       if (why === 'you') {
-        this.addLog(
-          'note',
-          "He's hit his limit of AI calls for this hour. Try again in a bit.",
-          c,
-        );
+        this.addLog('note', "He's hit his limit of AI calls for this hour. Try again in a bit.", c);
         this.offlineAnswer(c, mind, prompt.replace(/^You hear: "|"$/g, ''));
       }
       return;
@@ -636,14 +723,11 @@ export class Brain {
       .then((text) => {
         if (revision !== this.revision || !this.active) return;
         const reply = parseReply(text, this.savedMoves);
-        if (!reply)
-          throw new Error("The AI answered in a form he couldn't read.");
+        if (!reply) throw new Error("The AI answered in a form he couldn't read.");
         this.status = '';
         this.failureCount = 0;
         this.retryAt = 0;
-        const interruptGame =
-          why === 'you' &&
-          asksForActivity(prompt.replace(/^You hear: "|"$/g, ''));
+        const interruptGame = why === 'you' && asksForActivity(prompt.replace(/^You hear: "|"$/g, ''));
         const recordedPlan =
           ((c.game && c.game.state !== 'closed') || isSettledActivity(mind.skill?.name)) && !interruptGame
             ? reply.plan.filter((step) => 'say' in step)
@@ -663,8 +747,7 @@ export class Brain {
       .catch((err: unknown) => {
         if (revision !== this.revision || !this.active) return;
         this.failureCount++;
-        this.retryAt =
-          c.world.time + Math.min(300, 15 * 2 ** this.failureCount);
+        this.retryAt = c.world.time + Math.min(300, 15 * 2 ** this.failureCount);
         this.status = err instanceof Error ? err.message : String(err);
         this.addLog('note', this.status, c);
         if (why === 'you') {
@@ -679,32 +762,15 @@ export class Brain {
       });
   }
 
-  private apply(
-    c: Ctx,
-    mind: Mind,
-    reply: BrainReply,
-    why: 'you' | 'event' | 'auto',
-    interruptGame = false,
-  ) {
+  private apply(c: Ctx, mind: Mind, reply: BrainReply, why: 'you' | 'event' | 'auto', interruptGame = false) {
     if (Object.keys(reply.feel).length) c.mood.nudge(reply.feel);
     for (const r of reply.remember) c.memory.add(r, noteKind(r), 'ai', 2);
     const playing = (c.game && c.game.state !== 'closed') || isSettledActivity(mind.skill?.name);
     const allowed =
       why === 'you'
         ? reply.plan
-        : reply.plan.filter(
-            (st) =>
-              !(
-                'do' in st &&
-                ['closewindow', 'closetab', 'folder', 'file'].includes(st.do)
-              ),
-          );
-    const plan =
-      playing && !interruptGame
-        ? []
-        : this.puppet
-          ? allowed
-          : allowed.filter((st) => !('move' in st));
+        : reply.plan.filter((st) => !('do' in st && ['closewindow', 'closetab', 'folder', 'file'].includes(st.do)));
+    const plan = playing && !interruptGame ? [] : this.puppet ? allowed : allowed.filter((st) => !('move' in st));
     for (const st of plan) {
       if ('move' in st && !this.savedMoves.some((m) => m.frames === st.move)) {
         this.recentMoves.push({
@@ -717,25 +783,15 @@ export class Brain {
     }
     // He says his first line right away; the rest happens as the plan plays out.
     let did = '';
-    if (
-      plan.length &&
-      mind.perform(
-        c,
-        plan,
-        why === 'you' ? 'you asked (AI)' : 'his own idea (AI)',
-      )
-    )
+    if (plan.length && mind.perform(c, plan, why === 'you' ? 'you asked (AI)' : 'his own idea (AI)'))
       did = describePlan(plan);
     if (why === 'auto') mind.holdUntil = 0;
-    if (reply.say) this.onSpeak(reply.say.length > 220 ? reply.say.slice(0, 190).replace(/\s+\S*$/, '') + '… (more in chat)' : reply.say);
-    if (playing && !interruptGame)
-      for (const step of reply.plan) if ('say' in step) this.onSpeak(step.say);
-    const said = [
-      reply.say,
-      ...reply.plan.flatMap((st) => ('say' in st ? [st.say] : [])),
-    ]
-      .filter(Boolean)
-      .join(' … ');
+    if (reply.say)
+      this.onSpeak(
+        reply.say.length > 220 ? reply.say.slice(0, 190).replace(/\s+\S*$/, '') + '… (more in chat)' : reply.say,
+      );
+    if (playing && !interruptGame) for (const step of reply.plan) if ('say' in step) this.onSpeak(step.say);
+    const said = [reply.say, ...reply.plan.flatMap((st) => ('say' in st ? [st.say] : []))].filter(Boolean).join(' … ');
     if (said || did || why === 'you') this.addLog('him', said, c, did);
   }
 
@@ -784,39 +840,61 @@ export class Brain {
 
   private addLog(who: LogLine['who'], text: string, c: Ctx, acts = '') {
     this.log.push({ who, text, at: c.world.time, ...(acts ? { acts } : {}) });
-    while (this.log.length > TRANSCRIPT_LIMIT || this.log.reduce((n, l) => n + l.text.length, 0) > 120000) this.log.shift();
-    this.conversationVersion++; this.onConversation();
+    while (this.log.length > TRANSCRIPT_LIMIT || this.log.reduce((n, l) => n + l.text.length, 0) > 120000)
+      this.log.shift();
+    this.conversationVersion++;
+    this.onConversation();
   }
 
-  saveConversation() { return { v: 1, log: this.log, local: this.conversation.save() }; }
+  saveConversation() {
+    return { v: 1, log: this.log, local: this.conversation.save() };
+  }
   loadConversation(raw: unknown) {
     this.conversationVersion++;
-    this.log = []; this.history = []; this.heard = []; this.heardOffline = [];
+    this.log = [];
+    this.history = [];
+    this.heard = [];
+    this.heardOffline = [];
     this.conversation.reset();
     if (!raw || typeof raw !== 'object') return;
     const d = raw as { v?: unknown; log?: unknown; local?: unknown };
     if (d.v !== 1) return;
     this.conversation.load(d.local);
-    if (Array.isArray(d.log)) for (const rawLine of d.log.slice(-TRANSCRIPT_LIMIT)) {
-      if (!rawLine || typeof rawLine !== 'object') continue;
-      const l = rawLine as LogLine;
-      if (!['you', 'him', 'note'].includes(l.who) || typeof l.text !== 'string' || !Number.isFinite(l.at)) continue;
-      this.log.push({ who: l.who, text: l.text.slice(0, MESSAGE_LIMIT), at: Math.max(0, l.at),
-        ...(typeof l.acts === 'string' ? { acts: l.acts.slice(0, 500) } : {}) });
-    }
-    while (this.log.reduce((n,l) => n + l.text.length, 0) > 120000) this.log.shift();
-    this.history = this.log.filter(l => l.who !== 'note').slice(-HISTORY).map(l => ({
-      role: l.who === 'you' ? 'user' : 'assistant',
-      text: l.who === 'you' ? l.text : JSON.stringify({ say: l.text, plan: [] }),
-    }));
+    if (Array.isArray(d.log))
+      for (const rawLine of d.log.slice(-TRANSCRIPT_LIMIT)) {
+        if (!rawLine || typeof rawLine !== 'object') continue;
+        const l = rawLine as LogLine;
+        if (!['you', 'him', 'note'].includes(l.who) || typeof l.text !== 'string' || !Number.isFinite(l.at)) continue;
+        this.log.push({
+          who: l.who,
+          text: l.text.slice(0, MESSAGE_LIMIT),
+          at: Math.max(0, l.at),
+          ...(typeof l.acts === 'string' ? { acts: l.acts.slice(0, 500) } : {}),
+        });
+      }
+    while (this.log.reduce((n, l) => n + l.text.length, 0) > 120000) this.log.shift();
+    this.history = this.log
+      .filter((l) => l.who !== 'note')
+      .slice(-HISTORY)
+      .map((l) => ({
+        role: l.who === 'you' ? 'user' : 'assistant',
+        text: l.who === 'you' ? l.text : JSON.stringify({ say: l.text, plan: [] }),
+      }));
     this.trimHistory();
-    this.explainedOffline = this.log.some(l => l.who === 'note' && l.text.startsWith('Offline:'));
+    this.explainedOffline = this.log.some((l) => l.who === 'note' && l.text.startsWith('Offline:'));
   }
   newConversation() {
-    this.revision++; this.busy = false; this.loadConversation(null); this.status = ''; this.explainedOffline = false;
-    this.reactPending = null; this.onSpeak(''); this.onConversation();
+    this.revision++;
+    this.busy = false;
+    this.loadConversation(null);
+    this.status = '';
+    this.explainedOffline = false;
+    this.reactPending = null;
+    this.onSpeak('');
+    this.onConversation();
   }
   private trimHistory() {
-    while (this.history.length > HISTORY || this.history.reduce((n,l) => n + l.text.length, 0) > 16000) this.history.splice(0,2);
+    while (this.history.length > HISTORY || this.history.reduce((n, l) => n + l.text.length, 0) > 16000)
+      this.history.splice(0, 2);
   }
 }

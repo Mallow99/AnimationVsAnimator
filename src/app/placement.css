@@ -13,6 +13,20 @@
   color: #34463a;
   cursor: pointer;
 }
-#bagTransport .placement-option input { margin: 0; accent-color: #42664e; width: 16px; height: 16px; }
-#bagTransport .placement-option[hidden] { display: none; }
-@media (max-width: 520px) { #bagTransport { flex-wrap: wrap; } #bagTransport > span { flex-basis: 100%; } }
+#bagTransport .placement-option input {
+  margin: 0;
+  accent-color: #42664e;
+  width: 16px;
+  height: 16px;
+}
+#bagTransport .placement-option[hidden] {
+  display: none;
+}
+@media (max-width: 520px) {
+  #bagTransport {
+    flex-wrap: wrap;
+  }
+  #bagTransport > span {
+    flex-basis: 100%;
+  }
+}

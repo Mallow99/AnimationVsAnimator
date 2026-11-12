@@ -1,11 +1,6 @@
 import type { DesktopInfo } from '../shared/desktop';
 
-export function fileVisitView(
-  info: DesktopInfo,
-  names: string[],
-  target: number | null,
-  active: number[],
-) {
+export function fileVisitView(info: DesktopInfo, names: string[], target: number | null, active: number[]) {
   const homes = info.homes.filter((h) => target === null || h.id === target);
   return {
     chooseFolder: target !== null && active.includes(target) && info.foldersSupported,

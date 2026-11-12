@@ -3,12 +3,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import type {
-  BrowserPage,
-  DesktopResult,
-  DesktopState,
-  PageCutout,
-} from '../shared/desktop';
+import type { BrowserPage, DesktopResult, DesktopState, PageCutout } from '../shared/desktop';
 import { writeAtomic } from './storage';
 
 interface BrowserCommand {
@@ -42,36 +37,26 @@ export class DesktopBridge {
     const file = path.join(options.dataDir, 'desktop-bridge.json');
     try {
       const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
-      this.secret = /^[a-f0-9]{64}$/.test(stored.secret)
-        ? stored.secret
-        : randomBytes(32).toString('hex');
+      this.secret = /^[a-f0-9]{64}$/.test(stored.secret) ? stored.secret : randomBytes(32).toString('hex');
     } catch {
       this.secret = randomBytes(32).toString('hex');
     }
     this.persist();
   }
   private persist() {
-    writeAtomic(
-      path.join(this.options.dataDir, 'desktop-bridge.json'),
-      JSON.stringify({ secret: this.secret }),
-    );
+    writeAtomic(path.join(this.options.dataDir, 'desktop-bridge.json'), JSON.stringify({ secret: this.secret }));
   }
   get pairing() {
     return `http://127.0.0.1:${this.port}/?token=${this.secret}`;
   }
   get state(): DesktopState {
     return {
-      browser:
-        this.options.enabled() && Date.now() - this.browserAt < 6000
-          ? this.browser
-          : null,
+      browser: this.options.enabled() && Date.now() - this.browserAt < 6000 ? this.browser : null,
     };
   }
   async start(port = 31415) {
     this.server = http.createServer((req, res) => {
-      this.route(req, res).catch(() =>
-        this.respond(res, 400, { error: 'Invalid request' }),
-      );
+      this.route(req, res).catch(() => this.respond(res, 400, { error: 'Invalid request' }));
     });
     await new Promise<void>((resolve, reject) => {
       this.server!.once('error', reject);
@@ -96,9 +81,7 @@ export class DesktopBridge {
       wait.finish({ ok: false, message: 'The app closed.' });
     }
     this.waiting.clear();
-    await new Promise<void>((resolve) =>
-      this.server ? this.server.close(() => resolve()) : resolve(),
-    );
+    await new Promise<void>((resolve) => (this.server ? this.server.close(() => resolve()) : resolve()));
     this.server = null;
   }
   private respond(res: ServerResponse, status: number, data: unknown) {
@@ -121,10 +104,7 @@ export class DesktopBridge {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   }
   private authenticated(req: IncomingMessage, url: URL) {
-    const supplied =
-      req.headers.authorization?.replace(/^Bearer /, '') ??
-      url.searchParams.get('token') ??
-      '';
+    const supplied = req.headers.authorization?.replace(/^Bearer /, '') ?? url.searchParams.get('token') ?? '';
     return (
       Buffer.byteLength(supplied) === Buffer.byteLength(this.secret) &&
       timingSafeEqual(Buffer.from(supplied), Buffer.from(this.secret))
@@ -133,28 +113,20 @@ export class DesktopBridge {
   private async route(req: IncomingMessage, res: ServerResponse) {
     // Reject web origins even if someone accidentally exposes a pairing URL on a page.
     const origin = req.headers.origin;
-    if (
-      origin &&
-      !/^chrome-extension:\/\/[a-p]{32}$/.test(origin) &&
-      origin !== `http://127.0.0.1:${this.port}`
-    )
+    if (origin && !/^chrome-extension:\/\/[a-p]{32}$/.test(origin) && origin !== `http://127.0.0.1:${this.port}`)
       return this.respond(res, 403, { error: 'Origin refused' });
     if (origin) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
     }
     if (req.method === 'OPTIONS') {
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        'Authorization, Content-Type',
-      );
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
       res.writeHead(204);
       res.end();
       return;
     }
-    if (req.headers.host !== `127.0.0.1:${this.port}`)
-      return this.respond(res, 403, { error: 'Host refused' });
+    if (req.headers.host !== `127.0.0.1:${this.port}`) return this.respond(res, 403, { error: 'Host refused' });
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${this.port}`);
     if (!this.authenticated(req, url))
       return this.respond(res, 401, {
@@ -166,10 +138,7 @@ export class DesktopBridge {
       });
     if (url.pathname === '/browser/state' && req.method === 'POST') {
       const b = await this.body(req);
-      if (
-        !Number.isInteger(b.tab) ||
-        ![b.x, b.y, b.width, b.height].every(Number.isFinite)
-      )
+      if (!Number.isInteger(b.tab) || ![b.x, b.y, b.width, b.height].every(Number.isFinite))
         return this.respond(res, 400, { error: 'Invalid page' });
       this.browser = {
         tab: b.tab,
@@ -186,19 +155,14 @@ export class DesktopBridge {
     }
     if (url.pathname === '/browser/commands' && req.method === 'GET') {
       const tab = Number(url.searchParams.get('tab'));
-      const commands = this.queue.filter(
-        (c) => c.tab === tab && this.waiting.has(c.id),
-      );
-      this.queue = this.queue.filter(
-        (c) => c.tab !== tab && this.waiting.has(c.id),
-      );
+      const commands = this.queue.filter((c) => c.tab === tab && this.waiting.has(c.id));
+      this.queue = this.queue.filter((c) => c.tab !== tab && this.waiting.has(c.id));
       return this.respond(res, 200, commands);
     }
     if (url.pathname === '/browser/result' && req.method === 'POST') {
       const b = await this.body(req),
         wait = this.waiting.get(b.id);
-      if (!wait)
-        return this.respond(res, 409, { error: 'That command expired.' });
+      if (!wait) return this.respond(res, 409, { error: 'That command expired.' });
       let ok = b.ok === true;
       if (ok && wait.command.action === 'pluck') {
         const c = b.cutout;
@@ -243,10 +207,7 @@ export class DesktopBridge {
     }
     return this.respond(res, 404, { error: 'Unknown action' });
   }
-  browserAction(
-    action: 'closetab' | 'pluck' | 'restorepage',
-    owner: number,
-  ): Promise<DesktopResult> {
+  browserAction(action: 'closetab' | 'pluck' | 'restorepage', owner: number): Promise<DesktopResult> {
     const page = this.state.browser;
     if (!page)
       return Promise.resolve({
@@ -258,8 +219,7 @@ export class DesktopBridge {
         ok: false,
         message: 'Pick something on the page in the Chrome extension first.',
       });
-    if (this.waiting.size >= 8)
-      return Promise.resolve({ ok: false, message: 'Chrome is still busy.' });
+    if (this.waiting.size >= 8) return Promise.resolve({ ok: false, message: 'Chrome is still busy.' });
     const command = {
       id: randomBytes(12).toString('hex'),
       action,
@@ -272,8 +232,7 @@ export class DesktopBridge {
         this.queue = this.queue.filter((c) => c.id !== command.id);
         resolve({
           ok: false,
-          message:
-            'Chrome did not respond. Open the connected tab and try again.',
+          message: 'Chrome did not respond. Open the connected tab and try again.',
         });
       }, 10000);
       this.waiting.set(command.id, { command, timer, finish: resolve });

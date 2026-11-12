@@ -28,8 +28,7 @@ export class PlayHandheld extends Skill {
       }
     }
     const it = this.item;
-    if (!it || !c.items.list.includes(it) || it.where === 'cursor' || !c.char.useHand)
-      return 'none';
+    if (!it || !c.items.list.includes(it) || it.where === 'cursor' || !c.char.useHand) return 'none';
     if (this.fetch) {
       this.fetch.t += dt;
       if (!this.fetch.update(c, dt)) return 'go';
@@ -76,11 +75,7 @@ export class PlayHandheld extends Skill {
     it.aimLocal = null;
     c.look = 'target';
     c.lookTarget = { x: n.x + f * 18 * sc, y: n.y + 18 * sc };
-    if (
-      !this.linked &&
-      this.elapsed > this.nextComment &&
-      (events.includes('crash') || events.includes('record'))
-    ) {
+    if (!this.linked && this.elapsed > this.nextComment && (events.includes('crash') || events.includes('record'))) {
       this.nextComment = this.elapsed + 20;
       c.say(
         events.includes('record')

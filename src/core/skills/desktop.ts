@@ -16,10 +16,7 @@ export class DesktopInteraction extends Skill {
     const page = c.desktopState?.().browser;
     const target =
       this.name === 'pluck' && page
-        ? Math.max(
-            c.world.bounds.left + 20,
-            Math.min(c.world.bounds.right - 20, page.x + page.width / 2),
-          )
+        ? Math.max(c.world.bounds.left + 20, Math.min(c.world.bounds.right - 20, page.x + page.width / 2))
         : c.char.x;
     if (!this.requested && this.t < 4 && !arrive(c, target, 25)) return false;
     if (!this.requested) {

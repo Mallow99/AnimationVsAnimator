@@ -65,10 +65,7 @@ export function sweepConvex(a: Vec[], b: Vec[], delta: Vec): { time: number; nor
 export function segmentDistance(p: Vec, a: Vec, b: Vec) {
   const dx = b.x - a.x,
     dy = b.y - a.y;
-  const u = Math.max(
-    0,
-    Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)),
-  );
+  const u = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
   return Math.hypot(p.x - a.x - dx * u, p.y - a.y - dy * u);
 }
 
@@ -78,17 +75,14 @@ export function polygonDistance(p: Vec, polygon: Vec[]) {
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const a = polygon[i],
       b = polygon[j];
-    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
-      inside = !inside;
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
     distance = Math.min(distance, segmentDistance(p, a, b));
   }
   return inside ? 0 : distance;
 }
 
 export function convexHull(points: Vec[]) {
-  const sorted = points
-    .filter((p) => Number.isFinite(p.x + p.y))
-    .sort((a, b) => a.x - b.x || a.y - b.y);
+  const sorted = points.filter((p) => Number.isFinite(p.x + p.y)).sort((a, b) => a.x - b.x || a.y - b.y);
   const unique = sorted.filter((p, i) => !i || p.x !== sorted[i - 1].x || p.y !== sorted[i - 1].y);
   if (unique.length < 3) return unique;
   const cross = (a: Vec, b: Vec, c: Vec) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -115,8 +109,7 @@ export function overlapOffset(a: Vec[], b: Vec[]): Vec | null {
   });
   const ab = bounds(a),
     bb = bounds(b);
-  if (ab.right <= bb.left || ab.left >= bb.right || ab.bottom <= bb.top || ab.top >= bb.bottom)
-    return null;
+  if (ab.right <= bb.left || ab.left >= bb.right || ab.bottom <= bb.top || ab.top >= bb.bottom) return null;
   let best: Vec | null = null,
     minimum = Infinity;
   for (const poly of [a, b])

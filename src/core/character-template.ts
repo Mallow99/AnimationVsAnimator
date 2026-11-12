@@ -82,9 +82,5 @@ export function characterTemplate(p: Personality = 'inventive') {
 /** A gift is considerate, not a requirement to keep a friendship alive. */
 export function giftPreference(p: Personality | undefined, id: string) {
   const rank = characterTemplate(p).gifts.indexOf(id);
-  return rank < 0
-    ? ['book', 'flowers'].includes(id)
-      ? 0.6
-      : 0.45
-    : Math.max(0.65, 1 - rank * 0.08);
+  return rank < 0 ? (['book', 'flowers'].includes(id) ? 0.6 : 0.45) : Math.max(0.65, 1 - rank * 0.08);
 }

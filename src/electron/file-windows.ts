@@ -18,15 +18,19 @@ for(const w of finder.windows()) {
 JSON.stringify(out);`;
 function parseWindows(output: string) {
   const parsed = JSON.parse(output);
-  return (Array.isArray(parsed) ? parsed : [parsed]).filter((w: FileWindow) =>
-    w && typeof w.path === 'string' && w.path.length < 4096 &&
-    [w.id,w.x,w.y,w.width,w.height].every(Number.isFinite) &&
-    w.width > 100 && w.height > 100).slice(0,40);
+  return (Array.isArray(parsed) ? parsed : [parsed])
+    .filter(
+      (w: FileWindow) =>
+        w &&
+        typeof w.path === 'string' &&
+        w.path.length < 4096 &&
+        [w.id, w.x, w.y, w.width, w.height].every(Number.isFinite) &&
+        w.width > 100 &&
+        w.height > 100,
+    )
+    .slice(0, 40);
 }
-export function watchFileWindows(
-  update: (windows: FileWindow[]) => void,
-  note: (text: string) => void,
-) {
+export function watchFileWindows(update: (windows: FileWindow[]) => void, note: (text: string) => void) {
   let stopped = false,
     busy = false,
     child: ChildProcess | null = null,
@@ -35,10 +39,16 @@ export function watchFileWindows(
     if (stopped || busy) return;
     // Like PET_FAKE_WINDOWS, this is an explicit test adapter, never a native-verification claim.
     if (process.env.PET_FAKE_FILES !== undefined) {
-      try { update(parseWindows(process.env.PET_FAKE_FILES)); }
-      catch { update([]); }
+      try {
+        update(parseWindows(process.env.PET_FAKE_FILES));
+      } catch {
+        update([]);
+      }
       const message = 'Simulated file windows for verification; native detection is not being tested.';
-      if (lastError !== message) { note(message); lastError = message; }
+      if (lastError !== message) {
+        note(message);
+        lastError = message;
+      }
       return;
     }
     const args =

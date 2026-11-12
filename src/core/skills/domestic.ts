@@ -24,8 +24,7 @@ export class ReadingLight {
               Math.abs(t.tilt) < 0.3 &&
               Math.abs(t.center.x - c.char.x) < 280 * c.char.scale,
           )
-          .sort((a, b) => Math.abs(a.center.x - c.char.x) - Math.abs(b.center.x - c.char.x))[0] ??
-        null;
+          .sort((a, b) => Math.abs(a.center.x - c.char.x) - Math.abs(b.center.x - c.char.x))[0] ?? null;
     }
     const t = this.lamp;
     if (!t || !c.props?.things.includes(t) || t.held || Math.abs(t.tilt) > 0.3) return true;
@@ -35,8 +34,7 @@ export class ReadingLight {
       return true;
     }
     if (!t.on) {
-      if (!arrive(c, t.center.x + (c.char.x < t.center.x ? -25 : 25) * c.char.scale, 8))
-        return false;
+      if (!arrive(c, t.center.x + (c.char.x < t.center.x ? -25 : 25) * c.char.scale, 8)) return false;
       if (!this.reach.reach(c, t.toWorld(18, 35), dt)) {
         // Light is optional: an unreachable switch must not hold the reading activity forever.
         return this.reach.failed;
@@ -57,16 +55,22 @@ export class SwitchLamp extends Skill {
   readonly name = 'lamp';
   private reach = new Handling();
   private done = false;
-  constructor(private lamp: Thing | null = null, private desiredOn: boolean | undefined = lamp ? !lamp.on : undefined) {
+  constructor(
+    private lamp: Thing | null = null,
+    private desiredOn: boolean | undefined = lamp ? !lamp.on : undefined,
+  ) {
     super();
   }
   static nearest(c: Ctx) {
-    return c.props?.placed.filter(t=>t.def?.use==='light'&&!t.held&&!t.movingBy&&Math.abs(t.tilt)<.35)
-      .sort((a,b)=>Math.abs(a.center.x-c.char.x)-Math.abs(b.center.x-c.char.x))[0] ?? null;
+    return (
+      c.props?.placed
+        .filter((t) => t.def?.use === 'light' && !t.held && !t.movingBy && Math.abs(t.tilt) < 0.35)
+        .sort((a, b) => Math.abs(a.center.x - c.char.x) - Math.abs(b.center.x - c.char.x))[0] ?? null
+    );
   }
   start(c: Ctx) {
     this.lamp ??= SwitchLamp.nearest(c);
-    if(this.lamp)this.desiredOn ??= !this.lamp.on;
+    if (this.lamp) this.desiredOn ??= !this.lamp.on;
     if (!this.lamp) c.say('We need a lamp.', 1.5);
   }
   update(c: Ctx, dt: number) {
@@ -128,16 +132,13 @@ export class DomesticItem extends Skill {
       elapsed = this.elapsed;
     return item && !this.storing
       ? () =>
-          c.items.list.includes(item) && item.where !== 'cursor'
-            ? new DomesticItem(this.use, item, elapsed)
-            : null
+          c.items.list.includes(item) && item.where !== 'cursor' ? new DomesticItem(this.use, item, elapsed) : null
       : null;
   }
   update(c: Ctx, dt: number) {
     const it = this.item,
       ch = c.char;
-    if (!it || !c.items.list.includes(it) || it.where === 'cursor' || !ch.useHand || this.t > 150)
-      return true;
+    if (!it || !c.items.list.includes(it) || it.where === 'cursor' || !ch.useHand || this.t > 150) return true;
     if (this.fetch) {
       this.fetch.t += dt;
       if (!this.fetch.update(c, dt)) return false;
@@ -206,10 +207,7 @@ export class DomesticItem extends Skill {
       c.lookTarget = lift > 0.6 ? { x: n.x + f * 15 * sc, y: n.y } : at;
       c.mood.nudge({ contentment: dt / 300, frustration: -dt / 140 });
     }
-    if (
-      this.elapsed > (this.use === 'rest' ? 60 : 24) &&
-      (this.use === 'rest' || this.elapsed % 8 > 7.4)
-    ) {
+    if (this.elapsed > (this.use === 'rest' ? 60 : 24) && (this.use === 'rest' || this.elapsed % 8 > 7.4)) {
       // Fold/close in the settled pose before standing to put the original away.
       this.storing = true;
     }

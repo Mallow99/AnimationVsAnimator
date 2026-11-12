@@ -11,7 +11,11 @@ const ROWS = PRESET_ROWS;
 
 const STORE = 'lab-picks';
 let picks: Record<string, string> = { stance: 'C', walk: '1', color: 'deep', line: 'chunky', render: 'px2' };
-try { Object.assign(picks, JSON.parse(localStorage.getItem(STORE) ?? '{}')); } catch { /* storage unavailable */ }
+try {
+  Object.assign(picks, JSON.parse(localStorage.getItem(STORE) ?? '{}'));
+} catch {
+  /* storage unavailable */
+}
 
 function configFor(override?: { row: string; id: string }): PetConfig {
   const cfg: PetConfig = structuredClone(DEFAULT_CONFIG);
@@ -35,19 +39,26 @@ function summary() {
 
 // ───────────── canvases ─────────────
 
-const DESK_DARK = '#2b2f45', DESK_LIGHT = '#e6e8f0';
+const DESK_DARK = '#2b2f45',
+  DESK_LIGHT = '#e6e8f0';
 
 function fitCanvas(cv: HTMLCanvasElement) {
-  const dpr = window.devicePixelRatio || 1, r = cv.getBoundingClientRect();
-  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  const dpr = window.devicePixelRatio || 1,
+    r = cv.getBoundingClientRect();
+  cv.width = Math.round(r.width * dpr);
+  cv.height = Math.round(r.height * dpr);
   const g = cv.getContext('2d')!;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   return { w: r.width, h: r.height };
 }
 
 function paintDesk(g: CanvasRenderingContext2D, w: number, h: number, split: boolean) {
-  g.fillStyle = DESK_DARK; g.fillRect(0, 0, w, h);
-  if (split) { g.fillStyle = DESK_LIGHT; g.fillRect(w / 2, 0, w / 2, h); }
+  g.fillStyle = DESK_DARK;
+  g.fillRect(0, 0, w, h);
+  if (split) {
+    g.fillStyle = DESK_LIGHT;
+    g.fillRect(w / 2, 0, w / 2, h);
+  }
 }
 
 /** One demo cell: a character pacing back and forth. */
@@ -60,7 +71,14 @@ class Cell {
   private pixels = new PixelLayer();
   cfg!: PetConfig;
 
-  constructor(readonly cv: HTMLCanvasElement, readonly row: Row, readonly variant: Variant) { this.resize(); this.refresh(); }
+  constructor(
+    readonly cv: HTMLCanvasElement,
+    readonly row: Row,
+    readonly variant: Variant,
+  ) {
+    this.resize();
+    this.refresh();
+  }
 
   resize() {
     this.size = fitCanvas(this.cv);
@@ -86,7 +104,10 @@ class Cell {
       }
     }
     this.acc += Math.min(dt, 0.1);
-    while (this.acc >= 1 / 120) { c.step(1 / 120); this.acc -= 1 / 120; }
+    while (this.acc >= 1 / 120) {
+      c.step(1 / 120);
+      this.acc -= 1 / 120;
+    }
     c.drainEvents();
   }
 
@@ -146,25 +167,41 @@ function syncUI() {
 
 function choose(row: string, id: string) {
   picks[row] = id;
-  try { localStorage.setItem(STORE, JSON.stringify(picks)); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(STORE, JSON.stringify(picks));
+  } catch {
+    /* ignore */
+  }
   syncUI();
 }
 
 const copyBtn = document.getElementById('copy') as HTMLButtonElement;
 copyBtn.addEventListener('click', () => {
   const text = summary();
-  const done = () => { copyBtn.textContent = 'Copied'; setTimeout(() => (copyBtn.textContent = 'Copy picks'), 1500); };
+  const done = () => {
+    copyBtn.textContent = 'Copied';
+    setTimeout(() => (copyBtn.textContent = 'Copy picks'), 1500);
+  };
   navigator.clipboard?.writeText(text).then(done, () => {
-    const r = document.createRange(); r.selectNodeContents(summaryEl);
-    const sel = getSelection(); sel?.removeAllRanges(); sel?.addRange(r);
+    const r = document.createRange();
+    r.selectNodeContents(summaryEl);
+    const sel = getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(r);
   });
 });
 
 // Stage input: poke, drag, throw, swipe-smack, rub-to-pet.
-let last = { x: 0, y: 0, t: performance.now() }, vel = { x: 0, y: 0 };
-const local = (e: PointerEvent) => { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+let last = { x: 0, y: 0, t: performance.now() },
+  vel = { x: 0, y: 0 };
+const local = (e: PointerEvent) => {
+  const r = stage.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+};
 stage.addEventListener('pointermove', (e) => {
-  const p = local(e), now = performance.now(), dt = Math.max((now - last.t) / 1000, 1 / 240);
+  const p = local(e),
+    now = performance.now(),
+    dt = Math.max((now - last.t) / 1000, 1 / 240);
   vel.x += ((p.x - last.x) / dt - vel.x) * 0.5;
   vel.y += ((p.y - last.y) / dt - vel.y) * 0.5;
   last = { ...p, t: now };
@@ -176,7 +213,10 @@ stage.addEventListener('pointerdown', (e) => {
   const p = local(e);
   if (pet.pointerDown(p.x, p.y, performance.now())) stage.setPointerCapture(e.pointerId);
 });
-const up = (e: PointerEvent) => { const p = local(e); pet.pointerUp(p.x, p.y); };
+const up = (e: PointerEvent) => {
+  const p = local(e);
+  pet.pointerUp(p.x, p.y);
+};
 stage.addEventListener('pointerup', up);
 stage.addEventListener('pointercancel', up);
 
@@ -191,12 +231,20 @@ let prev = performance.now();
 function frame(now: number) {
   const dt = reduced ? 1 / 60 : (now - prev) / 1000;
   prev = now;
-  if (now - last.t > 50) { vel.x *= 0.8; vel.y *= 0.8; pet.pointerMove(last.x, last.y, vel.x, vel.y, now); }
+  if (now - last.t > 50) {
+    vel.x *= 0.8;
+    vel.y *= 0.8;
+    pet.pointerMove(last.x, last.y, vel.x, vel.y, now);
+  }
   pet.update(dt);
   const g = stage.getContext('2d')!;
   paintDesk(g, stageSize.w, stageSize.h, false);
-  pet.drawProps(g); pet.draw(g);
-  for (const c of cells) { c.update(dt); c.draw(); }
+  pet.drawProps(g);
+  pet.draw(g);
+  for (const c of cells) {
+    c.update(dt);
+    c.draw();
+  }
   requestAnimationFrame(frame);
 }
 syncUI();

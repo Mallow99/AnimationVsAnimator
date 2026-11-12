@@ -51,27 +51,22 @@ export class FriendlyMoment extends Skill {
     c.lookTarget = v.joints.neck ?? null;
     if (!this.sent) {
       this.sent = true;
-      if (this.kind === 'compare')
-        c.say(v.talent === 'drawing' ? 'What would you change?' : 'Want to compare?', 1.4);
+      if (this.kind === 'compare') c.say(v.talent === 'drawing' ? 'What would you change?' : 'Want to compare?', 1.4);
       if (this.kind === 'check')
-        c.say(
-          c.personality === 'competitive'
-            ? 'Want a breather? I’ll stay.'
-            : 'Want some company? No rush.',
-          2,
-        );
+        c.say(c.personality === 'competitive' ? 'Want a breather? I’ll stay.' : 'Want some company? No rush.', 2);
       if (this.kind === 'apology')
         c.say(
-          c.personality === 'mischievous'
-            ? 'I took that too far. Sorry.'
-            : 'Sorry about earlier. Let’s start over.',
+          c.personality === 'mischievous' ? 'I took that too far. Sorry.' : 'Sorry about earlier. Let’s start over.',
           2,
         );
       c.tellTo?.(this.peer!, {
         type: 'moment',
         kind: this.kind === 'compare' ? 'compare' : this.kind === 'apology' ? 'apology' : 'check',
       });
-      if(this.kind==='apology'){const r=c.relationship?.(this.peer!);if(r)r.lastDisagreement='';}
+      if (this.kind === 'apology') {
+        const r = c.relationship?.(this.peer!);
+        if (r) r.lastDisagreement = '';
+      }
       c.recordActivity?.(this.peer!, this.kind, true);
     }
     const hand = v.joints.handL ?? v.joints.neck;

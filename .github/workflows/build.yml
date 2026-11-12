@@ -1,0 +1,140 @@
+# Tests everything, builds the Mac and Windows apps, and puts the ZIPs on the Releases page.
+#
+# Runs when main changes, or by hand (Actions tab -> "Build and test the apps" -> Run workflow).
+# The version comes from product.json. A version that is not public yet is published as a
+# test release (tag v<version>) once the checks pass. A version that is already public is
+# never replaced: change "version" in product.json to ship a new build.
+name: Build and test the apps
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/archive/**'
+      - 'docs/store/**'
+      - 'docs/HANDOFF.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'CHANGELOG.md'
+      - 'README.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Every automated check, including the packaged edition running in real Electron.
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run verify -- --app
+      - name: Speed of the physics with 2 and 5 figures
+        run: npm run check quality-profile
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: check-logs
+          include-hidden-files: true
+          path: |
+            .build/verification/
+            .build/release/
+          retention-days: 14
+
+  # Two simulated hours of every feature, with two different random seeds.
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [7, 32]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check living-soak
+        env:
+          LIVING_SOAK_SEED: ${{ matrix.seed }}
+          LIVING_SOAK_SECONDS: 7200
+          LIVING_SOAK_TAIL_FPS: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-report-${{ matrix.seed }}
+          include-hidden-files: true
+          path: .build/living-soak-report-*.json
+          retention-days: 14
+
+  # Each app is built on its own operating system, unzipped, started, saved, quit and restarted.
+  packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+          - os: macos-14
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build the app and its ZIP
+        run: npm run package ${{ matrix.platform }}
+      - name: Start the unzipped app for real and check it restarts with its saves
+        run: node scripts/native-package-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-logs-${{ matrix.platform }}
+          path: .build/release/native-*
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.platform }}
+          path: |
+            out/*.zip
+            out/*.sha256
+          retention-days: 14
+
+  # Only when the checks and both soaks passed, and only from main. Publishes whichever apps
+  # were built (the hosted Mac machines are sometimes unavailable; that must not hold back Windows).
+  release:
+    needs: [checks, soak, packages]
+    if: ${{ !cancelled() && needs.checks.result == 'success' && needs.soak.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: app-*
+          path: out/built
+          merge-multiple: true
+      - name: Put the ZIPs on the Releases page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release.mjs

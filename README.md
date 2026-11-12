@@ -4,8 +4,8 @@ Download the ZIP for your computer. It includes the app and everything it needs.
 
 | Computer | Download |
 | --- | --- |
-| Windows 11 x64 | [Download Windows app](https://github.com/Mallow99/AnimationVsAnimator/releases/download/v1.0.0-rc.4/Mallow-Desk-Buddies-1.0.0-rc.4-win32-x64.zip) |
-| Apple Silicon Mac | [Download Mac app](https://github.com/Mallow99/AnimationVsAnimator/releases/download/v1.0.0-rc.4/Mallow-Desk-Buddies-1.0.0-rc.4-darwin-arm64.zip) |
+| Windows 11 x64 | [Download Windows app](https://github.com/Mallow99/AnimationVsAnimator/releases/download/v1.0.0-rc.5/Mallow-Desk-Buddies-1.0.0-rc.5-win32-x64.zip) |
+| Apple Silicon Mac | [Download Mac app](https://github.com/Mallow99/AnimationVsAnimator/releases/download/v1.0.0-rc.5/Mallow-Desk-Buddies-1.0.0-rc.5-darwin-arm64.zip) |
 
 **Windows:** Extract All, then open `Mallow-Desk-Buddies.exe` inside the extracted folder.
 Keep its accompanying files together.
@@ -13,11 +13,16 @@ Keep its accompanying files together.
 **Mac:** Extract, drag `Mallow-Desk-Buddies.app` to Applications, then open it.
 
 No Node.js, npm, terminal commands, Xcode, accounts or AI keys are required.
-Each ZIP contains a plain **START-HERE.txt** guide. These are unsigned test builds;
-see [installation help](docs/release/INSTALL.md) for OS-specific prompts.
+Each ZIP contains a plain **START-HERE.txt** guide. These are unsigned test builds, so
+Windows shows "Windows protected your PC" the first time (More info → Run anyway);
+see [installation help](docs/release/INSTALL.md) for both systems.
+
+**Optional Local AI:** if you run [Ollama](https://ollama.com/download) on the same computer,
+Settings → Local AI lets the buddies answer with one of your own models. Off by default;
+nothing leaves your computer.
 
 Use the tray/menu-bar icon for Settings, Pause, Hide and Quit. Everything works offline.
-The ZIPs under [Releases](https://github.com/Mallow99/AnimationVsAnimator/releases/tag/v1.0.0-rc.4)
+The ZIPs under [Releases](https://github.com/Mallow99/AnimationVsAnimator/releases/tag/v1.0.0-rc.5)
 are the runnable apps. GitHub’s “Code → Download ZIP” contains developer source files.
 
 [Features and customization](docs/release/FEATURES.md) ·
@@ -161,26 +166,23 @@ his name, size, look (presets or every number by hand) and how he moves.
 
 ## Commands
 
-Recent additions: a flat, front-on couch and TV in his own style (pixelated with him), video games and
-video games and Othello on the TV, removable helmet and boots, a larger pen, optional mace and canvas painting. Drop props
-in from Settings → Items, then use **Paint**, **Video games** or **Play Othello**.
-Full AI mode has a thinking-interval control for lower free-tier usage. His persona and body look
-remain the same. See [docs/HANDOFF.md](docs/HANDOFF.md) for verified changes and hardware checks.
-
-For a portable Windows copy that friends can run without Node, see [docs/WINDOWS.md](docs/WINDOWS.md).
-
 | Command | What it does |
 |---|---|
-| `npm start` | Build and launch the pet |
+| `npm start` | Build and launch the development edition |
+| `npm run start:release` | Build and launch the packaged edition (Mallow Desk Buddies) |
 | `npm run preview` | Run in a regular browser window (handy for tweaking) |
-| `npm run sim` | Headless physics tests |
 | `npm run lab` | Design lab: compare looks side by side |
 | `npm run typecheck` | Check the TypeScript for errors |
-| `npm run conversationcheck` | Verify persistent local dialogue, story branches and cancellation |
-| `npm run checks` | Focused regression checks for saves, AI, items and activities |
-| `npm run browsercheck` | Functional preview check (requires Chromium) |
-| `npm run package:win` | Build a portable Windows x64 app |
+| `npm run format` | Auto-format the code |
+| `npm run check` | List the automated checks; `npm run check <name>` runs one |
+| `npm run verify` | Run all the everyday checks (about 10 minutes) |
+| `npm run package win32` | Build the Windows ZIP into `out/` |
 
-See `CLAUDE.md` for the architecture and roadmap.
+GitHub builds, tests and publishes the Windows and Mac ZIPs by itself when `main` changes and the
+version in `product.json` is new (`.github/workflows/build.yml`).
+
+Working on the code: [AGENTS.md](AGENTS.md) (rules, map of the files, step-by-step recipes) and
+[docs/HANDOFF.md](docs/HANDOFF.md) (current state and known problems). Making your own items and
+furniture: [docs/MAKING-THINGS.md](docs/MAKING-THINGS.md).
 
 </details>

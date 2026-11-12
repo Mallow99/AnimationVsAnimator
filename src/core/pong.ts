@@ -16,8 +16,7 @@ export class Pong {
     private random: () => number = Math.random,
   ) {}
   moveUser(y: number) {
-    if (this.user !== null && Number.isFinite(y))
-      this.paddles[this.user] = Math.max(0.1, Math.min(0.9, y));
+    if (this.user !== null && Number.isFinite(y)) this.paddles[this.user] = Math.max(0.1, Math.min(0.9, y));
   }
   rematch() {
     this.score = [0, 0];
@@ -46,19 +45,13 @@ export class Pong {
       for (const side of [0, 1] as const)
         this.aim[side] = Math.max(
           0.1,
-          Math.min(
-            0.9,
-            this.ball.y + (this.random() - 0.5) * (1 - this.skills[side]) * 0.7,
-          ),
+          Math.min(0.9, this.ball.y + (this.random() - 0.5) * (1 - this.skills[side]) * 0.7),
         );
     }
     for (const side of [0, 1] as const)
       if (side !== this.user) {
         const speed = (0.35 + this.skills[side] * 0.6) * dt;
-        this.paddles[side] += Math.max(
-          -speed,
-          Math.min(speed, this.aim[side] - this.paddles[side]),
-        );
+        this.paddles[side] += Math.max(-speed, Math.min(speed, this.aim[side] - this.paddles[side]));
       }
     if (this.serve > 0) {
       this.serve -= dt;
@@ -78,9 +71,7 @@ export class Pong {
     for (const side of [0, 1] as const) {
       const edge = side ? 0.94 : 0.06;
       if (
-        (side
-          ? b.vx > 0 && old <= edge && b.x >= edge
-          : b.vx < 0 && old >= edge && b.x <= edge) &&
+        (side ? b.vx > 0 && old <= edge && b.x >= edge : b.vx < 0 && old >= edge && b.x <= edge) &&
         Math.abs(b.y - this.paddles[side]) <= 0.115
       ) {
         b.x = edge;
@@ -113,19 +104,14 @@ export function paintPong(
   w: number,
   h: number,
 ) {
-  g.fillStyle = "#202b32";
+  g.fillStyle = '#202b32';
   g.fillRect(x, y, w, h);
-  g.fillStyle = "#ddd8c4";
+  g.fillStyle = '#ddd8c4';
   for (let i = 0; i < 10; i++) g.fillRect(x + w / 2, y + (i * h) / 10, 1, 3);
   for (const side of [0, 1] as const)
-    g.fillRect(
-      x + (side ? 0.93 : 0.05) * w,
-      y + (pong.paddles[side] - 0.1) * h,
-      Math.max(2, w * 0.02),
-      h * 0.2,
-    );
+    g.fillRect(x + (side ? 0.93 : 0.05) * w, y + (pong.paddles[side] - 0.1) * h, Math.max(2, w * 0.02), h * 0.2);
   g.fillRect(x + pong.ball.x * w - 1, y + pong.ball.y * h - 1, 3, 3);
   g.font = `${Math.max(7, Math.round(h / 5))}px monospace`;
-  g.textAlign = "center";
+  g.textAlign = 'center';
   g.fillText(`${pong.score[0]}   ${pong.score[1]}`, x + w / 2, y + h * 0.25);
 }

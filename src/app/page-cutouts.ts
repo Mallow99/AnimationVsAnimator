@@ -24,12 +24,7 @@ export class PageCutouts {
   }
   hit(x: number, y: number) {
     return (
-      [...this.cards]
-        .reverse()
-        .find(
-          (c) =>
-            x >= c.x && x <= c.x + c.width && y >= c.y && y <= c.y + c.height,
-        ) ?? null
+      [...this.cards].reverse().find((c) => x >= c.x && x <= c.x + c.width && y >= c.y && y <= c.y + c.height) ?? null
     );
   }
   grab(x: number, y: number) {
@@ -93,8 +88,7 @@ export class PageCutouts {
       g.fillStyle = '#fff';
       g.fillRect(c.x - 3, c.y - 3, c.width + 6, c.height + 6);
       g.shadowBlur = 0;
-      if (c.bitmap.complete && c.bitmap.naturalWidth)
-        g.drawImage(c.bitmap, c.x, c.y, c.width, c.height);
+      if (c.bitmap.complete && c.bitmap.naturalWidth) g.drawImage(c.bitmap, c.x, c.y, c.width, c.height);
       g.restore();
     }
   }
